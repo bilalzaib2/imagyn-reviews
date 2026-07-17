@@ -61,18 +61,30 @@ model Product {
 }
 
 model Review {
-  id           String          @id @default(cuid())
-  storeId      String
-  store        Store           @relation(fields: [storeId], references: [id], onDelete: Cascade)
-  productId    String?
-  product      Product?        @relation(fields: [productId], references: [id], onDelete: SetNull)
-  authorName   String?
-  title        String?
-  body         String?
-  rating       Int?
-  status       String          @default("pending")
-  createdAt    DateTime        @default(now())
-  updatedAt    DateTime        @updatedAt
+  id               String   @id @default(cuid())
+  storeId          String
+  store            Store    @relation(fields: [storeId], references: [id], onDelete: Cascade)
+  productId        String?
+  product          Product? @relation(fields: [productId], references: [id], onDelete: SetNull)
+  authorName       String?
+  authorEmail      String?
+  title            String?
+  body             String?
+  merchantReply    String?
+  photoUrls        String?
+  rating           Int?
+  status           String   @default("pending")
+  verifiedPurchase Boolean  @default(false)
+  deletedAt        DateTime?
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  @@index([deletedAt, createdAt])
+  @@index([storeId, deletedAt, createdAt])
+  @@index([status])
+  @@index([rating])
+  @@index([verifiedPurchase])
+  @@index([productId])
 }
 
 model ReviewRequest {

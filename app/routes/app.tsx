@@ -1,7 +1,8 @@
 import type { HeadersFunction, LoaderFunctionArgs } from "react-router";
-import { Outlet, useLoaderData, useRouteError } from "react-router";
+import { Outlet, useLoaderData, useLocation, useRouteError } from "react-router";
 import { boundary } from "@shopify/shopify-app-react-router/server";
 import { AppProvider } from "@shopify/shopify-app-react-router/react";
+import { NavMenu } from "@shopify/app-bridge-react";
 
 import { authenticate } from "../shopify.server";
 
@@ -14,14 +15,25 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
 
 export default function App() {
   const { apiKey } = useLoaderData<typeof loader>();
+  const location = useLocation();
+  const appContextQuery = location.search;
+  const navItems = [
+    { label: "Dashboard", path: "/app" },
+    { label: "Reviews", path: "/app/reviews" },
+    { label: "Requests", path: "/app/requests" },
+    { label: "Widgets", path: "/app/widgets" },
+    { label: "Settings", path: "/app/settings" },
+  ];
 
   return (
-    <AppProvider embedded={false}>
-      <s-app-nav>
-        <s-link href="/app">Home</s-link>
-        <s-link href="/app/reviews">Reviews</s-link>
-        <s-link href="/app/additional">Additional page</s-link>
-      </s-app-nav>
+    <AppProvider embedded apiKey={apiKey}>
+      <NavMenu>
+        {navItems.map((item) => (
+          <a key={item.path} href={`${item.path}${appContextQuery}`}>
+            {item.label}
+          </a>
+        ))}
+      </NavMenu>
       <Outlet />
     </AppProvider>
   );

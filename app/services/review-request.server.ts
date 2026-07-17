@@ -7,6 +7,11 @@ export const reviewRequestService = {
         ...(storeId ? { storeId } : {}),
         ...(productId ? { productId } : {}),
       },
+      include: {
+        store: true,
+        product: true,
+      },
+      orderBy: { createdAt: "desc" },
     });
   },
 

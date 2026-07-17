@@ -1,0 +1,39 @@
+.page {
+  display: grid;
+  gap: var(--space-8);
+  padding-block: var(--space-10);
+}
+
+.header {
+  display: grid;
+  gap: var(--space-2);
+}
+
+.headerContent {
+  display: grid;
+  gap: var(--space-2);
+  max-width: 40rem;
+}
+
+.eyebrow {
+  margin: 0;
+  color: var(--color-text-muted);
+  font-size: var(--text-xs);
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+}
+
+.title {
+  margin: 0;
+  font-size: clamp(1.75rem, 3vw, 2.4rem);
+  font-weight: 600;
+  letter-spacing: -0.03em;
+}
+
+.subtitle {
+  margin: 0;
+  color: var(--color-text-muted);
+  font-size: var(--text-base);
+  line-height: 1.6;
+  max-width: 40rem;
+}

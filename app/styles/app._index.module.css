@@ -1,7 +1,7 @@
 .page {
   display: grid;
   gap: var(--space-8);
-  padding-block: var(--space-8);
+  padding-block: var(--space-10);
 }
 
 .header {
@@ -29,13 +29,25 @@
   color: var(--color-text-muted);
   font-size: var(--text-base);
   line-height: 1.6;
-  max-width: 36rem;
+  max-width: 40rem;
+}
+
+.mutedText {
+  margin: 0;
+  color: var(--color-text-muted);
+  font-size: var(--text-sm);
 }
 
 .statsGrid {
   display: grid;
   gap: var(--space-4);
   grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+}
+
+.errorText {
+  margin: 0;
+  color: var(--color-danger);
+  font-size: var(--text-sm);
 }
 
 .statContent {
@@ -81,4 +93,19 @@
   margin: 0;
   color: var(--color-text-muted);
   line-height: 1.7;
+}
+
+.emptyStateLink {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: fit-content;
+  margin: 0 auto;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  background: var(--color-surface);
+  color: var(--color-text);
+  text-decoration: none;
+  font-weight: 600;
+  padding: 0.65rem 0.9rem;
 }

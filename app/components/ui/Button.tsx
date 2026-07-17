@@ -1,7 +1,7 @@
 import type { ButtonHTMLAttributes, ReactNode } from "react";
 import styles from "./button.module.css";
 
-type ButtonProps = ButtonHTMLAttributes<HTMLButtonElement> & {
+type ButtonProps = Omit<ButtonHTMLAttributes<HTMLButtonElement>, "variant"> & {
   children: ReactNode;
   variant?: "primary" | "secondary" | "ghost";
   fullWidth?: boolean;
