@@ -2,8 +2,7 @@ import { useState } from "react";
 import { redirect, useFetcher, useLoaderData, useLocation, useRouteError } from "react-router";
 import type { ActionFunctionArgs, HeadersFunction, LoaderFunctionArgs } from "react-router";
 import { boundary } from "@shopify/shopify-app-react-router/server";
-import { AppProvider as PolarisAppProvider, Banner, Card, EmptyState } from "@shopify/polaris";
-import enTranslations from "@shopify/polaris/locales/en.json";
+import { Banner, Card, EmptyState } from "@shopify/polaris";
 
 import { Button } from "../components/ui/Button";
 import { Container } from "../components/ui/Container";
@@ -120,60 +119,58 @@ export default function EditReviewPage() {
   };
 
   return (
-    <PolarisAppProvider i18n={enTranslations}>
-      <Container as="main">
-        <div className={`${shellStyles.page} ${styles.page}`}>
-          <header className={`${shellStyles.header} ${styles.header}`}>
-            <div className={shellStyles.headerContent}>
-              <p className={`${shellStyles.eyebrow} ${styles.eyebrow}`}>Imagyn Reviews</p>
-              <h1 className={`${shellStyles.title} ${styles.title}`}>Edit Review</h1>
-              <p className={`${shellStyles.subtitle} ${styles.subtitle}`}>
-                Update the review details below.
-              </p>
-            </div>
-          </header>
+    <Container as="main">
+      <div className={`${shellStyles.page} ${styles.page}`}>
+        <header className={`${shellStyles.header} ${styles.header}`}>
+          <div className={shellStyles.headerContent}>
+            <p className={`${shellStyles.eyebrow} ${styles.eyebrow}`}>Imagyn Reviews</p>
+            <h1 className={`${shellStyles.title} ${styles.title}`}>Edit Review</h1>
+            <p className={`${shellStyles.subtitle} ${styles.subtitle}`}>
+              Update the review details below.
+            </p>
+          </div>
+        </header>
 
-          {fetcher.data && !fetcher.data.ok ? <Banner tone="critical">{fetcher.data.error}</Banner> : null}
+        {fetcher.data && !fetcher.data.ok ? <Banner tone="critical">{fetcher.data.error}</Banner> : null}
 
-          {!review ? (
+        {!review ? (
+          <Card>
+            <Banner tone="critical">{error}</Banner>
+            <EmptyState
+              heading="This review isn't available"
+              action={{ content: "Back to Reviews", url: backHref }}
+              image="https://cdn.shopify.com/s/files/1/0262/4071/2726/files/emptystate-files.png"
+            >
+              <p>It may have been deleted, or you may not have access to it.</p>
+            </EmptyState>
+          </Card>
+        ) : (
+          <>
             <Card>
-              <Banner tone="critical">{error}</Banner>
-              <EmptyState
-                heading="This review isn't available"
-                action={{ content: "Back to Reviews", url: backHref }}
-                image="https://cdn.shopify.com/s/files/1/0262/4071/2726/files/emptystate-files.png"
-              >
-                <p>It may have been deleted, or you may not have access to it.</p>
-              </EmptyState>
+              <ReviewForm
+                mode="edit"
+                products={products}
+                values={values}
+                onChange={handleChange}
+                disabled={isSubmitting}
+              />
             </Card>
-          ) : (
-            <>
-              <Card>
-                <ReviewForm
-                  mode="edit"
-                  products={products}
-                  values={values}
-                  onChange={handleChange}
-                  disabled={isSubmitting}
-                />
-              </Card>
 
-              <div className={styles.formActions}>
-                <LinkButton to={backHref}>Cancel</LinkButton>
-                <Button
-                  type="button"
-                  variant="primary"
-                  onClick={handleSubmit}
-                  disabled={isSubmitting || !values.reviewerName.trim() || !values.content.trim()}
-                >
-                  {isSubmitting ? "Saving..." : "Save Changes"}
-                </Button>
-              </div>
-            </>
-          )}
-        </div>
-      </Container>
-    </PolarisAppProvider>
+            <div className={styles.formActions}>
+              <LinkButton to={backHref}>Cancel</LinkButton>
+              <Button
+                type="button"
+                variant="primary"
+                onClick={handleSubmit}
+                disabled={isSubmitting || !values.reviewerName.trim() || !values.content.trim()}
+              >
+                {isSubmitting ? "Saving..." : "Save Changes"}
+              </Button>
+            </div>
+          </>
+        )}
+      </div>
+    </Container>
   );
 }
 

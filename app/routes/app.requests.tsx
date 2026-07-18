@@ -10,7 +10,6 @@ import {
 import type { ActionFunctionArgs, HeadersFunction, LoaderFunctionArgs } from "react-router";
 import { boundary } from "@shopify/shopify-app-react-router/server";
 import {
-  AppProvider as PolarisAppProvider,
   Badge,
   Banner,
   BlockStack,
@@ -31,7 +30,6 @@ import {
   TextField,
   Toast,
 } from "@shopify/polaris";
-import enTranslations from "@shopify/polaris/locales/en.json";
 
 import { Container } from "../components/ui/Container";
 import { authenticate } from "../shopify.server";
@@ -41,6 +39,7 @@ import {
   type ReviewRequestRecord,
   type ReviewRequestStatus,
 } from "../services/review-request.server";
+import { timed } from "../utils/perf.server";
 import shellStyles from "../styles/app.shell.module.css";
 import styles from "../styles/app.requests.module.css";
 
@@ -122,7 +121,8 @@ const emptyFormState: RequestFormState = {
 };
 
 export const loader = async ({ request }: LoaderFunctionArgs): Promise<LoaderData> => {
-  await authenticate.admin(request);
+  const loaderStart = performance.now();
+  await timed("app.requests authenticate.admin", () => authenticate.admin(request));
 
   const url = new URL(request.url);
   const search = url.searchParams.get("search")?.trim() || "";
@@ -147,6 +147,7 @@ export const loader = async ({ request }: LoaderFunctionArgs): Promise<LoaderDat
       reviewRequestService.listProducts(),
     ]);
 
+    console.log(`[perf] app.requests loader total: ${(performance.now() - loaderStart).toFixed(1)}ms`);
     return {
       requests: result.requests,
       customers: customers.map((customer) => ({
@@ -163,6 +164,7 @@ export const loader = async ({ request }: LoaderFunctionArgs): Promise<LoaderDat
       error: null,
     };
   } catch (error) {
+    console.log(`[perf] app.requests loader total (error): ${(performance.now() - loaderStart).toFixed(1)}ms`);
     return {
       requests: [],
       customers: [],
@@ -600,9 +602,9 @@ export default function RequestsPage() {
   const previewSendDate = formatDateTime(optimisticScheduleDate(Number(formState.delayDays || "0")));
 
   return (
-    <PolarisAppProvider i18n={enTranslations}>
+    <>
       <Container as="main">
-        <div className={`${shellStyles.page} ${styles.page}`}>
+      <div className={`${shellStyles.page} ${styles.page}`}>
           <header className={`${shellStyles.header} ${styles.header}`}>
             <div className={shellStyles.headerContent}>
               <p className={`${shellStyles.eyebrow} ${styles.eyebrow}`}>Imagyn Reviews</p>
@@ -907,7 +909,7 @@ export default function RequestsPage() {
           <Toast content={toastState.content} error={toastState.error} onDismiss={() => setToastState(null)} />
         ) : null}
       </Frame>
-    </PolarisAppProvider>
+    </>
   );
 }
 

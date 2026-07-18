@@ -3,7 +3,6 @@ import { useFetcher, useLoaderData, useNavigation, useRevalidator, useRouteError
 import type { ActionFunctionArgs, HeadersFunction, LoaderFunctionArgs } from "react-router";
 import { boundary } from "@shopify/shopify-app-react-router/server";
 import {
-  AppProvider as PolarisAppProvider,
   Badge,
   Banner,
   BlockStack,
@@ -23,10 +22,10 @@ import {
   TextField,
   Toast,
 } from "@shopify/polaris";
-import enTranslations from "@shopify/polaris/locales/en.json";
 
 import { Container } from "../components/ui/Container";
 import { authenticate } from "../shopify.server";
+import { timed } from "../utils/perf.server";
 import {
   widgetService,
 } from "../services/widget.server";
@@ -122,12 +121,15 @@ const initialOpenSections: Record<SettingSectionKey, boolean> = {
 const toNumberValue = (value: number | [number, number]) => (typeof value === "number" ? value : value[0]);
 
 export const loader = async ({ request }: LoaderFunctionArgs): Promise<LoaderData> => {
-  await authenticate.admin(request);
+  const loaderStart = performance.now();
+  await timed("app.widgets authenticate.admin", () => authenticate.admin(request));
 
   try {
     const widgets = await widgetService.listWidgets();
+    console.log(`[perf] app.widgets loader total: ${(performance.now() - loaderStart).toFixed(1)}ms`);
     return { widgets, error: null };
   } catch (error) {
+    console.log(`[perf] app.widgets loader total (error): ${(performance.now() - loaderStart).toFixed(1)}ms`);
     return {
       widgets: [],
       error: error instanceof Error ? error.message : "Unable to load widgets.",
@@ -582,7 +584,7 @@ export default function WidgetsPage() {
   };
 
   return (
-    <PolarisAppProvider i18n={enTranslations}>
+    <>
       <Container as="main">
         <div className={`${shellStyles.page} ${styles.page}`}>
           <header className={`${shellStyles.header} ${styles.header}`}>
@@ -821,7 +823,7 @@ export default function WidgetsPage() {
       <Frame>
         {toastState ? <Toast content={toastState.content} error={toastState.error} onDismiss={() => setToastState(null)} /> : null}
       </Frame>
-    </PolarisAppProvider>
+    </>
   );
 }
 

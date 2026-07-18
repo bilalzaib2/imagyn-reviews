@@ -10,8 +10,7 @@ import {
 } from "react-router";
 import type { ActionFunctionArgs, HeadersFunction, LoaderFunctionArgs } from "react-router";
 import { boundary } from "@shopify/shopify-app-react-router/server";
-import { AppProvider as PolarisAppProvider, Button as PolarisButton, ButtonGroup, Frame, TextField, Toast } from "@shopify/polaris";
-import enTranslations from "@shopify/polaris/locales/en.json";
+import { Button as PolarisButton, ButtonGroup, Frame, TextField, Toast } from "@shopify/polaris";
 
 import { Button } from "../components/ui/Button";
 import { Container } from "../components/ui/Container";
@@ -33,6 +32,7 @@ import {
 import { ReviewStatus } from "../services/review.shared";
 import { getOrCreateStore } from "../services/store.server";
 import { authenticate } from "../shopify.server";
+import { timed } from "../utils/perf.server";
 import styles from "../styles/app.reviews.module.css";
 import shellStyles from "../styles/app.shell.module.css";
 
@@ -46,7 +46,8 @@ type ActionData = {
 const STATUS_VALUES: string[] = Object.values(ReviewStatus);
 
 export const loader = async ({ request }: LoaderFunctionArgs) => {
-  const { session } = await authenticate.admin(request);
+  const loaderStart = performance.now();
+  const { session } = await timed("app.reviews authenticate.admin", () => authenticate.admin(request));
   const store = await getOrCreateStore(session.shop);
 
   const url = new URL(request.url);
@@ -76,6 +77,7 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
       limit: 20,
     });
 
+    console.log(`[perf] app.reviews loader total: ${(performance.now() - loaderStart).toFixed(1)}ms`);
     return {
       reviews: result.reviews,
       nextCursor: result.nextCursor,
@@ -92,6 +94,7 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
       prevCursor: prevCursor ?? "",
     };
   } catch (error) {
+    console.log(`[perf] app.reviews loader total (error): ${(performance.now() - loaderStart).toFixed(1)}ms`);
     return {
       reviews: [] as ReviewWithProduct[],
       nextCursor: null,
@@ -483,7 +486,7 @@ export default function ReviewsPage() {
     effectiveReviews.length > 0 && effectiveReviews.every((review) => selectedIds.includes(review.id));
 
   return (
-    <PolarisAppProvider i18n={enTranslations}>
+    <>
       <Container as="main">
       <div className={`${shellStyles.page} ${styles.page}`}>
         <header className={`${shellStyles.header} ${styles.header}`}>
@@ -957,7 +960,7 @@ export default function ReviewsPage() {
           <Toast content={toastState.content} error={toastState.error} onDismiss={() => setToastState(null)} />
         ) : null}
       </Frame>
-    </PolarisAppProvider>
+    </>
   );
 }
 

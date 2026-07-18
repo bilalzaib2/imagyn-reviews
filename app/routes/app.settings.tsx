@@ -4,11 +4,14 @@ import { boundary } from "@shopify/shopify-app-react-router/server";
 import { Container } from "../components/ui/Container";
 import { Section } from "../components/ui/Section";
 import { authenticate } from "../shopify.server";
+import { timed } from "../utils/perf.server";
 import shellStyles from "../styles/app.shell.module.css";
 import styles from "../styles/app.management.module.css";
 
 export const loader = async ({ request }: LoaderFunctionArgs) => {
-  await authenticate.admin(request);
+  const loaderStart = performance.now();
+  await timed("app.settings authenticate.admin", () => authenticate.admin(request));
+  console.log(`[perf] app.settings loader total: ${(performance.now() - loaderStart).toFixed(1)}ms`);
   return null;
 };
 

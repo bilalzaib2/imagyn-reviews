@@ -1,21 +1,35 @@
 import type { HeadersFunction, LoaderFunctionArgs } from "react-router";
-import { Outlet, useLoaderData, useLocation, useRouteError } from "react-router";
+import { Outlet, useLoaderData, useLocation, useNavigation, useRouteError } from "react-router";
 import { boundary } from "@shopify/shopify-app-react-router/server";
 import { AppProvider } from "@shopify/shopify-app-react-router/react";
+import { AppProvider as PolarisAppProvider } from "@shopify/polaris";
 import { NavMenu } from "@shopify/app-bridge-react";
+import enTranslations from "@shopify/polaris/locales/en.json";
 
 import { authenticate } from "../shopify.server";
+import { timed } from "../utils/perf.server";
+import styles from "../styles/app.shell.module.css";
 
 export const loader = async ({ request }: LoaderFunctionArgs) => {
-  await authenticate.admin(request);
+  const loaderStart = performance.now();
+  await timed("app.tsx authenticate.admin", () => authenticate.admin(request));
 
   // eslint-disable-next-line no-undef
-  return { apiKey: process.env.SHOPIFY_API_KEY || "" };
+  const result = { apiKey: process.env.SHOPIFY_API_KEY || "" };
+  console.log(`[perf] app.tsx loader total: ${(performance.now() - loaderStart).toFixed(1)}ms`);
+  return result;
 };
+
+// app.tsx's loader only ever returns a static env value (apiKey), so it never needs to
+// re-run on navigations within /app/* - the child route's own authenticate.admin call
+// remains the source of truth for session validity on every navigation.
+export const shouldRevalidate = () => false;
 
 export default function App() {
   const { apiKey } = useLoaderData<typeof loader>();
   const location = useLocation();
+  const navigation = useNavigation();
+  const isNavigating = navigation.state !== "idle";
   const appContextQuery = location.search;
   const navItems = [
     { label: "Dashboard", path: "/app" },
@@ -35,7 +49,10 @@ export default function App() {
           </a>
         ))}
       </NavMenu>
-      <Outlet />
+      <PolarisAppProvider i18n={enTranslations}>
+        {isNavigating ? <div className={styles.navProgress} aria-hidden="true" /> : null}
+        <Outlet />
+      </PolarisAppProvider>
     </AppProvider>
   );
 }

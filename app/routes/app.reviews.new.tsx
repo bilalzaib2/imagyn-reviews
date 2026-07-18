@@ -2,8 +2,7 @@ import { useState } from "react";
 import { redirect, useFetcher, useLoaderData, useLocation, useRouteError } from "react-router";
 import type { ActionFunctionArgs, HeadersFunction, LoaderFunctionArgs } from "react-router";
 import { boundary } from "@shopify/shopify-app-react-router/server";
-import { AppProvider as PolarisAppProvider, Banner, Card } from "@shopify/polaris";
-import enTranslations from "@shopify/polaris/locales/en.json";
+import { Banner, Card } from "@shopify/polaris";
 
 import { Button } from "../components/ui/Button";
 import { Container } from "../components/ui/Container";
@@ -116,45 +115,43 @@ export default function NewReviewPage() {
   const backHref = `/app/reviews${location.search}`;
 
   return (
-    <PolarisAppProvider i18n={enTranslations}>
-      <Container as="main">
-        <div className={`${shellStyles.page} ${styles.page}`}>
-          <header className={`${shellStyles.header} ${styles.header}`}>
-            <div className={shellStyles.headerContent}>
-              <p className={`${shellStyles.eyebrow} ${styles.eyebrow}`}>Imagyn Reviews</p>
-              <h1 className={`${shellStyles.title} ${styles.title}`}>New Review</h1>
-              <p className={`${shellStyles.subtitle} ${styles.subtitle}`}>
-                Add a review directly to a product.
-              </p>
-            </div>
-          </header>
-
-          {fetcher.data && !fetcher.data.ok ? <Banner tone="critical">{fetcher.data.error}</Banner> : null}
-
-          <Card>
-            <ReviewForm
-              mode="create"
-              products={products}
-              values={values}
-              onChange={handleChange}
-              disabled={isSubmitting}
-            />
-          </Card>
-
-          <div className={styles.formActions}>
-            <LinkButton to={backHref}>Cancel</LinkButton>
-            <Button
-              type="button"
-              variant="primary"
-              onClick={handleSubmit}
-              disabled={isSubmitting || !values.productId || !values.reviewerName.trim() || !values.content.trim()}
-            >
-              {isSubmitting ? "Saving..." : "Create Review"}
-            </Button>
+    <Container as="main">
+      <div className={`${shellStyles.page} ${styles.page}`}>
+        <header className={`${shellStyles.header} ${styles.header}`}>
+          <div className={shellStyles.headerContent}>
+            <p className={`${shellStyles.eyebrow} ${styles.eyebrow}`}>Imagyn Reviews</p>
+            <h1 className={`${shellStyles.title} ${styles.title}`}>New Review</h1>
+            <p className={`${shellStyles.subtitle} ${styles.subtitle}`}>
+              Add a review directly to a product.
+            </p>
           </div>
+        </header>
+
+        {fetcher.data && !fetcher.data.ok ? <Banner tone="critical">{fetcher.data.error}</Banner> : null}
+
+        <Card>
+          <ReviewForm
+            mode="create"
+            products={products}
+            values={values}
+            onChange={handleChange}
+            disabled={isSubmitting}
+          />
+        </Card>
+
+        <div className={styles.formActions}>
+          <LinkButton to={backHref}>Cancel</LinkButton>
+          <Button
+            type="button"
+            variant="primary"
+            onClick={handleSubmit}
+            disabled={isSubmitting || !values.productId || !values.reviewerName.trim() || !values.content.trim()}
+          >
+            {isSubmitting ? "Saving..." : "Create Review"}
+          </Button>
         </div>
-      </Container>
-    </PolarisAppProvider>
+      </div>
+    </Container>
   );
 }
 

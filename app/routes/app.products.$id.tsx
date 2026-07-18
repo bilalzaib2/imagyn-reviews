@@ -2,7 +2,6 @@ import { Link as RemixLink, useLoaderData, useLocation, useNavigation, useRouteE
 import type { HeadersFunction, LoaderFunctionArgs } from "react-router";
 import { boundary } from "@shopify/shopify-app-react-router/server";
 import {
-  AppProvider as PolarisAppProvider,
   Badge,
   Banner,
   BlockStack,
@@ -12,7 +11,6 @@ import {
   SkeletonDisplayText,
   Text,
 } from "@shopify/polaris";
-import enTranslations from "@shopify/polaris/locales/en.json";
 
 import { Container } from "../components/ui/Container";
 import { LinkButton } from "../components/ui/LinkButton";
@@ -141,149 +139,148 @@ export default function ProductDetailPage() {
   const backHref = `/app/products${location.search}`;
 
   return (
-    <PolarisAppProvider i18n={enTranslations}>
-      <Container as="main">
-        <div className={`${shellStyles.page} ${styles.page}`}>
-          <header className={`${shellStyles.header} ${styles.header}`}>
-            <div className={shellStyles.headerContent}>
-              <p className={`${shellStyles.eyebrow} ${styles.eyebrow}`}>Imagyn Reviews</p>
-              <h1 className={`${shellStyles.title} ${styles.title}`}>
-                {product ? product.name : "Product"}
-              </h1>
-              <p className={`${shellStyles.subtitle} ${styles.subtitle}`}>
-                Product overview and connected reviews.
-              </p>
+    <Container as="main">
+      <div className={`${shellStyles.page} ${styles.page}`}>
+        <header className={`${shellStyles.header} ${styles.header}`}>
+          <div className={shellStyles.headerContent}>
+            <p className={`${shellStyles.eyebrow} ${styles.eyebrow}`}>Imagyn Reviews</p>
+            <h1 className={`${shellStyles.title} ${styles.title}`}>
+              {product ? product.name : "Product"}
+            </h1>
+            <p className={`${shellStyles.subtitle} ${styles.subtitle}`}>
+              Product overview and connected reviews.
+            </p>
+          </div>
+          <div className={styles.headerActions}>
+            <LinkButton to={backHref}>Back to Products</LinkButton>
+          </div>
+        </header>
+
+        {isLoading ? (
+          <Card>
+            <div className={styles.skeletonBlock}>
+              <SkeletonDisplayText size="small" />
+              <SkeletonBodyText lines={6} />
             </div>
-            <div className={styles.headerActions}>
-              <LinkButton to={backHref}>Back to Products</LinkButton>
+          </Card>
+        ) : error || !product ? (
+          <Card>
+            <div className={styles.errorState}>
+              <Banner tone="critical">{error ?? "Product not found."}</Banner>
+              <EmptyState
+                heading="This product isn't available"
+                action={{ content: "Back to Products", url: backHref }}
+                image="https://cdn.shopify.com/s/files/1/0262/4071/2726/files/emptystate-files.png"
+              >
+                <p>It may have been removed, or you may not have access to it.</p>
+              </EmptyState>
             </div>
-          </header>
-
-          {isLoading ? (
+          </Card>
+        ) : (
+          <>
             <Card>
-              <div className={styles.skeletonBlock}>
-                <SkeletonDisplayText size="small" />
-                <SkeletonBodyText lines={6} />
-              </div>
-            </Card>
-          ) : error || !product ? (
-            <Card>
-              <div className={styles.errorState}>
-                <Banner tone="critical">{error ?? "Product not found."}</Banner>
-                <EmptyState
-                  heading="This product isn't available"
-                  action={{ content: "Back to Products", url: backHref }}
-                  image="https://cdn.shopify.com/s/files/1/0262/4071/2726/files/emptystate-files.png"
-                >
-                  <p>It may have been removed, or you may not have access to it.</p>
-                </EmptyState>
-              </div>
-            </Card>
-          ) : (
-            <>
-              <Card>
-                <div className={styles.productLayout}>
-                  {product.featuredImage ? (
-                    <img
-                      className={styles.productImage}
-                      src={product.featuredImage}
-                      alt={product.name}
-                      loading="lazy"
-                    />
-                  ) : (
-                    <div className={styles.productImagePlaceholder} aria-hidden="true" />
-                  )}
+              <div className={styles.productLayout}>
+                {product.featuredImage ? (
+                  <img
+                    className={styles.productImage}
+                    src={product.featuredImage}
+                    alt={product.name}
+                    loading="lazy"
+                  />
+                ) : (
+                  <div className={styles.productImagePlaceholder} aria-hidden="true" />
+                )}
 
-                  <div className={styles.productInfo}>
-                    <div className={styles.productTitleRow}>
-                      <Text as="h2" variant="headingLg">
-                        {product.name}
-                      </Text>
-                      <Badge tone={statusToneFor(product.status)}>{formatStatusLabel(product.status)}</Badge>
-                    </div>
-
-                    <dl className={styles.statGrid}>
-                      <StatItem label="Vendor" value={product.vendor || "—"} />
-                      <StatItem label="Product type" value={product.productType || "—"} />
-                      <StatItem label="Review count" value={String(product.totalReviews)} />
-                      <StatItem
-                        label="Average rating"
-                        value={product.totalReviews > 0 ? `${product.averageRating.toFixed(1)} / 5` : "No ratings yet"}
-                      />
-                      <StatItem label="Created" value={formatDate(product.createdAt)} />
-                      {product.lastSyncedAt ? (
-                        <StatItem label="Last synced" value={formatDate(product.lastSyncedAt)} />
-                      ) : null}
-                    </dl>
-
-                    <RatingBreakdown
-                      totalReviews={product.totalReviews}
-                      counts={[
-                        product.rating5Count,
-                        product.rating4Count,
-                        product.rating3Count,
-                        product.rating2Count,
-                        product.rating1Count,
-                      ]}
-                    />
-                  </div>
-                </div>
-              </Card>
-
-              <Card>
-                <BlockStack gap="400">
-                  <div className={styles.reviewsHeader}>
-                    <Text as="h2" variant="headingMd">
-                      Reviews
+                <div className={styles.productInfo}>
+                  <div className={styles.productTitleRow}>
+                    <Text as="h2" variant="headingLg">
+                      {product.name}
                     </Text>
-                    <RemixLink
-                      to={`/app/reviews?product=${encodeURIComponent(product.name)}`}
-                      className={styles.reviewsLink}
-                    >
-                      View all in Reviews
-                    </RemixLink>
+                    <Badge tone={statusToneFor(product.status)}>{formatStatusLabel(product.status)}</Badge>
                   </div>
 
-                  {reviews.length === 0 ? (
-                    <EmptyState
-                      heading="No reviews yet"
-                      image="https://cdn.shopify.com/s/files/1/0262/4071/2726/files/emptystate-files.png"
-                    >
-                      <p>Reviews for this product will appear here once customers start submitting them.</p>
-                    </EmptyState>
-                  ) : (
-                    <div className={styles.reviewList}>
-                      {reviewsTotalCount > reviews.length ? (
-                        <p className={styles.reviewListHint}>
-                          Showing the {reviews.length} most recent of {reviewsTotalCount} reviews.
-                        </p>
-                      ) : null}
-                      {reviews.map((review) => (
-                        <article key={review.id} className={styles.reviewRow}>
-                          <div className={styles.reviewRating} aria-label={`${review.rating} out of 5 stars`}>
-                            <StarRating value={review.rating} />
+                  <dl className={styles.statGrid}>
+                    <StatItem label="Vendor" value={product.vendor || "—"} />
+                    <StatItem label="Product type" value={product.productType || "—"} />
+                    <StatItem
+                      label="Average rating"
+                      value={product.totalReviews > 0 ? `${product.averageRating.toFixed(1)} / 5` : "No ratings yet"}
+                    />
+                    <StatItem label="Total reviews" value={String(product.totalReviews)} />
+                    <StatItem label="Created" value={formatDate(product.createdAt)} />
+                    <StatItem label="Last updated" value={formatDate(product.updatedAt)} />
+                    {product.lastSyncedAt ? (
+                      <StatItem label="Last synced" value={formatDate(product.lastSyncedAt)} />
+                    ) : null}
+                  </dl>
+
+                  <RatingBreakdown
+                    totalReviews={product.totalReviews}
+                    counts={[
+                      product.rating5Count,
+                      product.rating4Count,
+                      product.rating3Count,
+                      product.rating2Count,
+                      product.rating1Count,
+                    ]}
+                  />
+                </div>
+              </div>
+            </Card>
+
+            <Card>
+              <BlockStack gap="400">
+                <div className={styles.reviewsHeader}>
+                  <Text as="h2" variant="headingMd">
+                    Reviews
+                  </Text>
+                  <RemixLink
+                    to={`/app/reviews?product=${encodeURIComponent(product.name)}`}
+                    className={styles.reviewsLink}
+                  >
+                    View all in Reviews
+                  </RemixLink>
+                </div>
+
+                {reviews.length === 0 ? (
+                  <EmptyState
+                    heading="Your first review will appear here."
+                    image="https://cdn.shopify.com/s/files/1/0262/4071/2726/files/emptystate-files.png"
+                  >
+                    <p>Once a customer leaves feedback on this product, it shows up in this space.</p>
+                  </EmptyState>
+                ) : (
+                  <div className={styles.reviewList}>
+                    {reviewsTotalCount > reviews.length ? (
+                      <p className={styles.reviewListHint}>
+                        Showing the {reviews.length} most recent of {reviewsTotalCount} reviews.
+                      </p>
+                    ) : null}
+                    {reviews.map((review) => (
+                      <article key={review.id} className={styles.reviewRow}>
+                        <div className={styles.reviewRating} aria-label={`${review.rating} out of 5 stars`}>
+                          <StarRating value={review.rating} />
+                        </div>
+                        <div className={styles.reviewContent}>
+                          <div className={styles.reviewHeaderLine}>
+                            <span className={styles.reviewTitle}>{review.title ?? "Untitled review"}</span>
+                            <ReviewStatusBadge status={review.status} />
                           </div>
-                          <div className={styles.reviewContent}>
-                            <div className={styles.reviewHeaderLine}>
-                              <span className={styles.reviewTitle}>{review.title ?? "Untitled review"}</span>
-                              <ReviewStatusBadge status={review.status} />
-                            </div>
-                            <p className={styles.reviewMeta}>
-                              {review.reviewerName} • {formatDate(review.createdAt)}
-                            </p>
-                            {review.content ? <p className={styles.reviewBody}>{review.content}</p> : null}
-                          </div>
-                        </article>
-                      ))}
-                    </div>
-                  )}
-                </BlockStack>
-              </Card>
-            </>
-          )}
-        </div>
-      </Container>
-    </PolarisAppProvider>
+                          <p className={styles.reviewMeta}>
+                            {review.reviewerName} • {formatDate(review.createdAt)}
+                          </p>
+                          {review.content ? <p className={styles.reviewBody}>{review.content}</p> : null}
+                        </div>
+                      </article>
+                    ))}
+                  </div>
+                )}
+              </BlockStack>
+            </Card>
+          </>
+        )}
+      </div>
+    </Container>
   );
 }
 
