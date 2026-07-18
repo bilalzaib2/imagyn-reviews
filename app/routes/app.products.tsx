@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { useFetcher, useLoaderData, useNavigation, useRevalidator, useRouteError } from "react-router";
+import { Link, useFetcher, useLoaderData, useLocation, useNavigation, useRevalidator, useRouteError } from "react-router";
 import type { ActionFunctionArgs, HeadersFunction, LoaderFunctionArgs } from "react-router";
 import { boundary } from "@shopify/shopify-app-react-router/server";
 import {
@@ -125,6 +125,7 @@ export default function ProductsPage() {
   const fetcher = useFetcher<ActionData>();
   const navigation = useNavigation();
   const revalidator = useRevalidator();
+  const location = useLocation();
 
   const isLoading = navigation.state !== "idle";
   const isSyncing = fetcher.state !== "idle";
@@ -150,7 +151,11 @@ export default function ProductsPage() {
   };
 
   const rows = products.map((product: ProductListItem) => [
-    <div key={`${product.id}-image`} className={styles.productCell}>
+    <Link
+      key={`${product.id}-image`}
+      to={`/app/products/${product.id}${location.search}`}
+      className={styles.productCell}
+    >
       {product.featuredImage ? (
         <img className={styles.productImage} src={product.featuredImage} alt={product.name} loading="lazy" />
       ) : (
@@ -160,7 +165,7 @@ export default function ProductsPage() {
         <span className={styles.productName}>{product.name}</span>
         {product.vendor ? <span className={styles.productVendor}>{product.vendor}</span> : null}
       </div>
-    </div>,
+    </Link>,
     product.handle ?? "-",
     product.productType || "-",
     <Badge key={`${product.id}-status`} tone={statusToneFor(product.status)}>

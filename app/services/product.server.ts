@@ -139,3 +139,12 @@ export async function getProduct(id: string) {
     },
   });
 }
+
+export async function getProductForStore(id: string, storeId: string) {
+  return prisma.product.findFirst({
+    where: {
+      id,
+      storeId,
+    },
+  });
+}

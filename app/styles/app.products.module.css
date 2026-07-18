@@ -44,6 +44,18 @@
   display: flex;
   align-items: center;
   gap: var(--space-3);
+  text-decoration: none;
+  color: inherit;
+  border-radius: var(--radius-sm);
+}
+
+.productCell:hover .productName {
+  text-decoration: underline;
+}
+
+.productCell:focus-visible {
+  outline: 2px solid var(--color-accent);
+  outline-offset: 2px;
 }
 
 .productImage {

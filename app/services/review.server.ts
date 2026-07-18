@@ -95,6 +95,21 @@ export const reviewService = {
     };
   },
 
+  async getProductStats(productId: string) {
+    const [totalCount, aggregate] = await Promise.all([
+      prisma.review.count({ where: { productId, deletedAt: null } }),
+      prisma.review.aggregate({
+        where: { productId, deletedAt: null },
+        _avg: { rating: true },
+      }),
+    ]);
+
+    return {
+      totalCount,
+      averageRating: Number((aggregate._avg.rating ?? 0).toFixed(1)),
+    };
+  },
+
   async list(storeId?: string, productId?: string) {
     return prisma.review.findMany({
       where: {
