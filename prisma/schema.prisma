@@ -47,17 +47,27 @@ model Store {
 }
 
 model Product {
-  id           String          @id @default(cuid())
-  storeId      String
-  store        Store           @relation(fields: [storeId], references: [id], onDelete: Cascade)
-  name         String
-  slug         String?
-  description  String?
-  createdAt    DateTime        @default(now())
-  updatedAt    DateTime        @updatedAt
-  reviews      Review[]
-  reviewRequests ReviewRequest[]
-  widgets      Widget[]
+  id               String   @id @default(cuid())
+
+  storeId          String
+  store            Store    @relation(fields: [storeId], references: [id], onDelete: Cascade)
+
+  shopifyProductId String? @unique
+  name             String
+  handle           String?
+  vendor           String?
+  productType      String?
+  status           String?
+  featuredImage    String?
+  slug             String?
+  description      String?
+
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  reviews          Review[]
+  reviewRequests   ReviewRequest[]
+  widgets          Widget[]
 }
 
 model Review {
@@ -71,6 +81,7 @@ model Review {
   title            String?
   body             String?
   merchantReply    String?
+  repliedAt        DateTime?
   photoUrls        String?
   rating           Int?
   status           String   @default("pending")
@@ -95,8 +106,15 @@ model ReviewRequest {
   product      Product?        @relation(fields: [productId], references: [id], onDelete: SetNull)
   email        String?
   name         String?
+  orderNumber  String?
+  customMessage String?
   requestToken String?
+  delayDays    Int?
+  scheduledFor DateTime?
   status       String          @default("pending")
+  sentAt       DateTime?
+  openedAt     DateTime?
+  reviewedAt   DateTime?
   createdAt    DateTime        @default(now())
   updatedAt    DateTime        @updatedAt
 }

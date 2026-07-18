@@ -59,6 +59,7 @@ export interface ReviewQueryResult {
     authorName: string | null;
     authorEmail: string | null;
     merchantReply: string | null;
+    repliedAt: Date | null;
     rating: number | null;
     status: string;
     verifiedPurchase: boolean;
@@ -163,6 +164,7 @@ export const reviewService = {
         authorName: review.authorName,
         authorEmail: review.authorEmail,
         merchantReply: review.merchantReply,
+        repliedAt: review.repliedAt,
         rating: review.rating,
         status: review.status,
         verifiedPurchase: review.verifiedPurchase,
@@ -264,7 +266,55 @@ export const reviewService = {
     });
   },
 
-  async setReply(id: string, merchantReply: string) {
+  async approveReview(id: string) {
+    return this.moderateStatus(id, "approved");
+  },
+
+  async rejectReview(id: string) {
+    return this.moderateStatus(id, "rejected");
+  },
+
+  async replyToReview(id: string, merchantReply: string) {
+    const existing = await prisma.review.findFirst({ where: { id, deletedAt: null } });
+
+    if (!existing) {
+      throw new Error("Review not found.");
+    }
+
+    const normalizedReply = merchantReply.trim();
+
+    if (!normalizedReply) {
+      throw new Error("Reply cannot be empty.");
+    }
+
+    return prisma.review.update({
+      where: { id },
+      data: { merchantReply: normalizedReply, repliedAt: new Date() },
+      include: { product: true },
+    });
+  },
+
+  async updateReply(id: string, merchantReply: string) {
+    const existing = await prisma.review.findFirst({ where: { id, deletedAt: null } });
+
+    if (!existing) {
+      throw new Error("Review not found.");
+    }
+
+    const normalizedReply = merchantReply.trim();
+
+    if (!normalizedReply) {
+      throw new Error("Reply cannot be empty.");
+    }
+
+    return prisma.review.update({
+      where: { id },
+      data: { merchantReply: normalizedReply, repliedAt: new Date() },
+      include: { product: true },
+    });
+  },
+
+  async deleteReply(id: string) {
     const existing = await prisma.review.findFirst({ where: { id, deletedAt: null } });
 
     if (!existing) {
@@ -273,7 +323,7 @@ export const reviewService = {
 
     return prisma.review.update({
       where: { id },
-      data: { merchantReply: merchantReply.trim() || null },
+      data: { merchantReply: null, repliedAt: null },
       include: { product: true },
     });
   },

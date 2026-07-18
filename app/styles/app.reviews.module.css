@@ -525,6 +525,32 @@
   display: grid;
 }
 
+.replyField {
+  display: grid;
+}
+
+.replyDisplay {
+  padding: var(--space-4);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  background: var(--color-surface);
+  color: var(--color-text);
+  line-height: 1.7;
+  white-space: pre-wrap;
+}
+
+.replyMetaRow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2);
+}
+
+.replyMetaText {
+  color: var(--color-text-muted);
+  font-size: var(--text-sm);
+}
+
 .replyTextarea {
   width: 100%;
   border: 1px solid var(--color-border);

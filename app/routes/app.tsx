@@ -20,6 +20,7 @@ export default function App() {
   const navItems = [
     { label: "Dashboard", path: "/app" },
     { label: "Reviews", path: "/app/reviews" },
+    { label: "Products", path: "/app/products" },
     { label: "Requests", path: "/app/requests" },
     { label: "Widgets", path: "/app/widgets" },
     { label: "Settings", path: "/app/settings" },

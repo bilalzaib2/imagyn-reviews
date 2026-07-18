@@ -1,27 +1,73 @@
 import prisma from "../db.server";
 
-export const storeService = {
-  async list() {
-    return prisma.store.findMany();
-  },
+function getShopName(shop: string) {
+  return shop
+    .replace(".myshopify.com", "")
+    .replace(/-/g, " ")
+    .replace(/\b\w/g, (char) => char.toUpperCase());
+}
 
-  async getById(id: string) {
-    return prisma.store.findUnique({ where: { id } });
-  },
+function getSlug(shop: string) {
+  return shop.replace(".myshopify.com", "");
+}
 
-  async getBySlug(slug: string) {
-    return prisma.store.findUnique({ where: { slug } });
-  },
+export async function getOrCreateStore(shop: string) {
+  const slug = getSlug(shop);
 
-  async create(data: { name: string; slug: string; domain?: string | null }) {
-    return prisma.store.create({ data });
-  },
+  const existingStore = await prisma.store.findUnique({
+    where: {
+      slug,
+    },
+  });
 
-  async update(id: string, data: { name?: string; slug?: string; domain?: string | null }) {
-    return prisma.store.update({ where: { id }, data });
-  },
+  if (existingStore) {
+    return existingStore;
+  }
 
-  async remove(id: string) {
-    return prisma.store.delete({ where: { id } });
+  return prisma.store.create({
+    data: {
+      name: getShopName(shop),
+      slug,
+      domain: shop,
+    },
+  });
+}
+
+export async function getStoreById(id: string) {
+  return prisma.store.findUnique({
+    where: {
+      id,
+    },
+  });
+}
+
+export async function getStoreBySlug(slug: string) {
+  return prisma.store.findUnique({
+    where: {
+      slug,
+    },
+  });
+}
+
+export async function updateStore(
+  id: string,
+  data: {
+    name?: string;
+    domain?: string | null;
   },
-};
+) {
+  return prisma.store.update({
+    where: {
+      id,
+    },
+    data,
+  });
+}
+
+export async function deleteStore(id: string) {
+  return prisma.store.delete({
+    where: {
+      id,
+    },
+  });
+}

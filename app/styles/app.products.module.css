@@ -1,0 +1,75 @@
+.page {
+  padding: 32px;
+}
+
+.header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 28px;
+}
+
+.title {
+  font-size: 28px;
+  font-weight: 600;
+  letter-spacing: -0.02em;
+}
+
+.search {
+  width: 320px;
+  padding: 10px 14px;
+  border: 1px solid #e5e7eb;
+  border-radius: 10px;
+  font-size: 14px;
+  outline: none;
+}
+
+.table {
+  background: #fff;
+  border: 1px solid #ececec;
+  border-radius: 14px;
+  overflow: hidden;
+}
+
+.row {
+  display: grid;
+  grid-template-columns: 64px 1fr 140px 120px 100px;
+  align-items: center;
+  gap: 20px;
+  padding: 18px 20px;
+  border-bottom: 1px solid #f3f3f3;
+}
+
+.row:last-child {
+  border-bottom: none;
+}
+
+.image {
+  width: 48px;
+  height: 48px;
+  object-fit: cover;
+  border-radius: 10px;
+  background: #f5f5f5;
+}
+
+.name {
+  font-weight: 600;
+}
+
+.vendor {
+  margin-top: 3px;
+  color: #777;
+  font-size: 13px;
+}
+
+.headerRow {
+  font-size: 13px;
+  color: #777;
+  font-weight: 600;
+  background: #fafafa;
+}
+
+.status {
+  color: #16a34a;
+  font-weight: 600;
+}

@@ -9,6 +9,8 @@ import {
 } from "react-router";
 import type { ActionFunctionArgs, HeadersFunction, LoaderFunctionArgs } from "react-router";
 import { boundary } from "@shopify/shopify-app-react-router/server";
+import { AppProvider as PolarisAppProvider, Button as PolarisButton, ButtonGroup, Frame, TextField, Toast } from "@shopify/polaris";
+import enTranslations from "@shopify/polaris/locales/en.json";
 
 import { Button } from "../components/ui/Button";
 import { Container } from "../components/ui/Container";
@@ -25,6 +27,7 @@ type ReviewListItem = {
   authorName: string | null;
   authorEmail: string | null;
   merchantReply: string | null;
+  repliedAt: Date | null;
   rating: number | null;
   status: string;
   verifiedPurchase: boolean;
@@ -37,6 +40,7 @@ type ActionData = {
   ok: boolean;
   intent?: string;
   error?: string;
+  message?: string;
 };
 
 export const loader = async ({ request }: LoaderFunctionArgs) => {
@@ -116,8 +120,12 @@ export const action = async ({ request }: ActionFunctionArgs): Promise<ActionDat
         return { ok: false, error: "Missing review id." };
       }
 
-      await reviewService.moderateStatus(reviewId, intent === "approve" ? "approved" : "rejected");
-      return { ok: true, intent };
+      if (intent === "approve") {
+        await reviewService.approveReview(reviewId);
+      } else {
+        await reviewService.rejectReview(reviewId);
+      }
+      return { ok: true, intent, message: intent === "approve" ? "Review approved." : "Review rejected." };
     }
 
     if (intent === "delete") {
@@ -128,10 +136,14 @@ export const action = async ({ request }: ActionFunctionArgs): Promise<ActionDat
       }
 
       await reviewService.softDelete(reviewId);
-      return { ok: true, intent };
+      return { ok: true, intent, message: "Review deleted." };
     }
 
     if (intent === "reply") {
+      return { ok: false, error: "Unsupported reply action." };
+    }
+
+    if (intent === "replyCreate") {
       const reviewId = String(formData.get("reviewId") || "");
       const reply = String(formData.get("reply") || "");
 
@@ -139,8 +151,31 @@ export const action = async ({ request }: ActionFunctionArgs): Promise<ActionDat
         return { ok: false, error: "Missing review id." };
       }
 
-      await reviewService.setReply(reviewId, reply);
-      return { ok: true, intent };
+      await reviewService.replyToReview(reviewId, reply);
+      return { ok: true, intent, message: "Reply published." };
+    }
+
+    if (intent === "replyUpdate") {
+      const reviewId = String(formData.get("reviewId") || "");
+      const reply = String(formData.get("reply") || "");
+
+      if (!reviewId) {
+        return { ok: false, error: "Missing review id." };
+      }
+
+      await reviewService.updateReply(reviewId, reply);
+      return { ok: true, intent, message: "Reply updated." };
+    }
+
+    if (intent === "replyDelete") {
+      const reviewId = String(formData.get("reviewId") || "");
+
+      if (!reviewId) {
+        return { ok: false, error: "Missing review id." };
+      }
+
+      await reviewService.deleteReply(reviewId);
+      return { ok: true, intent, message: "Reply deleted." };
     }
 
     if (intent === "bulkApprove" || intent === "bulkReject" || intent === "bulkDelete") {
@@ -155,11 +190,15 @@ export const action = async ({ request }: ActionFunctionArgs): Promise<ActionDat
 
       if (intent === "bulkDelete") {
         await reviewService.bulkSoftDelete(ids);
-        return { ok: true, intent };
+        return { ok: true, intent, message: "Selected reviews deleted." };
       }
 
       await reviewService.bulkModerate(ids, intent === "bulkApprove" ? "approved" : "rejected");
-      return { ok: true, intent };
+      return {
+        ok: true,
+        intent,
+        message: intent === "bulkApprove" ? "Selected reviews approved." : "Selected reviews rejected.",
+      };
     }
 
     return { ok: false, error: "Unsupported action." };
@@ -231,10 +270,13 @@ export default function ReviewsPage() {
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [mutationError, setMutationError] = useState<string | null>(null);
   const [replyDraft, setReplyDraft] = useState("");
+  const [toastState, setToastState] = useState<{ content: string; error?: boolean } | null>(null);
+  const [isReplyEditing, setIsReplyEditing] = useState(false);
 
   const [optimisticStatus, setOptimisticStatus] = useState<Record<string, string>>({});
   const [optimisticDeleted, setOptimisticDeleted] = useState<Record<string, true>>({});
-  const [optimisticReply, setOptimisticReply] = useState<Record<string, string>>({});
+  const [optimisticReply, setOptimisticReply] = useState<Partial<Record<string, string | null>>>({});
+  const [optimisticRepliedAt, setOptimisticRepliedAt] = useState<Partial<Record<string, Date | null>>>({});
 
   useEffect(() => {
     setSearchInput(initialSearch);
@@ -247,17 +289,24 @@ export default function ReviewsPage() {
 
     if (!mutationFetcher.data.ok) {
       setMutationError(mutationFetcher.data.error || "Action failed.");
+      setToastState({ content: mutationFetcher.data.error || "Action failed.", error: true });
       setOptimisticStatus({});
       setOptimisticDeleted({});
       setOptimisticReply({});
+      setOptimisticRepliedAt({});
       return;
     }
 
     setMutationError(null);
+    setToastState({ content: mutationFetcher.data.message || "Review updated." });
     setSelectedIds([]);
     setOptimisticStatus({});
     setOptimisticDeleted({});
     setOptimisticReply({});
+    setOptimisticRepliedAt({});
+    if (mutationFetcher.data.intent?.startsWith("reply")) {
+      setIsReplyEditing(false);
+    }
     revalidator.revalidate();
   }, [mutationFetcher.data, revalidator]);
 
@@ -305,9 +354,10 @@ export default function ReviewsPage() {
       .map((review) => ({
         ...review,
         status: optimisticStatus[review.id] || review.status,
-        merchantReply: optimisticReply[review.id] ?? review.merchantReply,
+        merchantReply: optimisticReply[review.id] !== undefined ? optimisticReply[review.id] ?? null : review.merchantReply,
+        repliedAt: optimisticRepliedAt[review.id] !== undefined ? optimisticRepliedAt[review.id] ?? null : review.repliedAt,
       }));
-  }, [reviews, optimisticDeleted, optimisticStatus, optimisticReply]);
+  }, [reviews, optimisticDeleted, optimisticStatus, optimisticReply, optimisticRepliedAt]);
 
   useEffect(() => {
     if (isLoading || isMutating) {
@@ -331,7 +381,11 @@ export default function ReviewsPage() {
 
   useEffect(() => {
     setReplyDraft(selectedReview?.merchantReply ?? "");
+    setIsReplyEditing(!selectedReview?.merchantReply);
   }, [selectedReview?.id, selectedReview?.merchantReply]);
+
+  const activeIntent = mutationFetcher.formData?.get("_intent")?.toString() ?? "";
+  const isReplySaving = mutationFetcher.state !== "idle" && activeIntent.startsWith("reply");
 
   const renderStars = (rating: number) =>
     Array.from({ length: 5 }, (_, index) => (
@@ -375,8 +429,18 @@ export default function ReviewsPage() {
 
   const applyReply = (reviewId: string, reply: string) => {
     setMutationError(null);
-    setOptimisticReply((prev) => ({ ...prev, [reviewId]: reply }));
-    submitMutation({ _intent: "reply", reviewId, reply });
+    const trimmedReply = reply.trim();
+    const nextIntent = selectedReview?.merchantReply ? "replyUpdate" : "replyCreate";
+    setOptimisticReply((prev) => ({ ...prev, [reviewId]: trimmedReply }));
+    setOptimisticRepliedAt((prev) => ({ ...prev, [reviewId]: new Date() }));
+    submitMutation({ _intent: nextIntent, reviewId, reply: trimmedReply });
+  };
+
+  const deleteReply = (reviewId: string) => {
+    setMutationError(null);
+    setOptimisticReply((prev) => ({ ...prev, [reviewId]: null }));
+    setOptimisticRepliedAt((prev) => ({ ...prev, [reviewId]: null }));
+    submitMutation({ _intent: "replyDelete", reviewId });
   };
 
   const applyBulkAction = (intent: "bulkApprove" | "bulkReject" | "bulkDelete") => {
@@ -459,7 +523,8 @@ export default function ReviewsPage() {
     effectiveReviews.length > 0 && effectiveReviews.every((review) => selectedIds.includes(review.id));
 
   return (
-    <Container as="main">
+    <PolarisAppProvider i18n={enTranslations}>
+      <Container as="main">
       <div className={`${shellStyles.page} ${styles.page}`}>
         <header className={`${shellStyles.header} ${styles.header}`}>
           <div className={`${shellStyles.headerContent} ${styles.headerContent}`}>
@@ -734,27 +799,17 @@ export default function ReviewsPage() {
                     </div>
 
                     <div className={styles.detailActions}>
-                      <Button
-                        type="button"
-                        onClick={() => applySingleStatus(selectedReview.id, "approved")}
-                        disabled={isMutating}
-                      >
-                        Approve
-                      </Button>
-                      <Button
-                        type="button"
-                        onClick={() => applySingleStatus(selectedReview.id, "rejected")}
-                        disabled={isMutating}
-                      >
-                        Reject
-                      </Button>
-                      <Button
-                        type="button"
-                        onClick={() => applySingleDelete(selectedReview.id)}
-                        disabled={isMutating}
-                      >
-                        Delete
-                      </Button>
+                      <ButtonGroup>
+                        <PolarisButton onClick={() => applySingleStatus(selectedReview.id, "approved")} disabled={isMutating}>
+                          Approve
+                        </PolarisButton>
+                        <PolarisButton onClick={() => applySingleStatus(selectedReview.id, "rejected")} disabled={isMutating}>
+                          Reject
+                        </PolarisButton>
+                        <PolarisButton onClick={() => applySingleDelete(selectedReview.id)} disabled={isMutating}>
+                          Delete
+                        </PolarisButton>
+                      </ButtonGroup>
                     </div>
 
                     <div className={styles.detailSummary}>
@@ -817,26 +872,71 @@ export default function ReviewsPage() {
                     <div className={styles.detailSection}>
                       <div className={styles.detailSectionHeader}>
                         <h3 className={styles.detailSectionTitle}>Merchant reply</h3>
-                        <span className={styles.detailSectionHint}>Prisma backed</span>
+                        <span className={styles.detailSectionHint}>Merchant response</span>
                       </div>
-                      <label className={styles.replyLabel}>
-                        <textarea
-                          className={styles.replyTextarea}
-                          value={replyDraft}
-                          onChange={(event) => setReplyDraft(event.target.value)}
-                          placeholder="Write a public reply to this review"
-                          rows={4}
-                        />
-                      </label>
-                      <div className={styles.replyActions}>
-                        <Button
-                          type="button"
-                          onClick={() => applyReply(selectedReview.id, replyDraft)}
-                          disabled={isMutating}
-                        >
-                          Save reply
-                        </Button>
-                      </div>
+                      {selectedReview.merchantReply && !isReplyEditing ? (
+                        <>
+                          <div className={styles.replyDisplay}>{selectedReview.merchantReply}</div>
+                          <div className={styles.replyMetaRow}>
+                            <span className={styles.replyMetaText}>
+                              {selectedReview.repliedAt
+                                ? `Last updated ${formatLongDate(selectedReview.repliedAt)}`
+                                : "Published reply"}
+                            </span>
+                          </div>
+                          <div className={styles.replyActions}>
+                            <Button type="button" onClick={() => setIsReplyEditing(true)} disabled={isReplySaving}>
+                              Edit
+                            </Button>
+                            <Button type="button" onClick={() => deleteReply(selectedReview.id)} disabled={isReplySaving}>
+                              Delete
+                            </Button>
+                          </div>
+                        </>
+                      ) : (
+                        <>
+                          <div className={styles.replyField}>
+                            <TextField
+                              label="Merchant reply"
+                              labelHidden
+                              value={replyDraft}
+                              onChange={setReplyDraft}
+                              autoComplete="off"
+                              multiline={4}
+                              placeholder="Write a public reply to this review"
+                              disabled={isReplySaving}
+                            />
+                          </div>
+                          <div className={styles.replyActions}>
+                            <Button
+                              type="button"
+                              onClick={() => applyReply(selectedReview.id, replyDraft)}
+                              disabled={isReplySaving || replyDraft.trim().length === 0}
+                            >
+                              Save
+                            </Button>
+                            <Button
+                              type="button"
+                              onClick={() => {
+                                setReplyDraft(selectedReview.merchantReply ?? "");
+                                setIsReplyEditing(false);
+                              }}
+                              disabled={isReplySaving}
+                            >
+                              Cancel
+                            </Button>
+                            {selectedReview.merchantReply ? (
+                              <Button
+                                type="button"
+                                onClick={() => deleteReply(selectedReview.id)}
+                                disabled={isReplySaving}
+                              >
+                                Delete
+                              </Button>
+                            ) : null}
+                          </div>
+                        </>
+                      )}
                     </div>
                   </aside>
                 ) : null}
@@ -880,7 +980,13 @@ export default function ReviewsPage() {
           </div>
         </Section>
       </div>
-    </Container>
+      </Container>
+      <Frame>
+        {toastState ? (
+          <Toast content={toastState.content} error={toastState.error} onDismiss={() => setToastState(null)} />
+        ) : null}
+      </Frame>
+    </PolarisAppProvider>
   );
 }
 

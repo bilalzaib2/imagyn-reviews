@@ -1,0 +1,272 @@
+.page {
+  display: grid;
+  gap: var(--space-8);
+  padding-block: var(--space-10);
+}
+
+.header {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: var(--space-4);
+  flex-wrap: wrap;
+}
+
+.eyebrow {
+  margin: 0;
+  color: var(--color-text-muted);
+  font-size: var(--text-xs);
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+}
+
+.title {
+  margin: 0;
+}
+
+.subtitle {
+  margin: 0;
+  color: var(--color-text-muted);
+  line-height: 1.6;
+}
+
+.builderLayout {
+  display: grid;
+  grid-template-columns: minmax(240px, 280px) minmax(0, 1fr) minmax(320px, 380px);
+  gap: var(--space-6);
+  align-items: start;
+}
+
+.sidebarPanel,
+.previewPanel,
+.settingsPanel {
+  min-width: 0;
+}
+
+.settingsPanel {
+  display: grid;
+}
+
+.libraryList,
+.sectionContent {
+  display: grid;
+  gap: var(--space-3);
+}
+
+.libraryItem,
+.savedWidgetItem {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: var(--space-3);
+  align-items: start;
+  width: 100%;
+  padding: 0.9rem 1rem;
+  border: 1px solid rgba(17, 17, 17, 0.08);
+  border-radius: 18px;
+  background: rgba(255, 255, 255, 0.7);
+  text-align: left;
+  cursor: pointer;
+  transition: border-color 160ms ease, background-color 160ms ease, transform 160ms ease;
+}
+
+.libraryItem:hover,
+.savedWidgetItem:hover {
+  border-color: rgba(17, 17, 17, 0.18);
+  background: rgba(255, 255, 255, 0.92);
+  transform: translateY(-1px);
+}
+
+.libraryItemActive,
+.savedWidgetItemActive {
+  border-color: rgba(17, 17, 17, 0.22);
+  background: rgba(17, 17, 17, 0.04);
+}
+
+.libraryIcon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 2.5rem;
+  min-height: 2.5rem;
+  border-radius: 14px;
+  background: rgba(17, 17, 17, 0.06);
+  color: #111111;
+  font-size: 1rem;
+  font-weight: 700;
+}
+
+.libraryText,
+.savedWidgetItem {
+  display: grid;
+  gap: 0.2rem;
+}
+
+.libraryText small,
+.savedWidgetItem small {
+  color: var(--color-text-muted);
+  line-height: 1.45;
+}
+
+.previewFrame {
+  display: grid;
+  gap: var(--space-3);
+  padding: var(--space-4);
+  border-radius: 24px;
+  min-height: 680px;
+}
+
+.previewBrowserBar {
+  display: inline-flex;
+  gap: 0.45rem;
+}
+
+.previewBrowserBar span {
+  width: 0.72rem;
+  height: 0.72rem;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.5);
+}
+
+.previewStorefront {
+  min-height: 620px;
+  border-radius: 22px;
+  overflow: hidden;
+}
+
+.previewProductShell {
+  display: grid;
+  gap: 1.5rem;
+  margin: 0 auto;
+}
+
+.previewProductHeader {
+  display: grid;
+  gap: 0.5rem;
+}
+
+.starRatingPreview,
+.previewActions,
+.floatingBadgePreview {
+  display: flex;
+  align-items: center;
+  gap: 0.8rem;
+  flex-wrap: wrap;
+}
+
+.listPreview {
+  display: grid;
+  gap: 1rem;
+}
+
+.carouselPreview {
+  display: grid;
+  grid-auto-flow: column;
+  grid-auto-columns: max-content;
+  gap: 1rem;
+  overflow-x: auto;
+  padding-bottom: 0.5rem;
+}
+
+.carouselSlide {
+  min-width: 0;
+}
+
+.gridPreview,
+.masonryPreview {
+  display: flex;
+  gap: 1rem;
+  flex-wrap: wrap;
+  align-items: flex-start;
+}
+
+.masonryCell {
+  flex: 1 1 240px;
+}
+
+.previewCard {
+  display: grid;
+  border-style: solid;
+}
+
+.previewMetaTop {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.9rem;
+}
+
+.previewAvatar {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 2.4rem;
+  height: 2.4rem;
+  font-size: 0.82rem;
+  font-weight: 700;
+  flex-shrink: 0;
+}
+
+.previewHeaderBlock,
+.previewBodyBlock {
+  display: grid;
+  gap: 0.4rem;
+}
+
+.previewIdentity {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 0.45rem;
+  color: rgba(17, 17, 17, 0.72);
+  font-size: 0.82rem;
+}
+
+.previewStars {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.12rem;
+}
+
+.floatingBadge {
+  display: grid;
+  gap: 0.35rem;
+  padding: 1rem 1.15rem;
+  border: 1px solid;
+  box-shadow: 0 18px 40px rgba(17, 17, 17, 0.08);
+}
+
+.previewButton {
+  border: 1px solid;
+  padding: 0.7rem 1rem;
+  font: inherit;
+  cursor: pointer;
+}
+
+.settingsGrid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--space-3);
+}
+
+@media (max-width: 1280px) {
+  .builderLayout {
+    grid-template-columns: minmax(220px, 260px) minmax(0, 1fr);
+  }
+
+  .settingsPanel {
+    grid-column: 1 / -1;
+  }
+}
+
+@media (max-width: 860px) {
+  .builderLayout {
+    grid-template-columns: 1fr;
+  }
+
+  .previewFrame {
+    min-height: 540px;
+  }
+
+  .settingsGrid {
+    grid-template-columns: 1fr;
+  }
+}
