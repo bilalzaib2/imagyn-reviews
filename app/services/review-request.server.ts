@@ -201,14 +201,14 @@ export const reviewRequestService = {
     return prisma.review.findMany({
       where: {
         deletedAt: null,
-        authorEmail: { not: null },
+        reviewerEmail: { not: null },
       },
       select: {
-        authorName: true,
-        authorEmail: true,
+        reviewerName: true,
+        reviewerEmail: true,
       },
-      distinct: ["authorEmail"],
-      orderBy: { authorEmail: "asc" },
+      distinct: ["reviewerEmail"],
+      orderBy: { reviewerEmail: "asc" },
     });
   },
 

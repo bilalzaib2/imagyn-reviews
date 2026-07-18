@@ -62,6 +62,19 @@ model Product {
   slug             String?
   description      String?
 
+  // Denormalized review statistics, recalculated by review.server.ts after every review mutation.
+  averageRating    Float    @default(0)
+  totalReviews     Int      @default(0)
+  rating5Count     Int      @default(0)
+  rating4Count     Int      @default(0)
+  rating3Count     Int      @default(0)
+  rating2Count     Int      @default(0)
+  rating1Count     Int      @default(0)
+
+  // Set only by product.server.ts's syncProducts, kept separate from updatedAt so review-stat
+  // recalculation (which also touches this row) can't make "last synced" look fresher than it is.
+  lastSyncedAt     DateTime?
+
   createdAt        DateTime @default(now())
   updatedAt        DateTime @updatedAt
 
@@ -70,32 +83,51 @@ model Product {
   widgets          Widget[]
 }
 
+enum ReviewStatus {
+  PENDING
+  APPROVED
+  REJECTED
+}
+
 model Review {
-  id               String   @id @default(cuid())
+  id               String       @id @default(cuid())
+
   storeId          String
-  store            Store    @relation(fields: [storeId], references: [id], onDelete: Cascade)
-  productId        String?
-  product          Product? @relation(fields: [productId], references: [id], onDelete: SetNull)
-  authorName       String?
-  authorEmail      String?
+  store            Store        @relation(fields: [storeId], references: [id], onDelete: Cascade)
+
+  productId        String
+  product          Product      @relation(fields: [productId], references: [id], onDelete: Cascade)
+
+  rating           Int
   title            String?
-  body             String?
-  merchantReply    String?
+  content          String
+
+  reviewerName     String
+  reviewerEmail    String?
+  reviewerLocation String?
+  verifiedPurchase Boolean      @default(false)
+
+  status           ReviewStatus @default(PENDING)
+  isPublished      Boolean      @default(false)
+  helpfulCount     Int          @default(0)
+  featured         Boolean      @default(false)
+
+  reply            String?
   repliedAt        DateTime?
+
   photoUrls        String?
-  rating           Int?
-  status           String   @default("pending")
-  verifiedPurchase Boolean  @default(false)
   deletedAt        DateTime?
-  createdAt        DateTime @default(now())
-  updatedAt        DateTime @updatedAt
+
+  createdAt        DateTime     @default(now())
+  updatedAt        DateTime     @updatedAt
 
   @@index([deletedAt, createdAt])
   @@index([storeId, deletedAt, createdAt])
+  @@index([productId, deletedAt])
   @@index([status])
   @@index([rating])
   @@index([verifiedPurchase])
-  @@index([productId])
+  @@index([featured])
 }
 
 model ReviewRequest {

@@ -1,45 +1,23 @@
 import type { Prisma } from "@prisma/client";
 import prisma from "../db.server";
+import { ReviewStatus } from "./review.shared";
 
-const normalizeReviewInput = (input: {
-  title?: string | null;
-  body?: string | null;
-  authorName?: string | null;
-  authorEmail?: string | null;
-  merchantReply?: string | null;
-  rating?: number | null;
-  status?: string | null;
-  productId?: string | null;
-  photoUrls?: string | null;
-  verifiedPurchase?: boolean | null;
-}) => {
-  const title = input.title?.trim();
-  const body = input.body?.trim();
-  const authorName = input.authorName?.trim();
-  const authorEmail = input.authorEmail?.trim();
-  const merchantReply = input.merchantReply?.trim();
-  const rating = input.rating == null ? null : Number(input.rating);
-  const status = input.status?.trim() || "pending";
+export { ReviewStatus };
 
-  return {
-    title: title || null,
-    body: body || null,
-    authorName: authorName || null,
-    authorEmail: authorEmail || null,
-    merchantReply: merchantReply || null,
-    rating: Number.isFinite(rating) ? rating : null,
-    status,
-    productId: input.productId || null,
-    photoUrls: input.photoUrls || null,
-    verifiedPurchase: input.verifiedPurchase ?? false,
-  };
-};
+const RATING_MIN = 1;
+const RATING_MAX = 5;
+
+const reviewInclude = {
+  product: {
+    select: { id: true, name: true, featuredImage: true },
+  },
+} satisfies Prisma.ReviewInclude;
+
+export type ReviewWithProduct = Prisma.ReviewGetPayload<{ include: typeof reviewInclude }>;
 
 export interface ReviewQueryOptions {
-  storeId?: string;
-  productId?: string;
   search?: string;
-  status?: string;
+  status?: ReviewStatus;
   rating?: number;
   product?: string;
   dateFrom?: string;
@@ -49,333 +27,355 @@ export interface ReviewQueryOptions {
   limit?: number;
 }
 
-type ReviewWithProduct = Prisma.ReviewGetPayload<{ include: { product: true } }>;
-
 export interface ReviewQueryResult {
-  reviews: Array<{
-    id: string;
-    title: string | null;
-    body: string | null;
-    authorName: string | null;
-    authorEmail: string | null;
-    merchantReply: string | null;
-    repliedAt: Date | null;
-    rating: number | null;
-    status: string;
-    verifiedPurchase: boolean;
-    photoUrls: string | null;
-    createdAt: Date;
-    product: { id: string; name: string | null } | null;
-  }>;
+  reviews: ReviewWithProduct[];
   nextCursor: string | null;
   hasMore: boolean;
   totalCount: number;
 }
 
-export const reviewService = {
-  async getDashboardStats() {
-    const [aggregates, totalReviews, pendingReviews, verifiedReviews] = await Promise.all([
-      prisma.review.aggregate({
-        where: { deletedAt: null },
-        _avg: { rating: true },
-      }),
-      prisma.review.count({ where: { deletedAt: null } }),
-      prisma.review.count({ where: { deletedAt: null, status: "pending" } }),
-      prisma.review.count({ where: { deletedAt: null, verifiedPurchase: true } }),
-    ]);
+export interface CreateReviewInput {
+  productId: string;
+  rating: number;
+  title?: string | null;
+  content: string;
+  reviewerName: string;
+  reviewerEmail?: string | null;
+  reviewerLocation?: string | null;
+  verifiedPurchase?: boolean;
+  featured?: boolean;
+  photoUrls?: string | null;
+}
 
-    const averageRating = Number((aggregates._avg.rating ?? 0).toFixed(1));
-    const verifiedPurchaseRate = totalReviews === 0 ? 0 : Math.round((verifiedReviews / totalReviews) * 100);
+export interface UpdateReviewInput {
+  productId?: string;
+  rating?: number;
+  title?: string | null;
+  content?: string;
+  reviewerName?: string;
+  reviewerEmail?: string | null;
+  reviewerLocation?: string | null;
+  verifiedPurchase?: boolean;
+  featured?: boolean;
+  photoUrls?: string | null;
+}
 
-    return {
-      averageRating,
+function validateReviewInput(input: { rating: number; content: string; reviewerName: string }) {
+  if (!Number.isInteger(input.rating) || input.rating < RATING_MIN || input.rating > RATING_MAX) {
+    throw new Error("Rating must be a whole number between 1 and 5.");
+  }
+
+  if (!input.reviewerName || input.reviewerName.trim().length === 0) {
+    throw new Error("Reviewer name is required.");
+  }
+
+  if (!input.content || input.content.trim().length === 0) {
+    throw new Error("Review content is required.");
+  }
+}
+
+async function requireReview(id: string) {
+  const existing = await prisma.review.findFirst({ where: { id, deletedAt: null } });
+
+  if (!existing) {
+    throw new Error("Review not found.");
+  }
+
+  return existing;
+}
+
+export async function recalculateProductStats(productId: string) {
+  const [totalReviews, aggregate, ratingGroups] = await Promise.all([
+    prisma.review.count({ where: { productId, deletedAt: null } }),
+    prisma.review.aggregate({
+      where: { productId, deletedAt: null },
+      _avg: { rating: true },
+    }),
+    prisma.review.groupBy({
+      by: ["rating"],
+      where: { productId, deletedAt: null },
+      _count: { rating: true },
+    }),
+  ]);
+
+  const countByRating = new Map(ratingGroups.map((group) => [group.rating, group._count.rating]));
+
+  return prisma.product.update({
+    where: { id: productId },
+    data: {
       totalReviews,
-      pendingReviews,
-      verifiedPurchaseRate,
-    };
-  },
-
-  async getProductStats(productId: string) {
-    const [totalCount, aggregate] = await Promise.all([
-      prisma.review.count({ where: { productId, deletedAt: null } }),
-      prisma.review.aggregate({
-        where: { productId, deletedAt: null },
-        _avg: { rating: true },
-      }),
-    ]);
-
-    return {
-      totalCount,
       averageRating: Number((aggregate._avg.rating ?? 0).toFixed(1)),
-    };
-  },
+      rating5Count: countByRating.get(5) ?? 0,
+      rating4Count: countByRating.get(4) ?? 0,
+      rating3Count: countByRating.get(3) ?? 0,
+      rating2Count: countByRating.get(2) ?? 0,
+      rating1Count: countByRating.get(1) ?? 0,
+    },
+  });
+}
 
-  async list(storeId?: string, productId?: string) {
-    return prisma.review.findMany({
-      where: {
-        deletedAt: null,
-        ...(storeId ? { storeId } : {}),
-        ...(productId ? { productId } : {}),
-      },
-      include: { product: true },
-      orderBy: { createdAt: "desc" },
+async function queryReviews(
+  baseWhere: Prisma.ReviewWhereInput,
+  options: ReviewQueryOptions = {},
+): Promise<ReviewQueryResult> {
+  const limit = options.limit ?? 20;
+
+  const where: Prisma.ReviewWhereInput = {
+    ...baseWhere,
+    deletedAt: null,
+    ...(options.status ? { status: options.status } : {}),
+    ...(options.rating != null ? { rating: options.rating } : {}),
+    ...(options.verifiedPurchase != null ? { verifiedPurchase: options.verifiedPurchase } : {}),
+    ...(options.dateFrom || options.dateTo
+      ? {
+          createdAt: {
+            ...(options.dateFrom ? { gte: new Date(options.dateFrom) } : {}),
+            ...(options.dateTo ? { lte: new Date(`${options.dateTo}T23:59:59.999Z`) } : {}),
+          },
+        }
+      : {}),
+    ...(options.search
+      ? {
+          OR: [
+            { title: { contains: options.search } },
+            { content: { contains: options.search } },
+            { reviewerName: { contains: options.search } },
+          ],
+        }
+      : {}),
+    ...(options.product ? { product: { name: { contains: options.product } } } : {}),
+  };
+
+  const [totalCount, reviews] = await Promise.all([
+    prisma.review.count({ where }),
+    prisma.review.findMany({
+      where,
+      include: reviewInclude,
+      orderBy: [{ createdAt: "desc" }, { id: "desc" }],
+      take: limit + 1,
+      ...(options.cursor ? { cursor: { id: options.cursor }, skip: 1 } : {}),
+    }),
+  ]);
+
+  const hasMore = reviews.length > limit;
+  const pagedReviews = hasMore ? reviews.slice(0, limit) : reviews;
+
+  return {
+    reviews: pagedReviews,
+    nextCursor: hasMore && pagedReviews.length > 0 ? pagedReviews[pagedReviews.length - 1].id : null,
+    hasMore,
+    totalCount,
+  };
+}
+
+export async function getStoreReviews(storeId: string, options: ReviewQueryOptions = {}) {
+  return queryReviews({ storeId }, options);
+}
+
+export async function getProductReviews(productId: string, options: ReviewQueryOptions = {}) {
+  return queryReviews({ productId }, options);
+}
+
+export async function getReview(id: string) {
+  return prisma.review.findFirst({
+    where: { id, deletedAt: null },
+    include: reviewInclude,
+  });
+}
+
+export async function createReview(data: CreateReviewInput) {
+  const product = await prisma.product.findUnique({
+    where: { id: data.productId },
+    select: { id: true, storeId: true },
+  });
+
+  if (!product) {
+    throw new Error("Product not found.");
+  }
+
+  validateReviewInput(data);
+
+  const review = await prisma.review.create({
+    data: {
+      storeId: product.storeId,
+      productId: product.id,
+      rating: data.rating,
+      title: data.title?.trim() || null,
+      content: data.content.trim(),
+      reviewerName: data.reviewerName.trim(),
+      reviewerEmail: data.reviewerEmail?.trim() || null,
+      reviewerLocation: data.reviewerLocation?.trim() || null,
+      verifiedPurchase: data.verifiedPurchase ?? false,
+      featured: data.featured ?? false,
+      photoUrls: data.photoUrls || null,
+    },
+    include: reviewInclude,
+  });
+
+  await recalculateProductStats(product.id);
+
+  return review;
+}
+
+// Status changes (PENDING/APPROVED/REJECTED) are deliberately not accepted here and go
+// through approveReview/rejectReview instead, so the moderation workflow has one entry point.
+export async function updateReview(id: string, data: UpdateReviewInput) {
+  const existing = await requireReview(id);
+
+  const nextRating = data.rating ?? existing.rating;
+  const nextContent = data.content ?? existing.content;
+  const nextReviewerName = data.reviewerName ?? existing.reviewerName;
+
+  validateReviewInput({ rating: nextRating, content: nextContent, reviewerName: nextReviewerName });
+
+  let nextStoreId = existing.storeId;
+  let nextProductId = existing.productId;
+
+  if (data.productId && data.productId !== existing.productId) {
+    const product = await prisma.product.findUnique({
+      where: { id: data.productId },
+      select: { id: true, storeId: true },
     });
-  },
 
-  async query(options: ReviewQueryOptions = {}): Promise<ReviewQueryResult> {
-    const limit = options.limit ?? 20;
-    const where: Prisma.ReviewWhereInput = {
-      deletedAt: null,
-      ...(options.storeId ? { storeId: options.storeId } : {}),
-      ...(options.productId ? { productId: options.productId } : {}),
-      ...(options.status ? { status: options.status } : {}),
-      ...(options.rating != null ? { rating: options.rating } : {}),
-      ...(options.verifiedPurchase != null ? { verifiedPurchase: options.verifiedPurchase } : {}),
-      ...(options.dateFrom || options.dateTo
-        ? {
-            createdAt: {
-              ...(options.dateFrom ? { gte: new Date(options.dateFrom) } : {}),
-              ...(options.dateTo ? { lte: new Date(`${options.dateTo}T23:59:59.999Z`) } : {}),
-            },
-          }
-        : {}),
-      ...(options.search
-        ? {
-            OR: [
-              { title: { contains: options.search } },
-              { body: { contains: options.search } },
-              { authorName: { contains: options.search } },
-            ],
-          }
-        : {}),
-      ...(options.product
-        ? {
-            product: {
-              name: { contains: options.product },
-            },
-          }
-        : {}),
-    };
-
-    const [totalCount, reviews] = await Promise.all([
-      prisma.review.count({ where }),
-      prisma.review.findMany({
-        where,
-        include: { product: true },
-        orderBy: [{ createdAt: "desc" }, { id: "desc" }],
-        take: limit + 1,
-        ...(options.cursor ? { cursor: { id: options.cursor }, skip: 1 } : {}),
-      }),
-    ]);
-
-    const hasMore = reviews.length > limit;
-    const pagedReviews = hasMore ? reviews.slice(0, limit) : reviews;
-
-    return {
-      reviews: pagedReviews.map((review: ReviewWithProduct) => ({
-        id: review.id,
-        title: review.title,
-        body: review.body,
-        authorName: review.authorName,
-        authorEmail: review.authorEmail,
-        merchantReply: review.merchantReply,
-        repliedAt: review.repliedAt,
-        rating: review.rating,
-        status: review.status,
-        verifiedPurchase: review.verifiedPurchase,
-        photoUrls: review.photoUrls,
-        createdAt: review.createdAt,
-        product: review.product ? { id: review.product.id, name: review.product.name } : null,
-      })),
-      nextCursor: hasMore && pagedReviews.length > 0 ? pagedReviews[pagedReviews.length - 1].id : null,
-      hasMore,
-      totalCount,
-    };
-  },
-
-  async getById(id: string) {
-    return prisma.review.findFirst({
-      where: { id, deletedAt: null },
-      include: { product: true },
-    });
-  },
-
-  async create(data: {
-    storeId: string;
-    productId?: string | null;
-    authorName?: string | null;
-    authorEmail?: string | null;
-    merchantReply?: string | null;
-    title?: string | null;
-    body?: string | null;
-    rating?: number | null;
-    status?: string | null;
-    photoUrls?: string | null;
-    verifiedPurchase?: boolean | null;
-  }) {
-    const normalized = normalizeReviewInput(data);
-
-    if (!data.storeId) {
-      throw new Error("A storeId is required to create a review.");
+    if (!product) {
+      throw new Error("Product not found.");
     }
 
-    if (normalized.title == null && normalized.body == null) {
-      throw new Error("A review title or body is required.");
-    }
+    nextProductId = product.id;
+    nextStoreId = product.storeId;
+  }
 
-    if (normalized.rating != null && (normalized.rating < 1 || normalized.rating > 5)) {
-      throw new Error("Rating must be between 1 and 5.");
-    }
+  const review = await prisma.review.update({
+    where: { id },
+    data: {
+      storeId: nextStoreId,
+      productId: nextProductId,
+      rating: nextRating,
+      content: nextContent.trim(),
+      reviewerName: nextReviewerName.trim(),
+      ...(data.title !== undefined ? { title: data.title?.trim() || null } : {}),
+      ...(data.reviewerEmail !== undefined ? { reviewerEmail: data.reviewerEmail?.trim() || null } : {}),
+      ...(data.reviewerLocation !== undefined ? { reviewerLocation: data.reviewerLocation?.trim() || null } : {}),
+      ...(data.verifiedPurchase !== undefined ? { verifiedPurchase: data.verifiedPurchase } : {}),
+      ...(data.featured !== undefined ? { featured: data.featured } : {}),
+      ...(data.photoUrls !== undefined ? { photoUrls: data.photoUrls } : {}),
+    },
+    include: reviewInclude,
+  });
 
-    return prisma.review.create({
-      data: {
-        storeId: data.storeId,
-        ...normalized,
-      },
-      include: { product: true },
-    });
-  },
+  await recalculateProductStats(nextProductId);
 
-  async update(id: string, data: {
-    productId?: string | null;
-    authorName?: string | null;
-    authorEmail?: string | null;
-    merchantReply?: string | null;
-    title?: string | null;
-    body?: string | null;
-    rating?: number | null;
-    status?: string | null;
-    photoUrls?: string | null;
-    verifiedPurchase?: boolean | null;
-  }) {
-    const existing = await prisma.review.findFirst({ where: { id, deletedAt: null } });
+  if (existing.productId !== nextProductId) {
+    await recalculateProductStats(existing.productId);
+  }
 
-    if (!existing) {
-      throw new Error("Review not found.");
-    }
+  return review;
+}
 
-    const normalized = normalizeReviewInput(data);
+export async function deleteReview(id: string) {
+  const existing = await requireReview(id);
 
-    if (normalized.rating != null && (normalized.rating < 1 || normalized.rating > 5)) {
-      throw new Error("Rating must be between 1 and 5.");
-    }
+  const review = await prisma.review.update({
+    where: { id },
+    data: { deletedAt: new Date() },
+    include: reviewInclude,
+  });
 
-    return prisma.review.update({
-      where: { id },
-      data: normalized,
-      include: { product: true },
-    });
-  },
+  await recalculateProductStats(existing.productId);
 
-  async moderateStatus(id: string, status: "pending" | "approved" | "rejected") {
-    const existing = await prisma.review.findFirst({ where: { id, deletedAt: null } });
+  return review;
+}
 
-    if (!existing) {
-      throw new Error("Review not found.");
-    }
+async function setReviewStatus(id: string, status: typeof ReviewStatus.APPROVED | typeof ReviewStatus.REJECTED) {
+  const existing = await requireReview(id);
 
-    return prisma.review.update({
-      where: { id },
-      data: { status },
-      include: { product: true },
-    });
-  },
+  const review = await prisma.review.update({
+    where: { id },
+    data: { status, isPublished: status === ReviewStatus.APPROVED },
+    include: reviewInclude,
+  });
 
-  async approveReview(id: string) {
-    return this.moderateStatus(id, "approved");
-  },
+  await recalculateProductStats(existing.productId);
 
-  async rejectReview(id: string) {
-    return this.moderateStatus(id, "rejected");
-  },
+  return review;
+}
 
-  async replyToReview(id: string, merchantReply: string) {
-    const existing = await prisma.review.findFirst({ where: { id, deletedAt: null } });
+export async function approveReview(id: string) {
+  return setReviewStatus(id, ReviewStatus.APPROVED);
+}
 
-    if (!existing) {
-      throw new Error("Review not found.");
-    }
+export async function rejectReview(id: string) {
+  return setReviewStatus(id, ReviewStatus.REJECTED);
+}
 
-    const normalizedReply = merchantReply.trim();
+export async function replyToReview(id: string, reply: string) {
+  await requireReview(id);
 
-    if (!normalizedReply) {
-      throw new Error("Reply cannot be empty.");
-    }
+  const trimmedReply = reply.trim();
 
-    return prisma.review.update({
-      where: { id },
-      data: { merchantReply: normalizedReply, repliedAt: new Date() },
-      include: { product: true },
-    });
-  },
+  if (!trimmedReply) {
+    throw new Error("Reply cannot be empty.");
+  }
 
-  async updateReply(id: string, merchantReply: string) {
-    const existing = await prisma.review.findFirst({ where: { id, deletedAt: null } });
+  return prisma.review.update({
+    where: { id },
+    data: { reply: trimmedReply, repliedAt: new Date() },
+    include: reviewInclude,
+  });
+}
 
-    if (!existing) {
-      throw new Error("Review not found.");
-    }
+export async function deleteReply(id: string) {
+  await requireReview(id);
 
-    const normalizedReply = merchantReply.trim();
+  return prisma.review.update({
+    where: { id },
+    data: { reply: null, repliedAt: null },
+    include: reviewInclude,
+  });
+}
 
-    if (!normalizedReply) {
-      throw new Error("Reply cannot be empty.");
-    }
+async function distinctProductIdsFor(ids: string[]) {
+  const reviews = await prisma.review.findMany({
+    where: { id: { in: ids }, deletedAt: null },
+    select: { productId: true },
+  });
 
-    return prisma.review.update({
-      where: { id },
-      data: { merchantReply: normalizedReply, repliedAt: new Date() },
-      include: { product: true },
-    });
-  },
+  return Array.from(new Set(reviews.map((review) => review.productId)));
+}
 
-  async deleteReply(id: string) {
-    const existing = await prisma.review.findFirst({ where: { id, deletedAt: null } });
+export async function bulkModerateReviews(
+  ids: string[],
+  status: typeof ReviewStatus.APPROVED | typeof ReviewStatus.REJECTED,
+) {
+  if (ids.length === 0) {
+    return { count: 0 };
+  }
 
-    if (!existing) {
-      throw new Error("Review not found.");
-    }
+  const affectedProductIds = await distinctProductIdsFor(ids);
 
-    return prisma.review.update({
-      where: { id },
-      data: { merchantReply: null, repliedAt: null },
-      include: { product: true },
-    });
-  },
+  const result = await prisma.review.updateMany({
+    where: { id: { in: ids }, deletedAt: null },
+    data: { status, isPublished: status === ReviewStatus.APPROVED },
+  });
 
-  async bulkModerate(ids: string[], status: "pending" | "approved" | "rejected") {
-    if (ids.length === 0) {
-      return { count: 0 };
-    }
+  await Promise.all(affectedProductIds.map((productId) => recalculateProductStats(productId)));
 
-    return prisma.review.updateMany({
-      where: { id: { in: ids }, deletedAt: null },
-      data: { status },
-    });
-  },
+  return result;
+}
 
-  async bulkSoftDelete(ids: string[]) {
-    if (ids.length === 0) {
-      return { count: 0 };
-    }
+export async function bulkDeleteReviews(ids: string[]) {
+  if (ids.length === 0) {
+    return { count: 0 };
+  }
 
-    return prisma.review.updateMany({
-      where: { id: { in: ids }, deletedAt: null },
-      data: { deletedAt: new Date() },
-    });
-  },
+  const affectedProductIds = await distinctProductIdsFor(ids);
 
-  async softDelete(id: string) {
-    const existing = await prisma.review.findFirst({ where: { id, deletedAt: null } });
+  const result = await prisma.review.updateMany({
+    where: { id: { in: ids }, deletedAt: null },
+    data: { deletedAt: new Date() },
+  });
 
-    if (!existing) {
-      throw new Error("Review not found.");
-    }
+  await Promise.all(affectedProductIds.map((productId) => recalculateProductStats(productId)));
 
-    return prisma.review.update({
-      where: { id },
-      data: { deletedAt: new Date() },
-      include: { product: true },
-    });
-  },
-};
+  return result;
+}

@@ -15,15 +15,17 @@ import {
 import enTranslations from "@shopify/polaris/locales/en.json";
 
 import { Container } from "../components/ui/Container";
+import { LinkButton } from "../components/ui/LinkButton";
+import { ReviewStatusBadge } from "../components/reviews/ReviewStatusBadge";
+import { StarRating } from "../components/reviews/StarRating";
 import { authenticate } from "../shopify.server";
 import { getOrCreateStore } from "../services/store.server";
 import { getProductForStore } from "../services/product.server";
-import { reviewService } from "../services/review.server";
+import { getProductReviews, type ReviewWithProduct } from "../services/review.server";
 import shellStyles from "../styles/app.shell.module.css";
 import styles from "../styles/app.product-detail.module.css";
 
-type ProductStats = Awaited<ReturnType<typeof reviewService.getProductStats>>;
-type ProductReview = Awaited<ReturnType<typeof reviewService.list>>[number];
+const REVIEW_LIST_LIMIT = 50;
 
 export const loader = async ({ request, params }: LoaderFunctionArgs) => {
   const { session } = await authenticate.admin(request);
@@ -36,28 +38,25 @@ export const loader = async ({ request, params }: LoaderFunctionArgs) => {
     if (!product) {
       return {
         product: null,
-        stats: { totalCount: 0, averageRating: 0 } as ProductStats,
-        reviews: [] as ProductReview[],
+        reviews: [] as ReviewWithProduct[],
+        reviewsTotalCount: 0,
         error: "Product not found.",
       };
     }
 
-    const [stats, reviews] = await Promise.all([
-      reviewService.getProductStats(product.id),
-      reviewService.list(store.id, product.id),
-    ]);
+    const reviewResult = await getProductReviews(product.id, { limit: REVIEW_LIST_LIMIT });
 
     return {
       product,
-      stats,
-      reviews,
+      reviews: reviewResult.reviews,
+      reviewsTotalCount: reviewResult.totalCount,
       error: null as string | null,
     };
   } catch (error) {
     return {
       product: null,
-      stats: { totalCount: 0, averageRating: 0 } as ProductStats,
-      reviews: [] as ProductReview[],
+      reviews: [] as ReviewWithProduct[],
+      reviewsTotalCount: 0,
       error: error instanceof Error ? error.message : "Unable to load product.",
     };
   }
@@ -86,37 +85,12 @@ const statusToneFor = (status: string | null): "success" | "info" | "attention" 
   return "info";
 };
 
-const reviewStatusToneFor = (status: string): "success" | "warning" | "attention" => {
-  if (status === "approved") {
-    return "success";
-  }
-
-  if (status === "rejected") {
-    return "attention";
-  }
-
-  return "warning";
-};
-
 const formatDate = (value: Date | string) =>
   new Intl.DateTimeFormat("en", {
     month: "short",
     day: "numeric",
     year: "numeric",
   }).format(new Date(value));
-
-const renderStars = (rating: number) =>
-  Array.from({ length: 5 }, (_, index) => (
-    <svg
-      key={index}
-      viewBox="0 0 24 24"
-      className={styles.starIcon}
-      aria-hidden="true"
-      style={{ opacity: index < rating ? 1 : 0.22 }}
-    >
-      <path d="M12 2.75l2.84 5.75 6.36.92-4.6 4.48 1.09 6.34L12 17.46l-5.69 3.18 1.09-6.34-4.6-4.48 6.36-.92L12 2.75z" />
-    </svg>
-  ));
 
 function StatItem({ label, value }: { label: string; value: string }) {
   return (
@@ -127,8 +101,39 @@ function StatItem({ label, value }: { label: string; value: string }) {
   );
 }
 
+function RatingBreakdown({
+  totalReviews,
+  counts,
+}: {
+  totalReviews: number;
+  counts: [number, number, number, number, number];
+}) {
+  if (totalReviews === 0) {
+    return null;
+  }
+
+  return (
+    <div className={styles.ratingBreakdown}>
+      {([5, 4, 3, 2, 1] as const).map((star, index) => {
+        const count = counts[index];
+        const percent = totalReviews > 0 ? Math.round((count / totalReviews) * 100) : 0;
+
+        return (
+          <div key={star} className={styles.ratingBreakdownRow}>
+            <span className={styles.ratingBreakdownLabel}>{star}★</span>
+            <div className={styles.ratingBreakdownTrack}>
+              <div className={styles.ratingBreakdownFill} style={{ width: `${percent}%` }} />
+            </div>
+            <span className={styles.ratingBreakdownCount}>{count}</span>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
 export default function ProductDetailPage() {
-  const { product, stats, reviews, error } = useLoaderData<typeof loader>();
+  const { product, reviews, reviewsTotalCount, error } = useLoaderData<typeof loader>();
   const navigation = useNavigation();
   const location = useLocation();
   const isLoading = navigation.state !== "idle";
@@ -150,9 +155,7 @@ export default function ProductDetailPage() {
               </p>
             </div>
             <div className={styles.headerActions}>
-              <RemixLink to={backHref} className={styles.backLinkButton}>
-                Back to Products
-              </RemixLink>
+              <LinkButton to={backHref}>Back to Products</LinkButton>
             </div>
           </header>
 
@@ -202,16 +205,27 @@ export default function ProductDetailPage() {
                     <dl className={styles.statGrid}>
                       <StatItem label="Vendor" value={product.vendor || "—"} />
                       <StatItem label="Product type" value={product.productType || "—"} />
-                      <StatItem label="Review count" value={String(stats.totalCount)} />
+                      <StatItem label="Review count" value={String(product.totalReviews)} />
                       <StatItem
                         label="Average rating"
-                        value={stats.totalCount > 0 ? `${stats.averageRating.toFixed(1)} / 5` : "No ratings yet"}
+                        value={product.totalReviews > 0 ? `${product.averageRating.toFixed(1)} / 5` : "No ratings yet"}
                       />
                       <StatItem label="Created" value={formatDate(product.createdAt)} />
-                      {product.shopifyProductId ? (
-                        <StatItem label="Last synced" value={formatDate(product.updatedAt)} />
+                      {product.lastSyncedAt ? (
+                        <StatItem label="Last synced" value={formatDate(product.lastSyncedAt)} />
                       ) : null}
                     </dl>
+
+                    <RatingBreakdown
+                      totalReviews={product.totalReviews}
+                      counts={[
+                        product.rating5Count,
+                        product.rating4Count,
+                        product.rating3Count,
+                        product.rating2Count,
+                        product.rating1Count,
+                      ]}
+                    />
                   </div>
                 </div>
               </Card>
@@ -239,20 +253,25 @@ export default function ProductDetailPage() {
                     </EmptyState>
                   ) : (
                     <div className={styles.reviewList}>
-                      {reviews.map((review: ProductReview) => (
+                      {reviewsTotalCount > reviews.length ? (
+                        <p className={styles.reviewListHint}>
+                          Showing the {reviews.length} most recent of {reviewsTotalCount} reviews.
+                        </p>
+                      ) : null}
+                      {reviews.map((review) => (
                         <article key={review.id} className={styles.reviewRow}>
-                          <div className={styles.reviewRating} aria-label={`${review.rating ?? 0} out of 5 stars`}>
-                            {renderStars(review.rating ?? 0)}
+                          <div className={styles.reviewRating} aria-label={`${review.rating} out of 5 stars`}>
+                            <StarRating value={review.rating} />
                           </div>
                           <div className={styles.reviewContent}>
                             <div className={styles.reviewHeaderLine}>
                               <span className={styles.reviewTitle}>{review.title ?? "Untitled review"}</span>
-                              <Badge tone={reviewStatusToneFor(review.status)}>{formatStatusLabel(review.status)}</Badge>
+                              <ReviewStatusBadge status={review.status} />
                             </div>
                             <p className={styles.reviewMeta}>
-                              {review.authorName ?? "Anonymous"} • {formatDate(review.createdAt)}
+                              {review.reviewerName} • {formatDate(review.createdAt)}
                             </p>
-                            {review.body ? <p className={styles.reviewBody}>{review.body}</p> : null}
+                            {review.content ? <p className={styles.reviewBody}>{review.content}</p> : null}
                           </div>
                         </article>
                       ))}

@@ -150,8 +150,8 @@ export const loader = async ({ request }: LoaderFunctionArgs): Promise<LoaderDat
     return {
       requests: result.requests,
       customers: customers.map((customer) => ({
-        name: customer.authorName,
-        email: customer.authorEmail,
+        name: customer.reviewerName,
+        email: customer.reviewerEmail,
       })),
       products,
       totalCount: result.totalCount,

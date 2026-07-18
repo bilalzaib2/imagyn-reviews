@@ -1,0 +1,30 @@
+.row {
+  display: inline-flex;
+  gap: 2px;
+  align-items: center;
+}
+
+.star {
+  fill: currentColor;
+  color: var(--color-text);
+  display: block;
+}
+
+.starButton {
+  display: inline-flex;
+  padding: 2px;
+  border: none;
+  background: transparent;
+  cursor: pointer;
+  color: inherit;
+  border-radius: var(--radius-sm);
+}
+
+.starButton:hover {
+  opacity: 0.85;
+}
+
+.starButton:focus-visible {
+  outline: 2px solid var(--color-accent);
+  outline-offset: 2px;
+}
