@@ -14,18 +14,14 @@ function getSlug(shop: string) {
 export async function getOrCreateStore(shop: string) {
   const slug = getSlug(shop);
 
-  const existingStore = await prisma.store.findUnique({
+  return prisma.store.upsert({
     where: {
       slug,
     },
-  });
-
-  if (existingStore) {
-    return existingStore;
-  }
-
-  return prisma.store.create({
-    data: {
+    update: {
+      domain: shop,
+    },
+    create: {
       name: getShopName(shop),
       slug,
       domain: shop,
