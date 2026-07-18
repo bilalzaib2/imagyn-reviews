@@ -14,7 +14,6 @@ import {
 } from "@shopify/polaris";
 import enTranslations from "@shopify/polaris/locales/en.json";
 
-import { Button } from "../components/ui/Button";
 import { Container } from "../components/ui/Container";
 import { authenticate } from "../shopify.server";
 import { getOrCreateStore } from "../services/store.server";
@@ -151,8 +150,8 @@ export default function ProductDetailPage() {
               </p>
             </div>
             <div className={styles.headerActions}>
-              <RemixLink to={backHref} className={styles.backLink}>
-                <Button type="button">Back to Products</Button>
+              <RemixLink to={backHref} className={styles.backLinkButton}>
+                Back to Products
               </RemixLink>
             </div>
           </header>
