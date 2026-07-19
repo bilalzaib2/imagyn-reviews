@@ -97,6 +97,7 @@ model Review {
 
   productId        String
   product          Product      @relation(fields: [productId], references: [id], onDelete: Cascade)
+  productTitle     String?
 
   rating           Int
   title            String?

@@ -186,7 +186,7 @@ export async function getReview(id: string) {
 export async function createReview(data: CreateReviewInput) {
   const product = await prisma.product.findUnique({
     where: { id: data.productId },
-    select: { id: true, storeId: true },
+    select: { id: true, storeId: true, name: true },
   });
 
   if (!product) {
@@ -199,6 +199,7 @@ export async function createReview(data: CreateReviewInput) {
     data: {
       storeId: product.storeId,
       productId: product.id,
+      productTitle: product.name,
       rating: data.rating,
       title: data.title?.trim() || null,
       content: data.content.trim(),
@@ -230,11 +231,12 @@ export async function updateReview(id: string, data: UpdateReviewInput) {
 
   let nextStoreId = existing.storeId;
   let nextProductId = existing.productId;
+  let nextProductTitle = existing.productTitle;
 
   if (data.productId && data.productId !== existing.productId) {
     const product = await prisma.product.findUnique({
       where: { id: data.productId },
-      select: { id: true, storeId: true },
+      select: { id: true, storeId: true, name: true },
     });
 
     if (!product) {
@@ -243,6 +245,7 @@ export async function updateReview(id: string, data: UpdateReviewInput) {
 
     nextProductId = product.id;
     nextStoreId = product.storeId;
+    nextProductTitle = product.name;
   }
 
   const review = await prisma.review.update({
@@ -250,6 +253,7 @@ export async function updateReview(id: string, data: UpdateReviewInput) {
     data: {
       storeId: nextStoreId,
       productId: nextProductId,
+      productTitle: nextProductTitle,
       rating: nextRating,
       content: nextContent.trim(),
       reviewerName: nextReviewerName.trim(),
