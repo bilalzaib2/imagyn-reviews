@@ -19,10 +19,32 @@ function storeSlugFromShop(shop: string) {
   return shop.replace(".myshopify.com", "");
 }
 
+// A cross-origin POST with a JSON body is not a CORS "simple request," so the browser
+// sends an OPTIONS preflight first. React Router dispatches OPTIONS to the loader (it's
+// not a mutation method), so both loader and action short-circuit it the same way.
+function isPreflight(request: Request) {
+  return request.method === "OPTIONS";
+}
+
+function preflightResponse() {
+  return new Response(null, {
+    status: 204,
+    headers: {
+      "Access-Control-Allow-Origin": "*",
+      "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
+      "Access-Control-Allow-Headers": "Content-Type",
+    },
+  });
+}
+
 // Public, unauthenticated read for the storefront widget: shop + productId identify the
 // tenant/product, only APPROVED reviews are ever returned, and only display-safe fields
 // are included (no reviewerEmail/reviewerLocation).
 export const loader = async ({ request }: LoaderFunctionArgs) => {
+  if (isPreflight(request)) {
+    return preflightResponse();
+  }
+
   const url = new URL(request.url);
   const shop = url.searchParams.get("shop")?.trim() || "";
   const productId = url.searchParams.get("productId")?.trim() || "";
@@ -63,6 +85,10 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
 };
 
 export const action = async ({ request }: ActionFunctionArgs) => {
+  if (isPreflight(request)) {
+    return preflightResponse();
+  }
+
   if (request.method !== "POST") {
     return json({ ok: false, error: "Method not allowed." }, { status: 405 });
   }

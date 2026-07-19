@@ -7,7 +7,10 @@
   data-shop="{{ shop.permanent_domain }}"
   data-product-id="{{ block.settings.product.id }}"
 >
-  <p class="imagyn-reviews__loading">Loading reviews…</p>
+  <div class="imagyn-reviews__results" data-imagyn-list>
+    <p class="imagyn-reviews__loading">Loading reviews…</p>
+  </div>
+  <div class="imagyn-reviews__write" data-imagyn-write></div>
 </div>
 
 {{ 'reviews-widget.js' | asset_url | script_tag }}
