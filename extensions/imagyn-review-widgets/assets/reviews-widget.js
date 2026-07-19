@@ -1,4 +1,9 @@
 (function () {
+  // Requests must go through Shopify's App Proxy (same-origin, on the shop's own domain)
+  // so the app can verify Shopify actually signed them — a direct cross-origin fetch to
+  // the app's own domain would never carry a valid signature and is rejected server-side.
+  var PROXY_PATH = "/apps/reviews";
+
   function renderStars(rating) {
     var full = Math.round(rating);
     var stars = "";
@@ -210,13 +215,10 @@
       submitBtn.disabled = true;
       submitBtn.textContent = "Submitting…";
 
-      var endpoint = context.appUrl.replace(/\/$/, "") + "/api/reviews";
-
-      fetch(endpoint, {
+      fetch(PROXY_PATH, {
         method: "POST",
         headers: { "Content-Type": "application/json", Accept: "application/json" },
         body: JSON.stringify({
-          shop: context.shop,
           productId: context.productId,
           rating: selectedRating,
           customerName: customerName,
@@ -251,13 +253,11 @@
   }
 
   document.querySelectorAll("[data-imagyn-reviews]").forEach(function (root) {
-    var appUrl = root.getAttribute("data-app-url");
-    var shop = root.getAttribute("data-shop");
     var productId = root.getAttribute("data-product-id");
     var listEl = root.querySelector("[data-imagyn-list]");
     var writeEl = root.querySelector("[data-imagyn-write]");
 
-    if (!appUrl || !shop || !productId) {
+    if (!productId) {
       if (listEl) {
         listEl.innerHTML = '<p class="imagyn-reviews__error">Reviews are not configured for this block.</p>';
       }
@@ -265,17 +265,12 @@
     }
 
     if (listEl) {
-      var endpoint =
-        appUrl.replace(/\/$/, "") +
-        "/api/reviews?shop=" +
-        encodeURIComponent(shop) +
-        "&productId=" +
-        encodeURIComponent(productId);
+      var endpoint = PROXY_PATH + "?productId=" + encodeURIComponent(productId);
       loadList(listEl, endpoint);
     }
 
     if (writeEl) {
-      renderWriteReview(writeEl, { appUrl: appUrl, shop: shop, productId: productId });
+      renderWriteReview(writeEl, { productId: productId });
     }
   });
 })();

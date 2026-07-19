@@ -3,8 +3,6 @@
 <div
   class="imagyn-reviews"
   data-imagyn-reviews
-  data-app-url="{{ block.settings.app_url }}"
-  data-shop="{{ shop.permanent_domain }}"
   data-product-id="{{ block.settings.product.id }}"
 >
   <div class="imagyn-reviews__results" data-imagyn-list>
@@ -20,13 +18,7 @@
   "name": "Imagyn Reviews",
   "target": "section",
   "settings": [
-    { "type": "product", "id": "product", "label": "Product", "autofill": true },
-    {
-      "type": "text",
-      "id": "app_url",
-      "label": "Imagyn Reviews app URL",
-      "default": "https://imagyn-reviews-production.up.railway.app"
-    }
+    { "type": "product", "id": "product", "label": "Product", "autofill": true }
   ]
 }
 {% endschema %}

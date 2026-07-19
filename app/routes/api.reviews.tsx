@@ -1,4 +1,5 @@
 import type { ActionFunctionArgs, LoaderFunctionArgs } from "react-router";
+import { authenticate } from "../shopify.server";
 import { ReviewStatus } from "../services/review.shared";
 import { createReview, getProductReviews, getPublicReviewSummary } from "../services/review.server";
 import { getProductForStore } from "../services/product.server";
@@ -45,7 +46,13 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
     return preflightResponse();
   }
 
+  // Throws a 400 Response when the request wasn't genuinely forwarded by Shopify's App
+  // Proxy (missing/invalid signature) — this is what actually rejects non-Shopify traffic.
+  await authenticate.public.appProxy(request);
+
   const url = new URL(request.url);
+  // `shop` is one of the query params covered by the signature just verified above, so
+  // it's now a trusted value, not client-supplied.
   const shop = url.searchParams.get("shop")?.trim() || "";
   const productId = url.searchParams.get("productId")?.trim() || "";
 
@@ -93,6 +100,15 @@ export const action = async ({ request }: ActionFunctionArgs) => {
     return json({ ok: false, error: "Method not allowed." }, { status: 405 });
   }
 
+  // Throws a 400 Response when the request wasn't genuinely forwarded by Shopify's App
+  // Proxy (missing/invalid signature) — this is what actually rejects non-Shopify traffic.
+  await authenticate.public.appProxy(request);
+
+  // `shop` comes from the verified, signed query param Shopify's proxy appends — not from
+  // the request body, since the body itself isn't covered by the signature.
+  const url = new URL(request.url);
+  const shop = url.searchParams.get("shop")?.trim() || "";
+
   let payload: Record<string, unknown>;
   try {
     payload = await request.json();
@@ -100,7 +116,6 @@ export const action = async ({ request }: ActionFunctionArgs) => {
     return json({ ok: false, error: "Invalid JSON body." }, { status: 400 });
   }
 
-  const shop = typeof payload.shop === "string" ? payload.shop.trim() : "";
   const productId = typeof payload.productId === "string" ? payload.productId.trim() : "";
   const rating = Number(payload.rating);
   const customerName = typeof payload.customerName === "string" ? payload.customerName.trim() : "";
