@@ -1,0 +1,23 @@
+{{ 'collection-rating-badges.css' | asset_url | stylesheet_tag }}
+<script
+  src="{{ 'collection-rating-badges.js' | asset_url }}"
+  data-imagyn-collection-badges
+  data-star-color="{{ block.settings.star_color }}"
+  data-text-color="{{ block.settings.text_color }}"
+  defer
+></script>
+
+{% schema %}
+{
+  "name": "Imagyn Rating Badges (Collections & Search)",
+  "target": "body",
+  "settings": [
+    {
+      "type": "paragraph",
+      "content": "Adds a small rating badge to product cards in collection grids, search results, and featured/related product sections. Enable once here — no per-page placement needed."
+    },
+    { "type": "color", "id": "star_color", "label": "Star color" },
+    { "type": "color", "id": "text_color", "label": "Text color" }
+  ]
+}
+{% endschema %}

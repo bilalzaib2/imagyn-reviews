@@ -149,17 +149,50 @@ export async function getProductForStore(id: string, storeId: string) {
   });
 }
 
-// For callers that only have Shopify's own product identifier (e.g. Liquid's `product.id`,
-// which is the bare numeric id) rather than our internal cuid `Product.id`. `shopifyProductId`
-// is stored in GraphQL GID form (set from the Admin GraphQL API in syncProducts above), so a
-// bare numeric id is normalized to that form before the lookup.
-export async function getProductForStoreByShopifyId(shopifyProductId: string, storeId: string) {
-  const gid = shopifyProductId.startsWith("gid://") ? shopifyProductId : `gid://shopify/Product/${shopifyProductId}`;
+// `shopifyProductId` is stored in GraphQL GID form (set from the Admin GraphQL API in
+// syncProducts above), but callers on the storefront side only ever have Shopify's bare
+// numeric id (e.g. Liquid's `product.id`), so it's normalized to GID form before lookup.
+function toProductGid(shopifyProductId: string): string {
+  return shopifyProductId.startsWith("gid://") ? shopifyProductId : `gid://shopify/Product/${shopifyProductId}`;
+}
 
+// For callers that only have Shopify's own product identifier (e.g. Liquid's `product.id`)
+// rather than our internal cuid `Product.id`.
+export async function getProductForStoreByShopifyId(shopifyProductId: string, storeId: string) {
   return prisma.product.findFirst({
     where: {
-      shopifyProductId: gid,
+      shopifyProductId: toProductGid(shopifyProductId),
       storeId,
+    },
+  });
+}
+
+// Batched counterpart of getProductForStoreByShopifyId, for scanning many product cards at
+// once (collection grids, search results) without one query per product. Accepts a mix of
+// Shopify product ids and/or handles, since theme card markup exposes one or the other
+// depending on the theme — a single query resolves both.
+export async function getProductsForStoreByIdentifiers(
+  storeId: string,
+  identifiers: { shopifyProductIds: string[]; handles: string[] },
+) {
+  const gids = identifiers.shopifyProductIds.map(toProductGid);
+
+  if (gids.length === 0 && identifiers.handles.length === 0) {
+    return [];
+  }
+
+  return prisma.product.findMany({
+    where: {
+      storeId,
+      OR: [
+        ...(gids.length > 0 ? [{ shopifyProductId: { in: gids } }] : []),
+        ...(identifiers.handles.length > 0 ? [{ handle: { in: identifiers.handles } }] : []),
+      ],
+    },
+    select: {
+      id: true,
+      shopifyProductId: true,
+      handle: true,
     },
   });
 }

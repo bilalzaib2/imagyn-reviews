@@ -6,7 +6,8 @@ import { getProductForStoreByShopifyId } from "../services/product.server";
 import { getStoreBySlug } from "../services/store.server";
 import { getStorefrontWidgetSettings } from "../services/widget.server";
 
-function json(data: unknown, init?: ResponseInit) {
+// Shared with api.reviews.batch.tsx so the two public review endpoints respond identically.
+export function json(data: unknown, init?: ResponseInit) {
   return new Response(JSON.stringify(data), {
     ...init,
     headers: {
@@ -17,18 +18,18 @@ function json(data: unknown, init?: ResponseInit) {
   });
 }
 
-function storeSlugFromShop(shop: string) {
+export function storeSlugFromShop(shop: string) {
   return shop.replace(".myshopify.com", "");
 }
 
 // A cross-origin POST with a JSON body is not a CORS "simple request," so the browser
 // sends an OPTIONS preflight first. React Router dispatches OPTIONS to the loader (it's
 // not a mutation method), so both loader and action short-circuit it the same way.
-function isPreflight(request: Request) {
+export function isPreflight(request: Request) {
   return request.method === "OPTIONS";
 }
 
-function preflightResponse() {
+export function preflightResponse() {
   return new Response(null, {
     status: 204,
     headers: {

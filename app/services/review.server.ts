@@ -199,6 +199,34 @@ export async function getPublicReviewSummary(productId: string): Promise<PublicR
   };
 }
 
+// Batched counterpart of getPublicReviewSummary — one groupBy query for many products
+// instead of N queries, for rendering rating badges across a collection/search grid.
+export async function getPublicReviewSummaryBatch(
+  productIds: string[],
+): Promise<Record<string, PublicReviewSummary>> {
+  const summaries: Record<string, PublicReviewSummary> = {};
+
+  if (productIds.length === 0) {
+    return summaries;
+  }
+
+  const groups = await prisma.review.groupBy({
+    by: ["productId"],
+    where: { productId: { in: productIds }, deletedAt: null, status: ReviewStatus.APPROVED },
+    _avg: { rating: true },
+    _count: { rating: true },
+  });
+
+  for (const group of groups) {
+    summaries[group.productId] = {
+      averageRating: Number((group._avg.rating ?? 0).toFixed(1)),
+      totalReviews: group._count.rating,
+    };
+  }
+
+  return summaries;
+}
+
 export async function getReview(id: string) {
   return prisma.review.findFirst({
     where: { id, deletedAt: null },
