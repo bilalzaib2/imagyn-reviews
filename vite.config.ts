@@ -47,6 +47,32 @@ export default defineConfig({
       // See https://vitejs.dev/config/server-options.html#server-fs-allow for more information
       allow: ["app", "node_modules"],
     },
+    // Pre-transform the shell + top-level routes on server start instead of on
+    // first request, so the first navigation to each of these doesn't pay a
+    // cold on-demand transform cost.
+    warmup: {
+      clientFiles: [
+        "./app/root.tsx",
+        "./app/routes/app.tsx",
+        "./app/routes/app._index.tsx",
+        "./app/routes/app.products.tsx",
+        "./app/routes/app.reviews.tsx",
+        "./app/routes/app.requests.tsx",
+        "./app/routes/app.widgets.tsx",
+        "./app/routes/app.settings.tsx",
+      ],
+      ssrFiles: [
+        "./app/entry.server.tsx",
+        "./app/root.tsx",
+        "./app/routes/app.tsx",
+        "./app/routes/app._index.tsx",
+        "./app/routes/app.products.tsx",
+        "./app/routes/app.reviews.tsx",
+        "./app/routes/app.requests.tsx",
+        "./app/routes/app.widgets.tsx",
+        "./app/routes/app.settings.tsx",
+      ],
+    },
   },
   plugins: [
     reactRouter(),
@@ -56,6 +82,22 @@ export default defineConfig({
     assetsInlineLimit: 0,
   },
   optimizeDeps: {
-    include: ["@shopify/app-bridge-react"],
+    // Explicitly listing everything Vite otherwise discovers lazily prevents a
+    // mid-session "new dependency optimized" re-bundle + full reload, which
+    // pauses all in-flight requests until it finishes.
+    include: [
+      "@shopify/app-bridge-react",
+      "@shopify/polaris",
+      "@shopify/shopify-app-react-router/react",
+      "@shopify/shopify-app-react-router/server",
+      "@shopify/shopify-app-react-router/adapters/node",
+      "@shopify/shopify-app-session-storage-prisma",
+      "@prisma/client",
+      "react",
+      "react-dom",
+      "react-dom/client",
+      "react-router",
+      "react-router/dom",
+    ],
   },
 }) satisfies UserConfig;
