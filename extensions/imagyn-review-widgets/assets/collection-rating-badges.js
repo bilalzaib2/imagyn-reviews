@@ -1,14 +1,31 @@
 (function () {
-  // Fully independent of reviews-widget.js and rating-badge.js by design — this embed
-  // covers a different surface (collection grids, search results, featured/related product
-  // sections) and reuses only the backend batch endpoint, not any client code from those
-  // other two blocks.
+  // Dawn-only, using Dawn's actual verified card markup (snippets/card-product.liquid,
+  // confirmed identical across collection grids, featured collections, related products,
+  // and the search results page):
+  //
+  //   <div class="card-wrapper product-card-wrapper ...">
+  //     ...
+  //     <h3 class="card__heading">
+  //       <a class="full-unstyled-link" href="/products/{handle}">...</a>
+  //     </h3>
+  //
+  // Dawn's product page wraps the ENTIRE main product section in a single custom element,
+  // <product-info data-product-id="...">, which has no "card-wrapper" class — excluded
+  // explicitly below as well, as a second safeguard against ever matching it.
   var PROXY_PATH = "/apps/reviews/batch";
   var PROCESSED_ATTR = "data-imagyn-card-badge-injected";
-  // Dawn/OS 2.0 conventions first; a universal product-link fallback covers themes that
-  // don't use these class names.
-  var CARD_SELECTORS = ["[data-product-id]", ".card-wrapper", ".product-card", ".card--product", "[data-product-card]"];
+  var CARD_SELECTOR = ".card-wrapper";
   var DEBOUNCE_MS = 300;
+
+  // Set to false to silence the temporary debug logging once this is verified working.
+  var DEBUG = true;
+
+  function log() {
+    if (DEBUG && window.console && console.log) {
+      var args = ["[imagyn:collection-badges]"].concat(Array.prototype.slice.call(arguments));
+      console.log.apply(console, args);
+    }
+  }
 
   var scriptEl = document.querySelector("script[data-imagyn-collection-badges]");
   var starColor = scriptEl ? scriptEl.getAttribute("data-star-color") : "";
@@ -29,63 +46,50 @@
     return match ? match[1] : null;
   }
 
-  // Finds card-like containers and, for each, a product identifier (id or handle) plus the
-  // link to attach the badge near. Dedupes both by DOM node and by resolved product
-  // identity, since the class-based pass and the link-fallback pass can land on different
-  // container elements for the same card.
+  // Finds Dawn product cards and, for each, the title heading + product handle. Never
+  // matches the product page's own <product-info> wrapper, which is not a .card-wrapper.
   function findCards(root) {
     var found = [];
-    var seenContainers = [];
-    var seenKeys = {};
+    var candidates = root.querySelectorAll(CARD_SELECTOR);
 
-    function considerContainer(container, link) {
-      if (!container || container.hasAttribute(PROCESSED_ATTR)) {
-        return;
-      }
-      if (seenContainers.indexOf(container) !== -1) {
+    log("card containers matched (" + CARD_SELECTOR + "):", candidates.length);
+
+    candidates.forEach(function (card) {
+      if (card.hasAttribute(PROCESSED_ATTR)) {
         return;
       }
 
-      var productId = container.getAttribute("data-product-id") || (link && link.getAttribute("data-product-id"));
+      if (card.closest("product-info, [data-product-id]")) {
+        // Defensive: never treat anything inside the main product page wrapper as a card.
+        return;
+      }
+
+      var heading = card.querySelector(".card__heading");
+      var link = heading ? heading.querySelector("a[href]") : card.querySelector('a.full-unstyled-link[href*="/products/"]');
       var handle = extractHandleFromHref(link ? link.getAttribute("href") : null);
-      var key = productId ? "id:" + productId : handle ? "handle:" + handle : null;
 
-      if (!key || seenKeys[key]) {
+      if (!heading || !handle) {
         return;
       }
 
-      seenContainers.push(container);
-      seenKeys[key] = true;
-      found.push({ container: container, link: link, productId: productId, handle: handle });
-    }
-
-    CARD_SELECTORS.forEach(function (selector) {
-      root.querySelectorAll(selector).forEach(function (el) {
-        var link = el.matches('a[href*="/products/"]') ? el : el.querySelector('a[href*="/products/"]');
-        considerContainer(el, link);
-      });
+      found.push({ card: card, heading: heading, handle: handle });
     });
 
-    // Fallback for themes with no recognizable card-wrapper class: climb a few ancestor
-    // levels from the product link to find a reasonably card-sized container.
-    root.querySelectorAll('a[href*="/products/"]').forEach(function (link) {
-      var container = link.closest("li, .grid__item") || link.parentElement;
-      var depth = 0;
-      while (container && container.parentElement && container.children.length === 1 && depth < 3) {
-        container = container.parentElement;
-        depth += 1;
-      }
-      considerContainer(container, link);
-    });
+    log(
+      "product handles extracted:",
+      found.map(function (entry) {
+        return entry.handle;
+      }),
+    );
 
     return found;
   }
 
   function injectBadge(entry, summary) {
-    entry.container.setAttribute(PROCESSED_ATTR, "true");
+    entry.card.setAttribute(PROCESSED_ATTR, "true");
 
     if (!summary || summary.totalReviews === 0) {
-      return;
+      return false;
     }
 
     var badge = document.createElement("span");
@@ -96,12 +100,9 @@
       '<span class="imagyn-card-badge__stars" aria-hidden="true">' + renderStars(summary.averageRating) + "</span>" +
       '<span class="imagyn-card-badge__count">(' + summary.totalReviews + ")</span>";
 
-    var anchor = entry.link || entry.container;
-    if (anchor && anchor.parentElement) {
-      anchor.parentElement.insertBefore(badge, anchor.nextSibling);
-    } else {
-      entry.container.appendChild(badge);
-    }
+    // Beneath the title, always: inserted as the next sibling of the <h3 class="card__heading">.
+    entry.heading.parentElement.insertBefore(badge, entry.heading.nextSibling);
+    return true;
   }
 
   // One batched request for every card found in this pass, instead of one request per card.
@@ -110,47 +111,40 @@
       return;
     }
 
-    var productIds = [];
-    var handles = [];
-
-    entries.forEach(function (entry) {
-      if (entry.productId) {
-        productIds.push(entry.productId);
-      } else if (entry.handle) {
-        handles.push(entry.handle);
-      }
+    var handles = entries.map(function (entry) {
+      return entry.handle;
     });
 
-    var params = [];
-    if (productIds.length > 0) params.push("productIds=" + encodeURIComponent(productIds.join(",")));
-    if (handles.length > 0) params.push("handles=" + encodeURIComponent(handles.join(",")));
+    var endpoint = PROXY_PATH + "?handles=" + encodeURIComponent(handles.join(","));
+    log("batch request:", endpoint);
 
-    if (params.length === 0) {
-      entries.forEach(function (entry) {
-        entry.container.setAttribute(PROCESSED_ATTR, "true");
-      });
-      return;
-    }
-
-    fetch(PROXY_PATH + "?" + params.join("&"), { headers: { Accept: "application/json" } })
+    fetch(endpoint, { headers: { Accept: "application/json" } })
       .then(function (response) {
         if (!response.ok) {
-          throw new Error("Request failed");
+          throw new Error("Request failed with status " + response.status);
         }
         return response.json();
       })
       .then(function (data) {
+        log("batch response:", data);
+
         if (!data || !data.ok) {
           throw new Error("Unable to load ratings");
         }
+
+        var insertedCount = 0;
         entries.forEach(function (entry) {
-          var summary = (entry.productId && data.byProductId[entry.productId]) || (entry.handle && data.byHandle[entry.handle]);
-          injectBadge(entry, summary);
+          var summary = data.byHandle[entry.handle];
+          if (injectBadge(entry, summary)) {
+            insertedCount += 1;
+          }
         });
+        log("badges inserted:", insertedCount, "of", entries.length, "cards");
       })
-      .catch(function () {
+      .catch(function (error) {
+        log("batch request failed:", error);
         entries.forEach(function (entry) {
-          entry.container.setAttribute(PROCESSED_ATTR, "true");
+          entry.card.setAttribute(PROCESSED_ATTR, "true");
         });
       });
   }
@@ -163,8 +157,7 @@
 
   // One debounced MutationObserver covers AJAX-loaded collections ("load more"), predictive
   // search results, and any other dynamically injected cards, without theme-specific AJAX
-  // hooks. Debounced so a burst of DOM changes triggers one re-scan, not one per mutation;
-  // already-processed containers are skipped, so re-scans after a badge injection are cheap.
+  // hooks. Already-processed cards are skipped, so re-scans after a badge injection are cheap.
   var debounceTimer = null;
   var observer = new MutationObserver(function () {
     if (debounceTimer) {
