@@ -1,18 +1,66 @@
-import type { ActionFunctionArgs } from "react-router";
-import { createReview } from "../services/review.server";
+import type { ActionFunctionArgs, LoaderFunctionArgs } from "react-router";
+import { ReviewStatus } from "../services/review.shared";
+import { createReview, getProductReviews, getPublicReviewSummary } from "../services/review.server";
 import { getProductForStore } from "../services/product.server";
 import { getStoreBySlug } from "../services/store.server";
 
 function json(data: unknown, init?: ResponseInit) {
   return new Response(JSON.stringify(data), {
     ...init,
-    headers: { "Content-Type": "application/json", ...(init?.headers ?? {}) },
+    headers: {
+      "Content-Type": "application/json",
+      "Access-Control-Allow-Origin": "*",
+      ...(init?.headers ?? {}),
+    },
   });
 }
 
 function storeSlugFromShop(shop: string) {
   return shop.replace(".myshopify.com", "");
 }
+
+// Public, unauthenticated read for the storefront widget: shop + productId identify the
+// tenant/product, only APPROVED reviews are ever returned, and only display-safe fields
+// are included (no reviewerEmail/reviewerLocation).
+export const loader = async ({ request }: LoaderFunctionArgs) => {
+  const url = new URL(request.url);
+  const shop = url.searchParams.get("shop")?.trim() || "";
+  const productId = url.searchParams.get("productId")?.trim() || "";
+
+  if (!shop || !productId) {
+    return json({ ok: false, error: "shop and productId are required." }, { status: 400 });
+  }
+
+  const store = await getStoreBySlug(storeSlugFromShop(shop));
+
+  if (!store) {
+    return json({ ok: false, error: "Shop not found." }, { status: 404 });
+  }
+
+  const product = await getProductForStore(productId, store.id);
+
+  if (!product) {
+    return json({ ok: false, error: "Product not found for this shop." }, { status: 404 });
+  }
+
+  const [summary, result] = await Promise.all([
+    getPublicReviewSummary(product.id),
+    getProductReviews(product.id, { status: ReviewStatus.APPROVED, limit: 50 }),
+  ]);
+
+  return json({
+    ok: true,
+    summary,
+    reviews: result.reviews.map((review) => ({
+      id: review.id,
+      reviewerName: review.reviewerName,
+      rating: review.rating,
+      title: review.title,
+      content: review.content,
+      createdAt: review.createdAt,
+    })),
+  });
+};
 
 export const action = async ({ request }: ActionFunctionArgs) => {
   if (request.method !== "POST") {

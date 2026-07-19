@@ -1,0 +1,69 @@
+.imagyn-reviews {
+  font-family: inherit;
+  color: inherit;
+  max-width: 100%;
+}
+
+.imagyn-reviews__loading,
+.imagyn-reviews__empty,
+.imagyn-reviews__error {
+  font-size: 0.9em;
+  opacity: 0.75;
+}
+
+.imagyn-reviews__summary {
+  display: flex;
+  align-items: center;
+  gap: 0.5em;
+  margin-bottom: 1em;
+}
+
+.imagyn-reviews__stars,
+.imagyn-reviews__item-stars {
+  letter-spacing: 0.05em;
+  color: #f5a623;
+}
+
+.imagyn-reviews__average {
+  font-weight: 600;
+}
+
+.imagyn-reviews__count {
+  opacity: 0.7;
+}
+
+.imagyn-reviews__list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 1.25em;
+}
+
+.imagyn-reviews__item {
+  border-top: 1px solid rgba(0, 0, 0, 0.08);
+  padding-top: 1em;
+}
+
+.imagyn-reviews__item-header {
+  display: flex;
+  align-items: center;
+  gap: 0.5em;
+  margin-bottom: 0.35em;
+}
+
+.imagyn-reviews__item-title {
+  font-weight: 600;
+}
+
+.imagyn-reviews__item-content {
+  margin: 0 0 0.35em;
+  line-height: 1.5;
+}
+
+.imagyn-reviews__item-meta {
+  margin: 0;
+  font-size: 0.85em;
+  opacity: 0.65;
+}

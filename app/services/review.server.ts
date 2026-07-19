@@ -176,6 +176,29 @@ export async function getProductReviews(productId: string, options: ReviewQueryO
   return queryReviews({ productId }, options);
 }
 
+export interface PublicReviewSummary {
+  averageRating: number;
+  totalReviews: number;
+}
+
+// Scoped to APPROVED + non-deleted only, independent of recalculateProductStats (which
+// intentionally counts every status for internal merchant reporting). Used for public,
+// unauthenticated storefront display, where pending/rejected reviews must never surface.
+export async function getPublicReviewSummary(productId: string): Promise<PublicReviewSummary> {
+  const [totalReviews, aggregate] = await Promise.all([
+    prisma.review.count({ where: { productId, deletedAt: null, status: ReviewStatus.APPROVED } }),
+    prisma.review.aggregate({
+      where: { productId, deletedAt: null, status: ReviewStatus.APPROVED },
+      _avg: { rating: true },
+    }),
+  ]);
+
+  return {
+    averageRating: Number((aggregate._avg.rating ?? 0).toFixed(1)),
+    totalReviews,
+  };
+}
+
 export async function getReview(id: string) {
   return prisma.review.findFirst({
     where: { id, deletedAt: null },

@@ -1,21 +1,29 @@
-{% assign avg_rating = block.settings.product.metafields.demo.avg_rating.value | round %}
-<span style="color:{{ block.settings.colour }}">
-  {% render 'stars', rating: avg_rating %}
-</span>
-{% if avg_rating >= 4 %}
-  <br>
-  <img src="{{ "thumbs-up.png" | asset_img_url: '15x' }}" height="15" width="15" loading="lazy">
-  {{ 'ratings.home.recommendationText' | t }}
-{% endif %}
+{{ 'reviews-widget.css' | asset_url | stylesheet_tag }}
+
+<div
+  class="imagyn-reviews"
+  data-imagyn-reviews
+  data-app-url="{{ block.settings.app_url }}"
+  data-shop="{{ shop.permanent_domain }}"
+  data-product-id="{{ block.settings.product.id }}"
+>
+  <p class="imagyn-reviews__loading">Loading reviews…</p>
+</div>
+
+{{ 'reviews-widget.js' | asset_url | script_tag }}
 
 {% schema %}
 {
-  "name": "Star Rating",
+  "name": "Imagyn Reviews",
   "target": "section",
   "settings": [
-    { "type": "product", "id": "product", "label": "product", "autofill": true },
-    { "type": "color", "id": "colour", "label": "Star Colour", "default": "#ff0000" }
+    { "type": "product", "id": "product", "label": "Product", "autofill": true },
+    {
+      "type": "text",
+      "id": "app_url",
+      "label": "Imagyn Reviews app URL",
+      "default": "https://imagyn-reviews-production.up.railway.app"
+    }
   ]
 }
 {% endschema %}
-
