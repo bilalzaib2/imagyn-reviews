@@ -389,28 +389,44 @@
     });
   }
 
-  document.querySelectorAll("[data-imagyn-reviews]").forEach(function (root) {
-    // The product is detected automatically from Shopify's own `product` Liquid object
-    // (available on any product template) — the block has no product picker to configure.
-    var productId = root.getAttribute("data-product-id");
-    var listEl = root.querySelector("[data-imagyn-list]");
-    var writeEl = root.querySelector("[data-imagyn-write]");
-    var themeOverrides = readThemeOverrides(root);
+  // Scoped to `scope` so the Theme Editor's section re-render (see below) only
+  // (re-)initializes the block instance that actually changed, not every one on the page.
+  // The data-imagyn-initialized guard stops a block from being wired up twice.
+  function init(scope) {
+    (scope || document).querySelectorAll("[data-imagyn-reviews]:not([data-imagyn-initialized])").forEach(function (root) {
+      root.setAttribute("data-imagyn-initialized", "true");
 
-    if (!productId) {
-      if (listEl) {
-        listEl.innerHTML = '<p class="imagyn-reviews__error">Reviews are not configured for this block.</p>';
+      // The product is detected automatically from Shopify's own `product` Liquid object
+      // (available on any product template) — the block has no product picker to configure.
+      var productId = root.getAttribute("data-product-id");
+      var listEl = root.querySelector("[data-imagyn-list]");
+      var writeEl = root.querySelector("[data-imagyn-write]");
+      var themeOverrides = readThemeOverrides(root);
+
+      if (!productId) {
+        if (listEl) {
+          listEl.innerHTML = '<p class="imagyn-reviews__error">Reviews are not configured for this block.</p>';
+        }
+        return;
       }
-      return;
-    }
 
-    if (listEl) {
-      var endpoint = PROXY_PATH + "?productId=" + encodeURIComponent(productId);
-      loadList(root, listEl, endpoint, themeOverrides);
-    }
+      if (listEl) {
+        var endpoint = PROXY_PATH + "?productId=" + encodeURIComponent(productId);
+        loadList(root, listEl, endpoint, themeOverrides);
+      }
 
-    if (writeEl) {
-      renderWriteReview(writeEl, { productId: productId }, themeOverrides.showWriteReviewButton);
-    }
+      if (writeEl) {
+        renderWriteReview(writeEl, { productId: productId }, themeOverrides.showWriteReviewButton);
+      }
+    });
+  }
+
+  init();
+
+  // Shopify's Theme Editor swaps in new section HTML via AJAX whenever a merchant edits
+  // this block's settings; that swap doesn't re-run <script> tags, so without this listener
+  // the widget would only ever reflect whatever HTML existed on the editor's first load.
+  document.addEventListener("shopify:section:load", function (event) {
+    init(event.target);
   });
 })();

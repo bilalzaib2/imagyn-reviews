@@ -148,3 +148,18 @@ export async function getProductForStore(id: string, storeId: string) {
     },
   });
 }
+
+// For callers that only have Shopify's own product identifier (e.g. Liquid's `product.id`,
+// which is the bare numeric id) rather than our internal cuid `Product.id`. `shopifyProductId`
+// is stored in GraphQL GID form (set from the Admin GraphQL API in syncProducts above), so a
+// bare numeric id is normalized to that form before the lookup.
+export async function getProductForStoreByShopifyId(shopifyProductId: string, storeId: string) {
+  const gid = shopifyProductId.startsWith("gid://") ? shopifyProductId : `gid://shopify/Product/${shopifyProductId}`;
+
+  return prisma.product.findFirst({
+    where: {
+      shopifyProductId: gid,
+      storeId,
+    },
+  });
+}

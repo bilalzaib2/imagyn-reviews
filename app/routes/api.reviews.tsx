@@ -2,7 +2,7 @@ import type { ActionFunctionArgs, LoaderFunctionArgs } from "react-router";
 import { authenticate } from "../shopify.server";
 import { ReviewStatus } from "../services/review.shared";
 import { createReview, getProductReviews, getPublicReviewSummary } from "../services/review.server";
-import { getProductForStore } from "../services/product.server";
+import { getProductForStoreByShopifyId } from "../services/product.server";
 import { getStoreBySlug } from "../services/store.server";
 import { getStorefrontWidgetSettings } from "../services/widget.server";
 
@@ -67,7 +67,7 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
     return json({ ok: false, error: "Shop not found." }, { status: 404 });
   }
 
-  const product = await getProductForStore(productId, store.id);
+  const product = await getProductForStoreByShopifyId(productId, store.id);
 
   if (!product) {
     return json({ ok: false, error: "Product not found for this shop." }, { status: 404 });
@@ -145,7 +145,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
     return json({ ok: false, error: "Shop not found." }, { status: 404 });
   }
 
-  const product = await getProductForStore(productId, store.id);
+  const product = await getProductForStoreByShopifyId(productId, store.id);
 
   if (!product) {
     return json({ ok: false, error: "Product not found for this shop." }, { status: 404 });
