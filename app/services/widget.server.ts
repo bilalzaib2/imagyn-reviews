@@ -175,3 +175,31 @@ export const widgetService = {
     return toWidgetRecord(widget);
   },
 };
+
+// Resolution order for public/storefront rendering: an enabled widget scoped to this
+// specific product, then an enabled store-wide widget (productId null) of the same type,
+// then the built-in defaults. Reuses listWidgets/getDefaultWidgetSettings rather than
+// re-querying or re-parsing settings.
+export async function getStorefrontWidgetSettings(
+  storeId: string,
+  productId: string,
+  type: WidgetType = "review-list",
+): Promise<{ type: WidgetType; settings: WidgetSettings }> {
+  const productScoped = await widgetService.listWidgets(storeId, productId);
+  const productMatch = productScoped.find((widget) => widget.type === type && widget.settings.enabled);
+
+  if (productMatch) {
+    return { type: productMatch.type, settings: productMatch.settings };
+  }
+
+  const storeScoped = await widgetService.listWidgets(storeId);
+  const storeMatch = storeScoped.find(
+    (widget) => widget.type === type && widget.productId === null && widget.settings.enabled,
+  );
+
+  if (storeMatch) {
+    return { type: storeMatch.type, settings: storeMatch.settings };
+  }
+
+  return { type, settings: getDefaultWidgetSettings(type) };
+}

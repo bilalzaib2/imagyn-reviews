@@ -1,7 +1,13 @@
 .imagyn-reviews {
   font-family: inherit;
-  color: inherit;
-  max-width: 100%;
+  color: var(--imagyn-text-color, inherit);
+  background: var(--imagyn-background-color, transparent);
+  max-width: var(--imagyn-container-width, 100%);
+  font-size: var(--imagyn-body-font-size, inherit);
+  font-weight: var(--imagyn-font-weight, inherit);
+  letter-spacing: var(--imagyn-letter-spacing, normal);
+  line-height: var(--imagyn-line-height, normal);
+  text-align: var(--imagyn-text-align, left);
 }
 
 .imagyn-reviews__loading,
@@ -21,11 +27,12 @@
 .imagyn-reviews__stars,
 .imagyn-reviews__item-stars {
   letter-spacing: 0.05em;
-  color: #f5a623;
+  color: var(--imagyn-star-color, #f5a623);
 }
 
 .imagyn-reviews__average {
   font-weight: 600;
+  font-size: var(--imagyn-heading-font-size, inherit);
 }
 
 .imagyn-reviews__count {
@@ -38,12 +45,14 @@
   padding: 0;
   display: flex;
   flex-direction: column;
-  gap: 1.25em;
+  gap: var(--imagyn-gap, 1.25em);
 }
 
 .imagyn-reviews__item {
-  border-top: 1px solid rgba(0, 0, 0, 0.08);
-  padding-top: 1em;
+  border-top: 1px solid var(--imagyn-border-color, rgba(0, 0, 0, 0.08));
+  border-radius: var(--imagyn-border-radius, 0);
+  padding: var(--imagyn-padding, 0) 0 0;
+  padding-top: var(--imagyn-vertical-spacing, 1em);
 }
 
 .imagyn-reviews__item-header {
@@ -55,11 +64,11 @@
 
 .imagyn-reviews__item-title {
   font-weight: 600;
+  font-size: var(--imagyn-heading-font-size, inherit);
 }
 
 .imagyn-reviews__item-content {
   margin: 0 0 0.35em;
-  line-height: 1.5;
 }
 
 .imagyn-reviews__item-meta {
@@ -71,7 +80,7 @@
 .imagyn-reviews__write {
   margin-top: 1.5em;
   padding-top: 1.5em;
-  border-top: 1px solid rgba(0, 0, 0, 0.08);
+  border-top: 1px solid var(--imagyn-border-color, rgba(0, 0, 0, 0.08));
 }
 
 .imagyn-reviews__write-toggle {
@@ -79,7 +88,7 @@
   cursor: pointer;
   padding: 0.6em 1.1em;
   border: 1px solid currentColor;
-  border-radius: 4px;
+  border-radius: var(--imagyn-button-radius, 4px);
   background: transparent;
   color: inherit;
 }
@@ -90,6 +99,7 @@
   gap: 0.9em;
   max-width: 28em;
   margin-top: 1em;
+  text-align: left;
 }
 
 .imagyn-reviews__field {
@@ -108,9 +118,9 @@
   font: inherit;
   padding: 0.55em 0.7em;
   border: 1px solid rgba(0, 0, 0, 0.2);
-  border-radius: 4px;
+  border-radius: var(--imagyn-border-radius, 4px);
   background: #fff;
-  color: inherit;
+  color: #111;
 }
 
 .imagyn-reviews__rating-picker {
@@ -124,7 +134,7 @@
   cursor: pointer;
   border: none;
   background: transparent;
-  color: #f5a623;
+  color: var(--imagyn-star-color, #f5a623);
   padding: 0.1em;
 }
 
@@ -144,14 +154,32 @@
   font: inherit;
   cursor: pointer;
   padding: 0.65em 1.2em;
-  border: none;
-  border-radius: 4px;
-  background: #111;
-  color: #fff;
+  border-radius: var(--imagyn-button-radius, 4px);
   width: fit-content;
 }
 
 .imagyn-reviews__submit:disabled {
   opacity: 0.6;
   cursor: not-allowed;
+}
+
+/* Button style variants (buttonStyle setting): default is solid. */
+.imagyn-reviews--btn-solid .imagyn-reviews__submit,
+.imagyn-reviews .imagyn-reviews__submit {
+  background: var(--imagyn-button-color, #111);
+  color: #fff;
+  border: none;
+}
+
+.imagyn-reviews--btn-outline .imagyn-reviews__submit {
+  background: transparent;
+  color: var(--imagyn-button-color, #111);
+  border: 1px solid var(--imagyn-button-color, #111);
+}
+
+.imagyn-reviews--btn-ghost .imagyn-reviews__submit {
+  background: transparent;
+  color: var(--imagyn-button-color, #111);
+  border: none;
+  box-shadow: none;
 }

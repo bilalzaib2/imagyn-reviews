@@ -77,7 +77,40 @@
     listEl.innerHTML = summaryHtml + listHtml;
   }
 
-  function loadList(listEl, endpoint) {
+  // Maps the merchant's saved Widget settings (widget.server.ts / widget.shared.ts —
+  // unmodified) onto CSS custom properties consumed by reviews-widget.css, so the
+  // storefront widget reflects the same builder configuration shown in the admin.
+  function applyWidgetSettings(root, widget) {
+    if (!widget || !widget.settings) {
+      return;
+    }
+
+    var s = widget.settings;
+    var style = root.style;
+
+    style.setProperty("--imagyn-star-color", s.starColor);
+    style.setProperty("--imagyn-text-color", s.darkMode ? "#f5f5f5" : s.textColor);
+    style.setProperty("--imagyn-background-color", s.darkMode ? "#1a1a1a" : s.backgroundColor);
+    style.setProperty("--imagyn-border-color", s.darkMode ? "rgba(255,255,255,0.15)" : s.borderColor);
+    style.setProperty("--imagyn-border-radius", s.borderRadius + "px");
+    style.setProperty("--imagyn-heading-font-size", s.headingFontSize + "px");
+    style.setProperty("--imagyn-body-font-size", s.bodyFontSize + "px");
+    style.setProperty("--imagyn-font-weight", s.fontWeight);
+    style.setProperty("--imagyn-letter-spacing", s.letterSpacing + "px");
+    style.setProperty("--imagyn-line-height", s.lineHeight);
+    style.setProperty("--imagyn-padding", s.padding + "px");
+    style.setProperty("--imagyn-gap", s.gap + "px");
+    style.setProperty("--imagyn-vertical-spacing", s.verticalSpacing + "px");
+    style.setProperty("--imagyn-container-width", s.containerWidth + "px");
+    style.setProperty("--imagyn-text-align", s.alignment || "left");
+    style.setProperty("--imagyn-button-color", s.buttonColor);
+    style.setProperty("--imagyn-button-radius", s.buttonRadius + "px");
+
+    root.classList.remove("imagyn-reviews--btn-solid", "imagyn-reviews--btn-outline", "imagyn-reviews--btn-ghost");
+    root.classList.add("imagyn-reviews--btn-" + (s.buttonStyle || "solid"));
+  }
+
+  function loadList(root, listEl, endpoint) {
     fetch(endpoint, { headers: { Accept: "application/json" } })
       .then(function (response) {
         if (!response.ok) {
@@ -89,6 +122,7 @@
         if (!data || !data.ok) {
           throw new Error((data && data.error) || "Unable to load reviews");
         }
+        applyWidgetSettings(root, data.widget);
         renderList(listEl, data);
       })
       .catch(function () {
@@ -266,7 +300,7 @@
 
     if (listEl) {
       var endpoint = PROXY_PATH + "?productId=" + encodeURIComponent(productId);
-      loadList(listEl, endpoint);
+      loadList(root, listEl, endpoint);
     }
 
     if (writeEl) {

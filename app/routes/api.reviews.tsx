@@ -4,6 +4,7 @@ import { ReviewStatus } from "../services/review.shared";
 import { createReview, getProductReviews, getPublicReviewSummary } from "../services/review.server";
 import { getProductForStore } from "../services/product.server";
 import { getStoreBySlug } from "../services/store.server";
+import { getStorefrontWidgetSettings } from "../services/widget.server";
 
 function json(data: unknown, init?: ResponseInit) {
   return new Response(JSON.stringify(data), {
@@ -72,14 +73,16 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
     return json({ ok: false, error: "Product not found for this shop." }, { status: 404 });
   }
 
-  const [summary, result] = await Promise.all([
+  const [summary, result, widget] = await Promise.all([
     getPublicReviewSummary(product.id),
     getProductReviews(product.id, { status: ReviewStatus.APPROVED, limit: 50 }),
+    getStorefrontWidgetSettings(store.id, product.id),
   ]);
 
   return json({
     ok: true,
     summary,
+    widget,
     reviews: result.reviews.map((review) => ({
       id: review.id,
       reviewerName: review.reviewerName,
