@@ -1,12 +1,12 @@
 .page {
   display: grid;
-  gap: var(--space-8);
-  padding-block: var(--space-10);
+  gap: var(--space-10);
+  padding-block: var(--space-12);
 }
 
 .header {
   display: grid;
-  gap: var(--space-2);
+  gap: var(--space-3);
 }
 
 .headerContent {
@@ -19,15 +19,17 @@
   margin: 0;
   color: var(--color-text-muted);
   font-size: var(--text-xs);
-  letter-spacing: 0.2em;
+  font-weight: 600;
+  letter-spacing: 0.16em;
   text-transform: uppercase;
 }
 
 .title {
   margin: 0;
-  font-size: clamp(1.75rem, 3vw, 2.4rem);
+  font-size: clamp(1.875rem, 3.2vw, 2.5rem);
   font-weight: 600;
   letter-spacing: -0.03em;
+  line-height: 1.15;
 }
 
 .subtitle {

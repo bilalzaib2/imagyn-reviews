@@ -1,20 +1,20 @@
 :root {
   color-scheme: light;
-  --color-background: #f5f4ef;
+  --color-background: #ffffff;
   --color-surface: #ffffff;
-  --color-surface-muted: #f8f7f2;
-  --color-surface-strong: #f0eee7;
+  --color-surface-muted: #fafafa;
+  --color-surface-strong: #f2f2f2;
   --color-text: #111111;
-  --color-text-muted: #5f5f5a;
-  --color-border: #e4e1d8;
-  --color-border-strong: #d4d0c4;
+  --color-text-muted: #6b6b6b;
+  --color-border: #e5e5e5;
+  --color-border-strong: #d0d0d0;
   --color-accent: #111111;
-  --color-accent-soft: #f2f1eb;
+  --color-accent-soft: #f2f2f2;
   --color-success: #2c5e45;
   --color-danger: #8f3c2f;
 
-  --font-sans: Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
-  --font-display: Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  --font-sans: "Red Hat Text", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  --font-display: "Red Hat Text", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
 
   --text-xs: 0.75rem;
   --text-sm: 0.875rem;
@@ -41,11 +41,19 @@
   --radius-xl: 1.25rem;
 
   --shadow-sm: 0 1px 2px rgba(17, 17, 17, 0.04);
-  --shadow-md: 0 10px 30px rgba(17, 17, 17, 0.06);
-  --shadow-lg: 0 18px 40px rgba(17, 17, 17, 0.08);
+  --shadow-md: 0 4px 16px rgba(17, 17, 17, 0.05);
+  --shadow-lg: 0 8px 24px rgba(17, 17, 17, 0.06);
 
   --container-width: 1120px;
-  --container-padding: 1.5rem;
+  --container-padding: 2rem;
+
+  /* Polaris renders its own components (Card, Badge, Button, DataTable, ...) using its
+     own token set, independent of the custom properties above. These two overrides keep
+     Polaris-rendered UI visually consistent with the rest of the app: Polaris's default
+     page background is a light gray (not white), and its default font is Inter. */
+  --p-color-bg: #ffffff;
+  --p-font-family-sans: "Red Hat Text", -apple-system, BlinkMacSystemFont, "San Francisco", "Segoe UI", Roboto,
+    "Helvetica Neue", sans-serif;
 }
 
 * {

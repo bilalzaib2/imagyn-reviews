@@ -90,7 +90,7 @@
   min-height: 2.5rem;
   border-radius: 14px;
   background: rgba(17, 17, 17, 0.06);
-  color: #111111;
+  color: var(--color-text);
   font-size: 1rem;
   font-weight: 700;
 }
@@ -231,7 +231,7 @@
   gap: 0.35rem;
   padding: 1rem 1.15rem;
   border: 1px solid;
-  box-shadow: 0 18px 40px rgba(17, 17, 17, 0.08);
+  box-shadow: var(--shadow-lg);
 }
 
 .previewButton {
