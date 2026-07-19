@@ -31,19 +31,128 @@
     return div.innerHTML;
   }
 
-  function renderList(listEl, data) {
+  // Reads this block instance's own native Shopify theme-editor settings (added alongside
+  // the Widget Builder settings, not replacing them). Only non-empty values are included,
+  // so an untouched color setting doesn't blank out the Widget Builder's saved color.
+  // Checkbox/select settings always have a value in Shopify's schema (they can't be left
+  // "unset"), so those always apply for this block instance — that's expected native block
+  // behavior, still scoped to just this block, never touching the Widget Builder's data.
+  function readThemeOverrides(root) {
+    var overrides = {};
+
+    var starColor = root.getAttribute("data-star-color");
+    if (starColor) overrides.starColor = starColor;
+
+    var backgroundColor = root.getAttribute("data-background-color");
+    if (backgroundColor) overrides.backgroundColor = backgroundColor;
+
+    var borderColor = root.getAttribute("data-border-color");
+    if (borderColor) overrides.borderColor = borderColor;
+
+    var buttonColor = root.getAttribute("data-button-color");
+    if (buttonColor) overrides.buttonColor = buttonColor;
+
+    var borderRadius = parseFloat(root.getAttribute("data-border-radius"));
+    if (!isNaN(borderRadius)) overrides.borderRadius = borderRadius;
+
+    var headingFontSize = parseFloat(root.getAttribute("data-heading-font-size"));
+    if (!isNaN(headingFontSize)) overrides.headingFontSize = headingFontSize;
+
+    var bodyFontSize = parseFloat(root.getAttribute("data-body-font-size"));
+    if (!isNaN(bodyFontSize)) overrides.bodyFontSize = bodyFontSize;
+
+    var showAverageRating = root.getAttribute("data-show-average-rating");
+    if (showAverageRating === "true" || showAverageRating === "false") {
+      overrides.showAverageRating = showAverageRating === "true";
+    }
+
+    var showReviewCount = root.getAttribute("data-show-review-count");
+    if (showReviewCount === "true" || showReviewCount === "false") {
+      overrides.showReviewCount = showReviewCount === "true";
+    }
+
+    var showWriteReviewButton = root.getAttribute("data-show-write-review-button");
+    if (showWriteReviewButton === "true" || showWriteReviewButton === "false") {
+      overrides.showWriteReviewButton = showWriteReviewButton === "true";
+    }
+
+    var showLoadMoreButton = root.getAttribute("data-show-load-more-button");
+    if (showLoadMoreButton === "true" || showLoadMoreButton === "false") {
+      overrides.showLoadMoreButton = showLoadMoreButton === "true";
+    }
+
+    var reviewsPerPage = parseInt(root.getAttribute("data-reviews-per-page"), 10);
+    if (!isNaN(reviewsPerPage) && reviewsPerPage > 0) {
+      overrides.reviewsPerPage = reviewsPerPage;
+    }
+
+    var layout = root.getAttribute("data-layout");
+    if (layout) overrides.layout = layout;
+
+    return overrides;
+  }
+
+  // Maps the merchant's saved Widget settings (widget.server.ts / widget.shared.ts —
+  // unmodified) onto CSS custom properties consumed by reviews-widget.css, so the
+  // storefront widget reflects the same builder configuration shown in the admin. Any
+  // value also set via this block's own theme-editor settings overrides it, but only for
+  // this block instance — the Widget Builder's saved settings themselves are untouched.
+  function resolveSettings(widget, themeOverrides) {
+    var s = {};
+    if (widget && widget.settings) {
+      for (var key in widget.settings) {
+        if (Object.prototype.hasOwnProperty.call(widget.settings, key)) {
+          s[key] = widget.settings[key];
+        }
+      }
+    }
+    for (var overrideKey in themeOverrides) {
+      if (Object.prototype.hasOwnProperty.call(themeOverrides, overrideKey)) {
+        s[overrideKey] = themeOverrides[overrideKey];
+      }
+    }
+    return s;
+  }
+
+  function applyStyle(root, s) {
+    var style = root.style;
+
+    style.setProperty("--imagyn-star-color", s.starColor);
+    style.setProperty("--imagyn-text-color", s.textColor);
+    style.setProperty("--imagyn-background-color", s.backgroundColor);
+    style.setProperty("--imagyn-border-color", s.borderColor);
+    style.setProperty("--imagyn-border-radius", s.borderRadius + "px");
+    style.setProperty("--imagyn-heading-font-size", s.headingFontSize + "px");
+    style.setProperty("--imagyn-body-font-size", s.bodyFontSize + "px");
+    style.setProperty("--imagyn-button-color", s.buttonColor);
+
+    root.classList.remove("imagyn-reviews--layout-list", "imagyn-reviews--layout-grid", "imagyn-reviews--layout-carousel");
+    root.classList.add("imagyn-reviews--layout-" + (s.layout || "list"));
+  }
+
+  function renderList(listEl, data, s, visibleCount, onLoadMore) {
     var summary = data.summary || { averageRating: 0, totalReviews: 0 };
     var reviews = data.reviews || [];
 
-    var summaryHtml =
-      '<div class="imagyn-reviews__summary">' +
-      '<span class="imagyn-reviews__stars" aria-hidden="true">' + renderStars(summary.averageRating) + "</span>" +
-      '<span class="imagyn-reviews__average">' + summary.averageRating.toFixed(1) + "</span>" +
-      '<span class="imagyn-reviews__count">(' +
-      summary.totalReviews +
-      (summary.totalReviews === 1 ? " review" : " reviews") +
-      ")</span>" +
-      "</div>";
+    var summaryHtml = "";
+    if (s.showAverageRating !== false || s.showReviewCount !== false) {
+      summaryHtml += '<div class="imagyn-reviews__summary">';
+      if (s.showAverageRating !== false) {
+        summaryHtml +=
+          '<span class="imagyn-reviews__stars" aria-hidden="true">' + renderStars(summary.averageRating) + "</span>" +
+          '<span class="imagyn-reviews__average">' + summary.averageRating.toFixed(1) + "</span>";
+      }
+      if (s.showReviewCount !== false) {
+        summaryHtml +=
+          '<span class="imagyn-reviews__count">(' +
+          summary.totalReviews +
+          (summary.totalReviews === 1 ? " review" : " reviews") +
+          ")</span>";
+      }
+      summaryHtml += "</div>";
+    }
+
+    var visibleReviews = reviews.slice(0, visibleCount);
 
     var listHtml;
     if (reviews.length === 0) {
@@ -51,7 +160,7 @@
     } else {
       listHtml =
         '<ul class="imagyn-reviews__list">' +
-        reviews
+        visibleReviews
           .map(function (review) {
             return (
               '<li class="imagyn-reviews__item">' +
@@ -72,45 +181,21 @@
           })
           .join("") +
         "</ul>";
+
+      if (s.showLoadMoreButton !== false && visibleReviews.length < reviews.length) {
+        listHtml += '<button type="button" class="imagyn-reviews__load-more" data-imagyn-load-more>Load more</button>';
+      }
     }
 
     listEl.innerHTML = summaryHtml + listHtml;
-  }
 
-  // Maps the merchant's saved Widget settings (widget.server.ts / widget.shared.ts —
-  // unmodified) onto CSS custom properties consumed by reviews-widget.css, so the
-  // storefront widget reflects the same builder configuration shown in the admin.
-  function applyWidgetSettings(root, widget) {
-    if (!widget || !widget.settings) {
-      return;
+    var loadMoreBtn = listEl.querySelector("[data-imagyn-load-more]");
+    if (loadMoreBtn) {
+      loadMoreBtn.addEventListener("click", onLoadMore);
     }
-
-    var s = widget.settings;
-    var style = root.style;
-
-    style.setProperty("--imagyn-star-color", s.starColor);
-    style.setProperty("--imagyn-text-color", s.darkMode ? "#f5f5f5" : s.textColor);
-    style.setProperty("--imagyn-background-color", s.darkMode ? "#1a1a1a" : s.backgroundColor);
-    style.setProperty("--imagyn-border-color", s.darkMode ? "rgba(255,255,255,0.15)" : s.borderColor);
-    style.setProperty("--imagyn-border-radius", s.borderRadius + "px");
-    style.setProperty("--imagyn-heading-font-size", s.headingFontSize + "px");
-    style.setProperty("--imagyn-body-font-size", s.bodyFontSize + "px");
-    style.setProperty("--imagyn-font-weight", s.fontWeight);
-    style.setProperty("--imagyn-letter-spacing", s.letterSpacing + "px");
-    style.setProperty("--imagyn-line-height", s.lineHeight);
-    style.setProperty("--imagyn-padding", s.padding + "px");
-    style.setProperty("--imagyn-gap", s.gap + "px");
-    style.setProperty("--imagyn-vertical-spacing", s.verticalSpacing + "px");
-    style.setProperty("--imagyn-container-width", s.containerWidth + "px");
-    style.setProperty("--imagyn-text-align", s.alignment || "left");
-    style.setProperty("--imagyn-button-color", s.buttonColor);
-    style.setProperty("--imagyn-button-radius", s.buttonRadius + "px");
-
-    root.classList.remove("imagyn-reviews--btn-solid", "imagyn-reviews--btn-outline", "imagyn-reviews--btn-ghost");
-    root.classList.add("imagyn-reviews--btn-" + (s.buttonStyle || "solid"));
   }
 
-  function loadList(root, listEl, endpoint) {
+  function loadList(root, listEl, endpoint, themeOverrides) {
     fetch(endpoint, { headers: { Accept: "application/json" } })
       .then(function (response) {
         if (!response.ok) {
@@ -122,15 +207,33 @@
         if (!data || !data.ok) {
           throw new Error((data && data.error) || "Unable to load reviews");
         }
-        applyWidgetSettings(root, data.widget);
-        renderList(listEl, data);
+
+        var s = resolveSettings(data.widget, themeOverrides);
+        applyStyle(root, s);
+
+        var pageSize = s.reviewsPerPage > 0 ? s.reviewsPerPage : (data.reviews || []).length;
+        var visibleCount = pageSize;
+
+        function render() {
+          renderList(listEl, data, s, visibleCount, function () {
+            visibleCount += pageSize;
+            render();
+          });
+        }
+
+        render();
       })
       .catch(function () {
         listEl.innerHTML = '<p class="imagyn-reviews__error">Reviews are unavailable right now.</p>';
       });
   }
 
-  function renderWriteReview(writeEl, context) {
+  function renderWriteReview(writeEl, context, showWriteReviewButton) {
+    if (showWriteReviewButton === false) {
+      writeEl.innerHTML = "";
+      return;
+    }
+
     writeEl.innerHTML =
       '<button type="button" class="imagyn-reviews__write-toggle" data-imagyn-toggle>Write a Review</button>' +
       '<form class="imagyn-reviews__form" data-imagyn-form hidden>' +
@@ -287,9 +390,12 @@
   }
 
   document.querySelectorAll("[data-imagyn-reviews]").forEach(function (root) {
+    // The product is detected automatically from Shopify's own `product` Liquid object
+    // (available on any product template) — the block has no product picker to configure.
     var productId = root.getAttribute("data-product-id");
     var listEl = root.querySelector("[data-imagyn-list]");
     var writeEl = root.querySelector("[data-imagyn-write]");
+    var themeOverrides = readThemeOverrides(root);
 
     if (!productId) {
       if (listEl) {
@@ -300,11 +406,11 @@
 
     if (listEl) {
       var endpoint = PROXY_PATH + "?productId=" + encodeURIComponent(productId);
-      loadList(root, listEl, endpoint);
+      loadList(root, listEl, endpoint, themeOverrides);
     }
 
     if (writeEl) {
-      renderWriteReview(writeEl, { productId: productId });
+      renderWriteReview(writeEl, { productId: productId }, themeOverrides.showWriteReviewButton);
     }
   });
 })();

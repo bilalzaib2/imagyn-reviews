@@ -3,7 +3,20 @@
 <div
   class="imagyn-reviews"
   data-imagyn-reviews
-  data-product-id="{{ block.settings.product.id }}"
+  data-product-id="{{ product.id }}"
+  data-show-average-rating="{{ block.settings.show_average_rating }}"
+  data-show-review-count="{{ block.settings.show_review_count }}"
+  data-show-write-review-button="{{ block.settings.show_write_review_button }}"
+  data-reviews-per-page="{{ block.settings.reviews_per_page }}"
+  data-star-color="{{ block.settings.star_color }}"
+  data-button-color="{{ block.settings.button_color }}"
+  data-background-color="{{ block.settings.background_color }}"
+  data-border-color="{{ block.settings.border_color }}"
+  data-border-radius="{{ block.settings.border_radius }}"
+  data-heading-font-size="{{ block.settings.heading_size }}"
+  data-body-font-size="{{ block.settings.body_size }}"
+  data-layout="{{ block.settings.layout }}"
+  data-show-load-more-button="{{ block.settings.show_load_more_button }}"
 >
   <div class="imagyn-reviews__results" data-imagyn-list>
     <p class="imagyn-reviews__loading">Loading reviews…</p>
@@ -18,7 +31,38 @@
   "name": "Imagyn Reviews",
   "target": "section",
   "settings": [
-    { "type": "product", "id": "product", "label": "Product", "autofill": true }
+    { "type": "header", "content": "Display" },
+    { "type": "checkbox", "id": "show_average_rating", "label": "Show average rating", "default": true },
+    { "type": "checkbox", "id": "show_review_count", "label": "Show review count", "default": true },
+    { "type": "checkbox", "id": "show_write_review_button", "label": "Show write review button", "default": true },
+    { "type": "range", "id": "reviews_per_page", "label": "Reviews per page", "min": 1, "max": 50, "step": 1, "default": 10 },
+
+    { "type": "header", "content": "Appearance" },
+    { "type": "color", "id": "star_color", "label": "Star color" },
+    { "type": "color", "id": "button_color", "label": "Button color" },
+    { "type": "color", "id": "background_color", "label": "Background color" },
+    { "type": "color", "id": "border_color", "label": "Border color" },
+    { "type": "range", "id": "border_radius", "label": "Border radius", "min": 0, "max": 40, "step": 2, "unit": "px", "default": 20 },
+
+    { "type": "header", "content": "Typography" },
+    { "type": "range", "id": "heading_size", "label": "Heading size", "min": 12, "max": 32, "step": 1, "unit": "px", "default": 20 },
+    { "type": "range", "id": "body_size", "label": "Body size", "min": 10, "max": 22, "step": 1, "unit": "px", "default": 14 },
+
+    { "type": "header", "content": "Layout" },
+    {
+      "type": "select",
+      "id": "layout",
+      "label": "Layout",
+      "options": [
+        { "value": "list", "label": "List" },
+        { "value": "grid", "label": "Grid" },
+        { "value": "carousel", "label": "Carousel" }
+      ],
+      "default": "list"
+    },
+
+    { "type": "header", "content": "Behavior" },
+    { "type": "checkbox", "id": "show_load_more_button", "label": "Show Load More button (pagination)", "default": true }
   ]
 }
 {% endschema %}
