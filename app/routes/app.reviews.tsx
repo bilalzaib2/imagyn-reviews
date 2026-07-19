@@ -689,7 +689,7 @@ export default function ReviewsPage() {
                         const isSelected = review.id === selectedReviewId;
                         const reviewTitle = review.title ?? "Untitled review";
                         const customerName = review.reviewerName;
-                        const productName = review.product?.name ?? "Unassigned product";
+                        const productName = review.productTitle ?? review.product?.name ?? "Unassigned product";
                         const previewText = review.content.trim() || "No review text captured yet.";
                         const checked = selectedIds.includes(review.id);
 
@@ -798,7 +798,9 @@ export default function ReviewsPage() {
                       </div>
                       <div className={styles.detailMetaItem}>
                         <dt className={styles.detailLabel}>Product info</dt>
-                        <dd className={styles.detailValue}>{selectedReview.product?.name ?? "Unassigned product"}</dd>
+                        <dd className={styles.detailValue}>
+                          {selectedReview.productTitle ?? selectedReview.product?.name ?? "Unassigned product"}
+                        </dd>
                       </div>
                       <div className={styles.detailMetaItem}>
                         <dt className={styles.detailLabel}>Rating</dt>
