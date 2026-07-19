@@ -1,0 +1,35 @@
+{{ 'rating-badge.css' | asset_url | stylesheet_tag }}
+
+<button
+  type="button"
+  class="imagyn-rating-badge"
+  data-imagyn-rating-badge
+  data-product-id="{{ product.id }}"
+  data-empty-state="{{ block.settings.empty_state }}"
+  data-star-color="{{ block.settings.star_color }}"
+  data-text-color="{{ block.settings.text_color }}"
+  hidden
+></button>
+
+{{ 'rating-badge.js' | asset_url | script_tag }}
+
+{% schema %}
+{
+  "name": "Product Rating Badge",
+  "target": "section",
+  "settings": [
+    {
+      "type": "select",
+      "id": "empty_state",
+      "label": "When there are no reviews",
+      "options": [
+        { "value": "hide", "label": "Hide the badge" },
+        { "value": "show_text", "label": "Show \"No reviews yet\"" }
+      ],
+      "default": "hide"
+    },
+    { "type": "color", "id": "star_color", "label": "Star color" },
+    { "type": "color", "id": "text_color", "label": "Text color" }
+  ]
+}
+{% endschema %}
