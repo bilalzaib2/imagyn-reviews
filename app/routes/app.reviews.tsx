@@ -32,7 +32,6 @@ import {
 import { ReviewStatus } from "../services/review.shared";
 import { getOrCreateStore } from "../services/store.server";
 import { authenticate } from "../shopify.server";
-import { timed } from "../utils/perf.server";
 import styles from "../styles/app.reviews.module.css";
 import shellStyles from "../styles/app.shell.module.css";
 
@@ -46,8 +45,7 @@ type ActionData = {
 const STATUS_VALUES: string[] = Object.values(ReviewStatus);
 
 export const loader = async ({ request }: LoaderFunctionArgs) => {
-  const loaderStart = performance.now();
-  const { session } = await timed("app.reviews authenticate.admin", () => authenticate.admin(request));
+  const { session } = await authenticate.admin(request);
   const store = await getOrCreateStore(session.shop);
 
   const url = new URL(request.url);
@@ -77,7 +75,6 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
       limit: 20,
     });
 
-    console.log(`[perf] app.reviews loader total: ${(performance.now() - loaderStart).toFixed(1)}ms`);
     return {
       reviews: result.reviews,
       nextCursor: result.nextCursor,
@@ -94,7 +91,6 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
       prevCursor: prevCursor ?? "",
     };
   } catch (error) {
-    console.log(`[perf] app.reviews loader total (error): ${(performance.now() - loaderStart).toFixed(1)}ms`);
     return {
       reviews: [] as ReviewWithProduct[],
       nextCursor: null,

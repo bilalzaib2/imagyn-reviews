@@ -20,7 +20,6 @@ import { Container } from "../components/ui/Container";
 import { authenticate } from "../shopify.server";
 import { getOrCreateStore } from "../services/store.server";
 import { getProducts, syncProducts } from "../services/product.server";
-import { timed } from "../utils/perf.server";
 import shellStyles from "../styles/app.shell.module.css";
 import styles from "../styles/app.products.module.css";
 
@@ -34,20 +33,17 @@ type ActionData = {
 };
 
 export const loader = async ({ request }: LoaderFunctionArgs) => {
-  const loaderStart = performance.now();
-  const { session } = await timed("app.products authenticate.admin", () => authenticate.admin(request));
+  const { session } = await authenticate.admin(request);
 
   try {
     const store = await getOrCreateStore(session.shop);
     const products = await getProducts(store.id);
 
-    console.log(`[perf] app.products loader total: ${(performance.now() - loaderStart).toFixed(1)}ms`);
     return {
       products,
       error: null as string | null,
     };
   } catch (error) {
-    console.log(`[perf] app.products loader total (error): ${(performance.now() - loaderStart).toFixed(1)}ms`);
     return {
       products: [] as ProductListItem[],
       error: error instanceof Error ? error.message : "Unable to load products.",

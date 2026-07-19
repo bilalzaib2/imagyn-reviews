@@ -25,7 +25,6 @@ import {
 
 import { Container } from "../components/ui/Container";
 import { authenticate } from "../shopify.server";
-import { timed } from "../utils/perf.server";
 import {
   widgetService,
 } from "../services/widget.server";
@@ -121,15 +120,12 @@ const initialOpenSections: Record<SettingSectionKey, boolean> = {
 const toNumberValue = (value: number | [number, number]) => (typeof value === "number" ? value : value[0]);
 
 export const loader = async ({ request }: LoaderFunctionArgs): Promise<LoaderData> => {
-  const loaderStart = performance.now();
-  await timed("app.widgets authenticate.admin", () => authenticate.admin(request));
+  await authenticate.admin(request);
 
   try {
     const widgets = await widgetService.listWidgets();
-    console.log(`[perf] app.widgets loader total: ${(performance.now() - loaderStart).toFixed(1)}ms`);
     return { widgets, error: null };
   } catch (error) {
-    console.log(`[perf] app.widgets loader total (error): ${(performance.now() - loaderStart).toFixed(1)}ms`);
     return {
       widgets: [],
       error: error instanceof Error ? error.message : "Unable to load widgets.",

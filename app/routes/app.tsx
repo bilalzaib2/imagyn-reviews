@@ -7,23 +7,14 @@ import { NavMenu } from "@shopify/app-bridge-react";
 import enTranslations from "@shopify/polaris/locales/en.json";
 
 import { authenticate } from "../shopify.server";
-import { timed } from "../utils/perf.server";
 import styles from "../styles/app.shell.module.css";
 
 export const loader = async ({ request }: LoaderFunctionArgs) => {
-  const loaderStart = performance.now();
-  await timed("app.tsx authenticate.admin", () => authenticate.admin(request));
+  await authenticate.admin(request);
 
   // eslint-disable-next-line no-undef
-  const result = { apiKey: process.env.SHOPIFY_API_KEY || "" };
-  console.log(`[perf] app.tsx loader total: ${(performance.now() - loaderStart).toFixed(1)}ms`);
-  return result;
+  return { apiKey: process.env.SHOPIFY_API_KEY || "" };
 };
-
-// app.tsx's loader only ever returns a static env value (apiKey), so it never needs to
-// re-run on navigations within /app/* - the child route's own authenticate.admin call
-// remains the source of truth for session validity on every navigation.
-export const shouldRevalidate = () => false;
 
 export default function App() {
   const { apiKey } = useLoaderData<typeof loader>();

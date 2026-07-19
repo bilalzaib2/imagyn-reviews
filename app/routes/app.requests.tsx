@@ -39,7 +39,6 @@ import {
   type ReviewRequestRecord,
   type ReviewRequestStatus,
 } from "../services/review-request.server";
-import { timed } from "../utils/perf.server";
 import shellStyles from "../styles/app.shell.module.css";
 import styles from "../styles/app.requests.module.css";
 
@@ -121,8 +120,7 @@ const emptyFormState: RequestFormState = {
 };
 
 export const loader = async ({ request }: LoaderFunctionArgs): Promise<LoaderData> => {
-  const loaderStart = performance.now();
-  await timed("app.requests authenticate.admin", () => authenticate.admin(request));
+  await authenticate.admin(request);
 
   const url = new URL(request.url);
   const search = url.searchParams.get("search")?.trim() || "";
@@ -147,7 +145,6 @@ export const loader = async ({ request }: LoaderFunctionArgs): Promise<LoaderDat
       reviewRequestService.listProducts(),
     ]);
 
-    console.log(`[perf] app.requests loader total: ${(performance.now() - loaderStart).toFixed(1)}ms`);
     return {
       requests: result.requests,
       customers: customers.map((customer) => ({
@@ -164,7 +161,6 @@ export const loader = async ({ request }: LoaderFunctionArgs): Promise<LoaderDat
       error: null,
     };
   } catch (error) {
-    console.log(`[perf] app.requests loader total (error): ${(performance.now() - loaderStart).toFixed(1)}ms`);
     return {
       requests: [],
       customers: [],
