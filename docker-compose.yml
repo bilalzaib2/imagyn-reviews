@@ -1,0 +1,15 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: imagyn
+      POSTGRES_PASSWORD: imagyn
+      POSTGRES_DB: imagyn_reviews_dev
+    ports:
+      - "5432:5432"
+    volumes:
+      - imagyn_postgres_data:/var/lib/postgresql/data
+
+volumes:
+  imagyn_postgres_data:
