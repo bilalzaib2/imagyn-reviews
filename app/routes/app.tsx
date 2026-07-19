@@ -1,5 +1,6 @@
+import type { MouseEvent } from "react";
 import type { HeadersFunction, LoaderFunctionArgs } from "react-router";
-import { Outlet, useLoaderData, useLocation, useNavigation, useRouteError } from "react-router";
+import { Outlet, useLoaderData, useLocation, useNavigate, useNavigation, useRouteError } from "react-router";
 import { boundary } from "@shopify/shopify-app-react-router/server";
 import { AppProvider } from "@shopify/shopify-app-react-router/react";
 import { AppProvider as PolarisAppProvider } from "@shopify/polaris";
@@ -19,6 +20,7 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
 export default function App() {
   const { apiKey } = useLoaderData<typeof loader>();
   const location = useLocation();
+  const navigate = useNavigate();
   const navigation = useNavigation();
   const isNavigating = navigation.state !== "idle";
   const appContextQuery = location.search;
@@ -31,11 +33,23 @@ export default function App() {
     { label: "Settings", path: "/app/settings" },
   ];
 
+  // NavMenu renders real <a> elements for Shopify Admin's own sidebar chrome. Left-clicking
+  // one should always resolve as a React Router SPA transition (so it carries a session-token
+  // header) rather than a full document request; modified clicks (new tab, etc.) still fall
+  // through to the browser's native anchor behavior via href.
+  const handleNavClick = (event: MouseEvent<HTMLAnchorElement>, path: string) => {
+    if (event.defaultPrevented || event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) {
+      return;
+    }
+    event.preventDefault();
+    navigate(`${path}${appContextQuery}`);
+  };
+
   return (
     <AppProvider embedded apiKey={apiKey}>
       <NavMenu>
         {navItems.map((item) => (
-          <a key={item.path} href={`${item.path}${appContextQuery}`}>
+          <a key={item.path} href={`${item.path}${appContextQuery}`} onClick={(event) => handleNavClick(event, item.path)}>
             {item.label}
           </a>
         ))}
