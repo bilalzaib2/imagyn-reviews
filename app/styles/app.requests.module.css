@@ -129,15 +129,17 @@
   align-items: flex-start;
   justify-content: space-between;
   gap: var(--space-4);
-  padding: var(--space-4) var(--space-3);
+  padding: var(--space-5) var(--space-4);
   border-bottom: 1px solid var(--color-border);
+  border-left: 3px solid transparent;
   border-radius: var(--radius-md);
-  transition: background-color 150ms ease, border-color 150ms ease;
+  transition: background-color 150ms ease, border-color 150ms ease, transform 150ms ease;
 }
 
 .requestRow:hover {
   background-color: rgba(17, 17, 17, 0.025);
   cursor: pointer;
+  transform: translateX(1px);
 }
 
 .requestRow:focus-visible {
@@ -148,11 +150,22 @@
 .requestRowSelected {
   background-color: rgba(17, 17, 17, 0.04);
   border-bottom-color: var(--color-border-strong);
+  border-left-color: var(--color-accent);
   box-shadow: inset 0 0 0 1px rgba(17, 17, 17, 0.04);
 }
 
 .requestRow:last-child {
   border-bottom: none;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .requestRow {
+    transition: none;
+  }
+
+  .requestRow:hover {
+    transform: none;
+  }
 }
 
 .requestContent {
@@ -227,7 +240,7 @@
 }
 
 .skeletonRow {
-  height: 5.5rem;
+  height: 6.25rem;
   border-radius: var(--radius-md);
   background: linear-gradient(90deg, rgba(17, 17, 17, 0.06) 0%, rgba(17, 17, 17, 0.03) 50%, rgba(17, 17, 17, 0.06) 100%);
   background-size: 200% 100%;
@@ -260,9 +273,11 @@
 
 .emptyState {
   display: grid;
-  gap: var(--space-2);
-  align-content: start;
-  padding: var(--space-8);
+  gap: var(--space-3);
+  align-content: center;
+  justify-items: start;
+  min-height: 18rem;
+  padding: var(--space-10);
   border: 1px dashed var(--color-border);
   border-radius: var(--radius-lg);
   background: var(--color-surface-muted);
@@ -272,12 +287,14 @@
   margin: 0;
   font-size: var(--text-lg);
   font-weight: 600;
+  letter-spacing: -0.01em;
 }
 
 .emptyStateText {
   margin: 0 0 var(--space-2);
   color: var(--color-text-muted);
   line-height: 1.6;
+  max-width: 26rem;
 }
 
 .errorState {
@@ -304,8 +321,8 @@
 
 .detailPanel {
   display: grid;
-  gap: var(--space-4);
-  padding: var(--space-5);
+  gap: var(--space-5);
+  padding: var(--space-6);
   border: 1px solid var(--color-border);
   border-left: 3px solid var(--color-accent);
   border-radius: var(--radius-lg);
@@ -313,11 +330,12 @@
   box-shadow: var(--shadow-sm);
   position: sticky;
   top: var(--space-5);
+  transition: box-shadow 200ms ease;
 }
 
 .detailHeader {
   display: grid;
-  gap: var(--space-2);
+  gap: var(--space-3);
 }
 
 .detailStatusRow {
@@ -336,7 +354,7 @@
 
 .detailTitle {
   margin: 0;
-  font-size: var(--text-xl);
+  font-size: var(--text-2xl);
   font-weight: 600;
   letter-spacing: -0.02em;
 }
@@ -392,8 +410,13 @@
 
 .detailActions {
   display: flex;
-  gap: var(--space-2);
-  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+
+.actionsMenuButton {
+  gap: 0.4rem;
+  font-size: var(--text-sm);
+  padding-inline: var(--space-3);
 }
 
 .modalFields {

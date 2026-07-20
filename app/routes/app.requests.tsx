@@ -10,12 +10,12 @@ import {
 import type { ActionFunctionArgs, HeadersFunction, LoaderFunctionArgs } from "react-router";
 import { boundary } from "@shopify/shopify-app-react-router/server";
 import {
+  ActionList,
   BlockStack,
-  Button as PolarisButton,
-  ButtonGroup,
   Card,
   Frame,
   Modal,
+  Popover,
   Select,
   Text,
   TextField,
@@ -312,6 +312,7 @@ export default function RequestsPage() {
   const [requestModalMode, setRequestModalMode] = useState<RequestModalMode>("create");
   const [formState, setFormState] = useState<RequestFormState>(emptyFormState);
   const [confirmationState, setConfirmationState] = useState<ConfirmationState | null>(null);
+  const [actionsMenuOpen, setActionsMenuOpen] = useState(false);
 
   const [optimisticDeleted, setOptimisticDeleted] = useState<Record<string, true>>({});
   const [optimisticPatch, setOptimisticPatch] = useState<Partial<Record<string, Partial<ReviewRequestRecord>>> & Record<string, Partial<ReviewRequestRecord>>>({});
@@ -337,6 +338,10 @@ export default function RequestsPage() {
 
     return () => window.clearTimeout(timeoutId);
   }, [searchParams, searchValue, setSearchParams]);
+
+  useEffect(() => {
+    setActionsMenuOpen(false);
+  }, [selectedRequestId]);
 
   useEffect(() => {
     if (!fetcher.data) {
@@ -840,23 +845,75 @@ export default function RequestsPage() {
                       <div className={styles.detailDivider} />
 
                       <div className={styles.detailActions}>
-                        <ButtonGroup>
-                          <PolarisButton onClick={() => openEditModal(selectedRequest)} disabled={isMutating}>
-                            Edit
-                          </PolarisButton>
-                          <PolarisButton onClick={() => openRescheduleModal(selectedRequest)} disabled={isMutating}>
-                            Reschedule
-                          </PolarisButton>
-                          <PolarisButton onClick={() => handleResend(selectedRequest)} disabled={isMutating}>
-                            Resend
-                          </PolarisButton>
-                          <PolarisButton onClick={() => openConfirmation("cancel", selectedRequest)} disabled={isMutating}>
-                            Cancel
-                          </PolarisButton>
-                          <PolarisButton onClick={() => openConfirmation("delete", selectedRequest)} disabled={isMutating}>
-                            Delete
-                          </PolarisButton>
-                        </ButtonGroup>
+                        <Popover
+                          active={actionsMenuOpen}
+                          onClose={() => setActionsMenuOpen(false)}
+                          activator={
+                            <Button
+                              type="button"
+                              variant="secondary"
+                              className={styles.actionsMenuButton}
+                              onClick={() => setActionsMenuOpen((open) => !open)}
+                              disabled={isMutating}
+                              aria-label="Request actions"
+                              aria-haspopup="menu"
+                              aria-expanded={actionsMenuOpen}
+                            >
+                              <span aria-hidden="true">&#8226;&#8226;&#8226;</span>
+                              <span>Actions</span>
+                            </Button>
+                          }
+                        >
+                          <ActionList
+                            sections={[
+                              {
+                                items: [
+                                  {
+                                    content: "Edit",
+                                    onAction: () => {
+                                      setActionsMenuOpen(false);
+                                      openEditModal(selectedRequest);
+                                    },
+                                  },
+                                  {
+                                    content: "Reschedule",
+                                    onAction: () => {
+                                      setActionsMenuOpen(false);
+                                      openRescheduleModal(selectedRequest);
+                                    },
+                                  },
+                                  {
+                                    content: "Resend",
+                                    onAction: () => {
+                                      setActionsMenuOpen(false);
+                                      handleResend(selectedRequest);
+                                    },
+                                  },
+                                ],
+                              },
+                              {
+                                items: [
+                                  {
+                                    content: "Cancel request",
+                                    destructive: true,
+                                    onAction: () => {
+                                      setActionsMenuOpen(false);
+                                      openConfirmation("cancel", selectedRequest);
+                                    },
+                                  },
+                                  {
+                                    content: "Delete",
+                                    destructive: true,
+                                    onAction: () => {
+                                      setActionsMenuOpen(false);
+                                      openConfirmation("delete", selectedRequest);
+                                    },
+                                  },
+                                ],
+                              },
+                            ]}
+                          />
+                        </Popover>
                       </div>
                     </aside>
                   ) : null}
