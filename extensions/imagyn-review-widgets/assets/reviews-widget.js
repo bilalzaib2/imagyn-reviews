@@ -31,6 +31,31 @@
     return div.innerHTML;
   }
 
+  // A persistent anonymous identifier for "Was this helpful?" voting — this is what the
+  // (reviewId, visitorId) uniqueness constraint on the backend actually keys off of, not
+  // a Shopify customer id (the widget has no customer auth). Falls back to a session-only
+  // id when storage is unavailable (private browsing, disabled storage, etc.) so voting
+  // still works, just without persisting the visitor's choice across page loads.
+  function getVisitorId() {
+    var storageKey = "imagynVisitorId";
+    var randomId = function () {
+      if (window.crypto && window.crypto.randomUUID) {
+        return window.crypto.randomUUID();
+      }
+      return "v-" + Date.now().toString(36) + "-" + Math.random().toString(36).slice(2);
+    };
+
+    try {
+      var existing = window.localStorage.getItem(storageKey);
+      if (existing) return existing;
+      var generated = randomId();
+      window.localStorage.setItem(storageKey, generated);
+      return generated;
+    } catch (error) {
+      return randomId();
+    }
+  }
+
   // Reads this block instance's own native Shopify theme-editor settings (added alongside
   // the Widget Builder settings, not replacing them). Only non-empty values are included,
   // so an untouched color setting doesn't blank out the Widget Builder's saved color.
@@ -293,6 +318,33 @@
     }
   }
 
+  // Bottom-right of each review, per spec: "Was this helpful?" plus a 👍/👎 count pair.
+  // Vote clicks are handled by a single delegated listener on listEl (see loadList),
+  // not here — this only renders the current state (count + whether this visitor already
+  // voted this way), since renderList re-runs on every "load more" click and re-attaching
+  // a listener per button on every render would leak duplicate handlers.
+  function renderHelpfulRow(review) {
+    var helpfulCount = review.helpfulCount || 0;
+    var notHelpfulCount = review.notHelpfulCount || 0;
+    var myVote = review.myVote || null;
+    var helpfulActive = myVote === "HELPFUL";
+    var notHelpfulActive = myVote === "NOT_HELPFUL";
+
+    return (
+      '<div class="imagyn-reviews__helpful">' +
+      '<span class="imagyn-reviews__helpful-label">Was this helpful?</span>' +
+      '<button type="button" class="imagyn-reviews__helpful-btn' + (helpfulActive ? " imagyn-reviews__helpful-btn--active" : "") + '" ' +
+      'data-helpful-vote="HELPFUL" aria-pressed="' + (helpfulActive ? "true" : "false") + '" aria-label="Mark this review as helpful">' +
+      '<span aria-hidden="true">👍</span><span data-helpful-count="HELPFUL">' + helpfulCount + "</span>" +
+      "</button>" +
+      '<button type="button" class="imagyn-reviews__helpful-btn' + (notHelpfulActive ? " imagyn-reviews__helpful-btn--active" : "") + '" ' +
+      'data-helpful-vote="NOT_HELPFUL" aria-pressed="' + (notHelpfulActive ? "true" : "false") + '" aria-label="Mark this review as not helpful">' +
+      '<span aria-hidden="true">👎</span><span data-helpful-count="NOT_HELPFUL">' + notHelpfulCount + "</span>" +
+      "</button>" +
+      "</div>"
+    );
+  }
+
   function renderList(listEl, data, s, visibleCount, onLoadMore) {
     var reviews = data.reviews || [];
     var visibleReviews = reviews.slice(0, visibleCount);
@@ -306,7 +358,7 @@
         visibleReviews
           .map(function (review) {
             return (
-              '<li class="imagyn-reviews__item">' +
+              '<li class="imagyn-reviews__item" data-review-id="' + escapeHtml(review.id) + '">' +
               '<div class="imagyn-reviews__item-header">' +
               '<span class="imagyn-reviews__item-stars" aria-hidden="true">' + renderStars(review.rating) + "</span>" +
               (review.title
@@ -319,6 +371,7 @@
               " &middot; " +
               formatDate(review.createdAt) +
               "</p>" +
+              renderHelpfulRow(review) +
               "</li>"
             );
           })
@@ -338,66 +391,202 @@
     }
   }
 
-  function loadList(root, summaryEl, listEl, endpoint, themeOverrides) {
-    if (summaryEl) {
-      renderSummarySkeleton(summaryEl);
+  function applyHelpfulRowState(row, review) {
+    var helpfulBtn = row.querySelector('[data-helpful-vote="HELPFUL"]');
+    var notHelpfulBtn = row.querySelector('[data-helpful-vote="NOT_HELPFUL"]');
+    var helpfulActive = review.myVote === "HELPFUL";
+    var notHelpfulActive = review.myVote === "NOT_HELPFUL";
+
+    if (helpfulBtn) {
+      helpfulBtn.querySelector('[data-helpful-count="HELPFUL"]').textContent = review.helpfulCount || 0;
+      helpfulBtn.classList.toggle("imagyn-reviews__helpful-btn--active", helpfulActive);
+      helpfulBtn.setAttribute("aria-pressed", helpfulActive ? "true" : "false");
     }
+    if (notHelpfulBtn) {
+      notHelpfulBtn.querySelector('[data-helpful-count="NOT_HELPFUL"]').textContent = review.notHelpfulCount || 0;
+      notHelpfulBtn.classList.toggle("imagyn-reviews__helpful-btn--active", notHelpfulActive);
+      notHelpfulBtn.setAttribute("aria-pressed", notHelpfulActive ? "true" : "false");
+    }
+  }
 
-    fetch(endpoint, { headers: { Accept: "application/json" } })
+  // Optimistic: the UI updates immediately from locally-computed counts, then is
+  // reconciled with the server's authoritative counts on success (never trusting the
+  // optimistic math as final), or rolled back to the exact pre-vote state on failure.
+  // `getReview` reads live data so this keeps working correctly after a sort change
+  // swaps in a whole new review array, without needing to be re-wired.
+  function handleHelpfulVote(button, getReview, visitorId) {
+    var row = button.closest("[data-review-id]");
+    if (!row) return;
+
+    var reviewId = row.getAttribute("data-review-id");
+    var review = getReview(reviewId);
+    if (!review) return;
+
+    var newVote = button.getAttribute("data-helpful-vote");
+    if (review.myVote === newVote) return;
+
+    var previous = {
+      myVote: review.myVote || null,
+      helpfulCount: review.helpfulCount || 0,
+      notHelpfulCount: review.notHelpfulCount || 0,
+    };
+
+    var nextHelpful = previous.helpfulCount;
+    var nextNotHelpful = previous.notHelpfulCount;
+    if (previous.myVote === "HELPFUL") nextHelpful -= 1;
+    if (previous.myVote === "NOT_HELPFUL") nextNotHelpful -= 1;
+    if (newVote === "HELPFUL") nextHelpful += 1;
+    if (newVote === "NOT_HELPFUL") nextNotHelpful += 1;
+
+    review.myVote = newVote;
+    review.helpfulCount = nextHelpful;
+    review.notHelpfulCount = nextNotHelpful;
+    applyHelpfulRowState(row, review);
+
+    fetch(PROXY_PATH + "/vote", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Accept: "application/json" },
+      body: JSON.stringify({ reviewId: reviewId, visitorId: visitorId, vote: newVote }),
+    })
       .then(function (response) {
-        if (!response.ok) {
-          throw new Error("Request failed");
-        }
-        return response.json();
+        return response.json().then(function (json) {
+          return { ok: response.ok, data: json };
+        });
       })
-      .then(function (data) {
-        if (!data || !data.ok) {
-          throw new Error((data && data.error) || "Unable to load reviews");
+      .then(function (result) {
+        if (!result.ok || !result.data || !result.data.ok) {
+          throw new Error((result.data && result.data.error) || "Unable to record vote.");
         }
 
-        var s = resolveSettings(data.widget, themeOverrides);
-        applyStyle(root, s);
-
-        if (summaryEl) {
-          renderSummary(
-            summaryEl,
-            data.summary || { averageRating: 0, totalReviews: 0, ratingCounts: { 1: 0, 2: 0, 3: 0, 4: 0, 5: 0 } },
-            s,
-          );
-        }
-
-        var pageSize = s.reviewsPerPage > 0 ? s.reviewsPerPage : (data.reviews || []).length;
-        var visibleCount = pageSize;
-
-        function render() {
-          renderList(listEl, data, s, visibleCount, function () {
-            visibleCount += pageSize;
-            render();
-          });
-        }
-
-        render();
+        review.helpfulCount = result.data.helpfulCount;
+        review.notHelpfulCount = result.data.notHelpfulCount;
+        review.myVote = result.data.vote;
+        applyHelpfulRowState(row, review);
       })
       .catch(function () {
-        listEl.innerHTML = '<p class="imagyn-reviews__error">Reviews are unavailable right now.</p>';
-        // Rating/count can't be shown without the failed response's data, but Write a
-        // Review must stay available regardless (§12) — same principle the empty-state
-        // and disabled-stats paths in renderSummary already apply.
-        if (summaryEl) {
-          var s = resolveSettings(null, themeOverrides);
-          if (s.showWriteReviewButton !== false) {
-            summaryEl.innerHTML =
-              '<div class="imagyn-summary imagyn-fade-in">' +
-              '<div class="imagyn-summary__quickbar">' +
-              '<button type="button" class="imagyn-summary__quickbar-write" data-imagyn-write-toggle aria-expanded="false">' +
-              "Write a review</button>" +
-              "</div>" +
-              "</div>";
-          } else {
-            summaryEl.innerHTML = "";
-          }
-        }
+        review.myVote = previous.myVote;
+        review.helpfulCount = previous.helpfulCount;
+        review.notHelpfulCount = previous.notHelpfulCount;
+        applyHelpfulRowState(row, review);
       });
+  }
+
+  function renderSortControl(sortEl, currentSort, onChange) {
+    sortEl.innerHTML =
+      '<label class="imagyn-reviews__sort">' +
+      '<span class="imagyn-reviews__sort-label">Sort by</span>' +
+      '<select class="imagyn-reviews__sort-select" data-imagyn-sort-select>' +
+      '<option value="recent"' + (currentSort === "recent" ? " selected" : "") + ">Most Recent</option>" +
+      '<option value="helpful"' + (currentSort === "helpful" ? " selected" : "") + ">Most Helpful</option>" +
+      "</select>" +
+      "</label>";
+
+    sortEl.querySelector("[data-imagyn-sort-select]").addEventListener("change", function (event) {
+      onChange(event.target.value);
+    });
+  }
+
+  function loadList(root, summaryEl, listEl, sortEl, baseEndpoint, themeOverrides, visitorId) {
+    // Mutable across the whole widget instance's lifetime — the delegated vote listener
+    // below is attached exactly once but always needs to read whichever review array is
+    // currently loaded, including after a sort change swaps in a brand new fetch.
+    var currentData = null;
+
+    function findReview(reviewId) {
+      var reviews = (currentData && currentData.reviews) || [];
+      for (var i = 0; i < reviews.length; i++) {
+        if (reviews[i].id === reviewId) return reviews[i];
+      }
+      return null;
+    }
+
+    listEl.addEventListener("click", function (event) {
+      var voteBtn = event.target.closest ? event.target.closest("[data-helpful-vote]") : null;
+      if (voteBtn) {
+        handleHelpfulVote(voteBtn, findReview, visitorId);
+      }
+    });
+
+    function fetchAndRender(sort) {
+      if (summaryEl) {
+        renderSummarySkeleton(summaryEl);
+      }
+
+      var endpoint = baseEndpoint + "&visitorId=" + encodeURIComponent(visitorId) + "&sort=" + encodeURIComponent(sort);
+
+      fetch(endpoint, { headers: { Accept: "application/json" } })
+        .then(function (response) {
+          if (!response.ok) {
+            throw new Error("Request failed");
+          }
+          return response.json();
+        })
+        .then(function (data) {
+          if (!data || !data.ok) {
+            throw new Error((data && data.error) || "Unable to load reviews");
+          }
+
+          currentData = data;
+
+          var s = resolveSettings(data.widget, themeOverrides);
+          applyStyle(root, s);
+
+          if (summaryEl) {
+            renderSummary(
+              summaryEl,
+              data.summary || { averageRating: 0, totalReviews: 0, ratingCounts: { 1: 0, 2: 0, 3: 0, 4: 0, 5: 0 } },
+              s,
+            );
+          }
+
+          if (sortEl) {
+            if ((data.reviews || []).length > 0) {
+              renderSortControl(sortEl, sort, function (nextSort) {
+                fetchAndRender(nextSort);
+              });
+            } else {
+              sortEl.innerHTML = "";
+            }
+          }
+
+          var pageSize = s.reviewsPerPage > 0 ? s.reviewsPerPage : (data.reviews || []).length;
+          var visibleCount = pageSize;
+
+          function render() {
+            renderList(listEl, currentData, s, visibleCount, function () {
+              visibleCount += pageSize;
+              render();
+            });
+          }
+
+          render();
+        })
+        .catch(function () {
+          listEl.innerHTML = '<p class="imagyn-reviews__error">Reviews are unavailable right now.</p>';
+          if (sortEl) {
+            sortEl.innerHTML = "";
+          }
+          // Rating/count can't be shown without the failed response's data, but Write a
+          // Review must stay available regardless (§12) — same principle the empty-state
+          // and disabled-stats paths in renderSummary already apply.
+          if (summaryEl) {
+            var s = resolveSettings(null, themeOverrides);
+            if (s.showWriteReviewButton !== false) {
+              summaryEl.innerHTML =
+                '<div class="imagyn-summary imagyn-fade-in">' +
+                '<div class="imagyn-summary__quickbar">' +
+                '<button type="button" class="imagyn-summary__quickbar-write" data-imagyn-write-toggle aria-expanded="false">' +
+                "Write a review</button>" +
+                "</div>" +
+                "</div>";
+            } else {
+              summaryEl.innerHTML = "";
+            }
+          }
+        });
+    }
+
+    fetchAndRender("recent");
   }
 
   // The trigger for this form now lives in the Review Summary's quickbar
@@ -581,6 +770,7 @@
       // (available on any product template) — the block has no product picker to configure.
       var productId = root.getAttribute("data-product-id");
       var summaryEl = root.querySelector("[data-imagyn-summary]");
+      var sortEl = root.querySelector("[data-imagyn-sort]");
       var listEl = root.querySelector("[data-imagyn-list]");
       var writeEl = root.querySelector("[data-imagyn-write]");
       var themeOverrides = readThemeOverrides(root);
@@ -593,8 +783,9 @@
       }
 
       if (listEl) {
+        var visitorId = getVisitorId();
         var endpoint = PROXY_PATH + "?productId=" + encodeURIComponent(productId);
-        loadList(root, summaryEl, listEl, endpoint, themeOverrides);
+        loadList(root, summaryEl, listEl, sortEl, endpoint, themeOverrides, visitorId);
       }
 
       if (writeEl) {

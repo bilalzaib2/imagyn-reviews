@@ -178,3 +178,86 @@
   opacity: 0.6;
   cursor: not-allowed;
 }
+
+.imagyn-reviews__sort {
+  display: flex;
+  align-items: center;
+  gap: var(--imagyn-space-2xs, 0.3em);
+  margin-bottom: var(--imagyn-space-px-md, 16px);
+  font-size: var(--imagyn-font-size-sm, 13px);
+}
+
+.imagyn-reviews__sort-label {
+  color: var(--imagyn-color-text, inherit);
+  opacity: var(--imagyn-color-text-muted-opacity, 0.6);
+}
+
+.imagyn-reviews__sort-select {
+  font: inherit;
+  font-size: var(--imagyn-font-size-sm, 13px);
+  color: var(--imagyn-color-text, inherit);
+  background: var(--imagyn-color-surface, #fff);
+  border: var(--imagyn-border-width, 1px) solid var(--imagyn-color-border, rgba(0, 0, 0, 0.12));
+  border-radius: var(--imagyn-radius-sm, 4px);
+  padding: 0.3em 0.5em;
+  cursor: pointer;
+}
+
+.imagyn-reviews__sort-select:focus-visible {
+  outline: 2px solid var(--imagyn-color-focus, #2563eb);
+  outline-offset: 2px;
+}
+
+/* "Was this helpful?" — bottom-right of every review, per spec. */
+.imagyn-reviews__helpful {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  flex-wrap: wrap;
+  gap: var(--imagyn-space-sm, 0.6em);
+  margin-top: var(--imagyn-space-sm, 0.6em);
+}
+
+.imagyn-reviews__helpful-label {
+  font-size: var(--imagyn-font-size-xs, 12px);
+  color: var(--imagyn-color-text, inherit);
+  opacity: var(--imagyn-color-text-muted-opacity, 0.6);
+}
+
+.imagyn-reviews__helpful-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3em;
+  font: inherit;
+  font-size: var(--imagyn-font-size-xs, 12px);
+  cursor: pointer;
+  border: var(--imagyn-border-width, 1px) solid var(--imagyn-color-border, rgba(0, 0, 0, 0.12));
+  border-radius: var(--imagyn-radius-full, 999px);
+  padding: 0.3em 0.65em;
+  background: transparent;
+  color: var(--imagyn-color-text, inherit);
+  transition:
+    background-color var(--imagyn-duration-fast, 120ms) var(--imagyn-easing, ease-out),
+    border-color var(--imagyn-duration-fast, 120ms) var(--imagyn-easing, ease-out);
+}
+
+.imagyn-reviews__helpful-btn:hover {
+  background: var(--imagyn-color-border, rgba(0, 0, 0, 0.06));
+}
+
+.imagyn-reviews__helpful-btn:focus-visible {
+  outline: 2px solid var(--imagyn-color-focus, #2563eb);
+  outline-offset: 2px;
+}
+
+.imagyn-reviews__helpful-btn--active {
+  border-color: var(--imagyn-color-text, currentColor);
+  background: var(--imagyn-color-border, rgba(0, 0, 0, 0.08));
+  font-weight: var(--imagyn-font-weight-medium, 500);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .imagyn-reviews__helpful-btn {
+    transition: none;
+  }
+}

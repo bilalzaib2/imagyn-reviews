@@ -1,7 +1,13 @@
 import type { ActionFunctionArgs, LoaderFunctionArgs } from "react-router";
 import { authenticate } from "../shopify.server";
 import { ReviewStatus } from "../services/review.shared";
-import { createReview, getProductReviews, getPublicReviewSummary } from "../services/review.server";
+import {
+  createReview,
+  getProductReviews,
+  getPublicReviewSummary,
+  getVisitorVotes,
+  rankByHelpfulness,
+} from "../services/review.server";
 import { getProductForStoreByShopifyId } from "../services/product.server";
 import { getStoreBySlug } from "../services/store.server";
 import { getStorefrontWidgetSettings } from "../services/widget.server";
@@ -57,6 +63,10 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
   // it's now a trusted value, not client-supplied.
   const shop = url.searchParams.get("shop")?.trim() || "";
   const productId = url.searchParams.get("productId")?.trim() || "";
+  // Client-generated anonymous id (or a real customer id later) — opaque to this endpoint,
+  // only used to look up that visitor's own prior votes. Never trusted for anything else.
+  const visitorId = url.searchParams.get("visitorId")?.trim() || "";
+  const sort = url.searchParams.get("sort")?.trim() === "helpful" ? "helpful" : "recent";
 
   if (!shop || !productId) {
     return json({ ok: false, error: "shop and productId are required." }, { status: 400 });
@@ -80,17 +90,26 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
     getStorefrontWidgetSettings(store.id, product.id),
   ]);
 
+  const orderedReviews = sort === "helpful" ? rankByHelpfulness(result.reviews) : result.reviews;
+  const myVotes = await getVisitorVotes(
+    orderedReviews.map((review) => review.id),
+    visitorId,
+  );
+
   return json({
     ok: true,
     summary,
     widget,
-    reviews: result.reviews.map((review) => ({
+    reviews: orderedReviews.map((review) => ({
       id: review.id,
       reviewerName: review.reviewerName,
       rating: review.rating,
       title: review.title,
       content: review.content,
       createdAt: review.createdAt,
+      helpfulCount: review.helpfulCount,
+      notHelpfulCount: review.notHelpfulCount,
+      myVote: myVotes[review.id] ?? null,
     })),
   });
 };

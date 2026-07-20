@@ -540,6 +540,28 @@
   gap: var(--space-2);
 }
 
+.helpfulVoteRow {
+  display: flex;
+  gap: var(--space-5);
+}
+
+.helpfulVoteStat {
+  display: grid;
+  gap: 0.15rem;
+}
+
+.helpfulVoteCount {
+  font-size: var(--text-lg);
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.01em;
+}
+
+.helpfulVoteLabel {
+  font-size: var(--text-xs);
+  color: var(--color-text-muted);
+}
+
 .comingSoonPill {
   display: inline-flex;
   align-items: center;

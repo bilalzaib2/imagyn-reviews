@@ -111,6 +111,7 @@ model Review {
   status           ReviewStatus @default(PENDING)
   isPublished      Boolean      @default(false)
   helpfulCount     Int          @default(0)
+  notHelpfulCount  Int          @default(0)
   featured         Boolean      @default(false)
 
   reply            String?
@@ -122,6 +123,8 @@ model Review {
   createdAt        DateTime     @default(now())
   updatedAt        DateTime     @updatedAt
 
+  helpfulVotes     ReviewHelpfulVote[]
+
   @@index([deletedAt, createdAt])
   @@index([storeId, deletedAt, createdAt])
   @@index([productId, deletedAt])
@@ -129,6 +132,34 @@ model Review {
   @@index([rating])
   @@index([verifiedPurchase])
   @@index([featured])
+  @@index([helpfulCount])
+}
+
+enum HelpfulVoteValue {
+  HELPFUL
+  NOT_HELPFUL
+}
+
+// One row per (review, visitor) — the unique constraint is what makes "exactly one vote
+// per visitor, can change their vote" an invariant enforced by the database itself, not
+// just application logic. visitorId is an opaque string: a client-generated anonymous id
+// for storefront shoppers (see reviews-widget.js) today, but nothing here assumes that —
+// a real customer id would work identically, so this doesn't need to change if/when the
+// storefront gains real customer auth.
+model ReviewHelpfulVote {
+  id         String           @id @default(cuid())
+
+  reviewId   String
+  review     Review           @relation(fields: [reviewId], references: [id], onDelete: Cascade)
+
+  visitorId  String
+  vote       HelpfulVoteValue
+
+  createdAt  DateTime         @default(now())
+  updatedAt  DateTime         @updatedAt
+
+  @@unique([reviewId, visitorId])
+  @@index([reviewId, vote])
 }
 
 model ReviewRequest {

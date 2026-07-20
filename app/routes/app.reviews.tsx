@@ -61,6 +61,7 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
   const verifiedPurchase = url.searchParams.get("verifiedPurchase") === "true";
   const cursor = url.searchParams.get("cursor") || undefined;
   const prevCursor = url.searchParams.get("prevCursor") || undefined;
+  const sortParam = url.searchParams.get("sort")?.trim() === "helpful" ? "helpful" : "newest";
 
   try {
     const result = await getStoreReviews(store.id, {
@@ -73,6 +74,7 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
       verifiedPurchase: verifiedPurchase || undefined,
       cursor,
       limit: 20,
+      sort: sortParam,
     });
 
     return {
@@ -89,6 +91,7 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
       dateTo: dateTo ?? "",
       verifiedPurchase,
       prevCursor: prevCursor ?? "",
+      sort: sortParam,
     };
   } catch (error) {
     return {
@@ -105,6 +108,7 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
       dateTo: dateTo ?? "",
       verifiedPurchase,
       prevCursor: prevCursor ?? "",
+      sort: sortParam,
     };
   }
 };
@@ -226,6 +230,7 @@ export default function ReviewsPage() {
     dateTo: initialDateTo,
     verifiedPurchase: initialVerifiedPurchase,
     prevCursor: initialPrevCursor,
+    sort: initialSort,
   } = useLoaderData<typeof loader>();
 
   const mutationFetcher = useFetcher<ActionData>();
@@ -586,6 +591,18 @@ export default function ReviewsPage() {
               />
               <span className={styles.checkboxLabel}>Verified purchase</span>
             </label>
+
+            <label className={styles.filterGroup}>
+              <span className={styles.filterLabel}>Sort</span>
+              <select
+                className={styles.filterSelect}
+                value={initialSort}
+                onChange={(event) => updateQuery({ sort: event.target.value === "helpful" ? "helpful" : undefined })}
+              >
+                <option value="newest">Newest</option>
+                <option value="helpful">Most Helpful</option>
+              </select>
+            </label>
           </div>
         </div>
 
@@ -904,6 +921,22 @@ export default function ReviewsPage() {
                     <div className={styles.detailDivider} />
 
                     <div className={styles.detailSection}>
+                      <p className={styles.detailLabel}>Helpful Votes</p>
+                      <div className={styles.helpfulVoteRow}>
+                        <span className={styles.helpfulVoteStat}>
+                          <span className={styles.helpfulVoteCount}>{selectedReview.helpfulCount}</span>
+                          <span className={styles.helpfulVoteLabel}>Helpful 👍</span>
+                        </span>
+                        <span className={styles.helpfulVoteStat}>
+                          <span className={styles.helpfulVoteCount}>{selectedReview.notHelpfulCount}</span>
+                          <span className={styles.helpfulVoteLabel}>Not Helpful 👎</span>
+                        </span>
+                      </div>
+                    </div>
+
+                    <div className={styles.detailDivider} />
+
+                    <div className={styles.detailSection}>
                       <p className={styles.detailLabel}>Created</p>
                       <p className={styles.detailValue}>{formatLongDate(selectedReview.createdAt)}</p>
                     </div>
@@ -914,7 +947,6 @@ export default function ReviewsPage() {
                       <p className={styles.detailLabel}>Coming Soon</p>
                       <div className={styles.comingSoonRow}>
                         <span className={styles.comingSoonPill}>Media Gallery</span>
-                        <span className={styles.comingSoonPill}>Helpful Votes</span>
                         <span className={styles.comingSoonPill}>Merchant Notes</span>
                         <span className={styles.comingSoonPill}>Internal Tags</span>
                       </div>

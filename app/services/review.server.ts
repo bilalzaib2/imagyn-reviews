@@ -1,8 +1,8 @@
 import type { Prisma } from "@prisma/client";
 import prisma from "../db.server";
-import { ReviewStatus } from "./review.shared";
+import { HelpfulVoteValue, ReviewStatus } from "./review.shared";
 
-export { ReviewStatus };
+export { HelpfulVoteValue, ReviewStatus };
 
 const RATING_MIN = 1;
 const RATING_MAX = 5;
@@ -25,6 +25,10 @@ export interface ReviewQueryOptions {
   verifiedPurchase?: boolean;
   cursor?: string;
   limit?: number;
+  // Admin moderation sort only — a plain DB-level ORDER BY, distinct from the storefront's
+  // Wilson-score "Most Helpful" ranking (rankByHelpfulness), which needs recency weighting
+  // a merchant moderation queue has no reason to apply.
+  sort?: "newest" | "helpful";
 }
 
 export interface ReviewQueryResult {
@@ -146,12 +150,17 @@ async function queryReviews(
     ...(options.product ? { product: { name: { contains: options.product } } } : {}),
   };
 
+  const orderBy: Prisma.ReviewOrderByWithRelationInput[] =
+    options.sort === "helpful"
+      ? [{ helpfulCount: "desc" }, { createdAt: "desc" }, { id: "desc" }]
+      : [{ createdAt: "desc" }, { id: "desc" }];
+
   const [totalCount, reviews] = await Promise.all([
     prisma.review.count({ where }),
     prisma.review.findMany({
       where,
       include: reviewInclude,
-      orderBy: [{ createdAt: "desc" }, { id: "desc" }],
+      orderBy,
       take: limit + 1,
       ...(options.cursor ? { cursor: { id: options.cursor }, skip: 1 } : {}),
     }),
@@ -502,4 +511,122 @@ export async function bulkDeleteReviews(ids: string[]) {
   await Promise.all(affectedProductIds.map((productId) => recalculateProductStats(productId)));
 
   return result;
+}
+
+export interface HelpfulVoteResult {
+  helpfulCount: number;
+  notHelpfulCount: number;
+  vote: HelpfulVoteValue;
+}
+
+// Only APPROVED, non-deleted reviews are votable — matches the same public-visibility
+// rule every other storefront-facing query in this file already enforces. The unique
+// (reviewId, visitorId) constraint on ReviewHelpfulVote is what actually guarantees
+// "exactly one vote per visitor, can change it" — this upsert is just the one operation
+// that constraint allows. Counts are always recomputed from the vote rows themselves
+// inside the same transaction as the upsert (never incremented ad hoc), so a race between
+// two concurrent votes can't produce a count that doesn't match what's actually stored —
+// this is the "never trust client-side counts" rule applied server-side too.
+export async function castHelpfulVote(
+  reviewId: string,
+  visitorId: string,
+  vote: HelpfulVoteValue,
+): Promise<HelpfulVoteResult> {
+  if (!visitorId) {
+    throw new Error("A visitor identifier is required.");
+  }
+
+  return prisma.$transaction(async (tx) => {
+    const review = await tx.review.findFirst({
+      where: { id: reviewId, deletedAt: null, status: ReviewStatus.APPROVED },
+      select: { id: true },
+    });
+
+    if (!review) {
+      throw new Error("Review not found.");
+    }
+
+    await tx.reviewHelpfulVote.upsert({
+      where: { reviewId_visitorId: { reviewId, visitorId } },
+      update: { vote },
+      create: { reviewId, visitorId, vote },
+    });
+
+    const [helpfulCount, notHelpfulCount] = await Promise.all([
+      tx.reviewHelpfulVote.count({ where: { reviewId, vote: HelpfulVoteValue.HELPFUL } }),
+      tx.reviewHelpfulVote.count({ where: { reviewId, vote: HelpfulVoteValue.NOT_HELPFUL } }),
+    ]);
+
+    await tx.review.update({
+      where: { id: reviewId },
+      data: { helpfulCount, notHelpfulCount },
+    });
+
+    return { helpfulCount, notHelpfulCount, vote };
+  });
+}
+
+// Batched lookup of one visitor's existing votes across many reviews — used by the public
+// reviews endpoint to annotate each review with the requesting visitor's own vote (if
+// any), so a returning shopper sees their prior choice reflected instead of a blank state.
+export async function getVisitorVotes(
+  reviewIds: string[],
+  visitorId: string | null | undefined,
+): Promise<Record<string, HelpfulVoteValue>> {
+  if (!visitorId || reviewIds.length === 0) {
+    return {};
+  }
+
+  const votes = await prisma.reviewHelpfulVote.findMany({
+    where: { reviewId: { in: reviewIds }, visitorId },
+    select: { reviewId: true, vote: true },
+  });
+
+  const result: Record<string, HelpfulVoteValue> = {};
+  for (const { reviewId, vote } of votes) {
+    result[reviewId] = vote as HelpfulVoteValue;
+  }
+  return result;
+}
+
+function wilsonLowerBound(positive: number, total: number): number {
+  if (total === 0) return 0;
+
+  const z = 1.96; // 95% confidence
+  const phat = positive / total;
+
+  return (
+    (phat + (z * z) / (2 * total) - z * Math.sqrt((phat * (1 - phat) + (z * z) / (4 * total)) / total)) /
+    (1 + (z * z) / total)
+  );
+}
+
+const HELPFUL_RANK_HALF_LIFE_DAYS = 180;
+
+function ageDecay(createdAt: Date): number {
+  const ageDays = (Date.now() - createdAt.getTime()) / (1000 * 60 * 60 * 24);
+  return Math.pow(0.5, ageDays / HELPFUL_RANK_HALF_LIFE_DAYS);
+}
+
+function helpfulnessScore(review: { helpfulCount: number; notHelpfulCount: number; createdAt: Date }): number {
+  const total = review.helpfulCount + review.notHelpfulCount;
+  const quality = wilsonLowerBound(review.helpfulCount, total);
+  // Blended 70/30 rather than a straight multiply: a genuinely well-regarded old review
+  // stays visible instead of decaying to near-zero, while two reviews of comparable
+  // quality still favor the more recent one — "avoid older reviews permanently
+  // dominating" without making them disappear outright.
+  return quality * (0.7 + 0.3 * ageDecay(review.createdAt));
+}
+
+// "Most Helpful" sort for the public storefront widget. Deliberately not a stored/DB-
+// ordered column: the widget fetches its full review batch (capped at 50, see
+// getProductReviews's limit in api.reviews.tsx) in one request and re-sorts it here,
+// so this only ever runs over a small, already-fetched array — no pagination concerns.
+// The admin's "sort by Helpful" is a separate, simpler `ORDER BY helpfulCount DESC` at
+// the query level (see queryReviews) because that view paginates over a store's entire
+// review history and doesn't need Wilson-score sophistication for a moderation queue.
+export function rankByHelpfulness<T extends { helpfulCount: number; notHelpfulCount: number; createdAt: Date }>(
+  reviews: T[],
+): T[] {
+  return [...reviews].sort((a, b) => helpfulnessScore(b) - helpfulnessScore(a));
 }
