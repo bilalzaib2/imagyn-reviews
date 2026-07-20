@@ -13,8 +13,8 @@
   --color-success: #2c5e45;
   --color-danger: #8f3c2f;
 
-  --font-sans: "Red Hat Text", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
-  --font-display: "Red Hat Text", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  --font-sans: -apple-system, BlinkMacSystemFont, "SF Pro Display", "Helvetica Neue", Helvetica, Arial, sans-serif;
+  --font-display: -apple-system, BlinkMacSystemFont, "SF Pro Display", "Helvetica Neue", Helvetica, Arial, sans-serif;
 
   --text-xs: 0.75rem;
   --text-sm: 0.875rem;
@@ -52,8 +52,7 @@
      Polaris-rendered UI visually consistent with the rest of the app: Polaris's default
      page background is a light gray (not white), and its default font is Inter. */
   --p-color-bg: #ffffff;
-  --p-font-family-sans: "Red Hat Text", -apple-system, BlinkMacSystemFont, "San Francisco", "Segoe UI", Roboto,
-    "Helvetica Neue", sans-serif;
+  --p-font-family-sans: var(--font-sans);
 }
 
 * {

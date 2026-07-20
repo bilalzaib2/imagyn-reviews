@@ -1,0 +1,32 @@
+/*
+ * Imagyn Reviews — chip component (reserved).
+ *
+ * Interactive, removable pill — active filters, selected facets. Static labels (e.g.
+ * "Verified") use Tag instead (imagyn-component-tag.css). Both build on the shared
+ * .imagyn-pill base in imagyn-utilities.css rather than duplicating pill styling.
+ * Not yet wired into any block.
+ *
+ * Load imagyn-tokens.css and imagyn-utilities.css before this file.
+ */
+
+.imagyn-chip {
+  cursor: pointer;
+  background: var(--imagyn-color-surface, #ffffff);
+  transition: background-color var(--imagyn-duration-fast, 120ms) var(--imagyn-easing, ease-out);
+}
+
+.imagyn-chip:hover {
+  background: var(--imagyn-color-border, rgba(0, 0, 0, 0.08));
+}
+
+.imagyn-chip--selected {
+  background: var(--imagyn-color-text, currentColor);
+  color: var(--imagyn-color-surface, #ffffff);
+  border-color: transparent;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .imagyn-chip {
+    transition: none;
+  }
+}

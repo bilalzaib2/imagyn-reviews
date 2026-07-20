@@ -1,0 +1,59 @@
+/*
+ * Imagyn Reviews — button primitive (reserved).
+ *
+ * Generic button styles other components (Write Review Modal, Filters, Pagination)
+ * build on rather than each defining their own. Not yet wired into any block — the
+ * Reviews Widget's current buttons (reviews-widget.css) aren't being redesigned in
+ * this pass.
+ *
+ * Load imagyn-tokens.css before this file.
+ */
+
+.imagyn-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--imagyn-space-2xs, 0.3em);
+  font-family: var(--imagyn-font-family);
+  font-size: var(--imagyn-font-size-sm, 13px);
+  font-weight: var(--imagyn-font-weight-medium, 500);
+  line-height: var(--imagyn-line-height-tight, 1);
+  padding: var(--imagyn-space-sm, 0.6em) var(--imagyn-space-md, 1em);
+  border-radius: var(--imagyn-radius-md, 8px);
+  border: var(--imagyn-border-width, 1px) solid transparent;
+  cursor: pointer;
+  min-height: 44px;
+  transition:
+    background-color var(--imagyn-duration-fast, 120ms) var(--imagyn-easing, ease-out),
+    opacity var(--imagyn-duration-fast, 120ms) var(--imagyn-easing, ease-out);
+}
+
+.imagyn-btn--primary {
+  background: var(--imagyn-color-text, #111111);
+  color: var(--imagyn-color-surface, #ffffff);
+}
+
+.imagyn-btn--primary:hover {
+  opacity: 0.85;
+}
+
+.imagyn-btn--secondary {
+  background: transparent;
+  color: var(--imagyn-color-text, inherit);
+  border-color: var(--imagyn-color-border, rgba(0, 0, 0, 0.08));
+}
+
+.imagyn-btn--secondary:hover {
+  background: var(--imagyn-color-border, rgba(0, 0, 0, 0.08));
+}
+
+.imagyn-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .imagyn-btn {
+    transition: none;
+  }
+}

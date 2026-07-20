@@ -1,0 +1,52 @@
+/*
+ * Imagyn Reviews — input primitive (reserved).
+ *
+ * Generic text input / textarea styling for future form surfaces (Write Review Modal
+ * redesign, Filters search). Not yet wired into any block — the Reviews Widget's
+ * current inline form (reviews-widget.css) isn't being redesigned in this pass.
+ *
+ * Load imagyn-tokens.css before this file.
+ */
+
+.imagyn-input {
+  display: block;
+  width: 100%;
+  font-family: var(--imagyn-font-family);
+  font-size: var(--imagyn-font-size-base, 15px);
+  font-weight: var(--imagyn-font-weight-regular, 400);
+  line-height: var(--imagyn-line-height-base, 1.5);
+  color: var(--imagyn-color-text, inherit);
+  background: var(--imagyn-color-surface, #ffffff);
+  padding: var(--imagyn-space-sm, 0.6em) var(--imagyn-space-md, 1em);
+  border-radius: var(--imagyn-radius-sm, 4px);
+  border: var(--imagyn-border-width, 1px) solid var(--imagyn-color-border, rgba(0, 0, 0, 0.08));
+  transition: border-color var(--imagyn-duration-fast, 120ms) var(--imagyn-easing, ease-out);
+}
+
+.imagyn-input:focus {
+  outline: none;
+  border-color: var(--imagyn-color-focus, #2563eb);
+}
+
+.imagyn-input::placeholder {
+  color: var(--imagyn-color-text, inherit);
+  opacity: var(--imagyn-color-text-muted-opacity, 0.6);
+}
+
+.imagyn-input--error {
+  border-color: var(--imagyn-color-danger, #c0392b);
+}
+
+.imagyn-input-label {
+  display: block;
+  font-family: var(--imagyn-font-family);
+  font-size: var(--imagyn-font-size-sm, 13px);
+  font-weight: var(--imagyn-font-weight-semibold, 600);
+  margin-bottom: var(--imagyn-space-2xs, 0.3em);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .imagyn-input {
+    transition: none;
+  }
+}

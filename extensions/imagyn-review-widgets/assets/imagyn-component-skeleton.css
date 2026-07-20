@@ -1,0 +1,55 @@
+/*
+ * Imagyn Reviews — skeleton loader component (reserved).
+ *
+ * Default loading treatment per STOREFRONT_DESIGN_SYSTEM.md §11 — approximates real
+ * content shape, never a generic gray box. Shimmer is extremely subtle and respects
+ * prefers-reduced-motion by becoming a static muted fill. Not yet wired into any
+ * block.
+ *
+ * Load imagyn-tokens.css before this file.
+ */
+
+.imagyn-skeleton {
+  border-radius: var(--imagyn-radius-sm, 4px);
+  background: var(--imagyn-color-border, rgba(0, 0, 0, 0.08));
+  background-image: linear-gradient(
+    90deg,
+    var(--imagyn-color-border, rgba(0, 0, 0, 0.08)) 0%,
+    rgba(0, 0, 0, 0.04) 50%,
+    var(--imagyn-color-border, rgba(0, 0, 0, 0.08)) 100%
+  );
+  background-size: 200% 100%;
+  animation: imagyn-skeleton-sweep 1.6s ease-in-out infinite;
+}
+
+.imagyn-skeleton--text {
+  height: 0.9em;
+  width: 100%;
+}
+
+.imagyn-skeleton--title {
+  height: 1.2em;
+  width: 40%;
+}
+
+.imagyn-skeleton--avatar {
+  border-radius: var(--imagyn-radius-full, 999px);
+  width: 2.5em;
+  height: 2.5em;
+}
+
+@keyframes imagyn-skeleton-sweep {
+  0% {
+    background-position: 200% 0;
+  }
+  100% {
+    background-position: -200% 0;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .imagyn-skeleton {
+    animation: none;
+    background-image: none;
+  }
+}

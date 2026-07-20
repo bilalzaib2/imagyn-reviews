@@ -1,0 +1,57 @@
+/*
+ * Imagyn Reviews — filters component (reserved).
+ *
+ * Chip-based filter bar per STOREFRONT_DESIGN_SYSTEM.md §16 — not a form. Built on the
+ * shared .imagyn-pill base (imagyn-utilities.css) rather than redefining pill styling.
+ * Not yet wired into any block.
+ *
+ * Load imagyn-tokens.css and imagyn-utilities.css before this file.
+ */
+
+.imagyn-filters {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--imagyn-space-px-xs, 8px);
+  font-family: var(--imagyn-font-family);
+}
+
+.imagyn-filters__chip {
+  cursor: pointer;
+  background: var(--imagyn-color-surface, #ffffff);
+  transition: background-color var(--imagyn-duration-fast, 120ms) var(--imagyn-easing, ease-out);
+}
+
+.imagyn-filters__chip:hover {
+  background: var(--imagyn-color-border, rgba(0, 0, 0, 0.08));
+}
+
+.imagyn-filters__chip--active {
+  background: var(--imagyn-color-text, currentColor);
+  color: var(--imagyn-color-surface, #ffffff);
+  border-color: transparent;
+}
+
+.imagyn-filters__chip-remove {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: none;
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+  padding: 0;
+  font: inherit;
+  line-height: 1;
+  opacity: 0.6;
+}
+
+.imagyn-filters__chip-remove:hover {
+  opacity: 1;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .imagyn-filters__chip {
+    transition: none;
+  }
+}

@@ -1,0 +1,66 @@
+/*
+ * Imagyn Reviews — shared utility classes.
+ *
+ * Small, reusable building blocks that individual component files build on top of
+ * rather than each reinventing (e.g. Chip and Tag both need a pill shape — they share
+ * .imagyn-pill instead of duplicating its padding/radius/border rules).
+ *
+ * Load imagyn-tokens.css before this file.
+ */
+
+.imagyn-visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+.imagyn-truncate {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.imagyn-clamp-2 {
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.imagyn-clamp-3 {
+  display: -webkit-box;
+  -webkit-line-clamp: 3;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+/* Shared pill base for Chip (interactive/removable) and Tag (static) — see
+   imagyn-component-chip.css / imagyn-component-tag.css. */
+.imagyn-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--imagyn-space-3xs, 0.2em);
+  font-family: var(--imagyn-font-family);
+  font-size: var(--imagyn-font-size-xs, 12px);
+  font-weight: var(--imagyn-font-weight-medium, 500);
+  line-height: var(--imagyn-line-height-tight, 1);
+  letter-spacing: var(--imagyn-letter-spacing-tight, 0.01em);
+  padding: var(--imagyn-space-2xs, 0.3em) var(--imagyn-space-sm, 0.6em);
+  border-radius: var(--imagyn-radius-full, 999px);
+  border: var(--imagyn-border-width, 1px) solid var(--imagyn-color-border, rgba(0, 0, 0, 0.08));
+  color: var(--imagyn-color-text, inherit);
+  white-space: nowrap;
+}
+
+/* Focus ring — every interactive element in this system uses this exact treatment
+   (see STOREFRONT_DESIGN_SYSTEM.md §13). Never `outline: none` without this. */
+.imagyn-focus-ring:focus-visible {
+  outline: 2px solid var(--imagyn-color-focus, #2563eb);
+  outline-offset: 2px;
+}

@@ -1,0 +1,52 @@
+/*
+ * Imagyn Reviews — drawer component (reserved).
+ *
+ * Bottom-sheet drawer for mobile Filters (STOREFRONT_DESIGN_SYSTEM.md §14/§16). Not
+ * yet wired into any block.
+ *
+ * Load imagyn-tokens.css before this file.
+ */
+
+.imagyn-drawer-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.4);
+  z-index: 1000;
+}
+
+.imagyn-drawer {
+  font-family: var(--imagyn-font-family);
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: var(--imagyn-color-surface, #ffffff);
+  color: var(--imagyn-color-text, inherit);
+  border-radius: var(--imagyn-radius-lg, 12px) var(--imagyn-radius-lg, 12px) 0 0;
+  box-shadow: var(--imagyn-shadow-md, 0 2px 8px rgba(0, 0, 0, 0.06));
+  max-height: 85vh;
+  overflow-y: auto;
+  padding: var(--imagyn-space-px-lg, 24px);
+  transform: translateY(0);
+  transition: transform var(--imagyn-duration-slow, 320ms) var(--imagyn-easing, ease-out);
+}
+
+.imagyn-drawer__handle {
+  width: 2.5em;
+  height: 4px;
+  border-radius: var(--imagyn-radius-full, 999px);
+  background: var(--imagyn-color-border, rgba(0, 0, 0, 0.08));
+  margin: 0 auto var(--imagyn-space-md, 1em);
+}
+
+.imagyn-drawer__title {
+  font-size: var(--imagyn-font-size-md, 17px);
+  font-weight: var(--imagyn-font-weight-semibold, 600);
+  margin: 0 0 var(--imagyn-space-md, 1em);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .imagyn-drawer {
+    transition: none;
+  }
+}

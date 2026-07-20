@@ -17,7 +17,9 @@
 :root {
   /* Typography */
   --imagyn-font-family:
-    "Helvetica Neue World",
+    -apple-system,
+    BlinkMacSystemFont,
+    "SF Pro Display",
     "Helvetica Neue",
     Helvetica,
     Arial,
@@ -68,14 +70,23 @@
   --imagyn-color-border: rgba(0, 0, 0, 0.08);
   --imagyn-color-surface: #ffffff;
 
+  /* Borders */
+  --imagyn-border-width: 1px;
+
   /* Radii */
   --imagyn-radius-sm: 4px;
   --imagyn-radius-md: 8px;
   --imagyn-radius-lg: 12px;
   --imagyn-radius-full: 999px;
 
-  /* Shadows — calm, low-contrast; reserved for future surfaced components (review
-     cards, summary panel) that sit on top of the page rather than inline in text. */
+  /* Shadows — calm, low-contrast; also Imagyn Reviews' elevation system (no separate
+     --imagyn-elevation-* scale — elevation and shadow are the same concept here). */
   --imagyn-shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.05);
   --imagyn-shadow-md: 0 2px 8px rgba(0, 0, 0, 0.06);
+
+  /* Motion */
+  --imagyn-duration-fast: 120ms;
+  --imagyn-duration-base: 200ms;
+  --imagyn-duration-slow: 320ms;
+  --imagyn-easing: cubic-bezier(0.22, 1, 0.36, 1);
 }

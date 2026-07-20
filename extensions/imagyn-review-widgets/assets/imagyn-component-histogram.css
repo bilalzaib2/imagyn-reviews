@@ -1,0 +1,64 @@
+/*
+ * Imagyn Reviews — histogram component (reserved).
+ *
+ * Five horizontal bars (5-star to 1-star): label + bar + count. Per
+ * STOREFRONT_DESIGN_SYSTEM.md §16, bars are proportional to the largest count, not a
+ * fixed 100% scale. Not yet wired into any block — Review Summary currently ships
+ * without a distribution chart; this file exists so that feature has a defined home
+ * when it's built, consuming imagyn-tokens.css like every other component.
+ *
+ * Load imagyn-tokens.css before this file.
+ */
+
+.imagyn-histogram {
+  display: flex;
+  flex-direction: column;
+  gap: var(--imagyn-space-3xs, 0.2em);
+  font-family: var(--imagyn-font-family);
+}
+
+.imagyn-histogram__row {
+  display: grid;
+  grid-template-columns: 2.5em 1fr 2.5em;
+  align-items: center;
+  gap: var(--imagyn-space-xs, 0.4em);
+}
+
+.imagyn-histogram__label {
+  font-size: var(--imagyn-font-size-xs, 12px);
+  color: var(--imagyn-color-text, inherit);
+  opacity: var(--imagyn-color-text-muted-opacity, 0.6);
+  font-variant-numeric: tabular-nums;
+}
+
+.imagyn-histogram__track {
+  position: relative;
+  height: 6px;
+  border-radius: var(--imagyn-radius-full, 999px);
+  background: var(--imagyn-color-border, rgba(0, 0, 0, 0.08));
+  overflow: hidden;
+}
+
+.imagyn-histogram__fill {
+  position: absolute;
+  inset: 0;
+  width: var(--imagyn-histogram-fill, 0%);
+  border-radius: inherit;
+  background: var(--imagyn-color-star, #f5a623);
+  opacity: 0.85;
+  transition: width var(--imagyn-duration-base, 200ms) var(--imagyn-easing, ease-out);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .imagyn-histogram__fill {
+    transition: none;
+  }
+}
+
+.imagyn-histogram__count {
+  font-size: var(--imagyn-font-size-xs, 12px);
+  color: var(--imagyn-color-text, inherit);
+  opacity: var(--imagyn-color-text-muted-opacity, 0.6);
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+}

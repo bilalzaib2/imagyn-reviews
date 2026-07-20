@@ -1,0 +1,74 @@
+/*
+ * Imagyn Reviews — modal component (reserved).
+ *
+ * Centered floating modal on desktop, full-screen sheet on mobile — per
+ * STOREFRONT_DESIGN_SYSTEM.md §16/§14. Reserved for the Write Review Modal redesign;
+ * not yet wired into any block — the Reviews Widget's current inline form
+ * (reviews-widget.css) isn't being redesigned in this pass.
+ *
+ * Load imagyn-tokens.css before this file.
+ */
+
+.imagyn-modal-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.4);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: var(--imagyn-space-px-md, 16px);
+  z-index: 1000;
+}
+
+.imagyn-modal {
+  font-family: var(--imagyn-font-family);
+  background: var(--imagyn-color-surface, #ffffff);
+  color: var(--imagyn-color-text, inherit);
+  border-radius: var(--imagyn-radius-lg, 12px);
+  box-shadow: var(--imagyn-shadow-md, 0 2px 8px rgba(0, 0, 0, 0.06));
+  max-width: 30em;
+  width: 100%;
+  max-height: 90vh;
+  overflow-y: auto;
+  padding: var(--imagyn-space-px-lg, 24px);
+}
+
+.imagyn-modal__title {
+  font-size: var(--imagyn-font-size-lg, 20px);
+  font-weight: var(--imagyn-font-weight-semibold, 600);
+  margin: 0 0 var(--imagyn-space-md, 1em);
+}
+
+.imagyn-modal__close {
+  position: absolute;
+  top: var(--imagyn-space-px-sm, 12px);
+  right: var(--imagyn-space-px-sm, 12px);
+  min-width: 44px;
+  min-height: 44px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: none;
+  background: transparent;
+  cursor: pointer;
+  color: inherit;
+  opacity: 0.6;
+}
+
+.imagyn-modal__close:hover {
+  opacity: 1;
+}
+
+@media (max-width: 640px) {
+  .imagyn-modal-overlay {
+    padding: 0;
+    align-items: flex-end;
+  }
+
+  .imagyn-modal {
+    max-width: none;
+    max-height: 100vh;
+    height: 100%;
+    border-radius: 0;
+  }
+}

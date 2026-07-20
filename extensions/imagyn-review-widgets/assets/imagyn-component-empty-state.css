@@ -1,0 +1,20 @@
+/*
+ * Imagyn Reviews — empty state component (reserved).
+ *
+ * Calm, quiet, one line of plain-language text, no border/background — per
+ * STOREFRONT_DESIGN_SYSTEM.md §12. Used by deliberately-visited surfaces (Review
+ * Summary, Review Cards list); the Rating Badge and Collection Badges render nothing
+ * at all instead (§12), so they never use this component. Not yet wired into any
+ * block.
+ *
+ * Load imagyn-tokens.css before this file.
+ */
+
+.imagyn-empty-state {
+  font-family: var(--imagyn-font-family);
+  font-size: var(--imagyn-font-size-base, 15px);
+  color: var(--imagyn-color-text, inherit);
+  opacity: var(--imagyn-color-text-muted-opacity, 0.6);
+  padding: var(--imagyn-space-px-lg, 24px) 0;
+  text-align: left;
+}

@@ -34,25 +34,32 @@ Text should never look like it's fighting the merchant's own theme typography fo
 
 ---
 
-## 3. Helvetica Neue World Usage
+## 3. Typeface: System Font Stack
 
-**Primary font, all Imagyn Reviews storefront components:**
+**Primary font, all Imagyn Reviews storefront components (and, identically, the Imagyn admin dashboard — see `11_DESIGN_SYSTEM.md`):**
 
 ```
 font-family:
-  "Helvetica Neue World",
+  -apple-system,
+  BlinkMacSystemFont,
+  "SF Pro Display",
   "Helvetica Neue",
   Helvetica,
   Arial,
   sans-serif;
 ```
 
+This is a permanent, deliberate decision, not a placeholder: Imagyn Reviews does not load any external font (no Adobe Fonts/Typekit, no Google Fonts, no self-hosted `@font-face`) on either surface. Two reasons converge on the same answer:
+
+- **Storefront licensing:** a paid font kit (e.g. Adobe Fonts) is licensed to specific registered domains. Imagyn Reviews installs onto thousands of arbitrary, merchant-owned storefront domains we don't control — there is no domain to register the kit against. A system font stack has no licensing surface at all.
+- **Design intent:** `-apple-system`/`BlinkMacSystemFont`/`SF Pro Display` render as San Francisco on Apple devices — the same typographic voice as Apple, Linear, and Notion (§1) — while `Helvetica Neue → Helvetica → Arial → sans-serif` degrade gracefully everywhere else. No network request, no flash of unstyled/invisible text, zero render-blocking risk.
+
 Rules:
 
 - This stack is applied **only** to elements carrying an Imagyn class. It is never applied globally (never on `body`, `html`, or any selector the merchant's own theme might also target). Scoping is enforced at the component level, not the page level.
-- The fallback chain exists because "Helvetica Neue World" is not guaranteed to be installed on a shopper's device. Each fallback step degrades gracefully: Helvetica Neue (macOS/iOS default), Helvetica (older Apple systems), Arial (Windows universal), `sans-serif` (absolute floor — guarantees the browser's default sans-serif rather than a serif fallback, which would look broken).
 - Do not add a merchant-theme font as a fallback step, even for "better visual matching." Our type identity should be consistent across every store we appear on. A shopper who sees Imagyn Reviews on two different stores should recognize the same typographic voice on both.
-- Font loading must never block or delay rendering of the merchant's own page content. If a future iteration self-hosts "Helvetica Neue World" via `@font-face`, it must use `font-display: swap` and never appear as a render-blocking resource.
+- Never hardcode this stack inside an individual component file — every component consumes it via `var(--imagyn-font-family, ...)`, defined once in `imagyn-tokens.css`. Changing the typeface system-wide should mean editing one token, not auditing every component.
+- No component may introduce Adobe Fonts, Typekit, Google Fonts, or any other externally-loaded font, on either the storefront or the admin dashboard. This applies without exception.
 
 ---
 

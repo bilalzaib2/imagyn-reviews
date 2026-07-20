@@ -1,0 +1,24 @@
+/*
+ * Imagyn Reviews — tag component (reserved).
+ *
+ * Static, non-interactive pill label — e.g. "Verified". Interactive/removable pills
+ * (active filters) use Chip instead (imagyn-component-chip.css). Both build on the
+ * shared .imagyn-pill base in imagyn-utilities.css rather than duplicating pill
+ * styling. Not yet wired into any block.
+ *
+ * Load imagyn-tokens.css and imagyn-utilities.css before this file.
+ */
+
+.imagyn-tag {
+  background: var(--imagyn-color-surface, #ffffff);
+}
+
+.imagyn-tag--success {
+  color: var(--imagyn-color-success, #1a7f4b);
+  border-color: currentColor;
+}
+
+.imagyn-tag--neutral {
+  color: var(--imagyn-color-text, inherit);
+  opacity: var(--imagyn-color-text-muted-opacity, 0.6);
+}
