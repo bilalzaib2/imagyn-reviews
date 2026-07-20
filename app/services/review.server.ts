@@ -12,6 +12,9 @@ const reviewInclude = {
   product: {
     select: { id: true, name: true, featuredImage: true },
   },
+  media: {
+    orderBy: { createdAt: "asc" },
+  },
 } satisfies Prisma.ReviewInclude;
 
 export type ReviewWithProduct = Prisma.ReviewGetPayload<{ include: typeof reviewInclude }>;

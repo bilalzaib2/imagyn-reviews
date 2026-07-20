@@ -125,6 +125,7 @@ model Review {
   updatedAt        DateTime     @updatedAt
 
   helpfulVotes     ReviewHelpfulVote[]
+  media            ReviewMedia[]
 
   @@index([deletedAt, createdAt])
   @@index([storeId, deletedAt, createdAt])
@@ -134,6 +135,33 @@ model Review {
   @@index([verifiedPurchase])
   @@index([featured])
   @@index([helpfulCount])
+}
+
+enum ReviewMediaType {
+  IMAGE
+  VIDEO
+}
+
+// Customer-uploaded photos (and, later, videos — the type column and enum already support
+// VIDEO so that can be turned on without a schema change) attached to a review. One row per
+// asset rather than a delimited string (contrast the older, unused Review.photoUrls) so each
+// item carries its own moderation lifecycle (independently deletable) and real dimensions for
+// aspect-ratio-safe rendering, instead of just a bare URL.
+model ReviewMedia {
+  id           String          @id @default(cuid())
+
+  reviewId     String
+  review       Review          @relation(fields: [reviewId], references: [id], onDelete: Cascade)
+
+  type         ReviewMediaType @default(IMAGE)
+  url          String
+  width        Int?
+  height       Int?
+  thumbnailUrl String?
+
+  createdAt    DateTime        @default(now())
+
+  @@index([reviewId])
 }
 
 enum HelpfulVoteValue {

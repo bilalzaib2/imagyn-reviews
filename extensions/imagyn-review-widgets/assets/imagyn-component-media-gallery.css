@@ -1,0 +1,91 @@
+/*
+ * Imagyn Reviews — Media Gallery component.
+ *
+ * Two renderers share these rules:
+ *  - the aggregated, product-level Media Gallery (.imagyn-media-gallery) — every customer
+ *    photo across all approved reviews, one horizontal strip above the review list.
+ *  - the per-review thumbnail row (.imagyn-review-media) each Review Card renders beneath
+ *    its body text, per STOREFRONT_DESIGN_SYSTEM.md §16.
+ *
+ * Both open the same lightbox (imagyn-component-lightbox.css / reviews-widget.js), so their
+ * thumbnail buttons share one visual treatment.
+ *
+ * Load imagyn-tokens.css before this file.
+ */
+
+.imagyn-media-gallery {
+  margin-bottom: var(--imagyn-space-px-lg, 24px);
+}
+
+.imagyn-media-gallery__heading {
+  margin: 0 0 var(--imagyn-space-sm, 0.6em);
+  font-size: var(--imagyn-font-size-xs, 12px);
+  font-weight: var(--imagyn-font-weight-semibold, 600);
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--imagyn-color-text, inherit);
+  opacity: var(--imagyn-color-text-muted-opacity, 0.6);
+}
+
+.imagyn-media-gallery__track {
+  display: flex;
+  gap: var(--imagyn-space-xs, 0.4em);
+  overflow-x: auto;
+  scroll-snap-type: x proximity;
+  padding-bottom: 2px;
+  -webkit-overflow-scrolling: touch;
+}
+
+.imagyn-media-gallery__item,
+.imagyn-review-media__item {
+  flex: 0 0 auto;
+  width: 72px;
+  height: 72px;
+  padding: 0;
+  border: var(--imagyn-border-width, 1px) solid var(--imagyn-color-border, rgba(0, 0, 0, 0.1));
+  border-radius: var(--imagyn-radius-sm, 6px);
+  overflow: hidden;
+  background: var(--imagyn-color-surface-muted, rgba(0, 0, 0, 0.04));
+  cursor: pointer;
+  scroll-snap-align: start;
+  transition: opacity var(--imagyn-duration-fast, 120ms) var(--imagyn-easing, ease-out);
+}
+
+.imagyn-media-gallery__item:hover,
+.imagyn-review-media__item:hover {
+  opacity: 0.85;
+}
+
+.imagyn-media-gallery__item:focus-visible,
+.imagyn-review-media__item:focus-visible {
+  outline: 2px solid var(--imagyn-color-focus, #2563eb);
+  outline-offset: 2px;
+}
+
+.imagyn-media-gallery__image,
+.imagyn-review-media__image {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  aspect-ratio: 1 / 1;
+}
+
+.imagyn-review-media {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--imagyn-space-xs, 0.4em);
+  margin-top: var(--imagyn-space-sm, 0.6em);
+}
+
+.imagyn-review-media__item {
+  width: 56px;
+  height: 56px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .imagyn-media-gallery__item,
+  .imagyn-review-media__item {
+    transition: none;
+  }
+}

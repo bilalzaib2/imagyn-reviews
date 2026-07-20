@@ -4,6 +4,10 @@
   // the app's own domain would never carry a valid signature and is rejected server-side.
   var PROXY_PATH = "/apps/reviews";
 
+  var MAX_REVIEW_IMAGES = 10;
+  var MAX_IMAGE_SIZE_BYTES = 5 * 1024 * 1024;
+  var ALLOWED_IMAGE_TYPES = ["image/jpeg", "image/png", "image/webp", "image/gif"];
+
   function renderStars(rating) {
     var full = Math.round(rating);
     var stars = "";
@@ -368,6 +372,209 @@
     );
   }
 
+  // Shared by the aggregated Media Gallery and every Review Card's inline photo row: one
+  // overlay instance, lazily created and reused for the page, per STOREFRONT_DESIGN_SYSTEM.md
+  // §16 — arrow-key navigation, Escape to close, focus trapped while open, native swipe on
+  // touch. `items` is a plain array of { url, alt }; the caller owns what "photo N of the
+  // review" vs "photo N of the gallery" means, this only ever renders whatever it's given.
+  function createLightbox() {
+    var overlay = document.createElement("div");
+    overlay.className = "imagyn-lightbox-overlay";
+    overlay.setAttribute("role", "dialog");
+    overlay.setAttribute("aria-modal", "true");
+    overlay.setAttribute("aria-label", "Photo viewer");
+    overlay.innerHTML =
+      '<div class="imagyn-lightbox">' +
+      '<img class="imagyn-lightbox__image" alt="">' +
+      '<button type="button" class="imagyn-lightbox__nav imagyn-lightbox__nav--prev" aria-label="Previous photo">‹</button>' +
+      '<button type="button" class="imagyn-lightbox__nav imagyn-lightbox__nav--next" aria-label="Next photo">›</button>' +
+      '<button type="button" class="imagyn-lightbox__close" aria-label="Close">×</button>' +
+      '<span class="imagyn-lightbox__counter" data-imagyn-lightbox-counter></span>' +
+      "</div>";
+    document.body.appendChild(overlay);
+
+    var imageEl = overlay.querySelector(".imagyn-lightbox__image");
+    var prevBtn = overlay.querySelector(".imagyn-lightbox__nav--prev");
+    var nextBtn = overlay.querySelector(".imagyn-lightbox__nav--next");
+    var closeBtn = overlay.querySelector(".imagyn-lightbox__close");
+    var counterEl = overlay.querySelector("[data-imagyn-lightbox-counter]");
+
+    var items = [];
+    var currentIndex = 0;
+    var lastFocusedElement = null;
+    var touchStartX = null;
+
+    function show(index) {
+      if (items.length === 0) return;
+      currentIndex = (index + items.length) % items.length;
+      var item = items[currentIndex];
+      imageEl.src = item.url;
+      imageEl.alt = item.alt || "Customer photo";
+      var multiple = items.length > 1;
+      prevBtn.style.display = multiple ? "" : "none";
+      nextBtn.style.display = multiple ? "" : "none";
+      counterEl.style.display = multiple ? "" : "none";
+      counterEl.textContent = (currentIndex + 1) + " of " + items.length;
+    }
+
+    function getFocusable() {
+      return [closeBtn, prevBtn, nextBtn].filter(function (el) {
+        return el.style.display !== "none";
+      });
+    }
+
+    function onKeyDown(event) {
+      if (event.key === "Escape") {
+        event.preventDefault();
+        close();
+      } else if (event.key === "ArrowLeft") {
+        event.preventDefault();
+        show(currentIndex - 1);
+      } else if (event.key === "ArrowRight") {
+        event.preventDefault();
+        show(currentIndex + 1);
+      } else if (event.key === "Tab") {
+        var focusable = getFocusable();
+        if (focusable.length === 0) return;
+        var first = focusable[0];
+        var last = focusable[focusable.length - 1];
+        if (event.shiftKey && document.activeElement === first) {
+          event.preventDefault();
+          last.focus();
+        } else if (!event.shiftKey && document.activeElement === last) {
+          event.preventDefault();
+          first.focus();
+        }
+      }
+    }
+
+    function onTouchStart(event) {
+      touchStartX = event.touches && event.touches.length === 1 ? event.touches[0].clientX : null;
+    }
+
+    function onTouchEnd(event) {
+      if (touchStartX === null) return;
+      var endX = event.changedTouches && event.changedTouches[0] ? event.changedTouches[0].clientX : touchStartX;
+      var delta = endX - touchStartX;
+      touchStartX = null;
+      if (Math.abs(delta) < 40) return;
+      show(delta > 0 ? currentIndex - 1 : currentIndex + 1);
+    }
+
+    function open(nextItems, startIndex, triggerEl) {
+      if (!nextItems || nextItems.length === 0) return;
+      items = nextItems;
+      lastFocusedElement = triggerEl || document.activeElement;
+      show(startIndex || 0);
+      overlay.classList.add("imagyn-lightbox-overlay--open");
+      document.addEventListener("keydown", onKeyDown);
+      closeBtn.focus();
+    }
+
+    function close() {
+      overlay.classList.remove("imagyn-lightbox-overlay--open");
+      document.removeEventListener("keydown", onKeyDown);
+      imageEl.src = "";
+      if (lastFocusedElement && lastFocusedElement.focus) {
+        lastFocusedElement.focus();
+      }
+    }
+
+    closeBtn.addEventListener("click", close);
+    prevBtn.addEventListener("click", function () {
+      show(currentIndex - 1);
+    });
+    nextBtn.addEventListener("click", function () {
+      show(currentIndex + 1);
+    });
+    overlay.addEventListener("click", function (event) {
+      if (event.target === overlay) close();
+    });
+    overlay.addEventListener("touchstart", onTouchStart, { passive: true });
+    overlay.addEventListener("touchend", onTouchEnd, { passive: true });
+
+    return { open: open };
+  }
+
+  var sharedLightbox = null;
+  function getLightbox() {
+    if (!sharedLightbox) {
+      sharedLightbox = createLightbox();
+    }
+    return sharedLightbox;
+  }
+
+  // The aggregated, product-level Media Gallery — every customer photo across this
+  // product's approved reviews, one horizontal strip above the review list (distinct from
+  // each Review Card's own inline photo row, rendered separately in renderList). Renders
+  // nothing when there are no photos yet, same "render nothing" rule as the rest of this
+  // widget's optional sections.
+  function renderGallery(galleryEl, items) {
+    if (!items || items.length === 0) {
+      galleryEl.innerHTML = "";
+      return;
+    }
+
+    var html =
+      '<div class="imagyn-media-gallery">' +
+      '<p class="imagyn-media-gallery__heading">Customer photos</p>' +
+      '<div class="imagyn-media-gallery__track" role="list">' +
+      items
+        .map(function (item, index) {
+          return (
+            '<button type="button" class="imagyn-media-gallery__item" role="listitem" data-gallery-index="' +
+            index +
+            '" aria-label="View customer photo ' + (index + 1) + " of " + items.length + '">' +
+            '<img class="imagyn-media-gallery__image" src="' +
+            escapeHtml(item.thumbnailUrl || item.url) +
+            '" alt="" loading="lazy">' +
+            "</button>"
+          );
+        })
+        .join("") +
+      "</div>" +
+      "</div>";
+
+    galleryEl.innerHTML = html;
+
+    var lightboxItems = items.map(function (item) {
+      return { url: item.url, alt: "Customer photo" };
+    });
+
+    Array.prototype.forEach.call(galleryEl.querySelectorAll("[data-gallery-index]"), function (btn) {
+      btn.addEventListener("click", function () {
+        getLightbox().open(lightboxItems, Number(btn.getAttribute("data-gallery-index")), btn);
+      });
+    });
+  }
+
+  // Per-review thumbnail row, rendered beneath a review's body text when it has photos —
+  // per STOREFRONT_DESIGN_SYSTEM.md §16's Media Gallery rule. Click handling is delegated
+  // on listEl (see loadList) rather than wired here, matching the helpful-vote buttons.
+  function renderReviewMedia(review) {
+    if (!review.media || review.media.length === 0) {
+      return "";
+    }
+
+    return (
+      '<div class="imagyn-review-media">' +
+      review.media
+        .map(function (item, index) {
+          return (
+            '<button type="button" class="imagyn-review-media__item" data-review-media-index="' +
+            index +
+            '" aria-label="View photo ' + (index + 1) + " of " + review.media.length + '">' +
+            '<img class="imagyn-review-media__image" src="' +
+            escapeHtml(item.thumbnailUrl || item.url) +
+            '" alt="" loading="lazy">' +
+            "</button>"
+          );
+        })
+        .join("") +
+      "</div>"
+    );
+  }
+
   function renderList(listEl, data, s, visibleCount, onLoadMore) {
     var reviews = data.reviews || [];
     var visibleReviews = reviews.slice(0, visibleCount);
@@ -394,6 +601,7 @@
               " &middot; " +
               formatDate(review.createdAt) +
               "</p>" +
+              renderReviewMedia(review) +
               renderHelpfulRow(review) +
               "</li>"
             );
@@ -509,7 +717,7 @@
     });
   }
 
-  function loadList(root, summaryEl, listEl, sortEl, baseEndpoint, themeOverrides, visitorId) {
+  function loadList(root, summaryEl, galleryEl, listEl, sortEl, baseEndpoint, themeOverrides, visitorId) {
     // Mutable across the whole widget instance's lifetime — the delegated vote listener
     // below is attached exactly once but always needs to read whichever review array is
     // currently loaded, including after a sort change swaps in a brand new fetch.
@@ -527,6 +735,19 @@
       var voteBtn = event.target.closest ? event.target.closest("[data-helpful-vote]") : null;
       if (voteBtn) {
         handleHelpfulVote(voteBtn, findReview, visitorId);
+        return;
+      }
+
+      var mediaBtn = event.target.closest ? event.target.closest("[data-review-media-index]") : null;
+      if (mediaBtn) {
+        var row = mediaBtn.closest("[data-review-id]");
+        var review = row ? findReview(row.getAttribute("data-review-id")) : null;
+        if (!review || !review.media) return;
+
+        var lightboxItems = review.media.map(function (item) {
+          return { url: item.url, alt: "Customer photo" };
+        });
+        getLightbox().open(lightboxItems, Number(mediaBtn.getAttribute("data-review-media-index")), mediaBtn);
       }
     });
 
@@ -563,6 +784,10 @@
             );
           }
 
+          if (galleryEl) {
+            renderGallery(galleryEl, data.gallery || []);
+          }
+
           if (sortEl) {
             if ((data.reviews || []).length > 0) {
               renderSortControl(sortEl, sort, function (nextSort) {
@@ -589,6 +814,9 @@
           listEl.innerHTML = '<p class="imagyn-reviews__error">Reviews are unavailable right now.</p>';
           if (sortEl) {
             sortEl.innerHTML = "";
+          }
+          if (galleryEl) {
+            galleryEl.innerHTML = "";
           }
           // Rating/count can't be shown without the failed response's data, but Write a
           // Review must stay available regardless (§12) — same principle the empty-state
@@ -660,10 +888,21 @@
       '<label for="imagyn-reviews-content">Review</label>' +
       '<textarea id="imagyn-reviews-content" data-imagyn-field="content" rows="4" required></textarea>' +
       "</div>" +
+      '<div class="imagyn-reviews__field">' +
+      '<label for="imagyn-reviews-photos">Add photos (optional)</label>' +
+      '<input type="file" id="imagyn-reviews-photos" data-imagyn-photo-input accept="' +
+      ALLOWED_IMAGE_TYPES.join(",") +
+      '" multiple>' +
+      '<p class="imagyn-reviews__photo-hint" data-imagyn-photo-hint>Up to ' +
+      MAX_REVIEW_IMAGES +
+      " photos, 5MB max each.</p>" +
+      '<div class="imagyn-reviews__photo-previews" data-imagyn-photo-previews></div>' +
+      "</div>" +
+      '<div class="imagyn-reviews__upload-progress" data-imagyn-upload-progress hidden>' +
+      '<div class="imagyn-reviews__upload-progress-bar" data-imagyn-upload-progress-bar></div>' +
+      "</div>" +
       '<p class="imagyn-reviews__form-error" data-imagyn-form-error hidden></p>' +
-      '<p class="imagyn-reviews__form-success" data-imagyn-form-success hidden>' +
-      "Thanks! Your review has been submitted and is awaiting approval." +
-      "</p>" +
+      '<p class="imagyn-reviews__form-success" data-imagyn-form-success hidden></p>' +
       '<button type="submit" class="imagyn-reviews__submit" data-imagyn-submit>Submit review</button>' +
       "</form>";
 
@@ -673,6 +912,15 @@
     var submitBtn = writeEl.querySelector("[data-imagyn-submit]");
     var starButtons = Array.prototype.slice.call(writeEl.querySelectorAll("[data-rating-value]"));
     var selectedRating = 0;
+
+    var photoInput = writeEl.querySelector("[data-imagyn-photo-input]");
+    var photoPreviewsEl = writeEl.querySelector("[data-imagyn-photo-previews]");
+    var progressEl = writeEl.querySelector("[data-imagyn-upload-progress]");
+    var progressBarEl = writeEl.querySelector("[data-imagyn-upload-progress-bar]");
+    // { file, previewUrl } — client-managed rather than trusting input.files directly, since
+    // the input is reset after every change event so the same file can be re-picked and so
+    // rejected files never silently linger in the native selection.
+    var selectedPhotos = [];
 
     var reduceMotion = window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
 
@@ -722,6 +970,79 @@
       return field ? field.value.trim() : "";
     }
 
+    function renderPhotoPreviews() {
+      photoPreviewsEl.innerHTML = selectedPhotos
+        .map(function (item, index) {
+          return (
+            '<div class="imagyn-reviews__photo-preview">' +
+            '<img src="' + item.previewUrl + '" alt="Selected photo ' + (index + 1) + '">' +
+            '<button type="button" class="imagyn-reviews__photo-remove" data-remove-photo-index="' +
+            index +
+            '" aria-label="Remove photo ' + (index + 1) + '">×</button>' +
+            "</div>"
+          );
+        })
+        .join("");
+    }
+
+    photoInput.addEventListener("change", function () {
+      var files = Array.prototype.slice.call(photoInput.files || []);
+      // Reset immediately so the browser doesn't keep rejected/duplicate files selected,
+      // and so picking the same file again later re-fires the change event.
+      photoInput.value = "";
+
+      var rejectionMessage = null;
+
+      files.forEach(function (file) {
+        if (selectedPhotos.length >= MAX_REVIEW_IMAGES) {
+          rejectionMessage = "You can add up to " + MAX_REVIEW_IMAGES + " photos.";
+          return;
+        }
+        if (ALLOWED_IMAGE_TYPES.indexOf(file.type) === -1) {
+          rejectionMessage = file.name + ": unsupported file type.";
+          return;
+        }
+        if (file.size > MAX_IMAGE_SIZE_BYTES) {
+          rejectionMessage = file.name + ": file exceeds the 5MB limit.";
+          return;
+        }
+        selectedPhotos.push({ file: file, previewUrl: URL.createObjectURL(file) });
+      });
+
+      renderPhotoPreviews();
+      if (rejectionMessage) {
+        showError(rejectionMessage);
+      }
+    });
+
+    photoPreviewsEl.addEventListener("click", function (event) {
+      var removeBtn = event.target.closest ? event.target.closest("[data-remove-photo-index]") : null;
+      if (!removeBtn) return;
+
+      var index = Number(removeBtn.getAttribute("data-remove-photo-index"));
+      var removed = selectedPhotos.splice(index, 1)[0];
+      if (removed) URL.revokeObjectURL(removed.previewUrl);
+      renderPhotoPreviews();
+    });
+
+    function resetPhotos() {
+      selectedPhotos.forEach(function (item) {
+        URL.revokeObjectURL(item.previewUrl);
+      });
+      selectedPhotos = [];
+      renderPhotoPreviews();
+    }
+
+    function showUploadProgress(percent) {
+      progressEl.removeAttribute("hidden");
+      progressBarEl.style.width = percent + "%";
+    }
+
+    function hideUploadProgress() {
+      progressEl.setAttribute("hidden", "");
+      progressBarEl.style.width = "0%";
+    }
+
     form.addEventListener("submit", function (event) {
       event.preventDefault();
       hideError();
@@ -745,41 +1066,65 @@
 
       submitBtn.disabled = true;
       submitBtn.textContent = "Submitting…";
+      showUploadProgress(0);
 
-      fetch(PROXY_PATH, {
-        method: "POST",
-        headers: { "Content-Type": "application/json", Accept: "application/json" },
-        body: JSON.stringify({
-          productId: context.productId,
-          rating: selectedRating,
-          customerName: customerName,
-          customerEmail: fieldValue("customerEmail"),
-          title: fieldValue("title"),
-          content: content,
-        }),
-      })
-        .then(function (response) {
-          return response.json().then(function (data) {
-            return { ok: response.ok, data: data };
-          });
-        })
-        .then(function (result) {
-          if (!result.ok || !result.data || !result.data.ok) {
-            throw new Error((result.data && result.data.error) || "Unable to submit review.");
-          }
+      var formData = new FormData();
+      formData.append("productId", context.productId);
+      formData.append("rating", String(selectedRating));
+      formData.append("customerName", customerName);
+      formData.append("customerEmail", fieldValue("customerEmail"));
+      formData.append("title", fieldValue("title"));
+      formData.append("content", content);
+      selectedPhotos.forEach(function (item) {
+        formData.append("images", item.file, item.file.name);
+      });
 
-          form.reset();
-          selectedRating = 0;
-          paintStars();
-          successEl.removeAttribute("hidden");
-        })
-        .catch(function (error) {
-          showError(error.message || "Unable to submit review.");
-        })
-        .finally(function () {
-          submitBtn.disabled = false;
-          submitBtn.textContent = "Submit review";
-        });
+      // XMLHttpRequest rather than fetch: fetch has no upload-progress event, and this is
+      // the one submission in the widget large enough (multi-image uploads) to need one.
+      var xhr = new XMLHttpRequest();
+      xhr.open("POST", PROXY_PATH, true);
+      xhr.responseType = "json";
+
+      xhr.upload.addEventListener("progress", function (event) {
+        if (event.lengthComputable) {
+          showUploadProgress(Math.round((event.loaded / event.total) * 100));
+        }
+      });
+
+      xhr.addEventListener("load", function () {
+        hideUploadProgress();
+        submitBtn.disabled = false;
+        submitBtn.textContent = "Submit review";
+
+        var data = xhr.response;
+        if (xhr.status < 200 || xhr.status >= 300 || !data || !data.ok) {
+          showError((data && data.error) || "Unable to submit review.");
+          return;
+        }
+
+        form.reset();
+        selectedRating = 0;
+        paintStars();
+        resetPhotos();
+
+        var message = "Thanks! Your review has been submitted and is awaiting approval.";
+        if (data.media && data.media.failed && data.media.failed.length > 0) {
+          message +=
+            " " + data.media.failed.length + (data.media.failed.length === 1 ? " photo" : " photos") +
+            " could not be uploaded.";
+        }
+        successEl.textContent = message;
+        successEl.removeAttribute("hidden");
+      });
+
+      xhr.addEventListener("error", function () {
+        hideUploadProgress();
+        submitBtn.disabled = false;
+        submitBtn.textContent = "Submit review";
+        showError("Unable to submit review.");
+      });
+
+      xhr.send(formData);
     });
   }
 
@@ -794,6 +1139,7 @@
       // (available on any product template) — the block has no product picker to configure.
       var productId = root.getAttribute("data-product-id");
       var summaryEl = root.querySelector("[data-imagyn-summary]");
+      var galleryEl = root.querySelector("[data-imagyn-gallery]");
       var sortEl = root.querySelector("[data-imagyn-sort]");
       var listEl = root.querySelector("[data-imagyn-list]");
       var writeEl = root.querySelector("[data-imagyn-write]");
@@ -809,7 +1155,7 @@
       if (listEl) {
         var visitorId = getVisitorId();
         var endpoint = PROXY_PATH + "?productId=" + encodeURIComponent(productId);
-        loadList(root, summaryEl, listEl, sortEl, endpoint, themeOverrides, visitorId);
+        loadList(root, summaryEl, galleryEl, listEl, sortEl, endpoint, themeOverrides, visitorId);
       }
 
       if (writeEl) {

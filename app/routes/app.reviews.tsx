@@ -30,6 +30,7 @@ import {
   replyToReview,
   type ReviewWithProduct,
 } from "../services/review.server";
+import { deleteReviewMedia } from "../services/reviewMedia.server";
 import { ReviewStatus } from "../services/review.shared";
 import { getOrCreateStore } from "../services/store.server";
 import { authenticate } from "../shopify.server";
@@ -170,6 +171,17 @@ export const action = async ({ request }: ActionFunctionArgs): Promise<ActionDat
       return { ok: true, intent, message: "Reply deleted." };
     }
 
+    if (intent === "deleteMedia") {
+      const mediaId = String(formData.get("mediaId") || "");
+
+      if (!mediaId) {
+        return { ok: false, error: "Missing media id." };
+      }
+
+      await deleteReviewMedia(mediaId);
+      return { ok: true, intent, message: "Photo deleted." };
+    }
+
     if (intent === "bulkApprove" || intent === "bulkReject" || intent === "bulkDelete") {
       const ids = formData
         .getAll("reviewIds")
@@ -255,6 +267,7 @@ export default function ReviewsPage() {
   const [optimisticDeleted, setOptimisticDeleted] = useState<Record<string, true>>({});
   const [optimisticReply, setOptimisticReply] = useState<Partial<Record<string, string | null>>>({});
   const [optimisticRepliedAt, setOptimisticRepliedAt] = useState<Partial<Record<string, Date | null>>>({});
+  const [optimisticDeletedMediaIds, setOptimisticDeletedMediaIds] = useState<Record<string, true>>({});
 
   useEffect(() => {
     setSearchInput(initialSearch);
@@ -272,6 +285,7 @@ export default function ReviewsPage() {
       setOptimisticDeleted({});
       setOptimisticReply({});
       setOptimisticRepliedAt({});
+      setOptimisticDeletedMediaIds({});
       return;
     }
 
@@ -282,6 +296,7 @@ export default function ReviewsPage() {
     setOptimisticDeleted({});
     setOptimisticReply({});
     setOptimisticRepliedAt({});
+    setOptimisticDeletedMediaIds({});
     if (mutationFetcher.data.intent?.startsWith("reply")) {
       setIsReplyEditing(false);
     }
@@ -411,6 +426,12 @@ export default function ReviewsPage() {
     setOptimisticReply((prev) => ({ ...prev, [reviewId]: null }));
     setOptimisticRepliedAt((prev) => ({ ...prev, [reviewId]: null }));
     submitMutation({ _intent: "replyDelete", reviewId });
+  };
+
+  const deleteMedia = (mediaId: string) => {
+    setMutationError(null);
+    setOptimisticDeletedMediaIds((prev) => ({ ...prev, [mediaId]: true }));
+    submitMutation({ _intent: "deleteMedia", mediaId });
   };
 
   const applyBulkAction = (intent: "bulkApprove" | "bulkReject" | "bulkDelete") => {
@@ -715,10 +736,7 @@ export default function ReviewsPage() {
                         const productName = review.productTitle ?? review.product?.name ?? "Unassigned product";
                         const previewText = review.content.trim() || "No review text captured yet.";
                         const checked = selectedIds.includes(review.id);
-                        const photoCount = (review.photoUrls ?? "")
-                          .split(",")
-                          .map((url) => url.trim())
-                          .filter(Boolean).length;
+                        const photoCount = review.media.length;
 
                         return (
                           <div
@@ -836,22 +854,41 @@ export default function ReviewsPage() {
 
                     <div className={styles.detailSection}>
                       <p className={styles.detailLabel}>Photos</p>
-                      {(selectedReview.photoUrls ?? "").trim() ? (
-                        <div className={styles.photoGrid}>
-                          {selectedReview.photoUrls
-                            ?.split(",")
-                            .map((url) => url.trim())
-                            .filter(Boolean)
-                            .slice(0, 4)
-                            .map((url) => (
-                              <div key={url} className={styles.photoItem}>
-                                <img className={styles.photoImage} src={url} alt="Review attachment" loading="lazy" />
+                      {(() => {
+                        const visibleMedia = selectedReview.media.filter(
+                          (item) => !optimisticDeletedMediaIds[item.id],
+                        );
+
+                        if (visibleMedia.length === 0) {
+                          return <p className={styles.detailPlaceholder}>No photos have been uploaded for this review.</p>;
+                        }
+
+                        return (
+                          <div className={styles.photoGrid}>
+                            {visibleMedia.map((item) => (
+                              <div key={item.id} className={styles.photoItem}>
+                                <a href={item.url} target="_blank" rel="noreferrer" aria-label="View full size">
+                                  <img
+                                    className={styles.photoImage}
+                                    src={item.thumbnailUrl ?? item.url}
+                                    alt="Review attachment"
+                                    loading="lazy"
+                                  />
+                                </a>
+                                <button
+                                  type="button"
+                                  className={styles.photoDeleteButton}
+                                  onClick={() => deleteMedia(item.id)}
+                                  disabled={isMutating}
+                                  aria-label="Delete photo"
+                                >
+                                  ×
+                                </button>
                               </div>
                             ))}
-                        </div>
-                      ) : (
-                        <p className={styles.detailPlaceholder}>No photos have been uploaded for this review.</p>
-                      )}
+                          </div>
+                        );
+                      })()}
                     </div>
 
                     <div className={styles.detailDivider} />
@@ -951,7 +988,6 @@ export default function ReviewsPage() {
                     <div className={styles.detailSection}>
                       <p className={styles.detailLabel}>Coming Soon</p>
                       <div className={styles.comingSoonRow}>
-                        <span className={styles.comingSoonPill}>Media Gallery</span>
                         <span className={styles.comingSoonPill}>Merchant Notes</span>
                         <span className={styles.comingSoonPill}>Internal Tags</span>
                       </div>

@@ -8,6 +8,12 @@ import {
   getVisitorVotes,
   rankByHelpfulness,
 } from "../services/review.server";
+import {
+  MAX_IMAGES_PER_REVIEW,
+  getProductMediaGallery,
+  uploadReviewImages,
+  type ReviewImageFile,
+} from "../services/reviewMedia.server";
 import { getProductForStoreByShopifyId } from "../services/product.server";
 import { getStoreBySlug } from "../services/store.server";
 import { getStorefrontWidgetSettings } from "../services/widget.server";
@@ -45,6 +51,17 @@ export function preflightResponse() {
       "Access-Control-Allow-Headers": "Content-Type",
     },
   });
+}
+
+function serializeMedia(media: { id: string; type: string; url: string; thumbnailUrl: string | null; width: number | null; height: number | null }) {
+  return {
+    id: media.id,
+    type: media.type,
+    url: media.url,
+    thumbnailUrl: media.thumbnailUrl,
+    width: media.width,
+    height: media.height,
+  };
 }
 
 // Public, unauthenticated read for the storefront widget: shop + productId identify the
@@ -85,13 +102,16 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
     return json({ ok: false, error: "Product not found for this shop." }, { status: 404 });
   }
 
-  const [summary, result, widget, aiSummary] = await Promise.all([
+  const [summary, result, widget, aiSummary, gallery] = await Promise.all([
     getPublicReviewSummary(product.id),
     getProductReviews(product.id, { status: ReviewStatus.APPROVED, limit: 50 }),
     getStorefrontWidgetSettings(store.id, product.id),
     // Pure cache read — never triggers generation, so this can never slow down or block a
     // storefront page view. Returns null until a merchant has generated one at least once.
     getAiSummary(product.id),
+    // The aggregated, product-level Media Gallery — every customer photo across this
+    // product's approved reviews, independent of which review page/sort is showing.
+    getProductMediaGallery(product.id),
   ]);
 
   const orderedReviews = sort === "helpful" ? rankByHelpfulness(result.reviews) : result.reviews;
@@ -107,6 +127,14 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
     aiSummary: aiSummary
       ? { summary: aiSummary.summary, recommendation: aiSummary.recommendation }
       : null,
+    gallery: gallery.map((item) => ({
+      id: item.id,
+      reviewId: item.reviewId,
+      url: item.url,
+      thumbnailUrl: item.thumbnailUrl,
+      width: item.width,
+      height: item.height,
+    })),
     reviews: orderedReviews.map((review) => ({
       id: review.id,
       reviewerName: review.reviewerName,
@@ -117,9 +145,28 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
       helpfulCount: review.helpfulCount,
       notHelpfulCount: review.notHelpfulCount,
       myVote: myVotes[review.id] ?? null,
+      media: review.media.map(serializeMedia),
     })),
   });
 };
+
+async function readImageFiles(formData: FormData): Promise<ReviewImageFile[]> {
+  const files: ReviewImageFile[] = [];
+
+  for (const entry of formData.getAll("images")) {
+    if (!(entry instanceof File) || entry.size === 0) {
+      continue;
+    }
+
+    files.push({
+      filename: entry.name || "photo",
+      mimeType: entry.type || "application/octet-stream",
+      buffer: Buffer.from(await entry.arrayBuffer()),
+    });
+  }
+
+  return files.slice(0, MAX_IMAGES_PER_REVIEW);
+}
 
 export const action = async ({ request }: ActionFunctionArgs) => {
   if (isPreflight(request)) {
@@ -132,26 +179,31 @@ export const action = async ({ request }: ActionFunctionArgs) => {
 
   // Throws a 400 Response when the request wasn't genuinely forwarded by Shopify's App
   // Proxy (missing/invalid signature) — this is what actually rejects non-Shopify traffic.
-  await authenticate.public.appProxy(request);
+  // `admin` is only present when a session exists for the shop (always true for an
+  // installed, embedded app), and is what image uploads use to reach Shopify's Files API.
+  const { admin } = await authenticate.public.appProxy(request);
 
   // `shop` comes from the verified, signed query param Shopify's proxy appends — not from
   // the request body, since the body itself isn't covered by the signature.
   const url = new URL(request.url);
   const shop = url.searchParams.get("shop")?.trim() || "";
 
-  let payload: Record<string, unknown>;
+  let formData: FormData;
   try {
-    payload = await request.json();
+    formData = await request.formData();
   } catch {
-    return json({ ok: false, error: "Invalid JSON body." }, { status: 400 });
+    return json({ ok: false, error: "Invalid form submission." }, { status: 400 });
   }
 
-  const productId = typeof payload.productId === "string" ? payload.productId.trim() : "";
-  const rating = Number(payload.rating);
-  const customerName = typeof payload.customerName === "string" ? payload.customerName.trim() : "";
-  const customerEmail = typeof payload.customerEmail === "string" ? payload.customerEmail.trim() : "";
-  const title = typeof payload.title === "string" ? payload.title.trim() : "";
-  const content = typeof payload.content === "string" ? payload.content.trim() : "";
+  const field = (name: string) => String(formData.get(name) ?? "").trim();
+
+  const productId = field("productId");
+  const rating = Number(formData.get("rating"));
+  const customerName = field("customerName");
+  const customerEmail = field("customerEmail");
+  const title = field("title");
+  const content = field("content");
+  const imageFiles = await readImageFiles(formData);
 
   const errors: string[] = [];
   if (!shop) errors.push("Shop is required.");
@@ -188,6 +240,20 @@ export const action = async ({ request }: ActionFunctionArgs) => {
       reviewerEmail: customerEmail || null,
     });
 
+    let media: { uploaded: number; failed: Array<{ filename: string; error: string }> } | null = null;
+
+    if (imageFiles.length > 0) {
+      if (admin) {
+        const result = await uploadReviewImages(review.id, imageFiles, admin);
+        media = { uploaded: result.uploaded.length, failed: result.failed };
+      } else {
+        media = {
+          uploaded: 0,
+          failed: imageFiles.map((file) => ({ filename: file.filename, error: "Uploads are temporarily unavailable." })),
+        };
+      }
+    }
+
     return json(
       {
         ok: true,
@@ -196,6 +262,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
           status: review.status,
           createdAt: review.createdAt,
         },
+        media,
       },
       { status: 201 },
     );

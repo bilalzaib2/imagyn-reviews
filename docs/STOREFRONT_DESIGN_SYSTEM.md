@@ -274,13 +274,17 @@ Product Page
 │   ├── Histogram (5-star distribution bars)
 │   └── AI Summary (short synthesized text, clearly labeled as AI-generated)
 │
+├── Media Gallery (aggregated — every customer photo across this product's approved
+│   reviews, one horizontal strip; renders nothing when there are no photos yet)
+│
 ├── Filters (governs the Review Cards list below it)
 │
 ├── Review Cards (list)
 │   ├── Reviewer name + verified badge
 │   ├── Star rating
 │   ├── Review title + body
-│   ├── Media Gallery (if photos/video attached)
+│   ├── Review Media (that review's own photos, if any — same lightbox as the
+│   │   aggregated Media Gallery above, opened to that review's photos)
 │   └── Helpful voting
 │
 ├── Pagination (governs the Review Cards list)
@@ -330,7 +334,12 @@ The density reference point for the whole system: real content, tight but legibl
 
 ### Media Gallery
 
-Thumbnail row beneath review body text when present; tapping/clicking opens a lightweight lightbox (`--imagyn-radius-lg`, `--imagyn-shadow-md`) rather than navigating away. Lightbox transition uses `--imagyn-duration-slow`. Full keyboard operability required: arrow keys to navigate, Escape to close, focus trapped while open.
+Two renderings of the same underlying photos, sharing one lightbox implementation:
+
+- **Aggregated Media Gallery** — a horizontal strip above the Review Cards list, showing every customer photo across the product's approved reviews (newest first), independent of Filters/Pagination state on the list below it. Renders nothing at all when no photos exist yet — no empty state, no skeleton, matching the Rating Badge's "render nothing" rule (§12), since it never blocks the rest of the page.
+- **Review Media** — a thumbnail row beneath a single review's body text, only its own photos.
+
+Tapping/clicking any thumbnail in either opens the same lightweight lightbox (`--imagyn-radius-lg`, `--imagyn-shadow-md`), scoped to that thumbnail row's own photo set (the aggregated gallery's full set, or just one review's). Lightbox transition uses `--imagyn-duration-slow`. Full keyboard operability required: arrow keys to navigate, Escape to close, focus trapped while open. Native horizontal swipe/scroll is the primary mobile interaction for both the gallery strip and lightbox navigation, per §14.
 
 ### Filters
 

@@ -5,6 +5,8 @@
 {{ 'imagyn-component-empty-state.css' | asset_url | stylesheet_tag }}
 {{ 'imagyn-component-skeleton.css' | asset_url | stylesheet_tag }}
 {{ 'imagyn-component-summary.css' | asset_url | stylesheet_tag }}
+{{ 'imagyn-component-media-gallery.css' | asset_url | stylesheet_tag }}
+{{ 'imagyn-component-lightbox.css' | asset_url | stylesheet_tag }}
 {{ 'reviews-widget.css' | asset_url | stylesheet_tag }}
 
 <div
@@ -26,6 +28,7 @@
   data-show-load-more-button="{{ block.settings.show_load_more_button }}"
 >
   <div data-imagyn-summary></div>
+  <div data-imagyn-gallery></div>
   <div data-imagyn-sort></div>
   <div class="imagyn-reviews__results" data-imagyn-list>
     <p class="imagyn-reviews__loading">Loading reviews…</p>
