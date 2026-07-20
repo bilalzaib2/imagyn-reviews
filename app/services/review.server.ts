@@ -176,6 +176,55 @@ export async function getProductReviews(productId: string, options: ReviewQueryO
   return queryReviews({ productId }, options);
 }
 
+export interface StoreReviewStats {
+  totalReviews: number;
+  publishedReviews: number;
+  pendingReviews: number;
+  averageRating: number;
+  recentReviews: ReviewWithProduct[];
+}
+
+// Store-wide dashboard stats, queried directly off the Review table with the same
+// deletedAt/status scoping every other review query in this file already uses — there is
+// no separate cached counter anywhere (Product.totalReviews/rating*Count are per-product,
+// all-status aggregates written by recalculateProductStats for a different purpose, and
+// were never status-broken-down, so they can't answer "how many are pending" at all).
+// averageRating is computed from APPROVED reviews only, matching what getPublicReviewSummary
+// shows on the storefront — the dashboard's number and the storefront's number are always
+// the same query shape, just aggregated store-wide instead of per-product.
+export async function getStoreReviewStats(storeId: string, options: { recentLimit?: number } = {}): Promise<StoreReviewStats> {
+  const recentLimit = options.recentLimit ?? 5;
+
+  const [totalReviews, statusGroups, approvedAggregate, recentReviews] = await Promise.all([
+    prisma.review.count({ where: { storeId, deletedAt: null } }),
+    prisma.review.groupBy({
+      by: ["status"],
+      where: { storeId, deletedAt: null },
+      _count: { status: true },
+    }),
+    prisma.review.aggregate({
+      where: { storeId, deletedAt: null, status: ReviewStatus.APPROVED },
+      _avg: { rating: true },
+    }),
+    prisma.review.findMany({
+      where: { storeId, deletedAt: null },
+      include: reviewInclude,
+      orderBy: [{ createdAt: "desc" }, { id: "desc" }],
+      take: recentLimit,
+    }),
+  ]);
+
+  const countByStatus = new Map(statusGroups.map((group) => [group.status, group._count.status]));
+
+  return {
+    totalReviews,
+    publishedReviews: countByStatus.get(ReviewStatus.APPROVED) ?? 0,
+    pendingReviews: countByStatus.get(ReviewStatus.PENDING) ?? 0,
+    averageRating: Number((approvedAggregate._avg.rating ?? 0).toFixed(1)),
+    recentReviews,
+  };
+}
+
 export interface PublicReviewSummary {
   averageRating: number;
   totalReviews: number;
