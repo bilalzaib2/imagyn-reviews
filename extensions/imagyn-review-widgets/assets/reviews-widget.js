@@ -409,10 +409,18 @@
     var lastFocusedElement = null;
     var touchStartX = null;
 
+    // A quiet cross-fade between photos rather than an abrupt swap — the loading class is
+    // added right before the src changes (see show()) and removed once the new image has
+    // actually decoded, so the fade-in always reflects real load state, not a fixed timer.
+    imageEl.addEventListener("load", function () {
+      imageEl.classList.remove("imagyn-lightbox__image--loading");
+    });
+
     function show(index) {
       if (items.length === 0) return;
       currentIndex = (index + items.length) % items.length;
       var item = items[currentIndex];
+      imageEl.classList.add("imagyn-lightbox__image--loading");
       imageEl.src = item.url;
       imageEl.alt = item.alt || "Customer photo";
       var multiple = items.length > 1;
@@ -509,6 +517,29 @@
     return sharedLightbox;
   }
 
+  // Single place that turns one ReviewMedia item into a thumbnail button — both the
+  // aggregated Media Gallery and each Review Card's inline photo row call through here,
+  // so adding video support later (item.type is already IMAGE|VIDEO — see the Prisma
+  // schema) only means branching once, right here, rather than in every renderer that
+  // touches media. Today every item is an image, so there's nothing to branch on yet.
+  function renderMediaThumb(item, index, total, itemClass, imageClass) {
+    return (
+      '<button type="button" class="' +
+      itemClass +
+      '" data-media-index="' +
+      index +
+      '" aria-label="View photo ' + (index + 1) + " of " + total + '">' +
+      '<img class="' + imageClass + '" src="' + escapeHtml(item.thumbnailUrl || item.url) + '" alt="" loading="lazy">' +
+      "</button>"
+    );
+  }
+
+  function mediaToLightboxItems(items) {
+    return items.map(function (item) {
+      return { url: item.url, alt: "Customer photo" };
+    });
+  }
+
   // The aggregated, product-level Media Gallery — every customer photo across this
   // product's approved reviews, one horizontal strip above the review list (distinct from
   // each Review Card's own inline photo row, rendered separately in renderList). Renders
@@ -526,15 +557,7 @@
       '<div class="imagyn-media-gallery__track" role="list">' +
       items
         .map(function (item, index) {
-          return (
-            '<button type="button" class="imagyn-media-gallery__item" role="listitem" data-gallery-index="' +
-            index +
-            '" aria-label="View customer photo ' + (index + 1) + " of " + items.length + '">' +
-            '<img class="imagyn-media-gallery__image" src="' +
-            escapeHtml(item.thumbnailUrl || item.url) +
-            '" alt="" loading="lazy">' +
-            "</button>"
-          );
+          return renderMediaThumb(item, index, items.length, "imagyn-media-gallery__item", "imagyn-media-gallery__image");
         })
         .join("") +
       "</div>" +
@@ -542,13 +565,11 @@
 
     galleryEl.innerHTML = html;
 
-    var lightboxItems = items.map(function (item) {
-      return { url: item.url, alt: "Customer photo" };
-    });
+    var lightboxItems = mediaToLightboxItems(items);
 
-    Array.prototype.forEach.call(galleryEl.querySelectorAll("[data-gallery-index]"), function (btn) {
+    Array.prototype.forEach.call(galleryEl.querySelectorAll("[data-media-index]"), function (btn) {
       btn.addEventListener("click", function () {
-        getLightbox().open(lightboxItems, Number(btn.getAttribute("data-gallery-index")), btn);
+        getLightbox().open(lightboxItems, Number(btn.getAttribute("data-media-index")), btn);
       });
     });
   }
@@ -563,19 +584,13 @@
 
     return (
       '<div class="imagyn-review-media">' +
+      '<div class="imagyn-review-media__track">' +
       review.media
         .map(function (item, index) {
-          return (
-            '<button type="button" class="imagyn-review-media__item" data-review-media-index="' +
-            index +
-            '" aria-label="View photo ' + (index + 1) + " of " + review.media.length + '">' +
-            '<img class="imagyn-review-media__image" src="' +
-            escapeHtml(item.thumbnailUrl || item.url) +
-            '" alt="" loading="lazy">' +
-            "</button>"
-          );
+          return renderMediaThumb(item, index, review.media.length, "imagyn-review-media__item", "imagyn-review-media__image");
         })
         .join("") +
+      "</div>" +
       "</div>"
     );
   }
@@ -743,16 +758,13 @@
         return;
       }
 
-      var mediaBtn = event.target.closest ? event.target.closest("[data-review-media-index]") : null;
+      var mediaBtn = event.target.closest ? event.target.closest("[data-media-index]") : null;
       if (mediaBtn) {
         var row = mediaBtn.closest("[data-review-id]");
         var review = row ? findReview(row.getAttribute("data-review-id")) : null;
         if (!review || !review.media) return;
 
-        var lightboxItems = review.media.map(function (item) {
-          return { url: item.url, alt: "Customer photo" };
-        });
-        getLightbox().open(lightboxItems, Number(mediaBtn.getAttribute("data-review-media-index")), mediaBtn);
+        getLightbox().open(mediaToLightboxItems(review.media), Number(mediaBtn.getAttribute("data-media-index")), mediaBtn);
       }
     });
 

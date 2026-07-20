@@ -56,6 +56,14 @@
   width: auto;
   height: auto;
   object-fit: contain;
+  opacity: 1;
+  transition: opacity var(--imagyn-duration-base, 200ms) var(--imagyn-easing, ease-out);
+}
+
+/* Set right before the src changes, cleared on the new image's own load event (see
+   reviews-widget.js) — a quiet cross-fade between photos instead of an abrupt swap. */
+.imagyn-lightbox__image--loading {
+  opacity: 0;
 }
 
 .imagyn-lightbox__close,
@@ -133,7 +141,8 @@
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .imagyn-lightbox-overlay {
+  .imagyn-lightbox-overlay,
+  .imagyn-lightbox__image {
     transition: none;
   }
 }
