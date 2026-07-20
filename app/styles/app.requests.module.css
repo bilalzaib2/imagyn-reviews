@@ -304,9 +304,10 @@
 
 .detailPanel {
   display: grid;
-  gap: var(--space-5);
+  gap: var(--space-4);
   padding: var(--space-5);
   border: 1px solid var(--color-border);
+  border-left: 3px solid var(--color-accent);
   border-radius: var(--radius-lg);
   background: linear-gradient(180deg, var(--color-surface) 0%, rgba(17, 17, 17, 0.015) 100%);
   box-shadow: var(--shadow-sm);
@@ -319,12 +320,10 @@
   gap: var(--space-2);
 }
 
-.detailTopRow {
+.detailStatusRow {
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  gap: var(--space-3);
-  flex-wrap: wrap;
+  gap: var(--space-2);
 }
 
 .detailEyebrow {
@@ -348,24 +347,19 @@
   line-height: 1.7;
 }
 
-.detailActions {
-  display: flex;
-  gap: var(--space-2);
-  flex-wrap: wrap;
-}
-
-.detailList {
-  display: grid;
-  gap: var(--space-3);
+.detailDivider {
+  height: 1px;
   margin: 0;
+  background: var(--color-border);
 }
 
-.detailItem {
+.detailSection {
   display: grid;
   gap: var(--space-1);
 }
 
 .detailLabel {
+  margin: 0;
   font-size: var(--text-xs);
   letter-spacing: 0.16em;
   text-transform: uppercase;
@@ -377,6 +371,29 @@
   font-size: var(--text-sm);
   color: var(--color-text);
   line-height: 1.6;
+}
+
+.detailScheduleGrid {
+  display: grid;
+  gap: var(--space-2);
+}
+
+.detailScheduleItem {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--space-3);
+}
+
+.detailScheduleLabel {
+  font-size: var(--text-xs);
+  color: var(--color-text-muted);
+}
+
+.detailActions {
+  display: flex;
+  gap: var(--space-2);
+  flex-wrap: wrap;
 }
 
 .modalFields {

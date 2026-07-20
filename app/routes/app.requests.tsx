@@ -775,12 +775,69 @@ export default function RequestsPage() {
                   {selectedRequest ? (
                     <aside className={styles.detailPanel} aria-label="Request details">
                       <div className={styles.detailHeader}>
-                        <div className={styles.detailTopRow}>
-                          <p className={styles.detailEyebrow}>Selected request</p>
+                        <p className={styles.detailEyebrow}>Selected request</p>
+                        <div className={styles.detailStatusRow}>
                           <RequestStatusBadge status={selectedRequest.status} />
                         </div>
                         <h2 className={styles.detailTitle}>{selectedRequest.name ?? "Unnamed customer"}</h2>
                       </div>
+
+                      <div className={styles.detailDivider} />
+
+                      <div className={styles.detailSection}>
+                        <p className={styles.detailLabel}>Customer</p>
+                        <p className={styles.detailValue}>{selectedRequest.name ?? "Unnamed customer"}</p>
+                      </div>
+
+                      <div className={styles.detailDivider} />
+
+                      <div className={styles.detailSection}>
+                        <p className={styles.detailLabel}>Product</p>
+                        <p className={styles.detailValue}>{selectedRequest.product?.name ?? "General request"}</p>
+                      </div>
+
+                      <div className={styles.detailDivider} />
+
+                      <div className={styles.detailSection}>
+                        <p className={styles.detailLabel}>Order</p>
+                        <p className={styles.detailValue}>{selectedRequest.orderNumber ?? "-"}</p>
+                      </div>
+
+                      <div className={styles.detailDivider} />
+
+                      <div className={styles.detailSection}>
+                        <p className={styles.detailLabel}>Email</p>
+                        <p className={styles.detailValue}>{selectedRequest.email ?? "No email"}</p>
+                      </div>
+
+                      <div className={styles.detailDivider} />
+
+                      <div className={styles.detailSection}>
+                        <p className={styles.detailLabel}>Schedule</p>
+                        <div className={styles.detailScheduleGrid}>
+                          <div className={styles.detailScheduleItem}>
+                            <span className={styles.detailScheduleLabel}>Scheduled</span>
+                            <span className={styles.detailValue}>{formatDateTime(selectedRequest.scheduledFor)}</span>
+                          </div>
+                          <div className={styles.detailScheduleItem}>
+                            <span className={styles.detailScheduleLabel}>Sent</span>
+                            <span className={styles.detailValue}>{formatDateTime(selectedRequest.sentAt)}</span>
+                          </div>
+                          <div className={styles.detailScheduleItem}>
+                            <span className={styles.detailScheduleLabel}>Created</span>
+                            <span className={styles.detailValue}>{formatDateTime(selectedRequest.createdAt)}</span>
+                          </div>
+                        </div>
+                      </div>
+
+                      <div className={styles.detailDivider} />
+
+                      <div className={styles.detailSection}>
+                        <p className={styles.detailLabel}>Custom Message</p>
+                        <p className={styles.detailValue}>{selectedRequest.customMessage || "No custom message"}</p>
+                      </div>
+
+                      <div className={styles.detailDivider} />
 
                       <div className={styles.detailActions}>
                         <ButtonGroup>
@@ -801,37 +858,6 @@ export default function RequestsPage() {
                           </PolarisButton>
                         </ButtonGroup>
                       </div>
-
-                      <dl className={styles.detailList}>
-                        <div className={styles.detailItem}>
-                          <dt className={styles.detailLabel}>Product</dt>
-                          <dd className={styles.detailValue}>{selectedRequest.product?.name ?? "General request"}</dd>
-                        </div>
-                        <div className={styles.detailItem}>
-                          <dt className={styles.detailLabel}>Order Number</dt>
-                          <dd className={styles.detailValue}>{selectedRequest.orderNumber ?? "-"}</dd>
-                        </div>
-                        <div className={styles.detailItem}>
-                          <dt className={styles.detailLabel}>Email</dt>
-                          <dd className={styles.detailValue}>{selectedRequest.email ?? "No email"}</dd>
-                        </div>
-                        <div className={styles.detailItem}>
-                          <dt className={styles.detailLabel}>Scheduled Date</dt>
-                          <dd className={styles.detailValue}>{formatDateTime(selectedRequest.scheduledFor)}</dd>
-                        </div>
-                        <div className={styles.detailItem}>
-                          <dt className={styles.detailLabel}>Sent Date</dt>
-                          <dd className={styles.detailValue}>{formatDateTime(selectedRequest.sentAt)}</dd>
-                        </div>
-                        <div className={styles.detailItem}>
-                          <dt className={styles.detailLabel}>Created Date</dt>
-                          <dd className={styles.detailValue}>{formatDateTime(selectedRequest.createdAt)}</dd>
-                        </div>
-                        <div className={styles.detailItem}>
-                          <dt className={styles.detailLabel}>Custom Message</dt>
-                          <dd className={styles.detailValue}>{selectedRequest.customMessage || "No custom message"}</dd>
-                        </div>
-                      </dl>
                     </aside>
                   ) : null}
                 </>
