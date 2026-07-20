@@ -64,3 +64,26 @@
   outline: 2px solid var(--imagyn-color-focus, #2563eb);
   outline-offset: 2px;
 }
+
+/* Skeleton-to-content transition — the one animation-on-resolve the system allows
+   (STOREFRONT_DESIGN_SYSTEM.md §10): a quiet cross-fade when real content replaces a
+   skeleton, never a slide or scale. Apply to the root element of whatever replaces the
+   skeleton (populated or empty state alike). */
+@keyframes imagyn-fade-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+.imagyn-fade-in {
+  animation: imagyn-fade-in var(--imagyn-duration-base, 200ms) var(--imagyn-easing, ease-out);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .imagyn-fade-in {
+    animation: none;
+  }
+}

@@ -157,6 +157,9 @@
       "</div>";
   }
 
+  // Bars render at 0% and are animated to their target width right after insertion (see
+  // animateHistogramFills) — this is the "skeleton-to-content" motion exception
+  // STOREFRONT_DESIGN_SYSTEM.md §10 sanctions, not an on-load animation of its own.
   function renderHistogram(ratingCounts, totalReviews) {
     var maxCount = 0;
     for (var star = 1; star <= 5; star++) {
@@ -172,7 +175,8 @@
         '<div class="imagyn-histogram__row">' +
         '<span class="imagyn-histogram__label" aria-hidden="true">' + value + "</span>" +
         '<span class="imagyn-histogram__track">' +
-        '<span class="imagyn-histogram__fill" aria-hidden="true" style="--imagyn-histogram-fill: ' + fillPercent + '%"></span>' +
+        '<span class="imagyn-histogram__fill" aria-hidden="true" data-target-fill="' + fillPercent +
+        '" style="--imagyn-histogram-fill: 0%"></span>' +
         "</span>" +
         '<span class="imagyn-histogram__count" aria-hidden="true">' + count + "</span>" +
         '<span class="imagyn-visually-hidden">' +
@@ -182,6 +186,24 @@
     }
 
     return '<div class="imagyn-histogram">' + rows + "</div>";
+  }
+
+  // Double rAF: setting the CSS variable in the same frame the element is inserted lets
+  // the browser coalesce both styles into one paint, silently skipping the transition.
+  // Waiting a frame guarantees the 0% state has actually painted before the target value
+  // is applied. No-op under prefers-reduced-motion — the transition itself is disabled
+  // via CSS there, so this just jumps straight to the final width instead of animating.
+  function animateHistogramFills(summaryEl) {
+    var fills = summaryEl.querySelectorAll("[data-target-fill]");
+    if (fills.length === 0) return;
+
+    requestAnimationFrame(function () {
+      requestAnimationFrame(function () {
+        for (var i = 0; i < fills.length; i++) {
+          fills[i].style.setProperty("--imagyn-histogram-fill", fills[i].getAttribute("data-target-fill") + "%");
+        }
+      });
+    });
   }
 
   function renderSummary(summaryEl, summary, s) {
@@ -194,7 +216,7 @@
 
     if (totalReviews === 0) {
       summaryEl.innerHTML =
-        '<p class="imagyn-empty-state">No reviews yet — be the first to share your experience.</p>';
+        '<p class="imagyn-empty-state imagyn-fade-in">No reviews yet — be the first to share your experience.</p>';
       return;
     }
 
@@ -207,7 +229,7 @@
       totalReviews + (totalReviews === 1 ? " review" : " reviews") + ". " +
       recommendPercent + "% of customers recommend this product.";
 
-    var html = '<div class="imagyn-summary">';
+    var html = '<div class="imagyn-summary imagyn-fade-in">';
     html += '<span class="imagyn-visually-hidden">' + escapeHtml(srSummary) + "</span>";
     html += '<div class="imagyn-summary__hero" aria-hidden="true">';
     html += '<div class="imagyn-summary__headline">';
@@ -234,6 +256,7 @@
     html += "</div>"; // summary
 
     summaryEl.innerHTML = html;
+    animateHistogramFills(summaryEl);
   }
 
   function renderList(listEl, data, s, visibleCount, onLoadMore) {

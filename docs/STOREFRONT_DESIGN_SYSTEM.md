@@ -204,7 +204,8 @@ Motion communicates state change. It never exists to be noticed on its own.
 Rules:
 
 - One easing curve for the whole system. Do not introduce a second curve for a "special" component.
-- No animation on page load. Components should appear in their resolved state, not animate into existence, with the sole exception of skeleton-to-content transitions (§11), which cross-fade rather than slide or scale.
+- No animation on page load. Components should appear in their resolved state, not animate into existence, with the sole exception of skeleton-to-content transitions (§11), which cross-fade rather than slide or scale — implemented once, as the reusable `.imagyn-fade-in` utility, rather than per component. Review Summary's histogram bars growing from 0 to their target width the moment real content replaces the skeleton is part of this same exception, not a separate on-load animation.
+- Hover feedback on a non-interactive element (e.g. a Histogram row) is allowed as a purely decorative, mouse-only cue — it must never imply an affordance that isn't there (no cursor change beyond default, no new focus/keyboard behavior, no ARIA role). The moment an element gains real interactivity (e.g. Histogram rows becoming rating-filter shortcuts), it inherits the Filters component's full hover/focus/keyboard treatment instead of this decorative-only one.
 - Always respect `prefers-reduced-motion: reduce` — every transition in this system must have a reduced-motion variant that either removes the animation entirely or reduces it to an instant state change. This is not optional per component; it is enforced at the token level so no component can ship without it.
 - Loading spinners are a last resort, not a default. See §11.
 

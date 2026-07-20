@@ -1,11 +1,9 @@
 /*
- * Imagyn Reviews — histogram component (reserved).
+ * Imagyn Reviews — histogram component.
  *
  * Five horizontal bars (5-star to 1-star): label + bar + count. Per
  * STOREFRONT_DESIGN_SYSTEM.md §16, bars are proportional to the largest count, not a
- * fixed 100% scale. Not yet wired into any block — Review Summary currently ships
- * without a distribution chart; this file exists so that feature has a defined home
- * when it's built, consuming imagyn-tokens.css like every other component.
+ * fixed 100% scale. Wired into Review Summary (reviews-widget.js renderHistogram).
  *
  * Load imagyn-tokens.css before this file.
  */
@@ -22,6 +20,17 @@
   grid-template-columns: 2.5em 1fr 2.5em;
   align-items: center;
   gap: var(--imagyn-space-xs, 0.4em);
+  padding: var(--imagyn-space-3xs, 0.2em) var(--imagyn-space-2xs, 0.3em);
+  margin: 0 calc(var(--imagyn-space-2xs, 0.3em) * -1);
+  border-radius: var(--imagyn-radius-sm, 4px);
+  transition: background-color var(--imagyn-duration-fast, 120ms) var(--imagyn-easing, ease-out);
+}
+
+/* Decorative only — the row has no click handler or focus behavior (rating-filter
+   interactivity is reserved for a later phase per §16). Mouse-only feedback never
+   implies affordance to keyboard/assistive-tech users. */
+.imagyn-histogram__row:hover {
+  background: var(--imagyn-color-border, rgba(0, 0, 0, 0.08));
 }
 
 .imagyn-histogram__label {
@@ -50,7 +59,8 @@
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .imagyn-histogram__fill {
+  .imagyn-histogram__fill,
+  .imagyn-histogram__row {
     transition: none;
   }
 }
