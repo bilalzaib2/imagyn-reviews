@@ -266,31 +266,49 @@ How these components relate to one another, top to bottom, on a product page:
 
 ```
 Product Page
-├── Rating Badge (beside/near the product title — compact, single-line trust signal)
+├── Rating Badge (above the product title — compact, single-line trust signal:
+│   stars, average, count, and a Write a Review trigger)
 │
-├── Review Summary (further down the page, its own section)
-│   ├── Average rating (large numeral, --imagyn-font-size-lg, semibold)
-│   ├── Review count
-│   ├── Histogram (5-star distribution bars)
-│   └── AI Summary (short synthesized text, clearly labeled as AI-generated)
-│
-├── Media Gallery (aggregated — every customer photo across this product's approved
-│   reviews, one horizontal strip; renders nothing when there are no photos yet)
-│
-├── Filters (governs the Review Cards list below it)
-│
-├── Review Cards (list)
-│   ├── Reviewer name + verified badge
-│   ├── Star rating
-│   ├── Review title + body
-│   ├── Review Media (that review's own photos, if any — same lightbox as the
-│   │   aggregated Media Gallery above, opened to that review's photos)
-│   └── Helpful voting
-│
-├── Pagination (governs the Review Cards list)
-│
-└── Write Review Modal (triggered from Rating Badge, Review Summary, or a persistent CTA — not a separate page)
+└── Ratings & Reviews (dedicated full-width section, below the entire product info
+    — see "Full-width section relocation" below for how it gets there)
+    ├── 1. Section heading ("Ratings & Reviews", merchant-editable)
+    ├── 2. Overall rating (large numeral, --imagyn-font-size-xl, semibold + count)
+    ├── 3. Rating distribution (Histogram — 5-star bars)
+    ├── 4. Recommendation percentage
+    ├── 5. AI Summary (short synthesized text, clearly labeled as AI-generated)
+    ├── 6. Attribute ratings (reserved seam — no data model yet; renders nothing
+    │      today rather than a "Coming soon" placeholder, per §12)
+    ├── 7. Media Gallery (aggregated — every customer photo across this product's
+    │      approved reviews, one horizontal strip; renders nothing when empty)
+    ├── 8. Filters & Sorting (Sort exists today; chip-based Filters — see below —
+    │      remain a documented future component, not yet built)
+    ├── 9. Review Cards (list)
+    │   ├── Reviewer name + verified badge
+    │   ├── Star rating
+    │   ├── Review title + body
+    │   ├── Review Media (that review's own photos, if any — same lightbox as the
+    │   │   aggregated Media Gallery above, opened to that review's photos)
+    │   └── Helpful voting
+    ├── Pagination (governs the Review Cards list)
+    └── Write Review Modal (triggered from the Rating Badge above the title, or
+        this section's own Write a Review trigger beside the rating — both control
+        the same form and stay in sync; not a separate page)
 ```
+
+### Full-width section relocation
+
+A Shopify app block can only be inserted into whatever section a merchant drops it into —
+there's no way for an app to register an independent top-level section. Dawn (and most
+Online Store 2.0 themes) render the buy box in a narrow, often `position: sticky` info
+column, which is wrong for a long-form reviews section. `reviews-widget.js`'s
+`relocateRatingsSection()` works around this at runtime, synchronously on init (before first
+paint, so there's no visible flash): every Shopify section, on any OS 2.0 theme, is wrapped
+by the platform itself in an element whose `id` starts with `shopify-section-`. The Ratings &
+Reviews wrapper walks up to the nearest such ancestor and reinserts itself as that ancestor's
+next sibling, putting the section at the top level of the page — full width, below the entire
+product info — with no merchant action beyond the block placement they've already done. If no
+such ancestor exists (a non-standard theme), the section simply stays where the merchant
+placed it and still works, just narrower.
 
 Elsewhere on the storefront, independent of a single product page:
 

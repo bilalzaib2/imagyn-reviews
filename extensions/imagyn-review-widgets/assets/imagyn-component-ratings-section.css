@@ -1,0 +1,69 @@
+/*
+ * Imagyn Reviews — Ratings & Reviews section container.
+ *
+ * The outer full-width wrapper the whole review experience lives in once
+ * reviews-widget.js's relocateRatingsSection() moves it out of the (often narrow,
+ * position:sticky) product info column and reinserts it as a top-level section, below the
+ * entire product hero, matching a premium PDP's dedicated reviews section rather than a
+ * buy-box afterthought.
+ *
+ * Deliberately uses its own max-width/padding here rather than a merchant theme's content
+ * container class (e.g. Dawn's .page-width) — per STOREFRONT_DESIGN_SYSTEM.md's
+ * "must look correct in isolation" rule, nothing in this system may assume a particular
+ * theme convention exists.
+ *
+ * Load imagyn-tokens.css before this file.
+ */
+
+.imagyn-ratings-section {
+  padding-block: var(--imagyn-space-px-xl, 40px);
+  font-family: var(--imagyn-font-family);
+  color: var(--imagyn-color-text, inherit);
+}
+
+.imagyn-ratings-section__inner {
+  max-width: 1200px;
+  margin-inline: auto;
+  padding-inline: var(--imagyn-space-px-lg, 24px);
+}
+
+.imagyn-ratings-section__heading {
+  margin: 0 0 var(--imagyn-space-px-lg, 24px);
+  font-size: var(--imagyn-font-size-lg, 20px);
+  font-weight: var(--imagyn-font-weight-semibold, 600);
+  letter-spacing: var(--imagyn-letter-spacing-tight, 0.01em);
+}
+
+/* Shared quiet eyebrow label used above named sub-sections (Customer Photos, Filters &
+   Sorting) — one rule, several call sites, so the label treatment can't drift between them. */
+.imagyn-ratings-section__label {
+  margin: 0 0 var(--imagyn-space-sm, 0.6em);
+  font-size: var(--imagyn-font-size-xs, 12px);
+  font-weight: var(--imagyn-font-weight-semibold, 600);
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--imagyn-color-text, inherit);
+  opacity: var(--imagyn-color-text-muted-opacity, 0.6);
+}
+
+/* Subtle dividers between the section's major groups — deliberately not placed between
+   every individual stat (rating / distribution / recommendation stay one visual cluster),
+   only between the larger conceptual groups in the hierarchy. Applied directly to the
+   conditionally-rendered content classes themselves (not the always-present wrapper divs),
+   so a divider never appears above an empty section. */
+.imagyn-media-gallery,
+.imagyn-reviews__filters-row {
+  margin-top: var(--imagyn-space-px-lg, 24px);
+  padding-top: var(--imagyn-space-px-lg, 24px);
+  border-top: var(--imagyn-border-width, 1px) solid var(--imagyn-color-border, rgba(0, 0, 0, 0.08));
+}
+
+@media (max-width: 640px) {
+  .imagyn-ratings-section {
+    padding-block: var(--imagyn-space-px-lg, 24px);
+  }
+
+  .imagyn-ratings-section__inner {
+    padding-inline: var(--imagyn-space-px-md, 16px);
+  }
+}

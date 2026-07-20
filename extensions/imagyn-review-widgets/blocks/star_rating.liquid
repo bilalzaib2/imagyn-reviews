@@ -7,33 +7,48 @@
 {{ 'imagyn-component-summary.css' | asset_url | stylesheet_tag }}
 {{ 'imagyn-component-media-gallery.css' | asset_url | stylesheet_tag }}
 {{ 'imagyn-component-lightbox.css' | asset_url | stylesheet_tag }}
+{{ 'imagyn-component-ratings-section.css' | asset_url | stylesheet_tag }}
 {{ 'reviews-widget.css' | asset_url | stylesheet_tag }}
 
-<div
-  class="imagyn-reviews"
-  data-imagyn-reviews
-  data-product-id="{{ product.id }}"
-  data-show-average-rating="{{ block.settings.show_average_rating }}"
-  data-show-review-count="{{ block.settings.show_review_count }}"
-  data-show-write-review-button="{{ block.settings.show_write_review_button }}"
-  data-reviews-per-page="{{ block.settings.reviews_per_page }}"
-  data-star-color="{{ block.settings.star_color }}"
-  data-button-color="{{ block.settings.button_color }}"
-  data-background-color="{{ block.settings.background_color }}"
-  data-border-color="{{ block.settings.border_color }}"
-  data-border-radius="{{ block.settings.border_radius }}"
-  data-heading-font-size="{{ block.settings.heading_size }}"
-  data-body-font-size="{{ block.settings.body_size }}"
-  data-layout="{{ block.settings.layout }}"
-  data-show-load-more-button="{{ block.settings.show_load_more_button }}"
->
-  <div data-imagyn-summary></div>
-  <div data-imagyn-gallery></div>
-  <div data-imagyn-sort></div>
-  <div class="imagyn-reviews__results" data-imagyn-list>
-    <p class="imagyn-reviews__loading">Loading reviews…</p>
+{% comment %}
+  Rendered here (inside the product info column) only until reviews-widget.js's init()
+  relocates the whole .imagyn-ratings-section node to sit as a sibling after the enclosing
+  Shopify section — see the "Full-width section relocation" note in
+  docs/STOREFRONT_DESIGN_SYSTEM.md. If that relocation can't find a suitable ancestor (a
+  non-standard theme), this stays right here and still works, just narrower.
+{% endcomment %}
+<div class="imagyn-ratings-section" data-imagyn-ratings-section>
+  <div class="imagyn-ratings-section__inner">
+    <h2 class="imagyn-ratings-section__heading">{{ block.settings.section_heading | default: "Ratings & Reviews" }}</h2>
+
+    <div
+      class="imagyn-reviews"
+      data-imagyn-reviews
+      data-product-id="{{ product.id }}"
+      data-show-average-rating="{{ block.settings.show_average_rating }}"
+      data-show-review-count="{{ block.settings.show_review_count }}"
+      data-show-write-review-button="{{ block.settings.show_write_review_button }}"
+      data-reviews-per-page="{{ block.settings.reviews_per_page }}"
+      data-star-color="{{ block.settings.star_color }}"
+      data-button-color="{{ block.settings.button_color }}"
+      data-background-color="{{ block.settings.background_color }}"
+      data-border-color="{{ block.settings.border_color }}"
+      data-border-radius="{{ block.settings.border_radius }}"
+      data-heading-font-size="{{ block.settings.heading_size }}"
+      data-body-font-size="{{ block.settings.body_size }}"
+      data-layout="{{ block.settings.layout }}"
+      data-show-load-more-button="{{ block.settings.show_load_more_button }}"
+    >
+      <div data-imagyn-summary></div>
+      <div data-imagyn-attributes></div>
+      <div data-imagyn-gallery></div>
+      <div data-imagyn-sort></div>
+      <div class="imagyn-reviews__results" data-imagyn-list>
+        <p class="imagyn-reviews__loading">Loading reviews…</p>
+      </div>
+      <div class="imagyn-reviews__write" data-imagyn-write></div>
+    </div>
   </div>
-  <div class="imagyn-reviews__write" data-imagyn-write></div>
 </div>
 
 {{ 'reviews-widget.js' | asset_url | script_tag }}
@@ -44,6 +59,7 @@
   "target": "section",
   "settings": [
     { "type": "header", "content": "Display" },
+    { "type": "text", "id": "section_heading", "label": "Section heading", "default": "Ratings & Reviews" },
     { "type": "checkbox", "id": "show_average_rating", "label": "Show average rating", "default": true },
     { "type": "checkbox", "id": "show_review_count", "label": "Show review count", "default": true },
     { "type": "checkbox", "id": "show_write_review_button", "label": "Show write review button", "default": true },

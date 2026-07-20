@@ -244,11 +244,17 @@
   transition: width 150ms ease-out;
 }
 
+/* Wraps the "Filters & Sorting" label (.imagyn-ratings-section__label) above the Sort
+   control itself — see renderSortControl. A plain block stack; the label rule provides its
+   own bottom margin. */
+.imagyn-reviews__filters-row {
+  margin-bottom: var(--imagyn-space-px-md, 16px);
+}
+
 .imagyn-reviews__sort {
   display: flex;
   align-items: center;
   gap: var(--imagyn-space-2xs, 0.3em);
-  margin-bottom: var(--imagyn-space-px-md, 16px);
   font-size: var(--imagyn-font-size-sm, 13px);
 }
 

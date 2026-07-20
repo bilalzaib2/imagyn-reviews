@@ -12,21 +12,13 @@
  * lightbox (imagyn-component-lightbox.css / reviews-widget.js), so their thumbnail buttons
  * share one visual treatment.
  *
- * Load imagyn-tokens.css before this file.
+ * Load imagyn-tokens.css before this file. The heading above the gallery uses the shared
+ * .imagyn-ratings-section__label rule (imagyn-component-ratings-section.css), not a
+ * gallery-specific class — reused by other named sub-sections too.
  */
 
 .imagyn-media-gallery {
   margin-bottom: var(--imagyn-space-px-lg, 24px);
-}
-
-.imagyn-media-gallery__heading {
-  margin: 0 0 var(--imagyn-space-sm, 0.6em);
-  font-size: var(--imagyn-font-size-xs, 12px);
-  font-weight: var(--imagyn-font-weight-semibold, 600);
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
-  color: var(--imagyn-color-text, inherit);
-  opacity: var(--imagyn-color-text-muted-opacity, 0.6);
 }
 
 .imagyn-media-gallery__track,

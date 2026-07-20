@@ -305,8 +305,17 @@
     if (hasEmptyState) {
       html += '<p class="imagyn-empty-state">No reviews yet — be the first to share your experience.</p>';
     } else if (showStats) {
-      html += '<div class="imagyn-summary__hero" aria-hidden="true">';
-      html += '<div class="imagyn-summary__headline">';
+      // One cohesive "stats cluster" — overall rating, then the distribution that explains
+      // it, then the recommendation stat derived from it — sharing a tight internal rhythm
+      // (.imagyn-summary__hero's own gap), distinct from the more generous gap .imagyn-summary
+      // uses to separate this whole cluster from AI Summary/Customer Photos/etc.
+      //
+      // aria-hidden goes on the headline and recommend line individually (both fully
+      // redundant with the sr-only summary sentence above), NOT on the hero wrapper itself
+      // — the Histogram in between has its own real per-star sr-only text (see
+      // renderHistogram) that a wrapper-level aria-hidden would silence.
+      html += '<div class="imagyn-summary__hero">';
+      html += '<div class="imagyn-summary__headline" aria-hidden="true">';
 
       if (s.showAverageRating !== false) {
         html += '<span class="imagyn-summary__rating">' + averageRating.toFixed(1) + "</span>";
@@ -320,10 +329,12 @@
       }
       html += "</div>"; // headline
 
-      html += '<p class="imagyn-summary__recommend">' + recommendPercent + "% of customers recommend this product</p>";
-      html += "</div>"; // hero
-
       html += renderHistogram(ratingCounts, totalReviews);
+
+      html +=
+        '<p class="imagyn-summary__recommend" aria-hidden="true">' +
+        recommendPercent + "% of customers recommend this product</p>";
+      html += "</div>"; // hero
     }
 
     // Cache-only: aiSummary is whatever the reviews endpoint already had stored (see
@@ -553,7 +564,7 @@
 
     var html =
       '<div class="imagyn-media-gallery">' +
-      '<p class="imagyn-media-gallery__heading">Customer photos</p>' +
+      '<p class="imagyn-ratings-section__label">Customer photos</p>' +
       '<div class="imagyn-media-gallery__track" role="list">' +
       items
         .map(function (item, index) {
@@ -722,15 +733,22 @@
       });
   }
 
+  // "Filters & Sorting" in the section hierarchy — chip-based Filters aren't built yet
+  // anywhere in this app (per STOREFRONT_DESIGN_SYSTEM.md, still a documented future
+  // component), so this is Sorting alone today; the wrapper and heading stay so Filters can
+  // land here later without moving anything else.
   function renderSortControl(sortEl, currentSort, onChange) {
     sortEl.innerHTML =
+      '<div class="imagyn-reviews__filters-row">' +
+      '<p class="imagyn-ratings-section__label">Filters &amp; Sorting</p>' +
       '<label class="imagyn-reviews__sort">' +
       '<span class="imagyn-reviews__sort-label">Sort by</span>' +
       '<select class="imagyn-reviews__sort-select" data-imagyn-sort-select>' +
       '<option value="recent"' + (currentSort === "recent" ? " selected" : "") + ">Most Recent</option>" +
       '<option value="helpful"' + (currentSort === "helpful" ? " selected" : "") + ">Most Helpful</option>" +
       "</select>" +
-      "</label>";
+      "</label>" +
+      "</div>";
 
     sortEl.querySelector("[data-imagyn-sort-select]").addEventListener("change", function (event) {
       onChange(event.target.value);
@@ -1152,22 +1170,58 @@
     });
   }
 
+  // Shopify app blocks can only be inserted into whatever section a merchant drops them
+  // into — there's no way for an app to register a new top-level section a merchant places
+  // independently. This section needs to be full-width, below the entire product info (not
+  // squeezed into a theme's narrow, often position:sticky info column), so instead it
+  // relocates itself once: every Shopify section, on any Online Store 2.0 theme, is wrapped
+  // by the platform in an element whose id starts with "shopify-section-" — walking up to
+  // the nearest one and reinserting right after it puts this section at the top level of the
+  // page, wherever the merchant originally placed the block. Runs synchronously before first
+  // paint, so there's no visible flash. If no such ancestor exists (a non-standard theme),
+  // the section just stays where the merchant placed it and still works, only narrower.
+  function relocateRatingsSection(root) {
+    var section = root.closest("[data-imagyn-ratings-section]");
+    if (!section || section.hasAttribute("data-imagyn-relocated")) return;
+    section.setAttribute("data-imagyn-relocated", "true");
+
+    var anchor = section.closest('[id^="shopify-section-"]');
+    if (!anchor) return;
+
+    anchor.insertAdjacentElement("afterend", section);
+  }
+
+  // Reserved seam for per-attribute ratings (e.g. "Quality 4.8", "Comfort 4.5") — no such
+  // data exists yet (no schema, no review-form fields), so this intentionally renders
+  // nothing, matching this widget's "render nothing until there's real content" rule rather
+  // than showing shoppers a "Coming soon" placeholder. When that data exists, it renders
+  // into this element, in this position in the hierarchy (between AI Summary and Customer
+  // Photos), without moving anything else.
+  function renderAttributeRatings(attributesEl) {
+    if (!attributesEl) return;
+    attributesEl.innerHTML = "";
+  }
+
   // Scoped to `scope` so the Theme Editor's section re-render (see below) only
   // (re-)initializes the block instance that actually changed, not every one on the page.
   // The data-imagyn-initialized guard stops a block from being wired up twice.
   function init(scope) {
     (scope || document).querySelectorAll("[data-imagyn-reviews]:not([data-imagyn-initialized])").forEach(function (root) {
       root.setAttribute("data-imagyn-initialized", "true");
+      relocateRatingsSection(root);
 
       // The product is detected automatically from Shopify's own `product` Liquid object
       // (available on any product template) — the block has no product picker to configure.
       var productId = root.getAttribute("data-product-id");
       var summaryEl = root.querySelector("[data-imagyn-summary]");
+      var attributesEl = root.querySelector("[data-imagyn-attributes]");
       var galleryEl = root.querySelector("[data-imagyn-gallery]");
       var sortEl = root.querySelector("[data-imagyn-sort]");
       var listEl = root.querySelector("[data-imagyn-list]");
       var writeEl = root.querySelector("[data-imagyn-write]");
       var themeOverrides = readThemeOverrides(root);
+
+      renderAttributeRatings(attributesEl);
 
       if (!productId) {
         if (listEl) {
