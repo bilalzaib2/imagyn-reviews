@@ -64,7 +64,24 @@
         return;
       }
 
-      var heading = card.querySelector(".card__heading");
+      // Dawn renders .card__heading TWICE per card (a hidden alternate-layout copy plus the
+      // real, visible one) — querySelector() alone returns whichever comes first in DOM
+      // order, which is the hidden one on this theme, so the badge was landing in a
+      // display:none subtree (confirmed live: rect 0x0, computed display:none on its
+      // .card__information ancestor). Picking the one with a non-null offsetParent selects
+      // the actually-rendered heading instead.
+      var headingCandidates = card.querySelectorAll(".card__heading");
+      var heading = null;
+      for (var h = 0; h < headingCandidates.length; h++) {
+        if (headingCandidates[h].offsetParent !== null) {
+          heading = headingCandidates[h];
+          break;
+        }
+      }
+      if (!heading && headingCandidates.length > 0) {
+        heading = headingCandidates[0];
+      }
+
       var link = heading ? heading.querySelector("a[href]") : card.querySelector('a.full-unstyled-link[href*="/products/"]');
       var handle = extractHandleFromHref(link ? link.getAttribute("href") : null);
 
@@ -88,20 +105,36 @@
   function injectBadge(entry, summary) {
     entry.card.setAttribute(PROCESSED_ATTR, "true");
 
+    log("[" + entry.handle + "] rating object:", summary);
+
     if (!summary || summary.totalReviews === 0) {
       return false;
     }
+
+    var generatedHtml =
+      '<span class="imagyn-card-badge__stars" aria-hidden="true">' + renderStars(summary.averageRating) + "</span>" +
+      '<span class="imagyn-card-badge__count">(' + summary.totalReviews + ")</span>";
+    log("[" + entry.handle + "] generated HTML:", generatedHtml);
 
     var badge = document.createElement("span");
     badge.className = "imagyn-card-badge";
     if (starColor) badge.style.setProperty("--imagyn-card-badge-star-color", starColor);
     if (textColor) badge.style.setProperty("--imagyn-card-badge-text-color", textColor);
-    badge.innerHTML =
-      '<span class="imagyn-card-badge__stars" aria-hidden="true">' + renderStars(summary.averageRating) + "</span>" +
-      '<span class="imagyn-card-badge__count">(' + summary.totalReviews + ")</span>";
+    badge.innerHTML = generatedHtml;
+    log("[" + entry.handle + "] badge.innerHTML before insertion:", badge.innerHTML);
 
-    // Beneath the title, always: inserted as the next sibling of the <h3 class="card__heading">.
+    // Beneath the title, always: inserted as the next sibling of the visible <h3
+    // class="card__heading"> (see findCards — Dawn renders this heading twice per card).
     entry.heading.parentElement.insertBefore(badge, entry.heading.nextSibling);
+    log("[" + entry.handle + "] badge.outerHTML after insertion:", badge.outerHTML);
+    log(
+      "[" + entry.handle + "] badge rect after insertion:",
+      (function () {
+        var r = badge.getBoundingClientRect();
+        return { width: r.width, height: r.height };
+      })(),
+    );
+
     return true;
   }
 
