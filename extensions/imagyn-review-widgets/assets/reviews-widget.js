@@ -130,28 +130,34 @@
     root.classList.add("imagyn-reviews--layout-" + (s.layout || "list"));
   }
 
-  function renderList(listEl, data, s, visibleCount, onLoadMore) {
-    var summary = data.summary || { averageRating: 0, totalReviews: 0 };
-    var reviews = data.reviews || [];
-
-    var summaryHtml = "";
-    if (s.showAverageRating !== false || s.showReviewCount !== false) {
-      summaryHtml += '<div class="imagyn-reviews__summary">';
-      if (s.showAverageRating !== false) {
-        summaryHtml +=
-          '<span class="imagyn-reviews__stars" aria-hidden="true">' + renderStars(summary.averageRating) + "</span>" +
-          '<span class="imagyn-reviews__average">' + summary.averageRating.toFixed(1) + "</span>";
-      }
-      if (s.showReviewCount !== false) {
-        summaryHtml +=
-          '<span class="imagyn-reviews__count">(' +
-          summary.totalReviews +
-          (summary.totalReviews === 1 ? " review" : " reviews") +
-          ")</span>";
-      }
-      summaryHtml += "</div>";
+  // Review Summary component (STOREFRONT_ARCHITECTURE.md): a pure renderer of
+  // averageRating/totalReviews, no internal state, no events. Numeral-only per
+  // STOREFRONT_DESIGN_SYSTEM.md §16 — no star icons here, that's Histogram's future
+  // responsibility, not Summary's.
+  function renderSummary(summaryEl, summary, s) {
+    if (s.showAverageRating === false && s.showReviewCount === false) {
+      summaryEl.innerHTML = "";
+      return;
     }
 
+    var html = '<div class="imagyn-summary">';
+    if (s.showAverageRating !== false) {
+      html += '<span class="imagyn-summary__rating">' + summary.averageRating.toFixed(1) + "</span>";
+    }
+    if (s.showReviewCount !== false) {
+      html +=
+        '<span class="imagyn-summary__count">(' +
+        summary.totalReviews +
+        (summary.totalReviews === 1 ? " review" : " reviews") +
+        ")</span>";
+    }
+    html += "</div>";
+
+    summaryEl.innerHTML = html;
+  }
+
+  function renderList(listEl, data, s, visibleCount, onLoadMore) {
+    var reviews = data.reviews || [];
     var visibleReviews = reviews.slice(0, visibleCount);
 
     var listHtml;
@@ -187,7 +193,7 @@
       }
     }
 
-    listEl.innerHTML = summaryHtml + listHtml;
+    listEl.innerHTML = listHtml;
 
     var loadMoreBtn = listEl.querySelector("[data-imagyn-load-more]");
     if (loadMoreBtn) {
@@ -195,7 +201,7 @@
     }
   }
 
-  function loadList(root, listEl, endpoint, themeOverrides) {
+  function loadList(root, summaryEl, listEl, endpoint, themeOverrides) {
     fetch(endpoint, { headers: { Accept: "application/json" } })
       .then(function (response) {
         if (!response.ok) {
@@ -210,6 +216,10 @@
 
         var s = resolveSettings(data.widget, themeOverrides);
         applyStyle(root, s);
+
+        if (summaryEl) {
+          renderSummary(summaryEl, data.summary || { averageRating: 0, totalReviews: 0 }, s);
+        }
 
         var pageSize = s.reviewsPerPage > 0 ? s.reviewsPerPage : (data.reviews || []).length;
         var visibleCount = pageSize;
@@ -399,6 +409,7 @@
       // The product is detected automatically from Shopify's own `product` Liquid object
       // (available on any product template) — the block has no product picker to configure.
       var productId = root.getAttribute("data-product-id");
+      var summaryEl = root.querySelector("[data-imagyn-summary]");
       var listEl = root.querySelector("[data-imagyn-list]");
       var writeEl = root.querySelector("[data-imagyn-write]");
       var themeOverrides = readThemeOverrides(root);
@@ -412,7 +423,7 @@
 
       if (listEl) {
         var endpoint = PROXY_PATH + "?productId=" + encodeURIComponent(productId);
-        loadList(root, listEl, endpoint, themeOverrides);
+        loadList(root, summaryEl, listEl, endpoint, themeOverrides);
       }
 
       if (writeEl) {

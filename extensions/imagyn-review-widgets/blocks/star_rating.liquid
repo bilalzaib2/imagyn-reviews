@@ -1,3 +1,6 @@
+{{ 'imagyn-tokens.css' | asset_url | stylesheet_tag }}
+{{ 'imagyn-typography.css' | asset_url | stylesheet_tag }}
+{{ 'imagyn-component-summary.css' | asset_url | stylesheet_tag }}
 {{ 'reviews-widget.css' | asset_url | stylesheet_tag }}
 
 <div
@@ -18,6 +21,7 @@
   data-layout="{{ block.settings.layout }}"
   data-show-load-more-button="{{ block.settings.show_load_more_button }}"
 >
+  <div data-imagyn-summary></div>
   <div class="imagyn-reviews__results" data-imagyn-list>
     <p class="imagyn-reviews__loading">Loading reviews…</p>
   </div>

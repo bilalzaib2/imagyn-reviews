@@ -12,26 +12,9 @@
   opacity: 0.75;
 }
 
-.imagyn-reviews__summary {
-  display: flex;
-  align-items: center;
-  gap: 0.5em;
-  margin-bottom: 1em;
-}
-
-.imagyn-reviews__stars,
 .imagyn-reviews__item-stars {
   letter-spacing: 0.05em;
   color: var(--imagyn-star-color, #f5a623);
-}
-
-.imagyn-reviews__average {
-  font-weight: 600;
-  font-size: var(--imagyn-heading-font-size, inherit);
-}
-
-.imagyn-reviews__count {
-  opacity: 0.7;
 }
 
 /* Layout setting: list (default), grid, carousel. */

@@ -51,6 +51,16 @@
   --imagyn-space-lg: 1.5em;
   --imagyn-space-xl: 2.5em;
 
+  /* Absolute spacing — for gaps between components/sections, or within standalone
+     surfaces, where the gap must stay visually consistent regardless of local
+     font-size (unlike the em-based scale above, which is for spacing *within* a
+     single component). See STOREFRONT_DESIGN_SYSTEM.md §5. */
+  --imagyn-space-px-xs: 8px;
+  --imagyn-space-px-sm: 12px;
+  --imagyn-space-px-md: 16px;
+  --imagyn-space-px-lg: 24px;
+  --imagyn-space-px-xl: 40px;
+
   /* Color */
   --imagyn-color-text: currentColor;
   --imagyn-color-text-muted-opacity: 0.6;

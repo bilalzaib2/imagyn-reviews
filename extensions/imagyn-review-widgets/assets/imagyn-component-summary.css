@@ -1,9 +1,36 @@
 /*
- * Imagyn Reviews — review summary component (reserved).
+ * Imagyn Reviews — Review Summary component.
  *
- * Not yet wired into any block — the Reviews Widget's current summary line
- * (reviews-widget.css) isn't being redesigned in this pass. This file exists so the
- * summary's styling has a defined home when that redesign happens, consuming
- * imagyn-tokens.css / imagyn-typography.css like every other component, rather than
- * being added ad hoc later.
+ * Per STOREFRONT_DESIGN_SYSTEM.md §16: a large semibold numeral (tabular-nums) plus a
+ * muted-opacity review count, left-aligned, inline where space allows. No star icons —
+ * the star-distribution visual is Histogram's responsibility (a future phase), not
+ * Summary's; this component is numeral-led, matching the system's typography-first
+ * philosophy rather than repeating the icon row already shown in the Rating Badge above
+ * it on the page.
+ *
+ * Per STOREFRONT_ARCHITECTURE.md: no internal state, no events — purely a renderer of
+ * the averageRating/totalReviews values it's given.
  */
+
+.imagyn-summary {
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: var(--imagyn-space-xs, 0.4em);
+  margin-bottom: var(--imagyn-space-px-lg, 24px);
+  font-family: var(--imagyn-font-family, "Helvetica Neue", Helvetica, Arial, sans-serif);
+  color: var(--imagyn-color-text, inherit);
+}
+
+.imagyn-summary__rating {
+  font-size: var(--imagyn-font-size-lg, 20px);
+  font-weight: var(--imagyn-font-weight-semibold, 600);
+  line-height: var(--imagyn-line-height-tight, 1);
+  font-variant-numeric: tabular-nums;
+}
+
+.imagyn-summary__count {
+  font-size: var(--imagyn-font-size-sm, 13px);
+  font-weight: var(--imagyn-font-weight-regular, 400);
+  opacity: var(--imagyn-color-text-muted-opacity, 0.6);
+}
