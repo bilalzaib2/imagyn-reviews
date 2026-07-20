@@ -1,5 +1,6 @@
 import type { Prisma } from "@prisma/client";
 import prisma from "../db.server";
+import { maybeAutoRegenerateAiSummary } from "./aiSummary.server";
 import { HelpfulVoteValue, ReviewStatus } from "./review.shared";
 
 export { HelpfulVoteValue, ReviewStatus };
@@ -430,6 +431,13 @@ async function setReviewStatus(id: string, status: typeof ReviewStatus.APPROVED 
 
   await recalculateProductStats(existing.productId);
 
+  // Fire-and-forget: never awaited, so this moderation action always returns immediately
+  // regardless of AI latency. maybeAutoRegenerateAiSummary does its own threshold check
+  // and only actually calls the AI provider when enough new approved reviews warrant it.
+  if (status === ReviewStatus.APPROVED) {
+    void maybeAutoRegenerateAiSummary(existing.productId);
+  }
+
   return review;
 }
 
@@ -492,6 +500,10 @@ export async function bulkModerateReviews(
   });
 
   await Promise.all(affectedProductIds.map((productId) => recalculateProductStats(productId)));
+
+  if (status === ReviewStatus.APPROVED) {
+    affectedProductIds.forEach((productId) => void maybeAutoRegenerateAiSummary(productId));
+  }
 
   return result;
 }

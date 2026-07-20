@@ -132,6 +132,40 @@
   color: var(--imagyn-color-success, #1a7f4b);
 }
 
+/* Cache-only content (see reviews-widget.js's renderAiSummary) — renders nothing until a
+   merchant has generated a summary at least once, so there's no loading state to design
+   for on the storefront at all. */
+.imagyn-ai-summary {
+  display: grid;
+  gap: var(--imagyn-space-2xs, 0.3em);
+  padding: var(--imagyn-space-px-md, 16px);
+  border: var(--imagyn-border-width, 1px) solid var(--imagyn-color-border, rgba(0, 0, 0, 0.08));
+  border-radius: var(--imagyn-radius-md, 8px);
+  background: var(--imagyn-color-surface, #ffffff);
+}
+
+.imagyn-ai-summary__heading {
+  margin: 0;
+  font-size: var(--imagyn-font-size-sm, 13px);
+  font-weight: var(--imagyn-font-weight-semibold, 600);
+  color: var(--imagyn-color-text, inherit);
+}
+
+.imagyn-ai-summary__text {
+  margin: 0;
+  font-size: var(--imagyn-font-size-base, 15px);
+  line-height: var(--imagyn-line-height-base, 1.5);
+  color: var(--imagyn-color-text, inherit);
+}
+
+.imagyn-ai-summary__recommendation {
+  margin: 0;
+  font-size: var(--imagyn-font-size-sm, 13px);
+  line-height: var(--imagyn-line-height-base, 1.5);
+  color: var(--imagyn-color-text, inherit);
+  opacity: var(--imagyn-color-text-muted-opacity, 0.6);
+}
+
 /* Skeleton state — approximates the hero's real proportions rather than a generic box
    (STOREFRONT_DESIGN_SYSTEM.md §11). Shimmer/animation itself lives entirely in
    imagyn-component-skeleton.css; this only sizes the shared primitive to this layout. */

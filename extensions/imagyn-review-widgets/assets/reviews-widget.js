@@ -237,7 +237,25 @@
   // Review affordance stays fully present regardless of review count," which held
   // before this trigger moved here (it used to live in its own always-rendered DOM
   // region) and must keep holding now that it's part of this element's output.
-  function renderSummary(summaryEl, summary, s) {
+  function renderAiSummary(aiSummary) {
+    if (!aiSummary || !aiSummary.summary) {
+      return "";
+    }
+
+    var html = '<div class="imagyn-ai-summary">';
+    html += '<p class="imagyn-ai-summary__heading"><span aria-hidden="true">✨</span> AI Review Summary</p>';
+    html += '<p class="imagyn-ai-summary__text">' + escapeHtml(aiSummary.summary) + "</p>";
+    if (aiSummary.recommendation) {
+      html +=
+        '<p class="imagyn-ai-summary__recommendation"><strong>Recommended for:</strong> ' +
+        escapeHtml(aiSummary.recommendation) +
+        "</p>";
+    }
+    html += "</div>";
+    return html;
+  }
+
+  function renderSummary(summaryEl, summary, s, aiSummary) {
     var totalReviews = summary.totalReviews || 0;
     var averageRating = summary.averageRating || 0;
     var ratingCounts = summary.ratingCounts || { 1: 0, 2: 0, 3: 0, 4: 0, 5: 0 };
@@ -309,6 +327,11 @@
 
       html += renderHistogram(ratingCounts, totalReviews);
     }
+
+    // Cache-only: aiSummary is whatever the reviews endpoint already had stored (see
+    // getAiSummary — a pure read, never a generation trigger), so this never adds latency
+    // or blocks rendering. Renders nothing at all until a merchant has generated one.
+    html += renderAiSummary(aiSummary);
 
     html += "</div>"; // summary
 
@@ -536,6 +559,7 @@
               summaryEl,
               data.summary || { averageRating: 0, totalReviews: 0, ratingCounts: { 1: 0, 2: 0, 3: 0, 4: 0, 5: 0 } },
               s,
+              data.aiSummary || null,
             );
           }
 

@@ -1,5 +1,6 @@
 import { type KeyboardEvent, useEffect, useMemo, useState } from "react";
 import {
+  Link as RemixLink,
   useFetcher,
   useLoaderData,
   useLocation,
@@ -794,8 +795,12 @@ export default function ReviewsPage() {
 
                     <div className={styles.detailSection}>
                       <p className={styles.detailLabel}>AI Summary</p>
-                      <p className={styles.detailPlaceholder}>
-                        Coming soon — an AI-generated summary of this review will appear here.
+                      <p className={styles.detailText}>
+                        AI summaries are generated per product, from all of that product's approved reviews —{" "}
+                        <RemixLink to={`/app/products/${selectedReview.productId}`}>
+                          view it on the product page
+                        </RemixLink>
+                        .
                       </p>
                     </div>
 

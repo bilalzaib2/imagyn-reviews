@@ -1,5 +1,13 @@
-import { Link as RemixLink, useLoaderData, useLocation, useNavigation, useRouteError } from "react-router";
-import type { HeadersFunction, LoaderFunctionArgs } from "react-router";
+import { useEffect, useState } from "react";
+import {
+  Link as RemixLink,
+  useFetcher,
+  useLoaderData,
+  useLocation,
+  useNavigation,
+  useRouteError,
+} from "react-router";
+import type { ActionFunctionArgs, HeadersFunction, LoaderFunctionArgs } from "react-router";
 import { boundary } from "@shopify/shopify-app-react-router/server";
 import {
   Badge,
@@ -7,11 +15,14 @@ import {
   BlockStack,
   Card,
   EmptyState,
+  Frame,
   SkeletonBodyText,
   SkeletonDisplayText,
   Text,
+  Toast,
 } from "@shopify/polaris";
 
+import { Button } from "../components/ui/Button";
 import { Container } from "../components/ui/Container";
 import { LinkButton } from "../components/ui/LinkButton";
 import { ReviewStatusBadge } from "../components/reviews/ReviewStatusBadge";
@@ -20,10 +31,17 @@ import { authenticate } from "../shopify.server";
 import { getOrCreateStore } from "../services/store.server";
 import { getProductForStore } from "../services/product.server";
 import { getProductReviews, type ReviewWithProduct } from "../services/review.server";
+import { getAiSummary, regenerateAiSummary, type ProductAiSummaryRecord } from "../services/aiSummary.server";
 import shellStyles from "../styles/app.shell.module.css";
 import styles from "../styles/app.product-detail.module.css";
 
 const REVIEW_LIST_LIMIT = 50;
+
+type ActionData = {
+  ok: boolean;
+  error?: string;
+  message?: string;
+};
 
 export const loader = async ({ request, params }: LoaderFunctionArgs) => {
   const { session } = await authenticate.admin(request);
@@ -38,16 +56,21 @@ export const loader = async ({ request, params }: LoaderFunctionArgs) => {
         product: null,
         reviews: [] as ReviewWithProduct[],
         reviewsTotalCount: 0,
+        aiSummary: null as ProductAiSummaryRecord | null,
         error: "Product not found.",
       };
     }
 
-    const reviewResult = await getProductReviews(product.id, { limit: REVIEW_LIST_LIMIT });
+    const [reviewResult, aiSummary] = await Promise.all([
+      getProductReviews(product.id, { limit: REVIEW_LIST_LIMIT }),
+      getAiSummary(product.id),
+    ]);
 
     return {
       product,
       reviews: reviewResult.reviews,
       reviewsTotalCount: reviewResult.totalCount,
+      aiSummary,
       error: null as string | null,
     };
   } catch (error) {
@@ -55,10 +78,54 @@ export const loader = async ({ request, params }: LoaderFunctionArgs) => {
       product: null,
       reviews: [] as ReviewWithProduct[],
       reviewsTotalCount: 0,
+      aiSummary: null as ProductAiSummaryRecord | null,
       error: error instanceof Error ? error.message : "Unable to load product.",
     };
   }
 };
+
+export const action = async ({ request, params }: ActionFunctionArgs): Promise<ActionData> => {
+  await authenticate.admin(request);
+
+  const productId = params.id ?? "";
+  const formData = await request.formData();
+  const intent = String(formData.get("_intent") || "");
+
+  if (intent !== "regenerateAiSummary") {
+    return { ok: false, error: "Unsupported action." };
+  }
+
+  if (!productId) {
+    return { ok: false, error: "Product ID is required." };
+  }
+
+  try {
+    await regenerateAiSummary(productId);
+    return { ok: true, message: "AI Review Summary regenerated." };
+  } catch (error) {
+    return {
+      ok: false,
+      error: error instanceof Error ? error.message : "Unable to regenerate the AI summary.",
+    };
+  }
+};
+
+function formatRelativeTime(value: Date | string) {
+  const date = new Date(value);
+  const diffMs = Date.now() - date.getTime();
+  const diffMinutes = Math.round(diffMs / 60000);
+
+  if (diffMinutes < 1) return "Just now";
+  if (diffMinutes < 60) return `${diffMinutes} minute${diffMinutes === 1 ? "" : "s"} ago`;
+
+  const diffHours = Math.round(diffMinutes / 60);
+  if (diffHours < 24) return `${diffHours} hour${diffHours === 1 ? "" : "s"} ago`;
+
+  const diffDays = Math.round(diffHours / 24);
+  if (diffDays < 30) return `${diffDays} day${diffDays === 1 ? "" : "s"} ago`;
+
+  return new Intl.DateTimeFormat("en", { month: "short", day: "numeric", year: "numeric" }).format(date);
+}
 
 const formatStatusLabel = (status: string | null) => {
   if (!status) {
@@ -131,14 +198,37 @@ function RatingBreakdown({
 }
 
 export default function ProductDetailPage() {
-  const { product, reviews, reviewsTotalCount, error } = useLoaderData<typeof loader>();
+  const { product, reviews, reviewsTotalCount, aiSummary, error } = useLoaderData<typeof loader>();
   const navigation = useNavigation();
   const location = useLocation();
+  const fetcher = useFetcher<ActionData>();
   const isLoading = navigation.state !== "idle";
+  const isRegenerating = fetcher.state !== "idle";
+  const [toastState, setToastState] = useState<{ content: string; error?: boolean } | null>(null);
+
+  useEffect(() => {
+    if (!fetcher.data) {
+      return;
+    }
+
+    setToastState(
+      fetcher.data.ok
+        ? { content: fetcher.data.message || "AI Review Summary regenerated." }
+        : { content: fetcher.data.error || "Unable to regenerate the AI summary.", error: true },
+    );
+  }, [fetcher.data]);
 
   const backHref = `/app/products${location.search}`;
 
+  const handleRegenerate = () => {
+    if (!product) return;
+    const formData = new FormData();
+    formData.append("_intent", "regenerateAiSummary");
+    fetcher.submit(formData, { method: "post" });
+  };
+
   return (
+    <>
     <Container as="main">
       <div className={`${shellStyles.page} ${styles.page}`}>
         <header className={`${shellStyles.header} ${styles.header}`}>
@@ -232,6 +322,77 @@ export default function ProductDetailPage() {
               <BlockStack gap="400">
                 <div className={styles.reviewsHeader}>
                   <Text as="h2" variant="headingMd">
+                    ✨ AI Review Summary
+                  </Text>
+                  <Button type="button" onClick={handleRegenerate} disabled={isRegenerating}>
+                    {isRegenerating ? "Regenerating…" : "Regenerate AI Summary"}
+                  </Button>
+                </div>
+
+                {isRegenerating ? (
+                  <div className={styles.aiSummarySkeleton} aria-hidden="true">
+                    <SkeletonBodyText lines={3} />
+                  </div>
+                ) : aiSummary ? (
+                  <div className={styles.aiSummaryBlock}>
+                    <p className={styles.aiSummaryText}>{aiSummary.summary}</p>
+
+                    {aiSummary.positives.length > 0 ? (
+                      <div className={styles.aiSummaryGroup}>
+                        <span className={styles.aiSummaryGroupLabel}>Customers love</span>
+                        <ul className={styles.aiSummaryList}>
+                          {aiSummary.positives.map((point) => (
+                            <li key={point}>{point}</li>
+                          ))}
+                        </ul>
+                      </div>
+                    ) : null}
+
+                    {aiSummary.negatives.length > 0 ? (
+                      <div className={styles.aiSummaryGroup}>
+                        <span className={styles.aiSummaryGroupLabel}>Common complaints</span>
+                        <ul className={styles.aiSummaryList}>
+                          {aiSummary.negatives.map((point) => (
+                            <li key={point}>{point}</li>
+                          ))}
+                        </ul>
+                      </div>
+                    ) : null}
+
+                    {aiSummary.recommendation ? (
+                      <p className={styles.aiSummaryRecommendation}>
+                        <span className={styles.aiSummaryGroupLabel}>Recommended for</span> {aiSummary.recommendation}
+                      </p>
+                    ) : null}
+
+                    <dl className={styles.aiSummaryMeta}>
+                      <div className={styles.aiSummaryMetaItem}>
+                        <dt>Generated</dt>
+                        <dd>{formatRelativeTime(aiSummary.generatedAt)}</dd>
+                      </div>
+                      <div className={styles.aiSummaryMetaItem}>
+                        <dt>Reviews analyzed</dt>
+                        <dd>{aiSummary.reviewCountUsed}</dd>
+                      </div>
+                      <div className={styles.aiSummaryMetaItem}>
+                        <dt>Model</dt>
+                        <dd>{aiSummary.modelUsed}</dd>
+                      </div>
+                    </dl>
+                  </div>
+                ) : (
+                  <p className={styles.aiSummaryEmpty}>
+                    No AI summary has been generated yet. Click "Regenerate AI Summary" once this product has
+                    approved reviews.
+                  </p>
+                )}
+              </BlockStack>
+            </Card>
+
+            <Card>
+              <BlockStack gap="400">
+                <div className={styles.reviewsHeader}>
+                  <Text as="h2" variant="headingMd">
                     Reviews
                   </Text>
                   <RemixLink
@@ -281,6 +442,12 @@ export default function ProductDetailPage() {
         )}
       </div>
     </Container>
+    <Frame>
+      {toastState ? (
+        <Toast content={toastState.content} error={toastState.error} onDismiss={() => setToastState(null)} />
+      ) : null}
+    </Frame>
+    </>
   );
 }
 

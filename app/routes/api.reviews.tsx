@@ -11,6 +11,7 @@ import {
 import { getProductForStoreByShopifyId } from "../services/product.server";
 import { getStoreBySlug } from "../services/store.server";
 import { getStorefrontWidgetSettings } from "../services/widget.server";
+import { getAiSummary } from "../services/aiSummary.server";
 
 // Shared with api.reviews.batch.tsx so the two public review endpoints respond identically.
 export function json(data: unknown, init?: ResponseInit) {
@@ -84,10 +85,13 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
     return json({ ok: false, error: "Product not found for this shop." }, { status: 404 });
   }
 
-  const [summary, result, widget] = await Promise.all([
+  const [summary, result, widget, aiSummary] = await Promise.all([
     getPublicReviewSummary(product.id),
     getProductReviews(product.id, { status: ReviewStatus.APPROVED, limit: 50 }),
     getStorefrontWidgetSettings(store.id, product.id),
+    // Pure cache read — never triggers generation, so this can never slow down or block a
+    // storefront page view. Returns null until a merchant has generated one at least once.
+    getAiSummary(product.id),
   ]);
 
   const orderedReviews = sort === "helpful" ? rankByHelpfulness(result.reviews) : result.reviews;
@@ -100,6 +104,9 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
     ok: true,
     summary,
     widget,
+    aiSummary: aiSummary
+      ? { summary: aiSummary.summary, recommendation: aiSummary.recommendation }
+      : null,
     reviews: orderedReviews.map((review) => ({
       id: review.id,
       reviewerName: review.reviewerName,
