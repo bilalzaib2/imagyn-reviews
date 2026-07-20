@@ -1,7 +1,9 @@
+{{ 'imagyn-tokens.css' | asset_url | stylesheet_tag }}
+{{ 'imagyn-typography.css' | asset_url | stylesheet_tag }}
+{{ 'imagyn-component-summary.css' | asset_url | stylesheet_tag }}
 {{ 'rating-badge.css' | asset_url | stylesheet_tag }}
 
-<button
-  type="button"
+<div
   class="imagyn-rating-badge"
   data-imagyn-rating-badge
   data-product-id="{{ product.id }}"
@@ -9,7 +11,7 @@
   data-star-color="{{ block.settings.star_color }}"
   data-text-color="{{ block.settings.text_color }}"
   hidden
-></button>
+></div>
 
 {{ 'rating-badge.js' | asset_url | script_tag }}
 

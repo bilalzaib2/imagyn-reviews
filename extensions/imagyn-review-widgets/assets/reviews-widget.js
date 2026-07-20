@@ -176,7 +176,6 @@
 
     summaryEl.innerHTML =
       '<div class="imagyn-summary" aria-hidden="true">' +
-      '<div class="imagyn-skeleton imagyn-skeleton--text imagyn-summary__quickbar-skeleton"></div>' +
       '<div class="imagyn-summary__hero imagyn-summary__hero-skeleton">' +
       '<div class="imagyn-skeleton imagyn-skeleton--title"></div>' +
       '<div class="imagyn-skeleton imagyn-skeleton--text"></div>' +
@@ -259,16 +258,20 @@
     return html;
   }
 
+  // The inline rating summary (stars, numeral, count, and the Write a Review trigger) has
+  // moved to the Rating Badge block, positioned above the product title to match the
+  // native Shopify/Atoms pattern (see rating-badge.js) — this component now covers only
+  // the detailed breakdown (histogram, AI summary) and no longer duplicates those stats.
   function renderSummary(summaryEl, summary, s, aiSummary) {
     var totalReviews = summary.totalReviews || 0;
     var averageRating = summary.averageRating || 0;
     var ratingCounts = summary.ratingCounts || { 1: 0, 2: 0, 3: 0, 4: 0, 5: 0 };
 
     var showStats = totalReviews > 0 && (s.showAverageRating !== false || s.showReviewCount !== false);
-    var showWrite = s.showWriteReviewButton !== false;
     var recommendPercent = totalReviews > 0 ? Math.round(((ratingCounts[5] || 0) + (ratingCounts[4] || 0)) / totalReviews * 100) : 0;
+    var hasEmptyState = totalReviews === 0;
 
-    if (!showStats && !showWrite) {
+    if (!showStats && !hasEmptyState && !aiSummary) {
       summaryEl.innerHTML = "";
       return;
     }
@@ -283,32 +286,7 @@
       html += '<span class="imagyn-visually-hidden">' + escapeHtml(srSummary) + "</span>";
     }
 
-    // Quickbar: stars, numeral, count, and the Write a Review trigger on one inline
-    // line — the "header" of the widget. The trigger itself is wired up in
-    // renderWriteReview via event delegation on `root`, not here, since this element
-    // and the form it opens live in separate DOM subtrees (data-imagyn-summary vs
-    // data-imagyn-write) and renderWriteReview may run before this element exists.
-    html += '<div class="imagyn-summary__quickbar">';
-    if (showStats) {
-      html += '<span class="imagyn-summary__quickbar-stars" aria-hidden="true">' + renderStars(averageRating) + "</span>";
-      if (s.showAverageRating !== false) {
-        html += '<span class="imagyn-summary__quickbar-rating" aria-hidden="true">' + averageRating.toFixed(1) + "</span>";
-      }
-      if (s.showReviewCount !== false) {
-        html += '<span class="imagyn-summary__quickbar-count" aria-hidden="true">(' + totalReviews.toLocaleString() + ")</span>";
-      }
-    }
-    if (showWrite) {
-      if (showStats) {
-        html += '<span class="imagyn-summary__quickbar-divider" aria-hidden="true"></span>';
-      }
-      html +=
-        '<button type="button" class="imagyn-summary__quickbar-write" data-imagyn-write-toggle aria-expanded="false">' +
-        "Write a review</button>";
-    }
-    html += "</div>"; // quickbar
-
-    if (totalReviews === 0) {
+    if (hasEmptyState) {
       html += '<p class="imagyn-empty-state">No reviews yet — be the first to share your experience.</p>';
     } else if (showStats) {
       html += '<div class="imagyn-summary__hero" aria-hidden="true">';
@@ -818,22 +796,12 @@
           if (galleryEl) {
             galleryEl.innerHTML = "";
           }
-          // Rating/count can't be shown without the failed response's data, but Write a
-          // Review must stay available regardless (§12) — same principle the empty-state
-          // and disabled-stats paths in renderSummary already apply.
+          // Rating/count can't be shown without the failed response's data. The Write a
+          // Review trigger itself is unaffected — it lives in the Rating Badge block above
+          // the title, which fetches independently, and the form it opens is rendered by
+          // renderWriteReview regardless of whether this list request succeeded.
           if (summaryEl) {
-            var s = resolveSettings(null, themeOverrides);
-            if (s.showWriteReviewButton !== false) {
-              summaryEl.innerHTML =
-                '<div class="imagyn-summary imagyn-fade-in">' +
-                '<div class="imagyn-summary__quickbar">' +
-                '<button type="button" class="imagyn-summary__quickbar-write" data-imagyn-write-toggle aria-expanded="false">' +
-                "Write a review</button>" +
-                "</div>" +
-                "</div>";
-            } else {
-              summaryEl.innerHTML = "";
-            }
+            summaryEl.innerHTML = "";
           }
         });
     }
@@ -841,11 +809,10 @@
     fetchAndRender("recent");
   }
 
-  // The trigger for this form now lives in the Review Summary's quickbar
-  // (data-imagyn-write-toggle, see renderSummary) rather than here — it's wired via
-  // delegation on `root` rather than a direct reference because renderWriteReview runs
-  // synchronously in init(), before loadList's async fetch has rendered the summary (and
-  // its toggle button) at all.
+  // The trigger for this form lives in the separate Rating Badge block, above the product
+  // title (see rating-badge.js) — this listens for its "imagyn:write-review-toggle" custom
+  // event on `document` rather than a direct reference, since the two blocks are
+  // independent and may not even both be present on every page.
   function renderWriteReview(root, writeEl, context, showWriteReviewButton) {
     if (showWriteReviewButton === false) {
       writeEl.innerHTML = "";
@@ -924,19 +891,15 @@
 
     var reduceMotion = window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
 
-    root.addEventListener("click", function (event) {
-      var toggleBtn = event.target.closest ? event.target.closest("[data-imagyn-write-toggle]") : null;
-      if (!toggleBtn) return;
-
+    document.addEventListener("imagyn:write-review-toggle", function () {
       var isHidden = form.hasAttribute("hidden");
       if (isHidden) {
         form.removeAttribute("hidden");
-        toggleBtn.setAttribute("aria-expanded", "true");
         form.scrollIntoView({ behavior: reduceMotion ? "auto" : "smooth", block: "start" });
       } else {
         form.setAttribute("hidden", "");
-        toggleBtn.setAttribute("aria-expanded", "false");
       }
+      document.dispatchEvent(new CustomEvent("imagyn:write-review-state", { detail: { expanded: isHidden } }));
     });
 
     function paintStars() {
