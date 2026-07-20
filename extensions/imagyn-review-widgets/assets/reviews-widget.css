@@ -12,11 +12,6 @@
   opacity: 0.75;
 }
 
-.imagyn-reviews__item-stars {
-  letter-spacing: 0.05em;
-  color: var(--imagyn-star-color, #f5a623);
-}
-
 /* Layout setting: list (default), grid, carousel. */
 .imagyn-reviews__list {
   list-style: none;
@@ -41,45 +36,6 @@
   scroll-snap-type: x mandatory;
   gap: 1.25em;
   padding-bottom: 0.5em;
-}
-
-.imagyn-reviews--layout-carousel .imagyn-reviews__item {
-  flex: 0 0 260px;
-  scroll-snap-align: start;
-}
-
-.imagyn-reviews__item {
-  border: 1px solid var(--imagyn-border-color, rgba(0, 0, 0, 0.08));
-  border-radius: var(--imagyn-border-radius, 0);
-  padding: 1em;
-}
-
-.imagyn-reviews--layout-list .imagyn-reviews__item {
-  border-width: 1px 0 0 0;
-  border-radius: 0;
-  padding: 1em 0 0;
-}
-
-.imagyn-reviews__item-header {
-  display: flex;
-  align-items: center;
-  gap: 0.5em;
-  margin-bottom: 0.35em;
-}
-
-.imagyn-reviews__item-title {
-  font-weight: 600;
-  font-size: var(--imagyn-heading-font-size, inherit);
-}
-
-.imagyn-reviews__item-content {
-  margin: 0 0 0.35em;
-}
-
-.imagyn-reviews__item-meta {
-  margin: 0;
-  font-size: 0.85em;
-  opacity: 0.65;
 }
 
 .imagyn-reviews__load-more {
@@ -279,56 +235,5 @@
   outline-offset: 2px;
 }
 
-/* "Was this helpful?" — bottom-right of every review, per spec. */
-.imagyn-reviews__helpful {
-  display: flex;
-  align-items: center;
-  justify-content: flex-end;
-  flex-wrap: wrap;
-  gap: var(--imagyn-space-sm, 0.6em);
-  margin-top: var(--imagyn-space-sm, 0.6em);
-}
-
-.imagyn-reviews__helpful-label {
-  font-size: var(--imagyn-font-size-xs, 12px);
-  color: var(--imagyn-color-text, inherit);
-  opacity: var(--imagyn-color-text-muted-opacity, 0.6);
-}
-
-.imagyn-reviews__helpful-btn {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.3em;
-  font: inherit;
-  font-size: var(--imagyn-font-size-xs, 12px);
-  cursor: pointer;
-  border: var(--imagyn-border-width, 1px) solid var(--imagyn-color-border, rgba(0, 0, 0, 0.12));
-  border-radius: var(--imagyn-radius-full, 999px);
-  padding: 0.3em 0.65em;
-  background: transparent;
-  color: var(--imagyn-color-text, inherit);
-  transition:
-    background-color var(--imagyn-duration-fast, 120ms) var(--imagyn-easing, ease-out),
-    border-color var(--imagyn-duration-fast, 120ms) var(--imagyn-easing, ease-out);
-}
-
-.imagyn-reviews__helpful-btn:hover {
-  background: var(--imagyn-color-border, rgba(0, 0, 0, 0.06));
-}
-
-.imagyn-reviews__helpful-btn:focus-visible {
-  outline: 2px solid var(--imagyn-color-focus, #2563eb);
-  outline-offset: 2px;
-}
-
-.imagyn-reviews__helpful-btn--active {
-  border-color: var(--imagyn-color-text, currentColor);
-  background: var(--imagyn-color-border, rgba(0, 0, 0, 0.08));
-  font-weight: var(--imagyn-font-weight-medium, 500);
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .imagyn-reviews__helpful-btn {
-    transition: none;
-  }
-}
+/* Helpful voting is now part of the Review Card component
+   (imagyn-component-review-card.css) — see .imagyn-review-card__helpful. */

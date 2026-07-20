@@ -361,8 +361,17 @@
     }
   }
 
-  // Bottom-right of each review, per spec: "Was this helpful?" plus a 👍/👎 count pair.
-  // Vote clicks are handled by a single delegated listener on listEl (see loadList),
+  // Minimal outline thumb icons (Feather Icons' thumbs-up/thumbs-down glyphs — MIT-licensed
+  // generic iconography) rather than emoji, so the helpful row reads as quiet UI chrome
+  // instead of a decorative flourish. aria-hidden: the button's own aria-label already
+  // carries the meaning; the visible count text is what sighted users read.
+  var THUMBS_UP_ICON =
+    '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M14 9V5a3 3 0 0 0-3-3l-4 9v11h11.28a2 2 0 0 0 2-1.7l1.38-9a2 2 0 0 0-2-2.3zM7 22H4a2 2 0 0 1-2-2v-7a2 2 0 0 1 2-2h3" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"></path></svg>';
+  var THUMBS_DOWN_ICON =
+    '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M10 15v4a3 3 0 0 0 3 3l4-9V2H5.72a2 2 0 0 0-2 1.7l-1.38 9a2 2 0 0 0 2 2.3zm7-13h3a2 2 0 0 1 2 2v7a2 2 0 0 1-2 2h-3" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"></path></svg>';
+
+  // Bottom-right of each review, per spec: "Was this helpful?" plus a thumb-icon/count
+  // pair. Vote clicks are handled by a single delegated listener on listEl (see loadList),
   // not here — this only renders the current state (count + whether this visitor already
   // voted this way), since renderList re-runs on every "load more" click and re-attaching
   // a listener per button on every render would leak duplicate handlers.
@@ -374,15 +383,15 @@
     var notHelpfulActive = myVote === "NOT_HELPFUL";
 
     return (
-      '<div class="imagyn-reviews__helpful">' +
-      '<span class="imagyn-reviews__helpful-label">Was this helpful?</span>' +
-      '<button type="button" class="imagyn-reviews__helpful-btn' + (helpfulActive ? " imagyn-reviews__helpful-btn--active" : "") + '" ' +
+      '<div class="imagyn-review-card__helpful">' +
+      '<span class="imagyn-review-card__helpful-label">Was this helpful?</span>' +
+      '<button type="button" class="imagyn-review-card__helpful-btn' + (helpfulActive ? " imagyn-review-card__helpful-btn--active" : "") + '" ' +
       'data-helpful-vote="HELPFUL" aria-pressed="' + (helpfulActive ? "true" : "false") + '" aria-label="Mark this review as helpful">' +
-      '<span aria-hidden="true">👍</span><span data-helpful-count="HELPFUL">' + helpfulCount + "</span>" +
+      THUMBS_UP_ICON + '<span data-helpful-count="HELPFUL">' + helpfulCount + "</span>" +
       "</button>" +
-      '<button type="button" class="imagyn-reviews__helpful-btn' + (notHelpfulActive ? " imagyn-reviews__helpful-btn--active" : "") + '" ' +
+      '<button type="button" class="imagyn-review-card__helpful-btn' + (notHelpfulActive ? " imagyn-review-card__helpful-btn--active" : "") + '" ' +
       'data-helpful-vote="NOT_HELPFUL" aria-pressed="' + (notHelpfulActive ? "true" : "false") + '" aria-label="Mark this review as not helpful">' +
-      '<span aria-hidden="true">👎</span><span data-helpful-count="NOT_HELPFUL">' + notHelpfulCount + "</span>" +
+      THUMBS_DOWN_ICON + '<span data-helpful-count="NOT_HELPFUL">' + notHelpfulCount + "</span>" +
       "</button>" +
       "</div>"
     );
@@ -619,21 +628,19 @@
         visibleReviews
           .map(function (review) {
             return (
-              '<li class="imagyn-reviews__item" data-review-id="' + escapeHtml(review.id) + '">' +
-              '<div class="imagyn-reviews__item-header">' +
-              '<span class="imagyn-reviews__item-stars" aria-hidden="true">' + renderStars(review.rating) + "</span>" +
-              (review.title
-                ? '<strong class="imagyn-reviews__item-title">' + escapeHtml(review.title) + "</strong>"
-                : "") +
+              '<li class="imagyn-review-card" data-review-id="' + escapeHtml(review.id) + '">' +
+              '<div class="imagyn-review-card__header">' +
+              '<span class="imagyn-review-card__name">' + escapeHtml(review.reviewerName) + "</span>" +
+              '<span class="imagyn-review-card__date">' + formatDate(review.createdAt) + "</span>" +
               "</div>" +
-              '<p class="imagyn-reviews__item-content">' + escapeHtml(review.content) + "</p>" +
-              '<p class="imagyn-reviews__item-meta">' +
-              escapeHtml(review.reviewerName) +
-              " &middot; " +
-              formatDate(review.createdAt) +
-              "</p>" +
+              '<span class="imagyn-review-card__stars" aria-hidden="true">' + renderStars(review.rating) + "</span>" +
+              '<span class="imagyn-visually-hidden">Rated ' + review.rating + " out of 5 stars</span>" +
+              (review.title
+                ? '<p class="imagyn-review-card__title">' + escapeHtml(review.title) + "</p>"
+                : "") +
+              '<p class="imagyn-review-card__body">' + escapeHtml(review.content) + "</p>" +
               renderReviewMedia(review) +
-              renderHelpfulRow(review) +
+              '<div class="imagyn-review-card__footer">' + renderHelpfulRow(review) + "</div>" +
               "</li>"
             );
           })
@@ -661,12 +668,12 @@
 
     if (helpfulBtn) {
       helpfulBtn.querySelector('[data-helpful-count="HELPFUL"]').textContent = review.helpfulCount || 0;
-      helpfulBtn.classList.toggle("imagyn-reviews__helpful-btn--active", helpfulActive);
+      helpfulBtn.classList.toggle("imagyn-review-card__helpful-btn--active", helpfulActive);
       helpfulBtn.setAttribute("aria-pressed", helpfulActive ? "true" : "false");
     }
     if (notHelpfulBtn) {
       notHelpfulBtn.querySelector('[data-helpful-count="NOT_HELPFUL"]').textContent = review.notHelpfulCount || 0;
-      notHelpfulBtn.classList.toggle("imagyn-reviews__helpful-btn--active", notHelpfulActive);
+      notHelpfulBtn.classList.toggle("imagyn-review-card__helpful-btn--active", notHelpfulActive);
       notHelpfulBtn.setAttribute("aria-pressed", notHelpfulActive ? "true" : "false");
     }
   }

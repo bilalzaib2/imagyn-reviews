@@ -1,9 +1,165 @@
 /*
- * Imagyn Reviews — review card component (reserved).
+ * Imagyn Reviews — Review Card component.
  *
- * Not yet wired into any block — the Reviews Widget's current review list
- * (reviews-widget.css) isn't being redesigned in this pass. This file exists so the
- * review card's styling has a defined home when that redesign happens, consuming
- * imagyn-tokens.css / imagyn-typography.css like every other component, rather than
- * being added ad hoc later.
+ * The primary reading surface of the widget (STOREFRONT_DESIGN_SYSTEM.md §16): an
+ * editorial, typography-led layout — a hairline rule opens each review, generous vertical
+ * rhythm and whitespace do the separating, not a boxed container. List layout (the
+ * default) never carries a background, radius, or shadow; Grid/Carousel still need a
+ * visible boundary between adjacent tiles, so those two fall back to a hairline-bordered
+ * box — still no shadow.
+ *
+ * Per-review star ratings are intentionally monochrome (inherit the surrounding text
+ * color), not the amber accent — that accent stays reserved for the Summary hero above,
+ * so it reads as one confident signal rather than being repeated down the whole list.
+ *
+ * Load imagyn-tokens.css, imagyn-typography.css, and imagyn-utilities.css before this file.
  */
+
+.imagyn-review-card {
+  display: block;
+  font-family: var(--imagyn-font-family);
+  color: var(--imagyn-color-text, inherit);
+  border: var(--imagyn-border-width, 1px) solid var(--imagyn-color-border, rgba(0, 0, 0, 0.08));
+  border-radius: var(--imagyn-radius-md, 8px);
+  padding: var(--imagyn-space-px-lg, 24px);
+  background: var(--imagyn-color-surface, #ffffff);
+}
+
+/* List — the default, editorial reading experience: no box, a single hairline rule opens
+   each review, generous top padding carries the rest of the separation. */
+.imagyn-reviews--layout-list .imagyn-reviews__list {
+  gap: 0;
+}
+
+.imagyn-reviews--layout-list .imagyn-review-card {
+  border-width: var(--imagyn-border-width, 1px) 0 0 0;
+  border-radius: 0;
+  padding: var(--imagyn-space-px-xl, 40px) 0 0;
+  background: transparent;
+}
+
+.imagyn-reviews--layout-carousel .imagyn-review-card {
+  flex: 0 0 260px;
+  scroll-snap-align: start;
+}
+
+.imagyn-review-card__header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: var(--imagyn-space-sm, 0.6em);
+  margin-bottom: var(--imagyn-space-px-sm, 12px);
+}
+
+.imagyn-review-card__name {
+  font-size: var(--imagyn-font-size-md, 17px);
+  font-weight: var(--imagyn-font-weight-semibold, 600);
+  line-height: var(--imagyn-line-height-tight, 1);
+}
+
+.imagyn-review-card__date {
+  flex: none;
+  font-size: var(--imagyn-font-size-xs, 12px);
+  font-weight: var(--imagyn-font-weight-regular, 400);
+  color: var(--imagyn-color-text, inherit);
+  opacity: var(--imagyn-color-text-muted-opacity, 0.6);
+  white-space: nowrap;
+}
+
+.imagyn-review-card__stars {
+  display: block;
+  margin-bottom: var(--imagyn-space-px-sm, 12px);
+  font-size: var(--imagyn-font-size-sm, 13px);
+  letter-spacing: var(--imagyn-letter-spacing-normal, 0.02em);
+  line-height: var(--imagyn-line-height-tight, 1);
+  color: var(--imagyn-color-text, inherit);
+}
+
+.imagyn-review-card__title {
+  margin: 0 0 var(--imagyn-space-sm, 0.6em);
+  font-size: var(--imagyn-font-size-md, 17px);
+  font-weight: var(--imagyn-font-weight-semibold, 600);
+  line-height: var(--imagyn-line-height-base, 1.5);
+}
+
+.imagyn-review-card__body {
+  margin: 0;
+  max-width: 70ch;
+  font-size: var(--imagyn-font-size-base, 15px);
+  font-weight: var(--imagyn-font-weight-regular, 400);
+  line-height: var(--imagyn-line-height-base, 1.5);
+}
+
+.imagyn-review-card__footer {
+  margin-top: var(--imagyn-space-px-md, 16px);
+}
+
+/* Right-aligned and quiet, per spec — the review's own content stays the focus. */
+.imagyn-review-card__helpful {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  flex-wrap: wrap;
+  gap: var(--imagyn-space-sm, 0.6em);
+}
+
+.imagyn-review-card__helpful-label {
+  font-size: var(--imagyn-font-size-xs, 12px);
+  color: var(--imagyn-color-text, inherit);
+  opacity: var(--imagyn-color-text-muted-opacity, 0.6);
+}
+
+.imagyn-review-card__helpful-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--imagyn-space-3xs, 0.2em);
+  /* 44px touch target (§14) kept via padding alone — the visible icon/text stays small. */
+  min-height: 44px;
+  padding: 0 var(--imagyn-space-px-xs, 8px);
+  font: inherit;
+  font-family: var(--imagyn-font-family);
+  font-size: var(--imagyn-font-size-xs, 12px);
+  font-variant-numeric: tabular-nums;
+  color: var(--imagyn-color-text, inherit);
+  opacity: var(--imagyn-color-text-muted-opacity, 0.6);
+  background: none;
+  border: none;
+  margin: 0;
+  cursor: pointer;
+  transition:
+    opacity var(--imagyn-duration-fast, 120ms) var(--imagyn-easing, ease-out),
+    color var(--imagyn-duration-fast, 120ms) var(--imagyn-easing, ease-out);
+}
+
+.imagyn-review-card__helpful-btn svg {
+  width: 14px;
+  height: 14px;
+  stroke: currentColor;
+  fill: none;
+}
+
+.imagyn-review-card__helpful-btn:hover {
+  opacity: 1;
+}
+
+.imagyn-review-card__helpful-btn:focus-visible {
+  outline: 2px solid var(--imagyn-color-focus, #2563eb);
+  outline-offset: 2px;
+  border-radius: 2px;
+}
+
+.imagyn-review-card__helpful-btn--active {
+  opacity: 1;
+  color: var(--imagyn-color-success, #1a7f4b);
+}
+
+.imagyn-review-card__helpful-btn--active svg {
+  fill: currentColor;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .imagyn-review-card__helpful-btn {
+    transition: none;
+  }
+}
