@@ -3,31 +3,24 @@ import { useFetcher, useLoaderData, useNavigation, useRevalidator, useRouteError
 import type { ActionFunctionArgs, HeadersFunction, LoaderFunctionArgs } from "react-router";
 import { boundary } from "@shopify/shopify-app-react-router/server";
 import {
+  ActionList,
   Badge,
-  Banner,
   BlockStack,
-  Button,
-  Card,
+  Button as PolarisButton,
   Checkbox,
-  Collapsible,
-  Divider,
-  EmptyState,
   Frame,
-  InlineStack,
+  Popover,
   RangeSlider,
   Select,
-  SkeletonBodyText,
-  SkeletonDisplayText,
   Text,
   TextField,
   Toast,
 } from "@shopify/polaris";
 
+import { Button } from "../components/ui/Button";
 import { Container } from "../components/ui/Container";
 import { authenticate } from "../shopify.server";
-import {
-  widgetService,
-} from "../services/widget.server";
+import { widgetService } from "../services/widget.server";
 import { getDefaultWidgetSettings, type WidgetSettings, type WidgetType } from "../services/widget.shared";
 import type { WidgetRecord } from "../services/widget.server";
 import shellStyles from "../styles/app.shell.module.css";
@@ -42,35 +35,67 @@ type ActionData = {
 
 type LoaderData = {
   widgets: WidgetRecord[];
+  shop: string;
   error: string | null;
 };
 
-type LibraryItem = {
-  type: WidgetType;
+type PageView = "gallery" | "customize";
+
+// The theme extension ships exactly three real, installable blocks (see
+// extensions/imagyn-review-widgets/blocks/*.liquid — names below match their Shopify
+// block names exactly). Only "review-list" is wired to admin-editable settings today
+// (getStorefrontWidgetSettings always resolves that one type); Product Rating Badge and
+// Collection Rating Badge are configured entirely in the Shopify Theme Editor and have no
+// in-app settings to open, so their cards link out instead of pretending to have a
+// working Customize flow. Featured Collection Badge and Related Products Badge don't
+// exist as blocks at all yet — reserved placeholders only, per explicit product direction.
+type WidgetCardStatus = "editable" | "theme-editor" | "reserved";
+
+interface WidgetCardDef {
+  key: string;
   title: string;
   description: string;
-  icon: string;
-};
+  status: WidgetCardStatus;
+  blockName?: string;
+}
 
-type SettingSectionKey =
-  | "general"
-  | "colors"
-  | "typography"
-  | "cards"
-  | "reviewer"
-  | "stars"
-  | "buttons"
-  | "spacing"
-  | "advanced";
-
-const widgetLibrary: LibraryItem[] = [
-  { type: "star-rating", title: "Star Rating", description: "Compact social proof for product pages.", icon: "★★★★★" },
-  { type: "review-list", title: "Review List", description: "Classic stacked reviews with strong readability.", icon: "≣" },
-  { type: "review-carousel", title: "Review Carousel", description: "A premium rotating showcase for featured reviews.", icon: "↔" },
-  { type: "review-grid", title: "Review Grid", description: "Balanced grid for homepage and collection layouts.", icon: "▦" },
-  { type: "masonry-grid", title: "Masonry Grid", description: "Editorial-style layout for varied review lengths.", icon: "▤" },
-  { type: "floating-badge", title: "Floating Badge", description: "Persistent trust signal anchored to the viewport.", icon: "◎" },
+const widgetCards: WidgetCardDef[] = [
+  {
+    key: "product-reviews-widget",
+    title: "Product Reviews Widget",
+    description: "The full review experience on product pages — summary, histogram, review list, and write-a-review form.",
+    status: "editable",
+    blockName: "Imagyn Reviews",
+  },
+  {
+    key: "product-rating-badge",
+    title: "Product Rating Badge",
+    description: "A compact star-and-count trust signal placed near the buy box.",
+    status: "theme-editor",
+    blockName: "Product Rating Badge",
+  },
+  {
+    key: "collection-rating-badge",
+    title: "Collection Rating Badge",
+    description: "Star ratings on product cards across collection and search grids.",
+    status: "theme-editor",
+    blockName: "Collection Ratings",
+  },
+  {
+    key: "featured-collection-badge",
+    title: "Featured Collection Badge",
+    description: "A curated ratings highlight for featured-collection sections.",
+    status: "reserved",
+  },
+  {
+    key: "related-products-badge",
+    title: "Related Products Badge",
+    description: "Ratings shown alongside related and recommended products.",
+    status: "reserved",
+  },
 ];
+
+const reservedRoadmapItems = ["AI Summary styling", "Video Reviews", "Review Highlights"];
 
 const sampleReviews = [
   {
@@ -105,29 +130,19 @@ const sampleReviews = [
   },
 ];
 
-const initialOpenSections: Record<SettingSectionKey, boolean> = {
-  general: true,
-  colors: true,
-  typography: false,
-  cards: false,
-  reviewer: false,
-  stars: false,
-  buttons: false,
-  spacing: false,
-  advanced: false,
-};
-
 const toNumberValue = (value: number | [number, number]) => (typeof value === "number" ? value : value[0]);
+const REVIEWS_WIDGET_TYPE: WidgetType = "review-list";
 
 export const loader = async ({ request }: LoaderFunctionArgs): Promise<LoaderData> => {
-  await authenticate.admin(request);
+  const { session } = await authenticate.admin(request);
 
   try {
     const widgets = await widgetService.listWidgets();
-    return { widgets, error: null };
+    return { widgets, shop: session.shop, error: null };
   } catch (error) {
     return {
       widgets: [],
+      shop: session.shop,
       error: error instanceof Error ? error.message : "Unable to load widgets.",
     };
   }
@@ -166,7 +181,7 @@ export const action = async ({ request }: ActionFunctionArgs): Promise<ActionDat
     if (intent === "duplicate") {
       const widgetId = String(formData.get("widgetId") || "");
       if (!widgetId) {
-        return { ok: false, error: "Select a widget to duplicate." };
+        return { ok: false, error: "Save the widget before duplicating it." };
       }
 
       const duplicate = await widgetService.duplicateWidget(widgetId);
@@ -202,33 +217,21 @@ export const action = async ({ request }: ActionFunctionArgs): Promise<ActionDat
   }
 };
 
-function SettingsSection({
-  title,
-  open,
-  onToggle,
-  children,
-}: {
-  title: string;
-  open: boolean;
-  onToggle: () => void;
-  children: ReactNode;
-}) {
+function InspectorSection({ title, children }: { title: string; children: ReactNode }) {
   return (
-    <Card>
-      <BlockStack gap="300">
-        <InlineStack align="space-between" blockAlign="center">
-          <Text as="h3" variant="headingSm">
-            {title}
-          </Text>
-          <Button variant="plain" onClick={onToggle} accessibilityLabel={`Toggle ${title}`}>
-            {open ? "Collapse" : "Expand"}
-          </Button>
-        </InlineStack>
-        <Collapsible open={open} id={`section-${title.toLowerCase().replace(/\s+/g, "-")}`}>
-          <div className={styles.sectionContent}>{children}</div>
-        </Collapsible>
-      </BlockStack>
-    </Card>
+    <div className={styles.inspectorSection}>
+      <h3 className={styles.inspectorSectionTitle}>{title}</h3>
+      <div className={styles.inspectorSectionBody}>{children}</div>
+    </div>
+  );
+}
+
+function ReservedRow({ label }: { label: string }) {
+  return (
+    <div className={styles.reservedRow}>
+      <span className={styles.reservedRowLabel}>{label}</span>
+      <span className={styles.comingSoonPill}>Coming soon</span>
+    </div>
   );
 }
 
@@ -299,7 +302,7 @@ function ReviewPreviewCard({ settings, review }: { settings: WidgetSettings; rev
   );
 }
 
-function WidgetPreview({ type, settings }: { type: WidgetType; settings: WidgetSettings }) {
+function WidgetPreview({ settings }: { settings: WidgetSettings }) {
   const previewBackground = settings.darkMode ? "#111111" : "#F5F4EF";
   const previewSurface = settings.darkMode ? "#1B1B1B" : "#FFFFFF";
   const justifyContent = settings.alignment === "center" ? "center" : settings.alignment === "right" ? "flex-end" : "flex-start";
@@ -322,66 +325,11 @@ function WidgetPreview({ type, settings }: { type: WidgetType; settings: WidgetS
             </Text>
           </div>
 
-          {type === "star-rating" ? (
-            <div className={styles.starRatingPreview} style={{ justifyContent }}>
-              <div className={styles.previewStars}>{renderStars(5, settings.starSize, settings.starColor, settings.starFilled, settings.starOutline)}</div>
-              <Text as="span" variant="bodyMd">
-                4.9 from 1,284 reviews
-              </Text>
-            </div>
-          ) : null}
-
-          {type === "review-list" ? (
-            <div className={styles.listPreview}>
-              {sampleReviews.map((review) => (
-                <ReviewPreviewCard key={review.id} settings={settings} review={review} />
-              ))}
-            </div>
-          ) : null}
-
-          {type === "review-carousel" ? (
-            <div className={styles.carouselPreview}>
-              {sampleReviews.map((review) => (
-                <div key={review.id} className={styles.carouselSlide} style={{ width: `${settings.cardWidth}px` }}>
-                  <ReviewPreviewCard settings={settings} review={review} />
-                </div>
-              ))}
-            </div>
-          ) : null}
-
-          {type === "review-grid" ? (
-            <div className={styles.gridPreview} style={{ gap: `${settings.verticalSpacing}px` }}>
-              {sampleReviews.map((review) => (
-                <div key={review.id} style={{ width: `min(100%, ${settings.cardWidth}px)` }}>
-                  <ReviewPreviewCard settings={settings} review={review} />
-                </div>
-              ))}
-            </div>
-          ) : null}
-
-          {type === "masonry-grid" ? (
-            <div className={styles.masonryPreview} style={{ gap: `${settings.verticalSpacing}px` }}>
-              {sampleReviews.map((review, index) => (
-                <div key={review.id} className={styles.masonryCell} style={{ marginTop: index === 1 ? "40px" : index === 2 ? "16px" : "0", width: `min(100%, ${settings.cardWidth}px)` }}>
-                  <ReviewPreviewCard settings={settings} review={review} />
-                </div>
-              ))}
-            </div>
-          ) : null}
-
-          {type === "floating-badge" ? (
-            <div className={styles.floatingBadgePreview} style={{ justifyContent }}>
-              <div
-                className={styles.floatingBadge}
-                style={{ borderRadius: `${settings.borderRadius}px`, background: settings.backgroundColor, color: settings.textColor, borderColor: settings.borderColor }}
-              >
-                <div className={styles.previewStars}>{renderStars(5, settings.starSize, settings.starColor, settings.starFilled, settings.starOutline)}</div>
-                <Text as="span" variant="bodySm">
-                  Loved by 1,200+ shoppers
-                </Text>
-              </div>
-            </div>
-          ) : null}
+          <div className={styles.listPreview}>
+            {sampleReviews.map((review) => (
+              <ReviewPreviewCard key={review.id} settings={settings} review={review} />
+            ))}
+          </div>
 
           <div className={styles.previewActions} style={{ justifyContent }}>
             {settings.showWriteReviewButton ? (
@@ -420,44 +368,49 @@ function WidgetPreview({ type, settings }: { type: WidgetType; settings: WidgetS
 }
 
 export default function WidgetsPage() {
-  const { widgets, error } = useLoaderData<typeof loader>();
+  const { widgets, shop, error } = useLoaderData<typeof loader>();
   const fetcher = useFetcher<ActionData>();
   const navigation = useNavigation();
   const revalidator = useRevalidator();
   const isLoading = navigation.state !== "idle";
   const isMutating = fetcher.state !== "idle";
 
-  const [selectedWidgetId, setSelectedWidgetId] = useState<string | null>(widgets[0]?.id ?? null);
-  const [selectedType, setSelectedType] = useState<WidgetType>(widgets[0]?.type ?? "review-list");
-  const [draftName, setDraftName] = useState(widgets[0]?.name ?? getDefaultWidgetSettings("review-list").widgetName);
-  const [draftSettings, setDraftSettings] = useState<WidgetSettings>(widgets[0]?.settings ?? getDefaultWidgetSettings("review-list"));
-  const [baselineSettings, setBaselineSettings] = useState<WidgetSettings>(widgets[0]?.settings ?? getDefaultWidgetSettings("review-list"));
-  const [baselineName, setBaselineName] = useState(widgets[0]?.name ?? getDefaultWidgetSettings("review-list").widgetName);
+  const [view, setView] = useState<PageView>("gallery");
+  const [quickEditOpen, setQuickEditOpen] = useState(false);
+  const [actionsMenuOpen, setActionsMenuOpen] = useState(false);
+  const [optimisticDeletedIds, setOptimisticDeletedIds] = useState<Record<string, true>>({});
   const [toastState, setToastState] = useState<{ content: string; error?: boolean } | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
-  const [openSections, setOpenSections] = useState<Record<SettingSectionKey, boolean>>(initialOpenSections);
-  const [optimisticDeletedIds, setOptimisticDeletedIds] = useState<Record<string, true>>({});
 
   const effectiveWidgets = useMemo(
     () => widgets.filter((widget) => !optimisticDeletedIds[widget.id]),
     [widgets, optimisticDeletedIds],
   );
 
-  useEffect(() => {
-    if (!effectiveWidgets.length) {
-      return;
-    }
+  const reviewsWidget = useMemo(
+    () => effectiveWidgets.find((widget) => widget.type === REVIEWS_WIDGET_TYPE) ?? null,
+    [effectiveWidgets],
+  );
 
-    if (!selectedWidgetId || !effectiveWidgets.some((widget) => widget.id === selectedWidgetId)) {
-      const nextWidget = effectiveWidgets[0];
-      setSelectedWidgetId(nextWidget.id);
-      setSelectedType(nextWidget.type);
-      setDraftName(nextWidget.name);
-      setBaselineName(nextWidget.name);
-      setDraftSettings(nextWidget.settings);
-      setBaselineSettings(nextWidget.settings);
+  const [draftName, setDraftName] = useState(reviewsWidget?.name ?? getDefaultWidgetSettings(REVIEWS_WIDGET_TYPE).widgetName);
+  const [draftSettings, setDraftSettings] = useState<WidgetSettings>(
+    reviewsWidget?.settings ?? getDefaultWidgetSettings(REVIEWS_WIDGET_TYPE),
+  );
+  const [baselineSettings, setBaselineSettings] = useState<WidgetSettings>(
+    reviewsWidget?.settings ?? getDefaultWidgetSettings(REVIEWS_WIDGET_TYPE),
+  );
+  const [baselineName, setBaselineName] = useState(
+    reviewsWidget?.name ?? getDefaultWidgetSettings(REVIEWS_WIDGET_TYPE).widgetName,
+  );
+
+  useEffect(() => {
+    if (reviewsWidget) {
+      setDraftName(reviewsWidget.name);
+      setBaselineName(reviewsWidget.name);
+      setDraftSettings(reviewsWidget.settings);
+      setBaselineSettings(reviewsWidget.settings);
     }
-  }, [effectiveWidgets, selectedWidgetId]);
+  }, [reviewsWidget?.id, reviewsWidget?.updatedAt]);
 
   useEffect(() => {
     if (!fetcher.data) {
@@ -473,33 +426,14 @@ export default function WidgetsPage() {
 
     setActionError(null);
     setToastState({ content: fetcher.data.message || "Widget updated." });
-
-    if (fetcher.data.widgetId) {
-      setSelectedWidgetId(fetcher.data.widgetId);
-    }
-
     setOptimisticDeletedIds({});
     revalidator.revalidate();
   }, [fetcher.data, revalidator]);
-
-  const selectedSavedWidget = useMemo(
-    () => effectiveWidgets.find((widget) => widget.id === selectedWidgetId) ?? null,
-    [effectiveWidgets, selectedWidgetId],
-  );
 
   const hasUnsavedChanges = useMemo(
     () => draftName !== baselineName || JSON.stringify(draftSettings) !== JSON.stringify(baselineSettings),
     [baselineName, baselineSettings, draftName, draftSettings],
   );
-
-  const applyDraftFromWidget = (widget: WidgetRecord) => {
-    setSelectedWidgetId(widget.id);
-    setSelectedType(widget.type);
-    setDraftName(widget.name);
-    setBaselineName(widget.name);
-    setDraftSettings(widget.settings);
-    setBaselineSettings(widget.settings);
-  };
 
   const submitAction = (payload: Record<string, string>) => {
     const formData = new FormData();
@@ -511,22 +445,12 @@ export default function WidgetsPage() {
     setDraftSettings((current) => ({ ...current, [key]: value }));
   };
 
-  const handleLibrarySelect = (item: LibraryItem) => {
-    setSelectedType(item.type);
-    const defaults = getDefaultWidgetSettings(item.type);
-    setDraftSettings(defaults);
-    setBaselineSettings(defaults);
-    setDraftName(defaults.widgetName);
-    setBaselineName(defaults.widgetName);
-    setSelectedWidgetId(null);
-  };
-
   const handleSave = () => {
     submitAction({
       _intent: "save",
-      widgetId: selectedWidgetId ?? "",
+      widgetId: reviewsWidget?.id ?? "",
       widgetName: draftName,
-      type: selectedType,
+      type: REVIEWS_WIDGET_TYPE,
       settings: JSON.stringify({ ...draftSettings, widgetName: draftName }),
     });
     setBaselineName(draftName);
@@ -536,48 +460,41 @@ export default function WidgetsPage() {
   const handleDiscard = () => {
     setDraftName(baselineName);
     setDraftSettings(baselineSettings);
-    setSelectedType(selectedSavedWidget?.type ?? selectedType);
   };
 
   const handleDuplicate = () => {
-    if (!selectedWidgetId) {
+    if (!reviewsWidget) {
       setToastState({ content: "Save this widget before duplicating it.", error: true });
       return;
     }
-
-    submitAction({ _intent: "duplicate", widgetId: selectedWidgetId });
+    submitAction({ _intent: "duplicate", widgetId: reviewsWidget.id });
   };
 
   const handleDelete = () => {
-    if (!selectedWidgetId) {
-      const defaults = getDefaultWidgetSettings(selectedType);
+    if (!reviewsWidget) {
+      const defaults = getDefaultWidgetSettings(REVIEWS_WIDGET_TYPE);
       setDraftName(defaults.widgetName);
       setDraftSettings(defaults);
       setBaselineName(defaults.widgetName);
       setBaselineSettings(defaults);
       return;
     }
-
-    setOptimisticDeletedIds((current) => ({ ...current, [selectedWidgetId]: true }));
-    submitAction({ _intent: "delete", widgetId: selectedWidgetId });
+    setOptimisticDeletedIds((current) => ({ ...current, [reviewsWidget.id]: true }));
+    submitAction({ _intent: "delete", widgetId: reviewsWidget.id });
   };
 
   const handleReset = () => {
-    if (!selectedWidgetId) {
-      const defaults = getDefaultWidgetSettings(selectedType);
-      setDraftName(defaults.widgetName);
-      setDraftSettings(defaults);
-      setBaselineName(defaults.widgetName);
-      setBaselineSettings(defaults);
-      setToastState({ content: "Draft reset to defaults." });
-      return;
-    }
-
-    const defaults = getDefaultWidgetSettings(selectedType);
+    const defaults = getDefaultWidgetSettings(REVIEWS_WIDGET_TYPE);
     setDraftSettings(defaults);
     setBaselineSettings(defaults);
-    submitAction({ _intent: "reset", widgetId: selectedWidgetId });
+    if (reviewsWidget) {
+      submitAction({ _intent: "reset", widgetId: reviewsWidget.id });
+    } else {
+      setToastState({ content: "Draft reset to defaults." });
+    }
   };
+
+  const themeEditorUrl = `https://${shop}/admin/themes/current/editor`;
 
   return (
     <>
@@ -588,232 +505,367 @@ export default function WidgetsPage() {
               <p className={`${shellStyles.eyebrow} ${styles.eyebrow}`}>Imagyn Reviews</p>
               <h1 className={`${shellStyles.title} ${styles.title}`}>Widgets</h1>
               <p className={`${shellStyles.subtitle} ${styles.subtitle}`}>
-                Visually tune premium storefront review widgets with a live Shopify-native preview.
+                Customize how reviews present across your storefront.
               </p>
             </div>
-            <InlineStack gap="200" wrap>
-              <Button onClick={handleSave} loading={isMutating && fetcher.formData?.get("_intent")?.toString() === "save"} disabled={!hasUnsavedChanges}>
-                Save
-              </Button>
-              <Button variant="secondary" onClick={handleDiscard} disabled={!hasUnsavedChanges || isMutating}>
-                Discard Changes
-              </Button>
-              <Button variant="secondary" onClick={handleReset} disabled={isMutating}>
-                Reset to Default
-              </Button>
-              <Button variant="secondary" onClick={handleDuplicate} disabled={isMutating}>
-                Duplicate
-              </Button>
-              <Button variant="secondary" tone="critical" onClick={handleDelete} disabled={isMutating}>
-                Delete
-              </Button>
-            </InlineStack>
+            {view === "customize" ? (
+              <button type="button" className={styles.backLink} onClick={() => setView("gallery")}>
+                ← Back to Widgets
+              </button>
+            ) : null}
           </header>
 
-          {error ? <Banner tone="critical">{error}</Banner> : null}
-          {actionError ? <Banner tone="critical">{actionError}</Banner> : null}
+          {error ? (
+            <div className={styles.errorState} role="alert">
+              <h2 className={styles.errorStateTitle}>Unable to load widgets</h2>
+              <p className={styles.errorStateText}>{error}</p>
+            </div>
+          ) : actionError ? (
+            <p className={styles.feedbackError}>{actionError}</p>
+          ) : null}
 
           {isLoading && !widgets.length ? (
-            <Card>
-              <BlockStack gap="400">
-                <SkeletonDisplayText size="small" />
-                <SkeletonBodyText lines={10} />
-              </BlockStack>
-            </Card>
-          ) : (
-            <div className={styles.builderLayout}>
-              <div className={styles.sidebarPanel}>
-                <Card>
-                  <BlockStack gap="400">
-                    <div>
-                      <Text as="h2" variant="headingMd">
-                        Widget Library
-                      </Text>
-                      <Text as="p" variant="bodyMd" tone="subdued">
-                        Choose the presentation style to load into the live preview.
-                      </Text>
-                    </div>
-                    <div className={styles.libraryList}>
-                      {widgetLibrary.map((item) => (
-                        <button
-                          key={item.type}
-                          type="button"
-                          className={`${styles.libraryItem} ${selectedType === item.type ? styles.libraryItemActive : ""}`}
-                          onClick={() => handleLibrarySelect(item)}
-                        >
-                          <span className={styles.libraryIcon}>{item.icon}</span>
-                          <span className={styles.libraryText}>
-                            <strong>{item.title}</strong>
-                            <small>{item.description}</small>
-                          </span>
-                        </button>
-                      ))}
-                    </div>
-                    <Divider />
-                    <div>
-                      <Text as="h3" variant="headingSm">
-                        Saved Widgets
-                      </Text>
-                    </div>
-                    {effectiveWidgets.length === 0 ? (
-                      <EmptyState
-                        heading="No saved widgets yet"
-                        image="https://cdn.shopify.com/s/files/1/0262/4071/2726/files/emptystate-files.png"
-                      >
-                        <p>Customize a widget from the library and save it when you are ready.</p>
-                      </EmptyState>
-                    ) : (
-                      <BlockStack gap="200">
-                        {effectiveWidgets.map((widget) => (
-                          <button
-                            key={widget.id}
-                            type="button"
-                            className={`${styles.savedWidgetItem} ${selectedWidgetId === widget.id ? styles.savedWidgetItemActive : ""}`}
-                            onClick={() => applyDraftFromWidget(widget)}
-                          >
-                            <span>{widget.name}</span>
-                            <small>{widget.type.replace(/-/g, " ")}</small>
-                          </button>
-                        ))}
-                      </BlockStack>
-                    )}
-                  </BlockStack>
-                </Card>
-              </div>
-
-              <div className={styles.previewPanel}>
-                <Card>
-                  <BlockStack gap="400">
-                    <InlineStack align="space-between" blockAlign="center">
-                      <div>
-                        <Text as="h2" variant="headingMd">
-                          Live Preview
-                        </Text>
-                        <Text as="p" variant="bodyMd" tone="subdued">
-                          Storefront simulation updates instantly as you edit settings.
-                        </Text>
+            <div className={styles.skeletonGrid} aria-hidden="true">
+              {Array.from({ length: 5 }, (_, index) => (
+                <div key={index} className={styles.skeletonCard} />
+              ))}
+            </div>
+          ) : view === "gallery" ? (
+            <div className={styles.cardGrid}>
+              {widgetCards.map((card) => {
+                if (card.status === "reserved") {
+                  return (
+                    <div key={card.key} className={styles.widgetCard} data-reserved="true">
+                      <div className={styles.widgetCardHeader}>
+                        <h2 className={styles.widgetCardTitle}>{card.title}</h2>
+                        <span className={styles.comingSoonPill}>Coming soon</span>
                       </div>
-                      <Badge tone={draftSettings.enabled ? "success" : "attention"}>{draftSettings.enabled ? "Enabled" : "Disabled"}</Badge>
-                    </InlineStack>
-                    <WidgetPreview type={selectedType} settings={{ ...draftSettings, widgetName: draftName }} />
-                  </BlockStack>
-                </Card>
+                      <p className={styles.widgetCardDescription}>{card.description}</p>
+                      <div className={styles.widgetCardThumbnailPlaceholder}>Preview not yet available</div>
+                    </div>
+                  );
+                }
+
+                if (card.status === "theme-editor") {
+                  return (
+                    <div key={card.key} className={styles.widgetCard}>
+                      <div className={styles.widgetCardHeader}>
+                        <h2 className={styles.widgetCardTitle}>{card.title}</h2>
+                        <span className={styles.installBadge}>Available</span>
+                      </div>
+                      <p className={styles.widgetCardDescription}>{card.description}</p>
+                      <div className={styles.widgetCardThumbnailPlaceholder}>
+                        <span className={styles.previewStars}>{renderStars(5, 16, "#111111", true, false)}</span>
+                      </div>
+                      <div className={styles.widgetCardMeta}>
+                        <span className={styles.widgetCardMetaLabel}>Configured in the Shopify Theme Editor</span>
+                      </div>
+                      <div className={styles.widgetCardActions}>
+                        <a
+                          className={styles.themeEditorLink}
+                          href={themeEditorUrl}
+                          target="_top"
+                          rel="noreferrer"
+                        >
+                          Open in Theme Editor
+                        </a>
+                      </div>
+                    </div>
+                  );
+                }
+
+                return (
+                  <div key={card.key} className={styles.widgetCard}>
+                    <div className={styles.widgetCardHeader}>
+                      <h2 className={styles.widgetCardTitle}>{card.title}</h2>
+                      <span className={draftSettings.enabled ? styles.statusEnabled : styles.statusDisabled}>
+                        {draftSettings.enabled ? "Enabled" : "Disabled"}
+                      </span>
+                    </div>
+                    <p className={styles.widgetCardDescription}>{card.description}</p>
+                    <div className={styles.widgetCardThumbnail}>
+                      <div className={styles.widgetCardThumbnailScale}>
+                        <WidgetPreview settings={{ ...draftSettings, widgetName: draftName }} />
+                      </div>
+                    </div>
+                    <div className={styles.widgetCardMeta}>
+                      <span className={styles.installBadge}>Available</span>
+                      <span className={styles.widgetCardMetaLabel}>Block: {card.blockName}</span>
+                    </div>
+                    <div className={styles.widgetCardActions}>
+                      <Popover
+                        active={quickEditOpen}
+                        onClose={() => setQuickEditOpen(false)}
+                        activator={
+                          <Button type="button" onClick={() => setQuickEditOpen((open) => !open)} disabled={isMutating}>
+                            Quick Edit
+                          </Button>
+                        }
+                      >
+                        <div className={styles.quickEditPopover}>
+                          <Checkbox label="Enable widget" checked={draftSettings.enabled} onChange={(value) => updateSetting("enabled", value)} />
+                          <TextField label="Primary color" value={draftSettings.primaryColor} onChange={(value) => updateSetting("primaryColor", value)} autoComplete="off" />
+                          <TextField label="Star color" value={draftSettings.starColor} onChange={(value) => updateSetting("starColor", value)} autoComplete="off" />
+                          <PolarisButton
+                            variant="primary"
+                            onClick={() => {
+                              handleSave();
+                              setQuickEditOpen(false);
+                            }}
+                            disabled={!hasUnsavedChanges || isMutating}
+                          >
+                            Save
+                          </PolarisButton>
+                        </div>
+                      </Popover>
+                      <Button type="button" variant="primary" onClick={() => setView("customize")}>
+                        Customize
+                      </Button>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          ) : (
+            <div className={styles.inspectorLayout}>
+              <div className={styles.inspectorPreviewColumn}>
+                <div className={styles.inspectorPreviewCard}>
+                  <div className={styles.inspectorPreviewHeader}>
+                    <div>
+                      <p className={styles.detailEyebrow}>Live preview</p>
+                      <h2 className={styles.inspectorTitle}>{draftName}</h2>
+                    </div>
+                    <span className={draftSettings.enabled ? styles.statusEnabled : styles.statusDisabled}>
+                      {draftSettings.enabled ? "Enabled" : "Disabled"}
+                    </span>
+                  </div>
+                  <WidgetPreview settings={{ ...draftSettings, widgetName: draftName }} />
+                </div>
+
+                <div className={styles.inspectorActionsBar}>
+                  <div className={styles.inspectorActionsPrimary}>
+                    <Button variant="primary" onClick={handleSave} disabled={!hasUnsavedChanges || isMutating}>
+                      Save
+                    </Button>
+                    <Button variant="secondary" onClick={handleDiscard} disabled={!hasUnsavedChanges || isMutating}>
+                      Discard Changes
+                    </Button>
+                  </div>
+                  <Popover
+                    active={actionsMenuOpen}
+                    onClose={() => setActionsMenuOpen(false)}
+                    activator={
+                      <Button
+                        type="button"
+                        variant="secondary"
+                        className={styles.actionsMenuButton}
+                        onClick={() => setActionsMenuOpen((open) => !open)}
+                        disabled={isMutating}
+                        aria-label="Widget actions"
+                        aria-haspopup="menu"
+                        aria-expanded={actionsMenuOpen}
+                      >
+                        <span aria-hidden="true">&#8226;&#8226;&#8226;</span>
+                        <span>Actions</span>
+                      </Button>
+                    }
+                  >
+                    <ActionList
+                      sections={[
+                        {
+                          items: [
+                            { content: "Duplicate", onAction: () => { setActionsMenuOpen(false); handleDuplicate(); } },
+                            { content: "Reset to Default", onAction: () => { setActionsMenuOpen(false); handleReset(); } },
+                          ],
+                        },
+                        {
+                          items: [
+                            {
+                              content: "Delete",
+                              destructive: true,
+                              onAction: () => {
+                                setActionsMenuOpen(false);
+                                handleDelete();
+                              },
+                            },
+                          ],
+                        },
+                      ]}
+                    />
+                  </Popover>
+                </div>
               </div>
 
-              <div className={styles.settingsPanel}>
-                <BlockStack gap="300">
-                  <SettingsSection title="General" open={openSections.general} onToggle={() => setOpenSections((current) => ({ ...current, general: !current.general }))}>
-                    <BlockStack gap="300">
-                      <TextField label="Widget Name" value={draftName} onChange={setDraftName} autoComplete="off" />
-                      <Checkbox label="Enable Widget" checked={draftSettings.enabled} onChange={(value) => updateSetting("enabled", value)} />
-                      <Select
-                        label="Widget Placement"
-                        options={[
-                          { label: "Product header", value: "product-header" },
-                          { label: "Product body", value: "product-body" },
-                          { label: "Homepage featured", value: "homepage-featured" },
-                          { label: "Collection highlight", value: "collection-highlight" },
-                          { label: "Floating corner", value: "floating-corner" },
-                        ]}
-                        value={draftSettings.placement}
-                        onChange={(value) => updateSetting("placement", value)}
-                      />
-                      <Select
-                        label="Animation"
-                        options={[
-                          { label: "Fade", value: "fade" },
-                          { label: "Slide", value: "slide" },
-                          { label: "Lift", value: "lift" },
-                          { label: "Stagger", value: "stagger" },
-                        ]}
-                        value={draftSettings.animation}
-                        onChange={(value) => updateSetting("animation", value)}
-                      />
-                    </BlockStack>
-                  </SettingsSection>
+              <div className={styles.inspectorSettingsColumn}>
+                <InspectorSection title="Name">
+                  <TextField label="Widget name" labelHidden value={draftName} onChange={setDraftName} autoComplete="off" />
+                </InspectorSection>
 
-                  <SettingsSection title="Colors" open={openSections.colors} onToggle={() => setOpenSections((current) => ({ ...current, colors: !current.colors }))}>
-                    <div className={styles.settingsGrid}>
-                      <TextField label="Primary Color" value={draftSettings.primaryColor} onChange={(value) => updateSetting("primaryColor", value)} autoComplete="off" />
-                      <TextField label="Accent Color" value={draftSettings.accentColor} onChange={(value) => updateSetting("accentColor", value)} autoComplete="off" />
-                      <TextField label="Background" value={draftSettings.backgroundColor} onChange={(value) => updateSetting("backgroundColor", value)} autoComplete="off" />
-                      <TextField label="Text Color" value={draftSettings.textColor} onChange={(value) => updateSetting("textColor", value)} autoComplete="off" />
-                      <TextField label="Border Color" value={draftSettings.borderColor} onChange={(value) => updateSetting("borderColor", value)} autoComplete="off" />
-                      <TextField label="Star Color" value={draftSettings.starColor} onChange={(value) => updateSetting("starColor", value)} autoComplete="off" />
-                      <TextField label="Button Color" value={draftSettings.buttonColor} onChange={(value) => updateSetting("buttonColor", value)} autoComplete="off" />
-                    </div>
-                  </SettingsSection>
+                <div className={styles.inspectorDivider} />
 
-                  <SettingsSection title="Typography" open={openSections.typography} onToggle={() => setOpenSections((current) => ({ ...current, typography: !current.typography }))}>
-                    <BlockStack gap="300">
-                      <RangeSlider label="Heading Font Size" min={14} max={40} value={draftSettings.headingFontSize} onChange={(value) => updateSetting("headingFontSize", toNumberValue(value))} output />
-                      <RangeSlider label="Body Font Size" min={12} max={22} value={draftSettings.bodyFontSize} onChange={(value) => updateSetting("bodyFontSize", toNumberValue(value))} output />
-                      <Select label="Font Weight" options={[{ label: "Regular", value: "400" }, { label: "Medium", value: "500" }, { label: "Semibold", value: "600" }, { label: "Bold", value: "700" }]} value={draftSettings.fontWeight} onChange={(value) => updateSetting("fontWeight", value)} />
-                      <RangeSlider label="Letter Spacing" min={0} max={4} step={0.5} value={draftSettings.letterSpacing} onChange={(value) => updateSetting("letterSpacing", toNumberValue(value))} output />
-                      <RangeSlider label="Line Height" min={1} max={2} step={0.1} value={draftSettings.lineHeight} onChange={(value) => updateSetting("lineHeight", toNumberValue(value))} output />
-                    </BlockStack>
-                  </SettingsSection>
+                <InspectorSection title="Appearance">
+                  <p className={styles.inspectorGroupLabel}>Colors</p>
+                  <div className={styles.settingsGrid}>
+                    <TextField label="Primary" value={draftSettings.primaryColor} onChange={(value) => updateSetting("primaryColor", value)} autoComplete="off" />
+                    <TextField label="Accent" value={draftSettings.accentColor} onChange={(value) => updateSetting("accentColor", value)} autoComplete="off" />
+                    <TextField label="Background" value={draftSettings.backgroundColor} onChange={(value) => updateSetting("backgroundColor", value)} autoComplete="off" />
+                    <TextField label="Text" value={draftSettings.textColor} onChange={(value) => updateSetting("textColor", value)} autoComplete="off" />
+                    <TextField label="Border" value={draftSettings.borderColor} onChange={(value) => updateSetting("borderColor", value)} autoComplete="off" />
+                    <TextField label="Star" value={draftSettings.starColor} onChange={(value) => updateSetting("starColor", value)} autoComplete="off" />
+                    <TextField label="Button" value={draftSettings.buttonColor} onChange={(value) => updateSetting("buttonColor", value)} autoComplete="off" />
+                  </div>
 
-                  <SettingsSection title="Cards" open={openSections.cards} onToggle={() => setOpenSections((current) => ({ ...current, cards: !current.cards }))}>
-                    <BlockStack gap="300">
-                      <RangeSlider label="Border Radius" min={0} max={40} value={draftSettings.borderRadius} onChange={(value) => updateSetting("borderRadius", toNumberValue(value))} output />
-                      <RangeSlider label="Border Width" min={0} max={4} value={draftSettings.borderWidth} onChange={(value) => updateSetting("borderWidth", toNumberValue(value))} output />
-                      <Select label="Shadow" options={[{ label: "None", value: "none" }, { label: "Soft", value: "soft" }, { label: "Medium", value: "medium" }]} value={draftSettings.shadow} onChange={(value) => updateSetting("shadow", value)} />
-                      <RangeSlider label="Padding" min={8} max={40} value={draftSettings.padding} onChange={(value) => updateSetting("padding", toNumberValue(value))} output />
-                      <RangeSlider label="Gap" min={8} max={32} value={draftSettings.gap} onChange={(value) => updateSetting("gap", toNumberValue(value))} output />
-                      <Select label="Alignment" options={[{ label: "Left", value: "left" }, { label: "Center", value: "center" }, { label: "Right", value: "right" }]} value={draftSettings.alignment} onChange={(value) => updateSetting("alignment", value)} />
-                    </BlockStack>
-                  </SettingsSection>
+                  <p className={styles.inspectorGroupLabel}>Typography</p>
+                  <BlockStack gap="300">
+                    <RangeSlider label="Heading size" min={14} max={40} value={draftSettings.headingFontSize} onChange={(value) => updateSetting("headingFontSize", toNumberValue(value))} output />
+                    <RangeSlider label="Body size" min={12} max={22} value={draftSettings.bodyFontSize} onChange={(value) => updateSetting("bodyFontSize", toNumberValue(value))} output />
+                    <Select label="Weight" options={[{ label: "Regular", value: "400" }, { label: "Medium", value: "500" }, { label: "Semibold", value: "600" }, { label: "Bold", value: "700" }]} value={draftSettings.fontWeight} onChange={(value) => updateSetting("fontWeight", value)} />
+                    <RangeSlider label="Letter spacing" min={0} max={4} step={0.5} value={draftSettings.letterSpacing} onChange={(value) => updateSetting("letterSpacing", toNumberValue(value))} output />
+                    <RangeSlider label="Line height" min={1} max={2} step={0.1} value={draftSettings.lineHeight} onChange={(value) => updateSetting("lineHeight", toNumberValue(value))} output />
+                  </BlockStack>
 
-                  <SettingsSection title="Reviewer" open={openSections.reviewer} onToggle={() => setOpenSections((current) => ({ ...current, reviewer: !current.reviewer }))}>
-                    <BlockStack gap="300">
-                      <Checkbox label="Avatar" checked={draftSettings.showAvatar} onChange={(value) => updateSetting("showAvatar", value)} />
-                      <Select label="Avatar Shape" options={[{ label: "Circle", value: "circle" }, { label: "Rounded", value: "rounded" }, { label: "Square", value: "square" }]} value={draftSettings.avatarShape} onChange={(value) => updateSetting("avatarShape", value)} />
-                      <Checkbox label="Verified Badge" checked={draftSettings.showVerifiedBadge} onChange={(value) => updateSetting("showVerifiedBadge", value)} />
-                      <Checkbox label="Reviewer Name" checked={draftSettings.showReviewerName} onChange={(value) => updateSetting("showReviewerName", value)} />
-                      <Checkbox label="Date" checked={draftSettings.showDate} onChange={(value) => updateSetting("showDate", value)} />
-                      <Checkbox label="Country" checked={draftSettings.showCountry} onChange={(value) => updateSetting("showCountry", value)} />
-                    </BlockStack>
-                  </SettingsSection>
+                  <p className={styles.inspectorGroupLabel}>Corner radius</p>
+                  <RangeSlider label="Card corner radius" labelHidden min={0} max={40} value={draftSettings.borderRadius} onChange={(value) => updateSetting("borderRadius", toNumberValue(value))} output />
 
-                  <SettingsSection title="Stars" open={openSections.stars} onToggle={() => setOpenSections((current) => ({ ...current, stars: !current.stars }))}>
-                    <BlockStack gap="300">
-                      <RangeSlider label="Star Size" min={12} max={28} value={draftSettings.starSize} onChange={(value) => updateSetting("starSize", toNumberValue(value))} output />
-                      <TextField label="Star Color" value={draftSettings.starColor} onChange={(value) => updateSetting("starColor", value)} autoComplete="off" />
-                      <Checkbox label="Filled" checked={draftSettings.starFilled} onChange={(value) => updateSetting("starFilled", value)} />
-                      <Checkbox label="Outline" checked={draftSettings.starOutline} onChange={(value) => updateSetting("starOutline", value)} />
-                    </BlockStack>
-                  </SettingsSection>
+                  <p className={styles.inspectorGroupLabel}>Border</p>
+                  <RangeSlider label="Border width" min={0} max={4} value={draftSettings.borderWidth} onChange={(value) => updateSetting("borderWidth", toNumberValue(value))} output />
 
-                  <SettingsSection title="Buttons" open={openSections.buttons} onToggle={() => setOpenSections((current) => ({ ...current, buttons: !current.buttons }))}>
-                    <BlockStack gap="300">
-                      <Checkbox label="Load More" checked={draftSettings.showLoadMoreButton} onChange={(value) => updateSetting("showLoadMoreButton", value)} />
-                      <Checkbox label="Write Review" checked={draftSettings.showWriteReviewButton} onChange={(value) => updateSetting("showWriteReviewButton", value)} />
-                      <RangeSlider label="Button Radius" min={0} max={999} value={draftSettings.buttonRadius} onChange={(value) => updateSetting("buttonRadius", toNumberValue(value))} output />
-                      <Select label="Button Style" options={[{ label: "Solid", value: "solid" }, { label: "Outline", value: "outline" }, { label: "Ghost", value: "ghost" }]} value={draftSettings.buttonStyle} onChange={(value) => updateSetting("buttonStyle", value)} />
-                    </BlockStack>
-                  </SettingsSection>
+                  <p className={styles.inspectorGroupLabel}>Shadow</p>
+                  <Select label="Shadow" labelHidden options={[{ label: "None", value: "none" }, { label: "Soft", value: "soft" }, { label: "Medium", value: "medium" }]} value={draftSettings.shadow} onChange={(value) => updateSetting("shadow", value)} />
 
-                  <SettingsSection title="Spacing" open={openSections.spacing} onToggle={() => setOpenSections((current) => ({ ...current, spacing: !current.spacing }))}>
-                    <BlockStack gap="300">
-                      <RangeSlider label="Container Width" min={280} max={1200} value={draftSettings.containerWidth} onChange={(value) => updateSetting("containerWidth", toNumberValue(value))} output />
-                      <RangeSlider label="Card Width" min={220} max={420} value={draftSettings.cardWidth} onChange={(value) => updateSetting("cardWidth", toNumberValue(value))} output />
-                      <RangeSlider label="Margins" min={0} max={48} value={draftSettings.margins} onChange={(value) => updateSetting("margins", toNumberValue(value))} output />
-                      <RangeSlider label="Vertical Spacing" min={8} max={32} value={draftSettings.verticalSpacing} onChange={(value) => updateSetting("verticalSpacing", toNumberValue(value))} output />
-                    </BlockStack>
-                  </SettingsSection>
+                  <p className={styles.inspectorGroupLabel}>Buttons</p>
+                  <BlockStack gap="300">
+                    <RangeSlider label="Button radius" min={0} max={999} value={draftSettings.buttonRadius} onChange={(value) => updateSetting("buttonRadius", toNumberValue(value))} output />
+                    <Select label="Button style" options={[{ label: "Solid", value: "solid" }, { label: "Outline", value: "outline" }, { label: "Ghost", value: "ghost" }]} value={draftSettings.buttonStyle} onChange={(value) => updateSetting("buttonStyle", value)} />
+                  </BlockStack>
+                </InspectorSection>
 
-                  <SettingsSection title="Advanced" open={openSections.advanced} onToggle={() => setOpenSections((current) => ({ ...current, advanced: !current.advanced }))}>
-                    <BlockStack gap="300">
-                      <TextField label="Custom CSS" value={draftSettings.customCss} onChange={(value) => updateSetting("customCss", value)} autoComplete="off" multiline={6} />
-                      <Checkbox label="Enable Animations" checked={draftSettings.enableAnimations} onChange={(value) => updateSetting("enableAnimations", value)} />
-                      <Checkbox label="Dark Mode" checked={draftSettings.darkMode} onChange={(value) => updateSetting("darkMode", value)} />
-                    </BlockStack>
-                  </SettingsSection>
-                </BlockStack>
+                <div className={styles.inspectorDivider} />
+
+                <InspectorSection title="Layout">
+                  <p className={styles.inspectorGroupLabel}>Spacing</p>
+                  <BlockStack gap="300">
+                    <RangeSlider label="Padding" min={8} max={40} value={draftSettings.padding} onChange={(value) => updateSetting("padding", toNumberValue(value))} output />
+                    <RangeSlider label="Gap" min={8} max={32} value={draftSettings.gap} onChange={(value) => updateSetting("gap", toNumberValue(value))} output />
+                    <RangeSlider label="Margins" min={0} max={48} value={draftSettings.margins} onChange={(value) => updateSetting("margins", toNumberValue(value))} output />
+                    <RangeSlider label="Vertical spacing" min={8} max={32} value={draftSettings.verticalSpacing} onChange={(value) => updateSetting("verticalSpacing", toNumberValue(value))} output />
+                  </BlockStack>
+
+                  <p className={styles.inspectorGroupLabel}>Alignment</p>
+                  <Select label="Alignment" labelHidden options={[{ label: "Left", value: "left" }, { label: "Center", value: "center" }, { label: "Right", value: "right" }]} value={draftSettings.alignment} onChange={(value) => updateSetting("alignment", value)} />
+
+                  <p className={styles.inspectorGroupLabel}>Width</p>
+                  <BlockStack gap="300">
+                    <RangeSlider label="Container width" min={280} max={1200} value={draftSettings.containerWidth} onChange={(value) => updateSetting("containerWidth", toNumberValue(value))} output />
+                    <RangeSlider label="Card width" min={220} max={420} value={draftSettings.cardWidth} onChange={(value) => updateSetting("cardWidth", toNumberValue(value))} output />
+                  </BlockStack>
+
+                  <p className={styles.inspectorGroupLabel}>Card style</p>
+                  <div className={styles.cardStyleRow}>
+                    <span className={styles.cardStyleActive}>List</span>
+                    <span className={styles.cardStyleReserved}>Carousel · Coming soon</span>
+                    <span className={styles.cardStyleReserved}>Floating Review Widget · Coming soon</span>
+                  </div>
+                </InspectorSection>
+
+                <div className={styles.inspectorDivider} />
+
+                <InspectorSection title="Content">
+                  <p className={styles.inspectorGroupLabel}>Stars</p>
+                  <BlockStack gap="300">
+                    <RangeSlider label="Star size" min={12} max={28} value={draftSettings.starSize} onChange={(value) => updateSetting("starSize", toNumberValue(value))} output />
+                    <Checkbox label="Filled" checked={draftSettings.starFilled} onChange={(value) => updateSetting("starFilled", value)} />
+                    <Checkbox label="Outline" checked={draftSettings.starOutline} onChange={(value) => updateSetting("starOutline", value)} />
+                  </BlockStack>
+
+                  <p className={styles.inspectorGroupLabel}>Rating text</p>
+                  <ReservedRow label="Show numeral alongside stars" />
+
+                  <p className={styles.inspectorGroupLabel}>Reviewer name</p>
+                  <Checkbox label="Show reviewer name" checked={draftSettings.showReviewerName} onChange={(value) => updateSetting("showReviewerName", value)} />
+
+                  <p className={styles.inspectorGroupLabel}>Verified badge</p>
+                  <Checkbox label="Show verified buyer badge" checked={draftSettings.showVerifiedBadge} onChange={(value) => updateSetting("showVerifiedBadge", value)} />
+
+                  <p className={styles.inspectorGroupLabel}>Date</p>
+                  <BlockStack gap="300">
+                    <Checkbox label="Show date" checked={draftSettings.showDate} onChange={(value) => updateSetting("showDate", value)} />
+                    <Checkbox label="Show country" checked={draftSettings.showCountry} onChange={(value) => updateSetting("showCountry", value)} />
+                  </BlockStack>
+
+                  <p className={styles.inspectorGroupLabel}>Photos</p>
+                  <ReservedRow label="Show customer photos in the review list" />
+                </InspectorSection>
+
+                <div className={styles.inspectorDivider} />
+
+                <InspectorSection title="Behaviour">
+                  <p className={styles.inspectorGroupLabel}>Pagination</p>
+                  <Checkbox label="Show Load More button" checked={draftSettings.showLoadMoreButton} onChange={(value) => updateSetting("showLoadMoreButton", value)} />
+
+                  <p className={styles.inspectorGroupLabel}>Infinite scroll</p>
+                  <ReservedRow label="Load more reviews automatically while scrolling" />
+
+                  <p className={styles.inspectorGroupLabel}>Sorting</p>
+                  <ReservedRow label="Merchant-configurable default sort order" />
+
+                  <p className={styles.inspectorGroupLabel}>Default filter</p>
+                  <ReservedRow label="Pre-select a rating or status filter" />
+
+                  <p className={styles.inspectorGroupLabel}>Interactions</p>
+                  <BlockStack gap="300">
+                    <Checkbox label="Show Write a Review button" checked={draftSettings.showWriteReviewButton} onChange={(value) => updateSetting("showWriteReviewButton", value)} />
+                    <Select
+                      label="Placement"
+                      options={[
+                        { label: "Product header", value: "product-header" },
+                        { label: "Product body", value: "product-body" },
+                        { label: "Homepage featured", value: "homepage-featured" },
+                        { label: "Collection highlight", value: "collection-highlight" },
+                        { label: "Floating corner", value: "floating-corner" },
+                      ]}
+                      value={draftSettings.placement}
+                      onChange={(value) => updateSetting("placement", value)}
+                    />
+                    <Select
+                      label="Entrance animation"
+                      options={[
+                        { label: "Fade", value: "fade" },
+                        { label: "Slide", value: "slide" },
+                        { label: "Lift", value: "lift" },
+                        { label: "Stagger", value: "stagger" },
+                      ]}
+                      value={draftSettings.animation}
+                      onChange={(value) => updateSetting("animation", value)}
+                    />
+                  </BlockStack>
+                </InspectorSection>
+
+                <div className={styles.inspectorDivider} />
+
+                <InspectorSection title="Advanced">
+                  <BlockStack gap="300">
+                    <Checkbox label="Enable animations" checked={draftSettings.enableAnimations} onChange={(value) => updateSetting("enableAnimations", value)} />
+                    <Checkbox label="Dark mode preview" checked={draftSettings.darkMode} onChange={(value) => updateSetting("darkMode", value)} />
+                    <TextField label="Custom CSS" value={draftSettings.customCss} onChange={(value) => updateSetting("customCss", value)} autoComplete="off" multiline={6} />
+                  </BlockStack>
+                </InspectorSection>
               </div>
             </div>
           )}
+
+          {view === "gallery" ? (
+            <div className={styles.roadmapSection}>
+              <p className={styles.detailEyebrow}>Coming soon</p>
+              <div className={styles.comingSoonRow}>
+                {reservedRoadmapItems.map((item) => (
+                  <span key={item} className={styles.comingSoonPill}>
+                    {item}
+                  </span>
+                ))}
+              </div>
+            </div>
+          ) : null}
         </div>
       </Container>
       <Frame>
