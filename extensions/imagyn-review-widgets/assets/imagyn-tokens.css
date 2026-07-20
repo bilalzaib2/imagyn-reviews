@@ -23,11 +23,14 @@
     Arial,
     sans-serif;
 
-  --imagyn-font-size-xs: 0.75rem;
-  --imagyn-font-size-sm: 0.8125rem;
-  --imagyn-font-size-base: 0.9375rem;
-  --imagyn-font-size-md: 1.0625rem;
-  --imagyn-font-size-lg: 1.25rem;
+  /* px, not rem: rem ties our sizing to the merchant theme's own <html> font-size
+     (Dawn sets it to 62.5%, i.e. 1rem = 10px, not 16px) — px keeps Imagyn Reviews
+     components rendering the same size regardless of the merchant's root convention. */
+  --imagyn-font-size-xs: 12px;
+  --imagyn-font-size-sm: 13px;
+  --imagyn-font-size-base: 15px;
+  --imagyn-font-size-md: 17px;
+  --imagyn-font-size-lg: 20px;
 
   --imagyn-font-weight-regular: 400;
   --imagyn-font-weight-medium: 500;

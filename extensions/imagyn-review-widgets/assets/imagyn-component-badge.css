@@ -17,7 +17,7 @@
   align-items: center;
   gap: var(--imagyn-space-xs, 0.4em);
   font-family: var(--imagyn-font-family, "Helvetica Neue", Helvetica, Arial, sans-serif);
-  font-size: var(--imagyn-font-size-sm, 0.8125rem);
+  font-size: var(--imagyn-font-size-sm, 13px);
   font-weight: var(--imagyn-font-weight-medium, 500);
   line-height: var(--imagyn-line-height-tight, 1);
   letter-spacing: var(--imagyn-letter-spacing-tight, 0.01em);
