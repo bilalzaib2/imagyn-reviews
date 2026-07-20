@@ -71,6 +71,13 @@
         return;
       }
 
+      // Claimed synchronously, at discovery time — not after the batch request resolves.
+      // The batch fetch is async; without claiming here, a debounced re-scan triggered while
+      // the first request is still in flight (common on sections with slider/lazy-load JS,
+      // like Featured Collection) would find the same unclaimed card again and start a
+      // second request, producing two badges. This makes a card+badge pairing idempotent
+      // regardless of how long the network round trip takes — no timers involved.
+      card.setAttribute(PROCESSED_ATTR, "true");
       found.push({ card: card, heading: heading, handle: handle });
     });
 
@@ -78,8 +85,6 @@
   }
 
   function injectBadge(entry, summary) {
-    entry.card.setAttribute(PROCESSED_ATTR, "true");
-
     if (!summary || summary.totalReviews === 0) {
       return false;
     }
@@ -128,9 +133,8 @@
         });
       })
       .catch(function () {
-        entries.forEach(function (entry) {
-          entry.card.setAttribute(PROCESSED_ATTR, "true");
-        });
+        // Cards are already claimed (see findCards) regardless of outcome, so there's
+        // nothing further to mark here — just avoid an unhandled promise rejection.
       });
   }
 
