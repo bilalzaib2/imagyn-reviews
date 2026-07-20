@@ -147,6 +147,7 @@
 
     summaryEl.innerHTML =
       '<div class="imagyn-summary" aria-hidden="true">' +
+      '<div class="imagyn-skeleton imagyn-skeleton--text imagyn-summary__quickbar-skeleton"></div>' +
       '<div class="imagyn-summary__hero imagyn-summary__hero-skeleton">' +
       '<div class="imagyn-skeleton imagyn-skeleton--title"></div>' +
       '<div class="imagyn-skeleton imagyn-skeleton--text"></div>' +
@@ -206,57 +207,90 @@
     });
   }
 
+  // The Write a Review trigger (quickbar) is independent of the rating-display
+  // settings and of review count — per STOREFRONT_DESIGN_SYSTEM.md §12, "the Write a
+  // Review affordance stays fully present regardless of review count," which held
+  // before this trigger moved here (it used to live in its own always-rendered DOM
+  // region) and must keep holding now that it's part of this element's output.
   function renderSummary(summaryEl, summary, s) {
-    if (s.showAverageRating === false && s.showReviewCount === false) {
+    var totalReviews = summary.totalReviews || 0;
+    var averageRating = summary.averageRating || 0;
+    var ratingCounts = summary.ratingCounts || { 1: 0, 2: 0, 3: 0, 4: 0, 5: 0 };
+
+    var showStats = totalReviews > 0 && (s.showAverageRating !== false || s.showReviewCount !== false);
+    var showWrite = s.showWriteReviewButton !== false;
+    var recommendPercent = totalReviews > 0 ? Math.round(((ratingCounts[5] || 0) + (ratingCounts[4] || 0)) / totalReviews * 100) : 0;
+
+    if (!showStats && !showWrite) {
       summaryEl.innerHTML = "";
       return;
     }
 
-    var totalReviews = summary.totalReviews || 0;
+    var html = '<div class="imagyn-summary imagyn-fade-in">';
+
+    if (showStats) {
+      var srSummary =
+        "Average rating " + averageRating.toFixed(1) + " out of 5 stars, based on " +
+        totalReviews + (totalReviews === 1 ? " review" : " reviews") + ". " +
+        recommendPercent + "% of customers recommend this product.";
+      html += '<span class="imagyn-visually-hidden">' + escapeHtml(srSummary) + "</span>";
+    }
+
+    // Quickbar: stars, numeral, count, and the Write a Review trigger on one inline
+    // line — the "header" of the widget. The trigger itself is wired up in
+    // renderWriteReview via event delegation on `root`, not here, since this element
+    // and the form it opens live in separate DOM subtrees (data-imagyn-summary vs
+    // data-imagyn-write) and renderWriteReview may run before this element exists.
+    html += '<div class="imagyn-summary__quickbar">';
+    if (showStats) {
+      html += '<span class="imagyn-summary__quickbar-stars" aria-hidden="true">' + renderStars(averageRating) + "</span>";
+      if (s.showAverageRating !== false) {
+        html += '<span class="imagyn-summary__quickbar-rating" aria-hidden="true">' + averageRating.toFixed(1) + "</span>";
+      }
+      if (s.showReviewCount !== false) {
+        html += '<span class="imagyn-summary__quickbar-count" aria-hidden="true">(' + totalReviews.toLocaleString() + ")</span>";
+      }
+    }
+    if (showWrite) {
+      if (showStats) {
+        html += '<span class="imagyn-summary__quickbar-divider" aria-hidden="true"></span>';
+      }
+      html +=
+        '<button type="button" class="imagyn-summary__quickbar-write" data-imagyn-write-toggle aria-expanded="false">' +
+        "Write a review</button>";
+    }
+    html += "</div>"; // quickbar
 
     if (totalReviews === 0) {
-      summaryEl.innerHTML =
-        '<p class="imagyn-empty-state imagyn-fade-in">No reviews yet — be the first to share your experience.</p>';
-      return;
+      html += '<p class="imagyn-empty-state">No reviews yet — be the first to share your experience.</p>';
+    } else if (showStats) {
+      html += '<div class="imagyn-summary__hero" aria-hidden="true">';
+      html += '<div class="imagyn-summary__headline">';
+
+      if (s.showAverageRating !== false) {
+        html += '<span class="imagyn-summary__rating">' + averageRating.toFixed(1) + "</span>";
+      }
+
+      if (s.showReviewCount !== false) {
+        html +=
+          '<span class="imagyn-summary__count">' +
+          totalReviews + (totalReviews === 1 ? " review" : " reviews") +
+          "</span>";
+      }
+      html += "</div>"; // headline
+
+      html += '<p class="imagyn-summary__recommend">' + recommendPercent + "% of customers recommend this product</p>";
+      html += "</div>"; // hero
+
+      html += renderHistogram(ratingCounts, totalReviews);
     }
 
-    var averageRating = summary.averageRating || 0;
-    var ratingCounts = summary.ratingCounts || { 1: 0, 2: 0, 3: 0, 4: 0, 5: 0 };
-    var recommendPercent = Math.round(((ratingCounts[5] || 0) + (ratingCounts[4] || 0)) / totalReviews * 100);
-
-    var srSummary =
-      "Average rating " + averageRating.toFixed(1) + " out of 5 stars, based on " +
-      totalReviews + (totalReviews === 1 ? " review" : " reviews") + ". " +
-      recommendPercent + "% of customers recommend this product.";
-
-    var html = '<div class="imagyn-summary imagyn-fade-in">';
-    html += '<span class="imagyn-visually-hidden">' + escapeHtml(srSummary) + "</span>";
-    html += '<div class="imagyn-summary__hero" aria-hidden="true">';
-    html += '<div class="imagyn-summary__headline">';
-
-    if (s.showAverageRating !== false) {
-      html += '<span class="imagyn-summary__rating">' + averageRating.toFixed(1) + "</span>";
-    }
-
-    html += '<div class="imagyn-summary__headline-meta">';
-    html += '<span class="imagyn-summary__stars">' + renderStars(averageRating) + "</span>";
-    if (s.showReviewCount !== false) {
-      html +=
-        '<span class="imagyn-summary__count">' +
-        totalReviews + (totalReviews === 1 ? " review" : " reviews") +
-        "</span>";
-    }
-    html += "</div>"; // headline-meta
-    html += "</div>"; // headline
-
-    html += '<p class="imagyn-summary__recommend">' + recommendPercent + "% of customers recommend this product</p>";
-    html += "</div>"; // hero
-
-    html += renderHistogram(ratingCounts, totalReviews);
     html += "</div>"; // summary
 
     summaryEl.innerHTML = html;
-    animateHistogramFills(summaryEl);
+    if (totalReviews > 0 && showStats) {
+      animateHistogramFills(summaryEl);
+    }
   }
 
   function renderList(listEl, data, s, visibleCount, onLoadMore) {
@@ -346,20 +380,38 @@
       })
       .catch(function () {
         listEl.innerHTML = '<p class="imagyn-reviews__error">Reviews are unavailable right now.</p>';
+        // Rating/count can't be shown without the failed response's data, but Write a
+        // Review must stay available regardless (§12) — same principle the empty-state
+        // and disabled-stats paths in renderSummary already apply.
         if (summaryEl) {
-          summaryEl.innerHTML = "";
+          var s = resolveSettings(null, themeOverrides);
+          if (s.showWriteReviewButton !== false) {
+            summaryEl.innerHTML =
+              '<div class="imagyn-summary imagyn-fade-in">' +
+              '<div class="imagyn-summary__quickbar">' +
+              '<button type="button" class="imagyn-summary__quickbar-write" data-imagyn-write-toggle aria-expanded="false">' +
+              "Write a review</button>" +
+              "</div>" +
+              "</div>";
+          } else {
+            summaryEl.innerHTML = "";
+          }
         }
       });
   }
 
-  function renderWriteReview(writeEl, context, showWriteReviewButton) {
+  // The trigger for this form now lives in the Review Summary's quickbar
+  // (data-imagyn-write-toggle, see renderSummary) rather than here — it's wired via
+  // delegation on `root` rather than a direct reference because renderWriteReview runs
+  // synchronously in init(), before loadList's async fetch has rendered the summary (and
+  // its toggle button) at all.
+  function renderWriteReview(root, writeEl, context, showWriteReviewButton) {
     if (showWriteReviewButton === false) {
       writeEl.innerHTML = "";
       return;
     }
 
     writeEl.innerHTML =
-      '<button type="button" class="imagyn-reviews__write-toggle" data-imagyn-toggle>Write a Review</button>' +
       '<form class="imagyn-reviews__form" data-imagyn-form hidden>' +
       '<div class="imagyn-reviews__field">' +
       "<label>Rating</label>" +
@@ -402,7 +454,6 @@
       '<button type="submit" class="imagyn-reviews__submit" data-imagyn-submit>Submit review</button>' +
       "</form>";
 
-    var toggleBtn = writeEl.querySelector("[data-imagyn-toggle]");
     var form = writeEl.querySelector("[data-imagyn-form]");
     var errorEl = writeEl.querySelector("[data-imagyn-form-error]");
     var successEl = writeEl.querySelector("[data-imagyn-form-success]");
@@ -410,11 +461,17 @@
     var starButtons = Array.prototype.slice.call(writeEl.querySelectorAll("[data-rating-value]"));
     var selectedRating = 0;
 
-    toggleBtn.addEventListener("click", function () {
+    var reduceMotion = window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+
+    root.addEventListener("click", function (event) {
+      var toggleBtn = event.target.closest ? event.target.closest("[data-imagyn-write-toggle]") : null;
+      if (!toggleBtn) return;
+
       var isHidden = form.hasAttribute("hidden");
       if (isHidden) {
         form.removeAttribute("hidden");
         toggleBtn.setAttribute("aria-expanded", "true");
+        form.scrollIntoView({ behavior: reduceMotion ? "auto" : "smooth", block: "start" });
       } else {
         form.setAttribute("hidden", "");
         toggleBtn.setAttribute("aria-expanded", "false");
@@ -541,7 +598,7 @@
       }
 
       if (writeEl) {
-        renderWriteReview(writeEl, { productId: productId }, themeOverrides.showWriteReviewButton);
+        renderWriteReview(root, writeEl, { productId: productId }, themeOverrides.showWriteReviewButton);
       }
     });
   }

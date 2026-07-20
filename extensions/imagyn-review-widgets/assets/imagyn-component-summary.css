@@ -1,15 +1,18 @@
 /*
  * Imagyn Reviews — Review Summary component.
  *
- * The visual hero of the reviews widget (STOREFRONT_DESIGN_SYSTEM.md §16): a large
- * semibold numeral (tabular-nums) with a small accent star row and review count beside
- * it, a recommendation-percentage stat beneath, and the rating Histogram anchoring the
- * bottom. Three loading states share this one file rather than three separate
- * stylesheets: populated, skeleton (imagyn-component-skeleton.css primitives, scoped
- * here to the hero's actual proportions), and empty (imagyn-component-empty-state.css).
+ * The visual hero of the reviews widget (STOREFRONT_DESIGN_SYSTEM.md §16): an inline
+ * quickbar (stars, numeral, count, and the Write a Review action on one line) leads the
+ * component, followed by a large semibold numeral (tabular-nums), a recommendation-
+ * percentage stat, and the rating Histogram. Three loading states share this one file
+ * rather than three separate stylesheets: populated, skeleton (imagyn-component-
+ * skeleton.css primitives, scoped here to the hero's actual proportions), and empty
+ * (imagyn-component-empty-state.css).
  *
  * Per STOREFRONT_ARCHITECTURE.md: no internal state, no events — purely a renderer of
- * the averageRating/totalReviews/ratingCounts values it's given.
+ * the averageRating/totalReviews/ratingCounts values it's given. The one exception is
+ * the quickbar's Write a Review button, whose click handling is wired externally in
+ * reviews-widget.js (renderWriteReview) via event delegation.
  *
  * Load imagyn-tokens.css, imagyn-utilities.css, imagyn-component-histogram.css,
  * imagyn-component-empty-state.css, and imagyn-component-skeleton.css before this file.
@@ -22,6 +25,76 @@
   margin-bottom: var(--imagyn-space-px-lg, 24px);
   font-family: var(--imagyn-font-family);
   color: var(--imagyn-color-text, inherit);
+}
+
+.imagyn-summary__quickbar {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  row-gap: var(--imagyn-space-2xs, 0.3em);
+  column-gap: var(--imagyn-space-xs, 0.4em);
+}
+
+.imagyn-summary__quickbar-stars {
+  font-size: var(--imagyn-font-size-sm, 13px);
+  letter-spacing: var(--imagyn-letter-spacing-normal, 0.02em);
+  color: var(--imagyn-color-star, #f5a623);
+  line-height: var(--imagyn-line-height-tight, 1);
+}
+
+.imagyn-summary__quickbar-rating {
+  font-size: var(--imagyn-font-size-base, 15px);
+  font-weight: var(--imagyn-font-weight-semibold, 600);
+  line-height: var(--imagyn-line-height-tight, 1);
+  font-variant-numeric: tabular-nums;
+}
+
+.imagyn-summary__quickbar-count {
+  font-size: var(--imagyn-font-size-sm, 13px);
+  color: var(--imagyn-color-text, inherit);
+  opacity: var(--imagyn-color-text-muted-opacity, 0.6);
+  font-variant-numeric: tabular-nums;
+}
+
+.imagyn-summary__quickbar-divider {
+  width: var(--imagyn-border-width, 1px);
+  align-self: stretch;
+  min-height: 1em;
+  background: var(--imagyn-color-border, rgba(0, 0, 0, 0.08));
+}
+
+/* Inline text action, not a boxed button — restrained per the system's typography-first
+   principle. A quiet underline signals "actionable" without competing with the rating. */
+.imagyn-summary__quickbar-write {
+  font-family: inherit;
+  font-size: var(--imagyn-font-size-sm, 13px);
+  font-weight: var(--imagyn-font-weight-medium, 500);
+  color: var(--imagyn-color-text, inherit);
+  background: none;
+  border: none;
+  padding: 0;
+  margin: 0;
+  cursor: pointer;
+  text-decoration: underline;
+  text-underline-offset: 0.2em;
+  text-decoration-color: var(--imagyn-color-border, rgba(0, 0, 0, 0.2));
+  transition: text-decoration-color var(--imagyn-duration-fast, 120ms) var(--imagyn-easing, ease-out);
+}
+
+.imagyn-summary__quickbar-write:hover {
+  text-decoration-color: currentColor;
+}
+
+.imagyn-summary__quickbar-write:focus-visible {
+  outline: 2px solid var(--imagyn-color-focus, #2563eb);
+  outline-offset: 2px;
+  border-radius: 2px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .imagyn-summary__quickbar-write {
+    transition: none;
+  }
 }
 
 .imagyn-summary__hero {
@@ -44,20 +117,6 @@
   font-variant-numeric: tabular-nums;
 }
 
-.imagyn-summary__headline-meta {
-  display: flex;
-  flex-direction: column;
-  gap: var(--imagyn-space-3xs, 0.2em);
-}
-
-.imagyn-summary__stars {
-  display: block;
-  font-size: var(--imagyn-font-size-sm, 13px);
-  letter-spacing: var(--imagyn-letter-spacing-normal, 0.02em);
-  color: var(--imagyn-color-star, #f5a623);
-  line-height: var(--imagyn-line-height-tight, 1);
-}
-
 .imagyn-summary__count {
   display: block;
   font-size: var(--imagyn-font-size-sm, 13px);
@@ -76,6 +135,12 @@
 /* Skeleton state — approximates the hero's real proportions rather than a generic box
    (STOREFRONT_DESIGN_SYSTEM.md §11). Shimmer/animation itself lives entirely in
    imagyn-component-skeleton.css; this only sizes the shared primitive to this layout. */
+.imagyn-summary__quickbar-skeleton {
+  width: 12em;
+  height: 0.9em;
+  margin-bottom: var(--imagyn-space-2xs, 0.3em);
+}
+
 .imagyn-summary__hero-skeleton .imagyn-skeleton--title {
   width: 3.5em;
   height: 1.7em;

@@ -99,16 +99,6 @@
   border-top: 1px solid var(--imagyn-border-color, rgba(0, 0, 0, 0.08));
 }
 
-.imagyn-reviews__write-toggle {
-  font: inherit;
-  cursor: pointer;
-  padding: 0.6em 1.1em;
-  border: 1px solid currentColor;
-  border-radius: var(--imagyn-border-radius, 4px);
-  background: transparent;
-  color: inherit;
-}
-
 .imagyn-reviews__form {
   display: flex;
   flex-direction: column;
