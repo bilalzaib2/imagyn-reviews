@@ -108,6 +108,13 @@
   text-align: left;
 }
 
+/* Equal specificity to .imagyn-reviews__form's own `display: flex` means the browser's
+   default [hidden] { display: none } UA rule loses to it on cascade order alone — without
+   this override the form renders open regardless of the `hidden` attribute/toggle state. */
+.imagyn-reviews__form[hidden] {
+  display: none;
+}
+
 .imagyn-reviews__field {
   display: flex;
   flex-direction: column;
