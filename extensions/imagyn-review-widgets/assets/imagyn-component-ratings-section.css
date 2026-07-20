@@ -27,11 +27,15 @@
   padding-inline: var(--imagyn-space-px-lg, 24px);
 }
 
+/* Large and centered — the section's one hero moment (§4's --imagyn-font-size-2xl is
+   reserved for exactly this). A light weight keeps the size itself doing the work of
+   hierarchy rather than boldness, matching the editorial reference. */
 .imagyn-ratings-section__heading {
-  margin: 0 0 var(--imagyn-space-px-lg, 24px);
-  font-size: var(--imagyn-font-size-lg, 20px);
-  font-weight: var(--imagyn-font-weight-semibold, 600);
+  margin: 0 0 var(--imagyn-space-px-xl, 40px);
+  font-size: var(--imagyn-font-size-2xl, 34px);
+  font-weight: var(--imagyn-font-weight-regular, 400);
   letter-spacing: var(--imagyn-letter-spacing-tight, 0.01em);
+  text-align: center;
 }
 
 /* Shared quiet eyebrow label used above named sub-sections (Customer Photos, Filters &
@@ -65,5 +69,10 @@
 
   .imagyn-ratings-section__inner {
     padding-inline: var(--imagyn-space-px-md, 16px);
+  }
+
+  .imagyn-ratings-section__heading {
+    font-size: var(--imagyn-font-size-xl, 26px);
+    margin-bottom: var(--imagyn-space-px-lg, 24px);
   }
 }

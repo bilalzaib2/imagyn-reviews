@@ -63,32 +63,33 @@
   background: var(--imagyn-color-border, rgba(0, 0, 0, 0.08));
 }
 
-/* Inline text action, not a boxed button — restrained per the system's typography-first
-   principle. A quiet underline signals "actionable" without competing with the rating. */
+/* A quiet outline pill, not a filled button — the Rating Badge above the title already
+   offers this same action as an inline underlined link (its own compact context); this
+   is the detailed section's own trigger, restrained to match. */
 .imagyn-summary__quickbar-write {
   font-family: inherit;
   font-size: var(--imagyn-font-size-sm, 13px);
   font-weight: var(--imagyn-font-weight-medium, 500);
   color: var(--imagyn-color-text, inherit);
   background: none;
-  border: none;
-  padding: 0;
+  border: var(--imagyn-border-width, 1px) solid var(--imagyn-color-border, rgba(0, 0, 0, 0.16));
+  border-radius: var(--imagyn-radius-full, 999px);
+  padding: var(--imagyn-space-2xs, 0.3em) var(--imagyn-space-md, 1em);
   margin: 0;
   cursor: pointer;
-  text-decoration: underline;
-  text-underline-offset: 0.2em;
-  text-decoration-color: var(--imagyn-color-border, rgba(0, 0, 0, 0.2));
-  transition: text-decoration-color var(--imagyn-duration-fast, 120ms) var(--imagyn-easing, ease-out);
+  transition:
+    border-color var(--imagyn-duration-fast, 120ms) var(--imagyn-easing, ease-out),
+    background-color var(--imagyn-duration-fast, 120ms) var(--imagyn-easing, ease-out);
 }
 
 .imagyn-summary__quickbar-write:hover {
-  text-decoration-color: currentColor;
+  background: var(--imagyn-color-border, rgba(0, 0, 0, 0.04));
+  border-color: var(--imagyn-color-text, currentColor);
 }
 
 .imagyn-summary__quickbar-write:focus-visible {
   outline: 2px solid var(--imagyn-color-focus, #2563eb);
   outline-offset: 2px;
-  border-radius: 2px;
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -128,34 +129,38 @@
   font-variant-numeric: tabular-nums;
 }
 
+/* A lead statement, not a badge — centered, neutral-toned like the rest of this section
+   rather than the success green (that color stays reserved for real state changes, e.g.
+   an active helpful vote), matching the editorial reference's plain-text treatment. */
 .imagyn-summary__recommend {
   margin: 0;
-  font-size: var(--imagyn-font-size-sm, 13px);
-  font-weight: var(--imagyn-font-weight-medium, 500);
-  color: var(--imagyn-color-success, #1a7f4b);
+  font-size: var(--imagyn-font-size-base, 15px);
+  font-weight: var(--imagyn-font-weight-regular, 400);
+  color: var(--imagyn-color-text, inherit);
+  opacity: var(--imagyn-color-text-muted-opacity, 0.6);
+  text-align: center;
 }
 
 /* Cache-only content (see reviews-widget.js's renderAiSummary) — renders nothing until a
    merchant has generated a summary at least once, so there's no loading state to design
-   for on the storefront at all. */
+   for on the storefront at all. No card treatment (no border/background) — it reads as
+   part of the same editorial flow as the rest of the section, distinguished only by its
+   label, per STOREFRONT_DESIGN_SYSTEM.md §16's "text label, never a visual gimmick" rule. */
 .imagyn-ai-summary {
   display: grid;
-  gap: var(--imagyn-space-2xs, 0.3em);
-  padding: var(--imagyn-space-px-md, 16px);
-  border: var(--imagyn-border-width, 1px) solid var(--imagyn-color-border, rgba(0, 0, 0, 0.08));
-  border-radius: var(--imagyn-radius-md, 8px);
-  background: var(--imagyn-color-surface, #ffffff);
+  justify-items: center;
+  gap: var(--imagyn-space-sm, 0.6em);
+  text-align: center;
 }
 
 .imagyn-ai-summary__heading {
   margin: 0;
-  font-size: var(--imagyn-font-size-sm, 13px);
-  font-weight: var(--imagyn-font-weight-semibold, 600);
-  color: var(--imagyn-color-text, inherit);
+  text-align: center;
 }
 
 .imagyn-ai-summary__text {
   margin: 0;
+  max-width: 68ch;
   font-size: var(--imagyn-font-size-base, 15px);
   line-height: var(--imagyn-line-height-base, 1.5);
   color: var(--imagyn-color-text, inherit);
@@ -163,6 +168,7 @@
 
 .imagyn-ai-summary__recommendation {
   margin: 0;
+  max-width: 68ch;
   font-size: var(--imagyn-font-size-sm, 13px);
   line-height: var(--imagyn-line-height-base, 1.5);
   color: var(--imagyn-color-text, inherit);

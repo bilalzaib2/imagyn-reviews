@@ -34,6 +34,10 @@
   --imagyn-font-size-md: 17px;
   --imagyn-font-size-lg: 20px;
   --imagyn-font-size-xl: 26px;
+  /* Reserved for the Ratings & Reviews section's own hero heading — the one element in
+     the system large enough to need a step past the repeating-content scale above.
+     Never used for anything that appears more than once per page. */
+  --imagyn-font-size-2xl: 34px;
 
   --imagyn-font-weight-regular: 400;
   --imagyn-font-weight-medium: 500;

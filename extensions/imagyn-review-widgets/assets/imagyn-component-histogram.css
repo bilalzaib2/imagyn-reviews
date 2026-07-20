@@ -53,7 +53,10 @@
   inset: 0;
   width: var(--imagyn-histogram-fill, 0%);
   border-radius: inherit;
-  background: var(--imagyn-color-star, #f5a623);
+  /* Monochrome, not the amber accent — that stays reserved for the compact Rating Badge
+     higher up the page, so it reads as one confident signal rather than being repeated
+     throughout the detailed section. */
+  background: var(--imagyn-color-text, #111);
   opacity: 0.85;
   transition: width var(--imagyn-duration-base, 200ms) var(--imagyn-easing, ease-out);
 }

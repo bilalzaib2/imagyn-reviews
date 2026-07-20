@@ -245,8 +245,11 @@
       return "";
     }
 
+    // No sparkle/decorative icon, per STOREFRONT_DESIGN_SYSTEM.md §16: the AI-generated
+    // distinction is made through this text label alone. Shares imagyn-ratings-section__label's
+    // eyebrow treatment with "Customer photos"/"Filters & Sorting" rather than its own rule.
     var html = '<div class="imagyn-ai-summary">';
-    html += '<p class="imagyn-ai-summary__heading"><span aria-hidden="true">✨</span> AI Review Summary</p>';
+    html += '<p class="imagyn-ratings-section__label imagyn-ai-summary__heading">AI Review Summary</p>';
     html += '<p class="imagyn-ai-summary__text">' + escapeHtml(aiSummary.summary) + "</p>";
     if (aiSummary.recommendation) {
       html +=
@@ -305,15 +308,19 @@
     if (hasEmptyState) {
       html += '<p class="imagyn-empty-state">No reviews yet — be the first to share your experience.</p>';
     } else if (showStats) {
-      // One cohesive "stats cluster" — overall rating, then the distribution that explains
-      // it, then the recommendation stat derived from it — sharing a tight internal rhythm
-      // (.imagyn-summary__hero's own gap), distinct from the more generous gap .imagyn-summary
-      // uses to separate this whole cluster from AI Summary/Customer Photos/etc.
-      //
-      // aria-hidden goes on the headline and recommend line individually (both fully
-      // redundant with the sr-only summary sentence above), NOT on the hero wrapper itself
-      // — the Histogram in between has its own real per-star sr-only text (see
-      // renderHistogram) that a wrapper-level aria-hidden would silence.
+      // The recommendation stat leads as its own centered statement (matching the section
+      // heading above it), ahead of the rating/histogram cluster it's derived from — both
+      // aria-hidden, fully redundant with the sr-only summary sentence rendered above.
+      html +=
+        '<p class="imagyn-summary__recommend" aria-hidden="true">' +
+        recommendPercent + "% of customers recommend this product</p>";
+
+      // The rating headline + Histogram share a tight internal rhythm
+      // (.imagyn-summary__hero's own gap), distinct from the more generous gap
+      // .imagyn-summary uses to separate this whole cluster from AI Summary/Customer
+      // Photos/etc. aria-hidden goes on the headline itself, NOT the hero wrapper — the
+      // Histogram inside it has its own real per-star sr-only text (see renderHistogram)
+      // that a wrapper-level aria-hidden would silence.
       html += '<div class="imagyn-summary__hero">';
       html += '<div class="imagyn-summary__headline" aria-hidden="true">';
 
@@ -330,10 +337,6 @@
       html += "</div>"; // headline
 
       html += renderHistogram(ratingCounts, totalReviews);
-
-      html +=
-        '<p class="imagyn-summary__recommend" aria-hidden="true">' +
-        recommendPercent + "% of customers recommend this product</p>";
       html += "</div>"; // hero
     }
 

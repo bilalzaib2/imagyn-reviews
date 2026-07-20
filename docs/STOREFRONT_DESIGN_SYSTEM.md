@@ -75,6 +75,7 @@ Sizes are defined in **pixels, never `rem`**. This is a hard rule, not a prefere
 | `--imagyn-font-size-md` | 17px | Review card reviewer name, section labels |
 | `--imagyn-font-size-lg` | 20px | Review Summary average-rating number, modal title |
 | `--imagyn-font-size-xl` | 26px | Review Summary's hero average-rating numeral |
+| `--imagyn-font-size-2xl` | 34px | The Ratings & Reviews section's own heading only — never used for repeating content |
 
 **Weight** — three steps only, matching `11_DESIGN_SYSTEM.md`'s restraint principle:
 
@@ -330,13 +331,13 @@ The compact, single-line trust signal near the buy box — not the full review b
 
 ### Review Summary
 
-The visual hero of the widget — the first full-detail surface a shopper reaches. Average rating as a large numeral (`--imagyn-font-size-xl`, semibold, tabular-nums), with a compact accent star row and the review count stacked beside it (small, muted opacity) — the same quiet, scaled-down star treatment already established for the Rating Badge, not a competing element. A recommendation-percentage line ("N% of customers recommend this product", derived from the 4–5 star share of `ratingCounts`, `--imagyn-color-success`) sits beneath the headline. The Histogram anchors the bottom of the component. Generous vertical spacing (`--imagyn-space-px-lg`) separates the whole component from both the Rating Badge above and the Filters/Review Cards below — this is a section break, not a continuation.
+The visual hero of the widget — the first full-detail surface a shopper reaches, led by the section's own heading (`--imagyn-font-size-2xl`, regular weight, centered — the one place in the system that size is used). A recommendation-percentage line ("N% of customers recommend this product", derived from the 4–5 star share of `ratingCounts`) sits directly beneath the heading as its own centered lead statement, in neutral muted text rather than `--imagyn-color-success` — that color stays reserved for real state changes (e.g. an active helpful vote), not a static statistic, keeping the section's palette restrained. Below that, the rating cluster: average rating as a large numeral (`--imagyn-font-size-xl`, semibold, tabular-nums) with the review count beside it (small, muted opacity), and the Histogram anchoring the bottom of the cluster. Generous vertical spacing (`--imagyn-space-px-lg`) separates the whole component from both the Rating Badge above and the Filters/Review Cards below — this is a section break, not a continuation.
 
 Screen-reader text is a single visually-hidden sentence covering the numeral, star rating, review count, and recommendation percentage; the equivalent visual elements are `aria-hidden`. Zero reviews renders the Empty State component instead (§12) — one quiet muted-opacity line, no histogram, no recommendation stat. While the summary is loading, a skeleton (§11) sized to the hero's real proportions (numeral block, meta line, five histogram-width bars) renders synchronously before the network response arrives, replaced in place once data resolves.
 
 ### Histogram
 
-Five horizontal bars (5-star to 1-star), each a label + bar + count, using `--imagyn-color-star` at reduced opacity for the fill and `--imagyn-color-border` for the track. Bars are proportional to the largest count, not to a fixed 100% scale, so a store with mostly 5-star reviews shows a visually confident chart rather than five nearly-empty bars. Each row's numeral label, bar, and count are `aria-hidden`; a per-row visually-hidden sentence ("5 stars: 84 reviews") carries the equivalent text so the distribution is available to screen readers without duplicating the top-level summary sentence. No interactivity in this phase; each bar becomes a rating filter shortcut in a later iteration, at which point it inherits the Filters component's focus/hover treatment.
+Five horizontal bars (5-star to 1-star), each a label + bar + count, using `--imagyn-color-text` (monochrome, not the amber accent — that stays reserved for the compact Rating Badge) at reduced opacity for the fill and `--imagyn-color-border` for the track. Bars are proportional to the largest count, not to a fixed 100% scale, so a store with mostly 5-star reviews shows a visually confident chart rather than five nearly-empty bars. Each row's numeral label, bar, and count are `aria-hidden`; a per-row visually-hidden sentence ("5 stars: 84 reviews") carries the equivalent text so the distribution is available to screen readers without duplicating the top-level summary sentence. No interactivity in this phase; each bar becomes a rating filter shortcut in a later iteration, at which point it inherits the Filters component's focus/hover treatment.
 
 ### Recommendation section
 
