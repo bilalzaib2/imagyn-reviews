@@ -10,28 +10,22 @@ import {
 import type { ActionFunctionArgs, HeadersFunction, LoaderFunctionArgs } from "react-router";
 import { boundary } from "@shopify/shopify-app-react-router/server";
 import {
-  Badge,
-  Banner,
   BlockStack,
-  Box,
-  Button,
+  Button as PolarisButton,
+  ButtonGroup,
   Card,
-  DataTable,
-  EmptyState,
   Frame,
-  InlineStack,
   Modal,
-  Pagination,
   Select,
-  SkeletonBodyText,
-  SkeletonDisplayText,
-  Spinner,
   Text,
   TextField,
   Toast,
 } from "@shopify/polaris";
 
+import { Button } from "../components/ui/Button";
 import { Container } from "../components/ui/Container";
+import { Section } from "../components/ui/Section";
+import { RequestStatusBadge } from "../components/requests/RequestStatusBadge";
 import { authenticate } from "../shopify.server";
 import {
   reviewRequestService,
@@ -296,26 +290,6 @@ const formatDateTime = (value: Date | null) => {
   }).format(new Date(value));
 };
 
-const statusTone = (status: ReviewRequestStatus): "success" | "warning" | "attention" | "info" | "new" => {
-  if (status === "sent" || status === "reviewed") {
-    return "success";
-  }
-
-  if (status === "opened") {
-    return "new";
-  }
-
-  if (status === "scheduled" || status === "sending") {
-    return "info";
-  }
-
-  if (status === "failed" || status === "cancelled") {
-    return "attention";
-  }
-
-  return "warning";
-};
-
 const buildCustomerValue = (name: string | null, email: string | null) => `${name ?? ""}||${email ?? ""}`;
 
 export default function RequestsPage() {
@@ -577,22 +551,6 @@ export default function RequestsPage() {
     submitAction({ _intent: "reschedule", requestId: selectedRequest.id, delayDays: formState.delayDays });
   };
 
-  const rows = effectiveRequests.map((request) => [
-    request.name ?? "Unnamed customer",
-    request.product?.name ?? "General request",
-    request.orderNumber ?? "-",
-    request.email ?? "No email",
-    <Badge key={`${request.id}-status`} tone={statusTone(request.status)}>{request.status}</Badge>,
-    formatDateTime(request.scheduledFor),
-    formatDateTime(request.sentAt),
-    formatDateTime(request.createdAt),
-    <div key={`${request.id}-actions`} className={styles.tableActions}>
-      <Button size="micro" onClick={() => setSelectedRequestId(request.id)} disabled={isMutating}>View</Button>
-      <Button size="micro" onClick={() => openEditModal(request)} disabled={isMutating}>Edit</Button>
-      <Button size="micro" onClick={() => openRescheduleModal(request)} disabled={isMutating}>Reschedule</Button>
-    </div>,
-  ]);
-
   const selectedCustomerLabel = customerOptions.find((option) => option.value === formState.customer)?.label ?? "No customer selected";
   const selectedProductLabel = productOptions.find((option) => option.value === formState.productId)?.label ?? "No product selected";
   const previewSendDate = formatDateTime(optimisticScheduleDate(Number(formState.delayDays || "0")));
@@ -610,182 +568,276 @@ export default function RequestsPage() {
               </p>
             </div>
             <div className={styles.headerActions}>
-              <Button onClick={openCreateModal} disabled={customerOptions.length === 0 || productOptions.length === 0 || isMutating}>
+              <Button
+                variant="primary"
+                onClick={openCreateModal}
+                disabled={customerOptions.length === 0 || productOptions.length === 0 || isMutating}
+              >
                 Send Request
               </Button>
             </div>
           </header>
 
           <div className={styles.toolbar}>
-            <div className={styles.searchField}>
-              <TextField
-                label="Search requests"
-                labelHidden
-                value={searchValue}
-                onChange={setSearchValue}
-                autoComplete="off"
+            <label className={styles.searchField}>
+              <input
+                className={styles.searchInput}
+                type="search"
                 placeholder="Search customer, email, order number, or product"
+                aria-label="Search requests"
+                value={searchValue}
+                onChange={(event) => setSearchValue(event.target.value)}
               />
-            </div>
-            <div className={styles.filterField}>
-              <Select
-                label="Status"
-                labelHidden
-                options={STATUS_FILTER_OPTIONS}
-                value={status}
-                onChange={(value) => {
-                  const next = new URLSearchParams(searchParams);
-                  if (value) {
-                    next.set("status", value);
-                  } else {
-                    next.delete("status");
-                  }
-                  next.delete("page");
-                  setSearchParams(next);
-                }}
-              />
-            </div>
-            <div className={styles.filterField}>
-              <Select
-                label="Date filter"
-                labelHidden
-                options={DATE_FILTER_OPTIONS}
-                value={dateFilter}
-                onChange={(value) => {
-                  const next = new URLSearchParams(searchParams);
-                  if (value === "all") {
-                    next.delete("dateFilter");
-                  } else {
-                    next.set("dateFilter", value);
-                  }
-                  next.delete("page");
-                  setSearchParams(next);
-                }}
-              />
+            </label>
+
+            <div className={styles.toolbarControls}>
+              <label className={styles.filterGroup}>
+                <span className={styles.filterLabel}>Status</span>
+                <select
+                  className={styles.filterSelect}
+                  value={status}
+                  onChange={(event) => {
+                    const value = event.target.value;
+                    const next = new URLSearchParams(searchParams);
+                    if (value) {
+                      next.set("status", value);
+                    } else {
+                      next.delete("status");
+                    }
+                    next.delete("page");
+                    setSearchParams(next);
+                  }}
+                >
+                  {STATUS_FILTER_OPTIONS.map((option) => (
+                    <option key={option.value || "all"} value={option.value}>
+                      {option.label}
+                    </option>
+                  ))}
+                </select>
+              </label>
+
+              <label className={styles.filterGroup}>
+                <span className={styles.filterLabel}>Date</span>
+                <select
+                  className={styles.filterSelect}
+                  value={dateFilter}
+                  onChange={(event) => {
+                    const value = event.target.value;
+                    const next = new URLSearchParams(searchParams);
+                    if (value === "all") {
+                      next.delete("dateFilter");
+                    } else {
+                      next.set("dateFilter", value);
+                    }
+                    next.delete("page");
+                    setSearchParams(next);
+                  }}
+                >
+                  {DATE_FILTER_OPTIONS.map((option) => (
+                    <option key={option.value} value={option.value}>
+                      {option.label}
+                    </option>
+                  ))}
+                </select>
+              </label>
             </div>
           </div>
 
-          {error ? <Banner tone="critical">{error}</Banner> : null}
-          {actionError ? <Banner tone="critical">{actionError}</Banner> : null}
+          {actionError ? <p className={styles.feedbackError}>{actionError}</p> : null}
+          {isLoading ? <p className={styles.feedbackMuted}>Refreshing request results...</p> : null}
 
-          <div className={styles.contentGrid}>
-            <div className={styles.tableCard}>
-              <Card>
-                {isLoading ? (
-                  <div className={styles.skeletonTable}>
-                    <SkeletonDisplayText size="small" />
-                    <SkeletonBodyText lines={8} />
+          <Section
+            title="Review requests"
+            description={`Showing ${totalCount} request${totalCount === 1 ? "" : "s"}.`}
+          >
+            <div className={styles.splitLayout}>
+              {isLoading ? (
+                <>
+                  <div className={styles.listColumn}>
+                    <div className={styles.skeletonList} aria-hidden="true">
+                      {Array.from({ length: 6 }, (_, index) => (
+                        <div key={index} className={styles.skeletonRow} />
+                      ))}
+                    </div>
                   </div>
-                ) : effectiveRequests.length === 0 ? (
-                  <EmptyState
-                    heading="No review requests found"
-                    action={{ content: "Send Request", onAction: openCreateModal }}
-                    image="https://cdn.shopify.com/s/files/1/0262/4071/2726/files/emptystate-files.png"
-                  >
-                    <p>Try broadening your filters or create a new request to start collecting reviews.</p>
-                  </EmptyState>
-                ) : (
-                  <BlockStack gap="400">
-                    <DataTable
-                      columnContentTypes={["text", "text", "text", "text", "text", "text", "text", "text", "text"]}
-                      headings={[
-                        "Customer",
-                        "Product",
-                        "Order Number",
-                        "Email",
-                        "Status",
-                        "Scheduled Date",
-                        "Sent Date",
-                        "Created Date",
-                        "Actions",
-                      ]}
-                      rows={rows}
-                      increasedTableDensity
-                    />
-                    <div className={styles.paginationRow}>
-                      <Pagination
-                        hasPrevious={page > 1}
-                        hasNext={page < totalPages}
-                        onPrevious={() => {
+                  <aside className={styles.detailPanel} aria-hidden="true">
+                    <div className={styles.skeletonTitle} />
+                    <div className={styles.skeletonParagraph} />
+                    <div className={styles.skeletonParagraph} />
+                    <div className={styles.skeletonBlock} />
+                  </aside>
+                </>
+              ) : error ? (
+                <div className={styles.errorState} role="alert">
+                  <h2 className={styles.errorStateTitle}>Unable to load requests</h2>
+                  <p className={styles.errorStateText}>{error}</p>
+                  <Button type="button" onClick={() => window.location.reload()}>
+                    Try again
+                  </Button>
+                </div>
+              ) : effectiveRequests.length === 0 ? (
+                <>
+                  <div className={styles.emptyState}>
+                    <h2 className={styles.emptyStateTitle}>No review requests found</h2>
+                    <p className={styles.emptyStateText}>
+                      Try broadening your filters or create a new request to start collecting reviews.
+                    </p>
+                    <Button
+                      type="button"
+                      onClick={openCreateModal}
+                      disabled={customerOptions.length === 0 || productOptions.length === 0}
+                    >
+                      Send Request
+                    </Button>
+                  </div>
+                  <aside className={styles.detailPanel}>
+                    <p className={styles.detailEyebrow}>Request details</p>
+                    <h2 className={styles.detailTitle}>Select a request</h2>
+                    <p className={styles.detailText}>
+                      Choose a request from the list to review details and manage its lifecycle.
+                    </p>
+                  </aside>
+                </>
+              ) : (
+                <>
+                  <div className={styles.listColumn}>
+                    <div className={styles.listScroll}>
+                      <div className={styles.list}>
+                        {effectiveRequests.map((request) => {
+                          const isSelected = request.id === selectedRequestId;
+                          const customerName = request.name ?? "Unnamed customer";
+                          const productName = request.product?.name ?? "General request";
+
+                          return (
+                            <div
+                              key={request.id}
+                              className={`${styles.requestRow} ${isSelected ? styles.requestRowSelected : ""}`}
+                              onClick={() => setSelectedRequestId(request.id)}
+                              onKeyDown={(event) => {
+                                if (event.key === "Enter" || event.key === " ") {
+                                  event.preventDefault();
+                                  setSelectedRequestId(request.id);
+                                }
+                              }}
+                              role="button"
+                              tabIndex={0}
+                              aria-pressed={isSelected}
+                            >
+                              <div className={styles.requestContent}>
+                                <div className={styles.requestHeaderLine}>
+                                  <h2 className={styles.requestTitle}>{customerName}</h2>
+                                  <RequestStatusBadge status={request.status} />
+                                </div>
+                                <p className={styles.requestMeta}>
+                                  {productName}
+                                  {request.orderNumber ? ` · #${request.orderNumber}` : ""}
+                                  {request.email ? ` · ${request.email}` : ""}
+                                </p>
+                              </div>
+                              <p className={styles.requestDate}>{formatDateTime(request.scheduledFor)}</p>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </div>
+
+                    <div className={styles.pagination}>
+                      <button
+                        className={styles.paginationButton}
+                        type="button"
+                        onClick={() => {
                           const next = new URLSearchParams(searchParams);
                           next.set("page", String(page - 1));
                           setSearchParams(next);
                         }}
-                        onNext={() => {
+                        disabled={page <= 1 || isLoading || isMutating}
+                      >
+                        Previous
+                      </button>
+                      <span className={styles.paginationLabel}>
+                        Page {page} of {totalPages}
+                      </span>
+                      <button
+                        className={styles.paginationButton}
+                        type="button"
+                        onClick={() => {
                           const next = new URLSearchParams(searchParams);
                           next.set("page", String(page + 1));
                           setSearchParams(next);
                         }}
-                      />
+                        disabled={page >= totalPages || isLoading || isMutating}
+                      >
+                        Next
+                      </button>
                     </div>
-                  </BlockStack>
-                )}
-              </Card>
-            </div>
-
-            <aside className={styles.detailPanel}>
-              {selectedRequest ? (
-                <BlockStack gap="400">
-                  <div className={styles.detailHeader}>
-                    <p className={styles.detailEyebrow}>Selected request</p>
-                    <h2 className={styles.detailTitle}>{selectedRequest.name ?? "Unnamed customer"}</h2>
-                    <Badge tone={statusTone(selectedRequest.status)}>{selectedRequest.status}</Badge>
                   </div>
 
-                  <dl className={styles.detailList}>
-                    <div className={styles.detailItem}>
-                      <dt className={styles.detailLabel}>Product</dt>
-                      <dd className={styles.detailValue}>{selectedRequest.product?.name ?? "General request"}</dd>
-                    </div>
-                    <div className={styles.detailItem}>
-                      <dt className={styles.detailLabel}>Order Number</dt>
-                      <dd className={styles.detailValue}>{selectedRequest.orderNumber ?? "-"}</dd>
-                    </div>
-                    <div className={styles.detailItem}>
-                      <dt className={styles.detailLabel}>Email</dt>
-                      <dd className={styles.detailValue}>{selectedRequest.email ?? "No email"}</dd>
-                    </div>
-                    <div className={styles.detailItem}>
-                      <dt className={styles.detailLabel}>Scheduled Date</dt>
-                      <dd className={styles.detailValue}>{formatDateTime(selectedRequest.scheduledFor)}</dd>
-                    </div>
-                    <div className={styles.detailItem}>
-                      <dt className={styles.detailLabel}>Sent Date</dt>
-                      <dd className={styles.detailValue}>{formatDateTime(selectedRequest.sentAt)}</dd>
-                    </div>
-                    <div className={styles.detailItem}>
-                      <dt className={styles.detailLabel}>Created Date</dt>
-                      <dd className={styles.detailValue}>{formatDateTime(selectedRequest.createdAt)}</dd>
-                    </div>
-                    <div className={styles.detailItem}>
-                      <dt className={styles.detailLabel}>Custom Message</dt>
-                      <dd className={styles.detailValue}>{selectedRequest.customMessage || "No custom message"}</dd>
-                    </div>
-                  </dl>
+                  {selectedRequest ? (
+                    <aside className={styles.detailPanel} aria-label="Request details">
+                      <div className={styles.detailHeader}>
+                        <div className={styles.detailTopRow}>
+                          <p className={styles.detailEyebrow}>Selected request</p>
+                          <RequestStatusBadge status={selectedRequest.status} />
+                        </div>
+                        <h2 className={styles.detailTitle}>{selectedRequest.name ?? "Unnamed customer"}</h2>
+                      </div>
 
-                  <div className={styles.detailActions}>
-                    <Button onClick={() => openEditModal(selectedRequest)} disabled={isMutating}>Edit</Button>
-                    <Button onClick={() => openRescheduleModal(selectedRequest)} disabled={isMutating}>Reschedule</Button>
-                    <Button onClick={() => handleResend(selectedRequest)} disabled={isMutating}>Resend</Button>
-                    <Button onClick={() => openConfirmation("cancel", selectedRequest)} disabled={isMutating}>Cancel</Button>
-                    <Button onClick={() => openConfirmation("delete", selectedRequest)} disabled={isMutating}>Delete</Button>
-                  </div>
-                </BlockStack>
-              ) : isLoading ? (
-                <div className={styles.skeletonPanel}>
-                  <SkeletonDisplayText size="small" />
-                  <SkeletonBodyText lines={6} />
-                </div>
-              ) : (
-                <EmptyState
-                  heading="Select a request"
-                  image="https://cdn.shopify.com/s/files/1/0262/4071/2726/files/emptystate-files.png"
-                >
-                  <p>Choose a request from the table to review details and manage its lifecycle.</p>
-                </EmptyState>
+                      <div className={styles.detailActions}>
+                        <ButtonGroup>
+                          <PolarisButton onClick={() => openEditModal(selectedRequest)} disabled={isMutating}>
+                            Edit
+                          </PolarisButton>
+                          <PolarisButton onClick={() => openRescheduleModal(selectedRequest)} disabled={isMutating}>
+                            Reschedule
+                          </PolarisButton>
+                          <PolarisButton onClick={() => handleResend(selectedRequest)} disabled={isMutating}>
+                            Resend
+                          </PolarisButton>
+                          <PolarisButton onClick={() => openConfirmation("cancel", selectedRequest)} disabled={isMutating}>
+                            Cancel
+                          </PolarisButton>
+                          <PolarisButton onClick={() => openConfirmation("delete", selectedRequest)} disabled={isMutating}>
+                            Delete
+                          </PolarisButton>
+                        </ButtonGroup>
+                      </div>
+
+                      <dl className={styles.detailList}>
+                        <div className={styles.detailItem}>
+                          <dt className={styles.detailLabel}>Product</dt>
+                          <dd className={styles.detailValue}>{selectedRequest.product?.name ?? "General request"}</dd>
+                        </div>
+                        <div className={styles.detailItem}>
+                          <dt className={styles.detailLabel}>Order Number</dt>
+                          <dd className={styles.detailValue}>{selectedRequest.orderNumber ?? "-"}</dd>
+                        </div>
+                        <div className={styles.detailItem}>
+                          <dt className={styles.detailLabel}>Email</dt>
+                          <dd className={styles.detailValue}>{selectedRequest.email ?? "No email"}</dd>
+                        </div>
+                        <div className={styles.detailItem}>
+                          <dt className={styles.detailLabel}>Scheduled Date</dt>
+                          <dd className={styles.detailValue}>{formatDateTime(selectedRequest.scheduledFor)}</dd>
+                        </div>
+                        <div className={styles.detailItem}>
+                          <dt className={styles.detailLabel}>Sent Date</dt>
+                          <dd className={styles.detailValue}>{formatDateTime(selectedRequest.sentAt)}</dd>
+                        </div>
+                        <div className={styles.detailItem}>
+                          <dt className={styles.detailLabel}>Created Date</dt>
+                          <dd className={styles.detailValue}>{formatDateTime(selectedRequest.createdAt)}</dd>
+                        </div>
+                        <div className={styles.detailItem}>
+                          <dt className={styles.detailLabel}>Custom Message</dt>
+                          <dd className={styles.detailValue}>{selectedRequest.customMessage || "No custom message"}</dd>
+                        </div>
+                      </dl>
+                    </aside>
+                  ) : null}
+                </>
               )}
-            </aside>
-          </div>
+            </div>
+          </Section>
         </div>
       </Container>
 
