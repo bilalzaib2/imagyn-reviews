@@ -10,7 +10,7 @@ import {
 } from "react-router";
 import type { ActionFunctionArgs, HeadersFunction, LoaderFunctionArgs } from "react-router";
 import { boundary } from "@shopify/shopify-app-react-router/server";
-import { Button as PolarisButton, ButtonGroup, Frame, TextField, Toast } from "@shopify/polaris";
+import { ActionList, Button as PolarisButton, ButtonGroup, Frame, Popover, TextField, Toast } from "@shopify/polaris";
 
 import { Button } from "../components/ui/Button";
 import { Container } from "../components/ui/Container";
@@ -243,6 +243,7 @@ export default function ReviewsPage() {
   const [replyDraft, setReplyDraft] = useState("");
   const [toastState, setToastState] = useState<{ content: string; error?: boolean } | null>(null);
   const [isReplyEditing, setIsReplyEditing] = useState(false);
+  const [actionsMenuOpen, setActionsMenuOpen] = useState(false);
 
   const [optimisticStatus, setOptimisticStatus] = useState<Record<string, ReviewStatus>>({});
   const [optimisticDeleted, setOptimisticDeleted] = useState<Record<string, true>>({});
@@ -355,6 +356,10 @@ export default function ReviewsPage() {
     setReplyDraft(selectedReview?.reply ?? "");
     setIsReplyEditing(!selectedReview?.reply);
   }, [selectedReview?.id, selectedReview?.reply]);
+
+  useEffect(() => {
+    setActionsMenuOpen(false);
+  }, [selectedReviewId]);
 
   const activeIntent = mutationFetcher.formData?.get("_intent")?.toString() ?? "";
   const isReplySaving = mutationFetcher.state !== "idle" && activeIntent.startsWith("reply");
@@ -692,6 +697,10 @@ export default function ReviewsPage() {
                         const productName = review.productTitle ?? review.product?.name ?? "Unassigned product";
                         const previewText = review.content.trim() || "No review text captured yet.";
                         const checked = selectedIds.includes(review.id);
+                        const photoCount = (review.photoUrls ?? "")
+                          .split(",")
+                          .map((url) => url.trim())
+                          .filter(Boolean).length;
 
                         return (
                           <div
@@ -722,17 +731,25 @@ export default function ReviewsPage() {
                                 <StarRating value={review.rating} />
                               </div>
                               <div className={styles.reviewContent}>
-                                <div className={styles.reviewHeaderLine}>
-                                  <h2 className={styles.reviewTitle}>{reviewTitle}</h2>
+                                <h2 className={styles.reviewTitle}>{reviewTitle}</h2>
+                                <div className={styles.reviewBadgeRow}>
                                   <ReviewStatusBadge status={review.status} />
+                                  {review.verifiedPurchase ? (
+                                    <span className={styles.verifiedBadge}>Verified buyer</span>
+                                  ) : null}
+                                  {photoCount > 0 ? (
+                                    <span className={styles.metaBadge}>
+                                      {photoCount} photo{photoCount === 1 ? "" : "s"}
+                                    </span>
+                                  ) : null}
+                                  <span className={review.reply ? styles.replyBadgeActive : styles.metaBadge}>
+                                    {review.reply ? "Replied" : "No reply"}
+                                  </span>
                                 </div>
                                 <p className={styles.reviewMeta}>
                                   {customerName} • {productName}
                                 </p>
                                 <p className={styles.reviewPreview}>{previewText}</p>
-                                {review.verifiedPurchase ? (
-                                  <span className={styles.verifiedBadge}>Verified purchase</span>
-                                ) : null}
                               </div>
                             </div>
                             <p className={styles.reviewDate}>{formatShortDate(review.createdAt)}</p>
@@ -746,83 +763,57 @@ export default function ReviewsPage() {
                 {selectedReview ? (
                   <aside className={styles.detailPanel} aria-label="Review details">
                     <div className={styles.detailHeader}>
-                      <div className={styles.detailTopRow}>
-                        <p className={styles.detailEyebrow}>Selected review</p>
+                      <p className={styles.detailEyebrow}>Selected review</p>
+                      <div className={styles.detailStatusRow}>
                         <ReviewStatusBadge status={selectedReview.status} />
                       </div>
                       <h2 className={styles.detailTitle}>{selectedReview.title ?? "Untitled review"}</h2>
-                      <div className={styles.detailMetaRow}>
-                        <span className={styles.verifiedBadge}>
-                          {selectedReview.verifiedPurchase ? "Verified purchase" : "Unverified"}
-                        </span>
-                        <span className={styles.detailDate}>{formatLongDate(selectedReview.createdAt)}</span>
-                      </div>
-                    </div>
-
-                    <div className={styles.detailActions}>
-                      <ButtonGroup>
-                        <PolarisButton onClick={() => applySingleStatus(selectedReview.id, ReviewStatus.APPROVED)} disabled={isMutating}>
-                          Approve
-                        </PolarisButton>
-                        <PolarisButton onClick={() => applySingleStatus(selectedReview.id, ReviewStatus.REJECTED)} disabled={isMutating}>
-                          Reject
-                        </PolarisButton>
-                        <PolarisButton url={`/app/reviews/${selectedReview.id}/edit${location.search}`}>
-                          Edit
-                        </PolarisButton>
-                        <PolarisButton onClick={() => applySingleDelete(selectedReview.id)} disabled={isMutating}>
-                          Delete
-                        </PolarisButton>
-                      </ButtonGroup>
-                    </div>
-
-                    <div className={styles.detailSummary}>
                       <div className={styles.ratingLarge} aria-label={`${selectedReview.rating} out of 5 stars`}>
-                        <StarRating value={selectedReview.rating} size={22} />
+                        <StarRating value={selectedReview.rating} size={18} />
                       </div>
-                      <p className={styles.detailText}>{selectedReview.content}</p>
                     </div>
 
-                    <dl className={styles.detailMetaList}>
-                      <div className={styles.detailMetaItem}>
-                        <dt className={styles.detailLabel}>Customer name</dt>
-                        <dd className={styles.detailValue}>{selectedReview.reviewerName}</dd>
-                      </div>
-                      <div className={styles.detailMetaItem}>
-                        <dt className={styles.detailLabel}>Customer email</dt>
-                        <dd className={styles.detailValue}>{selectedReview.reviewerEmail ?? "Not provided"}</dd>
-                      </div>
-                      <div className={styles.detailMetaItem}>
-                        <dt className={styles.detailLabel}>Location</dt>
-                        <dd className={styles.detailValue}>{selectedReview.reviewerLocation ?? "Not provided"}</dd>
-                      </div>
-                      <div className={styles.detailMetaItem}>
-                        <dt className={styles.detailLabel}>Product info</dt>
-                        <dd className={styles.detailValue}>
-                          {selectedReview.productTitle ?? selectedReview.product?.name ?? "Unassigned product"}
-                        </dd>
-                      </div>
-                      <div className={styles.detailMetaItem}>
-                        <dt className={styles.detailLabel}>Rating</dt>
-                        <dd className={styles.detailValue}>{selectedReview.rating} / 5</dd>
-                      </div>
-                      <div className={styles.detailMetaItem}>
-                        <dt className={styles.detailLabel}>Status</dt>
-                        <dd className={styles.detailValue}>
-                          <ReviewStatusBadge status={selectedReview.status} />
-                        </dd>
-                      </div>
-                      <div className={styles.detailMetaItem}>
-                        <dt className={styles.detailLabel}>Created date</dt>
-                        <dd className={styles.detailValue}>{formatLongDate(selectedReview.createdAt)}</dd>
-                      </div>
-                    </dl>
+                    <div className={styles.detailDivider} />
 
                     <div className={styles.detailSection}>
-                      <div className={styles.detailSectionHeader}>
-                        <h3 className={styles.detailSectionTitle}>Uploaded photos</h3>
-                        <span className={styles.detailSectionHint}>Media</span>
-                      </div>
+                      <p className={styles.detailLabel}>AI Summary</p>
+                      <p className={styles.detailPlaceholder}>
+                        Coming soon — an AI-generated summary of this review will appear here.
+                      </p>
+                    </div>
+
+                    <div className={styles.detailDivider} />
+
+                    <div className={styles.detailSection}>
+                      <p className={styles.detailLabel}>Customer</p>
+                      <p className={styles.detailValue}>{selectedReview.reviewerName}</p>
+                      <p className={styles.detailSubvalue}>{selectedReview.reviewerEmail ?? "No email provided"}</p>
+                      <p className={styles.detailSubvalue}>{selectedReview.reviewerLocation ?? "No location provided"}</p>
+                      <p className={styles.detailSubvalue}>
+                        {selectedReview.verifiedPurchase ? "Verified buyer" : "Unverified purchase"}
+                      </p>
+                    </div>
+
+                    <div className={styles.detailDivider} />
+
+                    <div className={styles.detailSection}>
+                      <p className={styles.detailLabel}>Product</p>
+                      <p className={styles.detailValue}>
+                        {selectedReview.productTitle ?? selectedReview.product?.name ?? "Unassigned product"}
+                      </p>
+                    </div>
+
+                    <div className={styles.detailDivider} />
+
+                    <div className={styles.detailSection}>
+                      <p className={styles.detailLabel}>Review</p>
+                      <p className={styles.detailValue}>{selectedReview.content}</p>
+                    </div>
+
+                    <div className={styles.detailDivider} />
+
+                    <div className={styles.detailSection}>
+                      <p className={styles.detailLabel}>Photos</p>
                       {(selectedReview.photoUrls ?? "").trim() ? (
                         <div className={styles.photoGrid}>
                           {selectedReview.photoUrls
@@ -837,15 +828,14 @@ export default function ReviewsPage() {
                             ))}
                         </div>
                       ) : (
-                        <div className={styles.placeholderBox}>No photos have been uploaded for this review yet.</div>
+                        <p className={styles.detailPlaceholder}>No photos have been uploaded for this review.</p>
                       )}
                     </div>
 
+                    <div className={styles.detailDivider} />
+
                     <div className={styles.detailSection}>
-                      <div className={styles.detailSectionHeader}>
-                        <h3 className={styles.detailSectionTitle}>Merchant reply</h3>
-                        <span className={styles.detailSectionHint}>Merchant response</span>
-                      </div>
+                      <p className={styles.detailLabel}>Merchant Reply</p>
                       {selectedReview.reply && !isReplyEditing ? (
                         <>
                           <div className={styles.replyDisplay}>{selectedReview.reply}</div>
@@ -909,6 +899,89 @@ export default function ReviewsPage() {
                           </div>
                         </>
                       )}
+                    </div>
+
+                    <div className={styles.detailDivider} />
+
+                    <div className={styles.detailSection}>
+                      <p className={styles.detailLabel}>Created</p>
+                      <p className={styles.detailValue}>{formatLongDate(selectedReview.createdAt)}</p>
+                    </div>
+
+                    <div className={styles.detailDivider} />
+
+                    <div className={styles.detailSection}>
+                      <p className={styles.detailLabel}>Coming Soon</p>
+                      <div className={styles.comingSoonRow}>
+                        <span className={styles.comingSoonPill}>Media Gallery</span>
+                        <span className={styles.comingSoonPill}>Helpful Votes</span>
+                        <span className={styles.comingSoonPill}>Merchant Notes</span>
+                        <span className={styles.comingSoonPill}>Internal Tags</span>
+                      </div>
+                    </div>
+
+                    <div className={styles.detailDivider} />
+
+                    <div className={styles.detailActions}>
+                      <ButtonGroup>
+                        <PolarisButton
+                          variant="primary"
+                          onClick={() => applySingleStatus(selectedReview.id, ReviewStatus.APPROVED)}
+                          disabled={isMutating}
+                        >
+                          Approve
+                        </PolarisButton>
+                        <PolarisButton
+                          onClick={() => applySingleStatus(selectedReview.id, ReviewStatus.REJECTED)}
+                          disabled={isMutating}
+                        >
+                          Reject
+                        </PolarisButton>
+                      </ButtonGroup>
+                      <Popover
+                        active={actionsMenuOpen}
+                        onClose={() => setActionsMenuOpen(false)}
+                        activator={
+                          <Button
+                            type="button"
+                            variant="secondary"
+                            className={styles.actionsMenuButton}
+                            onClick={() => setActionsMenuOpen((open) => !open)}
+                            disabled={isMutating}
+                            aria-label="Review actions"
+                            aria-haspopup="menu"
+                            aria-expanded={actionsMenuOpen}
+                          >
+                            <span aria-hidden="true">&#8226;&#8226;&#8226;</span>
+                            <span>Actions</span>
+                          </Button>
+                        }
+                      >
+                        <ActionList
+                          sections={[
+                            {
+                              items: [
+                                {
+                                  content: "Edit",
+                                  url: `/app/reviews/${selectedReview.id}/edit${location.search}`,
+                                },
+                              ],
+                            },
+                            {
+                              items: [
+                                {
+                                  content: "Delete",
+                                  destructive: true,
+                                  onAction: () => {
+                                    setActionsMenuOpen(false);
+                                    applySingleDelete(selectedReview.id);
+                                  },
+                                },
+                              ],
+                            },
+                          ]}
+                        />
+                      </Popover>
                     </div>
                   </aside>
                 ) : null}
