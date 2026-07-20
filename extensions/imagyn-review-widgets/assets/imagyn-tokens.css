@@ -33,6 +33,7 @@
   --imagyn-font-size-base: 15px;
   --imagyn-font-size-md: 17px;
   --imagyn-font-size-lg: 20px;
+  --imagyn-font-size-xl: 26px;
 
   --imagyn-font-weight-regular: 400;
   --imagyn-font-weight-medium: 500;
@@ -69,6 +70,7 @@
   --imagyn-color-star: #f5a623;
   --imagyn-color-border: rgba(0, 0, 0, 0.08);
   --imagyn-color-surface: #ffffff;
+  --imagyn-color-success: #1a7f4b;
 
   /* Borders */
   --imagyn-border-width: 1px;

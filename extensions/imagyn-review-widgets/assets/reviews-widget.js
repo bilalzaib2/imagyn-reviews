@@ -131,27 +131,107 @@
   }
 
   // Review Summary component (STOREFRONT_ARCHITECTURE.md): a pure renderer of
-  // averageRating/totalReviews, no internal state, no events. Numeral-only per
-  // STOREFRONT_DESIGN_SYSTEM.md §16 — no star icons here, that's Histogram's future
-  // responsibility, not Summary's.
+  // averageRating/totalReviews/ratingCounts, no internal state, no events. The visual
+  // hero of the widget per STOREFRONT_DESIGN_SYSTEM.md §16 — large numeral, accent star
+  // row, review count, recommendation percentage, and the rating Histogram.
+
+  // Skeleton shown synchronously on init, before the network response arrives — approximates
+  // the hero's real layout per §11, not a generic box. Purely presentational, aria-hidden
+  // (the real content that replaces it carries its own accessible text).
+  function renderSummarySkeleton(summaryEl) {
+    var rows = "";
+    var widths = ["92%", "78%", "55%", "34%", "18%"];
+    for (var i = 0; i < 5; i++) {
+      rows += '<div class="imagyn-skeleton imagyn-skeleton--text" style="width:' + widths[i] + '"></div>';
+    }
+
+    summaryEl.innerHTML =
+      '<div class="imagyn-summary" aria-hidden="true">' +
+      '<div class="imagyn-summary__hero imagyn-summary__hero-skeleton">' +
+      '<div class="imagyn-skeleton imagyn-skeleton--title"></div>' +
+      '<div class="imagyn-skeleton imagyn-skeleton--text"></div>' +
+      "</div>" +
+      '<div class="imagyn-summary__histogram-skeleton">' +
+      rows +
+      "</div>" +
+      "</div>";
+  }
+
+  function renderHistogram(ratingCounts, totalReviews) {
+    var maxCount = 0;
+    for (var star = 1; star <= 5; star++) {
+      if (ratingCounts[star] > maxCount) maxCount = ratingCounts[star];
+    }
+
+    var rows = "";
+    for (var value = 5; value >= 1; value--) {
+      var count = ratingCounts[value] || 0;
+      var fillPercent = maxCount > 0 ? Math.round((count / maxCount) * 100) : 0;
+
+      rows +=
+        '<div class="imagyn-histogram__row">' +
+        '<span class="imagyn-histogram__label" aria-hidden="true">' + value + "</span>" +
+        '<span class="imagyn-histogram__track">' +
+        '<span class="imagyn-histogram__fill" aria-hidden="true" style="--imagyn-histogram-fill: ' + fillPercent + '%"></span>' +
+        "</span>" +
+        '<span class="imagyn-histogram__count" aria-hidden="true">' + count + "</span>" +
+        '<span class="imagyn-visually-hidden">' +
+        value + (value === 1 ? " star" : " stars") + ": " + count + (count === 1 ? " review" : " reviews") +
+        "</span>" +
+        "</div>";
+    }
+
+    return '<div class="imagyn-histogram">' + rows + "</div>";
+  }
+
   function renderSummary(summaryEl, summary, s) {
     if (s.showAverageRating === false && s.showReviewCount === false) {
       summaryEl.innerHTML = "";
       return;
     }
 
-    var html = '<div class="imagyn-summary">';
-    if (s.showAverageRating !== false) {
-      html += '<span class="imagyn-summary__rating">' + summary.averageRating.toFixed(1) + "</span>";
+    var totalReviews = summary.totalReviews || 0;
+
+    if (totalReviews === 0) {
+      summaryEl.innerHTML =
+        '<p class="imagyn-empty-state">No reviews yet — be the first to share your experience.</p>';
+      return;
     }
+
+    var averageRating = summary.averageRating || 0;
+    var ratingCounts = summary.ratingCounts || { 1: 0, 2: 0, 3: 0, 4: 0, 5: 0 };
+    var recommendPercent = Math.round(((ratingCounts[5] || 0) + (ratingCounts[4] || 0)) / totalReviews * 100);
+
+    var srSummary =
+      "Average rating " + averageRating.toFixed(1) + " out of 5 stars, based on " +
+      totalReviews + (totalReviews === 1 ? " review" : " reviews") + ". " +
+      recommendPercent + "% of customers recommend this product.";
+
+    var html = '<div class="imagyn-summary">';
+    html += '<span class="imagyn-visually-hidden">' + escapeHtml(srSummary) + "</span>";
+    html += '<div class="imagyn-summary__hero" aria-hidden="true">';
+    html += '<div class="imagyn-summary__headline">';
+
+    if (s.showAverageRating !== false) {
+      html += '<span class="imagyn-summary__rating">' + averageRating.toFixed(1) + "</span>";
+    }
+
+    html += '<div class="imagyn-summary__headline-meta">';
+    html += '<span class="imagyn-summary__stars">' + renderStars(averageRating) + "</span>";
     if (s.showReviewCount !== false) {
       html +=
-        '<span class="imagyn-summary__count">(' +
-        summary.totalReviews +
-        (summary.totalReviews === 1 ? " review" : " reviews") +
-        ")</span>";
+        '<span class="imagyn-summary__count">' +
+        totalReviews + (totalReviews === 1 ? " review" : " reviews") +
+        "</span>";
     }
-    html += "</div>";
+    html += "</div>"; // headline-meta
+    html += "</div>"; // headline
+
+    html += '<p class="imagyn-summary__recommend">' + recommendPercent + "% of customers recommend this product</p>";
+    html += "</div>"; // hero
+
+    html += renderHistogram(ratingCounts, totalReviews);
+    html += "</div>"; // summary
 
     summaryEl.innerHTML = html;
   }
@@ -202,6 +282,10 @@
   }
 
   function loadList(root, summaryEl, listEl, endpoint, themeOverrides) {
+    if (summaryEl) {
+      renderSummarySkeleton(summaryEl);
+    }
+
     fetch(endpoint, { headers: { Accept: "application/json" } })
       .then(function (response) {
         if (!response.ok) {
@@ -218,7 +302,11 @@
         applyStyle(root, s);
 
         if (summaryEl) {
-          renderSummary(summaryEl, data.summary || { averageRating: 0, totalReviews: 0 }, s);
+          renderSummary(
+            summaryEl,
+            data.summary || { averageRating: 0, totalReviews: 0, ratingCounts: { 1: 0, 2: 0, 3: 0, 4: 0, 5: 0 } },
+            s,
+          );
         }
 
         var pageSize = s.reviewsPerPage > 0 ? s.reviewsPerPage : (data.reviews || []).length;
@@ -235,6 +323,9 @@
       })
       .catch(function () {
         listEl.innerHTML = '<p class="imagyn-reviews__error">Reviews are unavailable right now.</p>';
+        if (summaryEl) {
+          summaryEl.innerHTML = "";
+        }
       });
   }
 

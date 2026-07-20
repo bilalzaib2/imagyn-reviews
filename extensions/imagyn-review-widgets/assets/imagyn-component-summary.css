@@ -1,36 +1,99 @@
 /*
  * Imagyn Reviews — Review Summary component.
  *
- * Per STOREFRONT_DESIGN_SYSTEM.md §16: a large semibold numeral (tabular-nums) plus a
- * muted-opacity review count, left-aligned, inline where space allows. No star icons —
- * the star-distribution visual is Histogram's responsibility (a future phase), not
- * Summary's; this component is numeral-led, matching the system's typography-first
- * philosophy rather than repeating the icon row already shown in the Rating Badge above
- * it on the page.
+ * The visual hero of the reviews widget (STOREFRONT_DESIGN_SYSTEM.md §16): a large
+ * semibold numeral (tabular-nums) with a small accent star row and review count beside
+ * it, a recommendation-percentage stat beneath, and the rating Histogram anchoring the
+ * bottom. Three loading states share this one file rather than three separate
+ * stylesheets: populated, skeleton (imagyn-component-skeleton.css primitives, scoped
+ * here to the hero's actual proportions), and empty (imagyn-component-empty-state.css).
  *
  * Per STOREFRONT_ARCHITECTURE.md: no internal state, no events — purely a renderer of
- * the averageRating/totalReviews values it's given.
+ * the averageRating/totalReviews/ratingCounts values it's given.
+ *
+ * Load imagyn-tokens.css, imagyn-utilities.css, imagyn-component-histogram.css,
+ * imagyn-component-empty-state.css, and imagyn-component-skeleton.css before this file.
  */
 
 .imagyn-summary {
   display: flex;
-  align-items: baseline;
-  flex-wrap: wrap;
-  gap: var(--imagyn-space-xs, 0.4em);
+  flex-direction: column;
+  gap: var(--imagyn-space-px-lg, 24px);
   margin-bottom: var(--imagyn-space-px-lg, 24px);
-  font-family: var(--imagyn-font-family, "Helvetica Neue", Helvetica, Arial, sans-serif);
+  font-family: var(--imagyn-font-family);
   color: var(--imagyn-color-text, inherit);
 }
 
+.imagyn-summary__hero {
+  display: flex;
+  flex-direction: column;
+  gap: var(--imagyn-space-2xs, 0.3em);
+}
+
+.imagyn-summary__headline {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--imagyn-space-sm, 0.6em);
+}
+
 .imagyn-summary__rating {
-  font-size: var(--imagyn-font-size-lg, 20px);
+  font-size: var(--imagyn-font-size-xl, 26px);
   font-weight: var(--imagyn-font-weight-semibold, 600);
   line-height: var(--imagyn-line-height-tight, 1);
   font-variant-numeric: tabular-nums;
 }
 
-.imagyn-summary__count {
+.imagyn-summary__headline-meta {
+  display: flex;
+  flex-direction: column;
+  gap: var(--imagyn-space-3xs, 0.2em);
+}
+
+.imagyn-summary__stars {
+  display: block;
   font-size: var(--imagyn-font-size-sm, 13px);
-  font-weight: var(--imagyn-font-weight-regular, 400);
+  letter-spacing: var(--imagyn-letter-spacing-normal, 0.02em);
+  color: var(--imagyn-color-star, #f5a623);
+  line-height: var(--imagyn-line-height-tight, 1);
+}
+
+.imagyn-summary__count {
+  display: block;
+  font-size: var(--imagyn-font-size-sm, 13px);
+  color: var(--imagyn-color-text, inherit);
   opacity: var(--imagyn-color-text-muted-opacity, 0.6);
+  font-variant-numeric: tabular-nums;
+}
+
+.imagyn-summary__recommend {
+  margin: 0;
+  font-size: var(--imagyn-font-size-sm, 13px);
+  font-weight: var(--imagyn-font-weight-medium, 500);
+  color: var(--imagyn-color-success, #1a7f4b);
+}
+
+/* Skeleton state — approximates the hero's real proportions rather than a generic box
+   (STOREFRONT_DESIGN_SYSTEM.md §11). Shimmer/animation itself lives entirely in
+   imagyn-component-skeleton.css; this only sizes the shared primitive to this layout. */
+.imagyn-summary__hero-skeleton .imagyn-skeleton--title {
+  width: 3.5em;
+  height: 1.7em;
+  margin-bottom: var(--imagyn-space-2xs, 0.3em);
+}
+
+.imagyn-summary__hero-skeleton .imagyn-skeleton--text {
+  width: 9em;
+  height: 0.8em;
+}
+
+.imagyn-summary__histogram-skeleton {
+  display: flex;
+  flex-direction: column;
+  gap: var(--imagyn-space-3xs, 0.2em);
+}
+
+.imagyn-summary__histogram-skeleton .imagyn-skeleton--text {
+  height: 6px;
+  border-radius: var(--imagyn-radius-full, 999px);
 }

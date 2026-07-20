@@ -179,23 +179,43 @@ export async function getProductReviews(productId: string, options: ReviewQueryO
 export interface PublicReviewSummary {
   averageRating: number;
   totalReviews: number;
+  // Optional: only getPublicReviewSummary (single-product, Review Summary widget) computes
+  // the per-star breakdown. getPublicReviewSummaryBatch (collection/search badge grids)
+  // doesn't need it, so it isn't required there.
+  ratingCounts?: { 1: number; 2: number; 3: number; 4: number; 5: number };
 }
 
 // Scoped to APPROVED + non-deleted only, independent of recalculateProductStats (which
-// intentionally counts every status for internal merchant reporting). Used for public,
-// unauthenticated storefront display, where pending/rejected reviews must never surface.
+// intentionally counts every status for internal merchant reporting, and whose stored
+// Product.rating5Count..rating1Count therefore can't be reused here — they'd leak
+// pending/rejected counts into a public response). Used for public, unauthenticated
+// storefront display, where pending/rejected reviews must never surface.
 export async function getPublicReviewSummary(productId: string): Promise<PublicReviewSummary> {
-  const [totalReviews, aggregate] = await Promise.all([
+  const [totalReviews, aggregate, ratingGroups] = await Promise.all([
     prisma.review.count({ where: { productId, deletedAt: null, status: ReviewStatus.APPROVED } }),
     prisma.review.aggregate({
       where: { productId, deletedAt: null, status: ReviewStatus.APPROVED },
       _avg: { rating: true },
     }),
+    prisma.review.groupBy({
+      by: ["rating"],
+      where: { productId, deletedAt: null, status: ReviewStatus.APPROVED },
+      _count: { rating: true },
+    }),
   ]);
+
+  const countByRating = new Map(ratingGroups.map((group) => [group.rating, group._count.rating]));
 
   return {
     averageRating: Number((aggregate._avg.rating ?? 0).toFixed(1)),
     totalReviews,
+    ratingCounts: {
+      5: countByRating.get(5) ?? 0,
+      4: countByRating.get(4) ?? 0,
+      3: countByRating.get(3) ?? 0,
+      2: countByRating.get(2) ?? 0,
+      1: countByRating.get(1) ?? 0,
+    },
   };
 }
 
