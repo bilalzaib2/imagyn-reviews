@@ -1,0 +1,62 @@
+/*
+ * Imagyn Reviews — typography base.
+ *
+ * Small set of reusable typographic classes built from imagyn-tokens.css. Components
+ * opt into these rather than declaring font-family/size/weight ad hoc, so every current
+ * and future Imagyn Reviews component (badges, review cards, summary, filters, AI
+ * summary, media gallery) reads as one consistent, typography-first system.
+ *
+ * Load imagyn-tokens.css before this file. Applying these classes has no effect on the
+ * merchant's theme — nothing here is applied automatically to any element.
+ */
+
+.imagyn-text {
+  font-family: var(--imagyn-font-family);
+  color: var(--imagyn-color-text);
+  line-height: var(--imagyn-line-height-base);
+}
+
+.imagyn-text--muted {
+  opacity: var(--imagyn-color-text-muted-opacity);
+}
+
+.imagyn-text--xs {
+  font-size: var(--imagyn-font-size-xs);
+}
+
+.imagyn-text--sm {
+  font-size: var(--imagyn-font-size-sm);
+}
+
+.imagyn-text--base {
+  font-size: var(--imagyn-font-size-base);
+}
+
+.imagyn-text--md {
+  font-size: var(--imagyn-font-size-md);
+}
+
+.imagyn-text--lg {
+  font-size: var(--imagyn-font-size-lg);
+}
+
+.imagyn-text--regular {
+  font-weight: var(--imagyn-font-weight-regular);
+}
+
+.imagyn-text--medium {
+  font-weight: var(--imagyn-font-weight-medium);
+}
+
+.imagyn-text--semibold {
+  font-weight: var(--imagyn-font-weight-semibold);
+}
+
+.imagyn-text--tight {
+  line-height: var(--imagyn-line-height-tight);
+  letter-spacing: var(--imagyn-letter-spacing-tight);
+}
+
+.imagyn-text--tabular {
+  font-variant-numeric: tabular-nums;
+}

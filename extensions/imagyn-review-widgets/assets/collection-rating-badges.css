@@ -1,29 +1,10 @@
+/*
+ * Collection Ratings embed — context-specific styling only.
+ * The badge's own visual style (colors, typography, icon sizing) lives in
+ * imagyn-component-badge.css, shared with other components that render a badge.
+ * This file only concerns itself with how the badge sits within a Dawn product card.
+ */
+
 .imagyn-card-badge {
-  display: inline-flex;
-  align-items: center;
-  gap: var(--imagyn-space-xs, 0.4em);
   margin-top: var(--imagyn-space-sm, 0.6em);
-  font-family: var(--imagyn-font-family, "Helvetica Neue", Helvetica, Arial, sans-serif);
-  font-size: var(--imagyn-font-size-sm, 0.8125rem);
-  font-weight: var(--imagyn-font-weight-medium, 500);
-  line-height: var(--imagyn-line-height-tight, 1);
-  letter-spacing: var(--imagyn-letter-spacing-tight, 0.01em);
-  color: var(--imagyn-card-badge-text-color, inherit);
-}
-
-.imagyn-card-badge__stars {
-  display: inline-flex;
-  align-items: center;
-  /* Slightly smaller than the badge's own font-size so the icon row reads as a quiet
-     accent next to the count, not competing with it — a small, deliberate hierarchy
-     choice rather than both elements shouting at the same weight. */
-  font-size: 0.9em;
-  letter-spacing: var(--imagyn-letter-spacing-normal, 0.02em);
-  color: var(--imagyn-card-badge-star-color, var(--imagyn-color-star, #f5a623));
-}
-
-.imagyn-card-badge__count {
-  color: var(--imagyn-color-text, currentColor);
-  opacity: var(--imagyn-color-text-muted-opacity, 0.6);
-  font-variant-numeric: tabular-nums;
 }

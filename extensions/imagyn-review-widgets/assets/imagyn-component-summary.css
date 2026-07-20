@@ -1,0 +1,9 @@
+/*
+ * Imagyn Reviews — review summary component (reserved).
+ *
+ * Not yet wired into any block — the Reviews Widget's current summary line
+ * (reviews-widget.css) isn't being redesigned in this pass. This file exists so the
+ * summary's styling has a defined home when that redesign happens, consuming
+ * imagyn-tokens.css / imagyn-typography.css like every other component, rather than
+ * being added ad hoc later.
+ */

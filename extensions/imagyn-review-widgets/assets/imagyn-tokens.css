@@ -1,0 +1,68 @@
+/*
+ * Imagyn Reviews — design tokens.
+ *
+ * Raw values only (colors, spacing, typography scale, radii, shadows). No selectors
+ * beyond :root, no component rules. Every Imagyn Reviews component consumes these via
+ * var() instead of redefining its own values — see imagyn-typography.css for the
+ * typographic base rules built from these tokens, and imagyn-component-*.css files
+ * for individual component styles.
+ *
+ * Note: Shopify theme app extensions serve the assets/ folder flat — there is no
+ * confirmed support for nested folders (e.g. assets/components/), so component files
+ * use an "imagyn-component-*.css" naming convention instead of a components/ subfolder.
+ *
+ * Defining tokens here has no visual effect on the merchant's theme by itself — only
+ * elements carrying Imagyn's own classes reference them.
+ */
+:root {
+  /* Typography */
+  --imagyn-font-family:
+    "Helvetica Neue World",
+    "Helvetica Neue",
+    Helvetica,
+    Arial,
+    sans-serif;
+
+  --imagyn-font-size-xs: 0.75rem;
+  --imagyn-font-size-sm: 0.8125rem;
+  --imagyn-font-size-base: 0.9375rem;
+  --imagyn-font-size-md: 1.0625rem;
+  --imagyn-font-size-lg: 1.25rem;
+
+  --imagyn-font-weight-regular: 400;
+  --imagyn-font-weight-medium: 500;
+  --imagyn-font-weight-semibold: 600;
+
+  --imagyn-letter-spacing-tight: 0.01em;
+  --imagyn-letter-spacing-normal: 0.02em;
+
+  --imagyn-line-height-tight: 1;
+  --imagyn-line-height-base: 1.5;
+
+  /* Spacing */
+  --imagyn-space-3xs: 0.2em;
+  --imagyn-space-2xs: 0.3em;
+  --imagyn-space-xs: 0.4em;
+  --imagyn-space-sm: 0.6em;
+  --imagyn-space-md: 1em;
+  --imagyn-space-lg: 1.5em;
+  --imagyn-space-xl: 2.5em;
+
+  /* Color */
+  --imagyn-color-text: currentColor;
+  --imagyn-color-text-muted-opacity: 0.6;
+  --imagyn-color-star: #f5a623;
+  --imagyn-color-border: rgba(0, 0, 0, 0.08);
+  --imagyn-color-surface: #ffffff;
+
+  /* Radii */
+  --imagyn-radius-sm: 4px;
+  --imagyn-radius-md: 8px;
+  --imagyn-radius-lg: 12px;
+  --imagyn-radius-full: 999px;
+
+  /* Shadows — calm, low-contrast; reserved for future surfaced components (review
+     cards, summary panel) that sit on top of the page rather than inline in text. */
+  --imagyn-shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.05);
+  --imagyn-shadow-md: 0 2px 8px rgba(0, 0, 0, 0.06);
+}

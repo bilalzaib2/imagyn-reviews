@@ -1,0 +1,9 @@
+/*
+ * Imagyn Reviews — review card component (reserved).
+ *
+ * Not yet wired into any block — the Reviews Widget's current review list
+ * (reviews-widget.css) isn't being redesigned in this pass. This file exists so the
+ * review card's styling has a defined home when that redesign happens, consuming
+ * imagyn-tokens.css / imagyn-typography.css like every other component, rather than
+ * being added ad hoc later.
+ */
