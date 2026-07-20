@@ -85,6 +85,12 @@
   }
 
   function injectBadge(entry, summary) {
+    // Enforced directly, independent of the PROCESSED_ATTR bookkeeping in findCards: this
+    // exact card must never end up with more than one badge, regardless of how it got here.
+    if (entry.card.querySelector(".imagyn-card-badge")) {
+      return false;
+    }
+
     if (!summary || summary.totalReviews === 0) {
       return false;
     }
