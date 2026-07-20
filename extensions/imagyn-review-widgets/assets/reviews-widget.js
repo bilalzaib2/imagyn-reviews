@@ -262,16 +262,21 @@
   // moved to the Rating Badge block, positioned above the product title to match the
   // native Shopify/Atoms pattern (see rating-badge.js) — this component now covers only
   // the detailed breakdown (histogram, AI summary) and no longer duplicates those stats.
+  // A second, independent Write a Review trigger is still offered here too, right beside
+  // the rating — both it and the badge's trigger control the same underlying form (see the
+  // "imagyn:write-review-toggle"/"imagyn:write-review-state" events below), so opening or
+  // closing the form from either place keeps both buttons' state in sync.
   function renderSummary(summaryEl, summary, s, aiSummary) {
     var totalReviews = summary.totalReviews || 0;
     var averageRating = summary.averageRating || 0;
     var ratingCounts = summary.ratingCounts || { 1: 0, 2: 0, 3: 0, 4: 0, 5: 0 };
 
     var showStats = totalReviews > 0 && (s.showAverageRating !== false || s.showReviewCount !== false);
+    var showWrite = s.showWriteReviewButton !== false;
     var recommendPercent = totalReviews > 0 ? Math.round(((ratingCounts[5] || 0) + (ratingCounts[4] || 0)) / totalReviews * 100) : 0;
     var hasEmptyState = totalReviews === 0;
 
-    if (!showStats && !hasEmptyState && !aiSummary) {
+    if (!showStats && !hasEmptyState && !aiSummary && !showWrite) {
       summaryEl.innerHTML = "";
       return;
     }
@@ -284,6 +289,17 @@
         totalReviews + (totalReviews === 1 ? " review" : " reviews") + ". " +
         recommendPercent + "% of customers recommend this product.";
       html += '<span class="imagyn-visually-hidden">' + escapeHtml(srSummary) + "</span>";
+    }
+
+    if (showWrite) {
+      var formEl = document.querySelector("[data-imagyn-form]");
+      var formOpen = !!(formEl && !formEl.hasAttribute("hidden"));
+      html +=
+        '<div class="imagyn-summary__quickbar">' +
+        '<button type="button" class="imagyn-summary__quickbar-write" data-imagyn-summary-write aria-expanded="' +
+        (formOpen ? "true" : "false") +
+        '">Write a review</button>' +
+        "</div>";
     }
 
     if (hasEmptyState) {
@@ -318,6 +334,17 @@
     html += "</div>"; // summary
 
     summaryEl.innerHTML = html;
+
+    var summaryWriteBtn = summaryEl.querySelector("[data-imagyn-summary-write]");
+    if (summaryWriteBtn) {
+      summaryWriteBtn.addEventListener("click", function () {
+        document.dispatchEvent(new CustomEvent("imagyn:write-review-toggle"));
+      });
+      document.addEventListener("imagyn:write-review-state", function (event) {
+        summaryWriteBtn.setAttribute("aria-expanded", event.detail && event.detail.expanded ? "true" : "false");
+      });
+    }
+
     if (totalReviews > 0 && showStats) {
       animateHistogramFills(summaryEl);
     }
@@ -796,12 +823,34 @@
           if (galleryEl) {
             galleryEl.innerHTML = "";
           }
-          // Rating/count can't be shown without the failed response's data. The Write a
-          // Review trigger itself is unaffected — it lives in the Rating Badge block above
-          // the title, which fetches independently, and the form it opens is rendered by
-          // renderWriteReview regardless of whether this list request succeeded.
+          // Rating/count can't be shown without the failed response's data, but Write a
+          // Review must stay available regardless (the Rating Badge above the title offers
+          // it too, fetching independently, but this widget's own trigger shouldn't
+          // disappear just because the list request failed).
           if (summaryEl) {
-            summaryEl.innerHTML = "";
+            var s = resolveSettings(null, themeOverrides);
+            if (s.showWriteReviewButton !== false) {
+              var formEl = document.querySelector("[data-imagyn-form]");
+              var formOpen = !!(formEl && !formEl.hasAttribute("hidden"));
+              summaryEl.innerHTML =
+                '<div class="imagyn-summary imagyn-fade-in">' +
+                '<div class="imagyn-summary__quickbar">' +
+                '<button type="button" class="imagyn-summary__quickbar-write" data-imagyn-summary-write aria-expanded="' +
+                (formOpen ? "true" : "false") +
+                '">Write a review</button>' +
+                "</div>" +
+                "</div>";
+
+              var summaryWriteBtn = summaryEl.querySelector("[data-imagyn-summary-write]");
+              summaryWriteBtn.addEventListener("click", function () {
+                document.dispatchEvent(new CustomEvent("imagyn:write-review-toggle"));
+              });
+              document.addEventListener("imagyn:write-review-state", function (event) {
+                summaryWriteBtn.setAttribute("aria-expanded", event.detail && event.detail.expanded ? "true" : "false");
+              });
+            } else {
+              summaryEl.innerHTML = "";
+            }
           }
         });
     }

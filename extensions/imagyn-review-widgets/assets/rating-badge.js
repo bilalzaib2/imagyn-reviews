@@ -26,10 +26,6 @@
     }
   }
 
-  function hasWriteReviewForm() {
-    return !!document.querySelector("[data-imagyn-form]");
-  }
-
   function render(root, summary, widgetSettings, emptyState) {
     var totalReviews = (summary && summary.totalReviews) || 0;
     var averageRating = (summary && summary.averageRating) || 0;
@@ -38,9 +34,13 @@
     var showEmptyText = totalReviews === 0 && emptyState === "show_text";
     // The write-review affordance stays available regardless of review count (matching
     // the widget's own "the Write a Review affordance stays fully present regardless of
-    // review count" rule) — it only depends on the merchant's setting and whether a
-    // write-review form actually exists on this page.
-    var showWrite = hasWriteReviewForm() && (!widgetSettings || widgetSettings.showWriteReviewButton !== false);
+    // review count" rule) — driven purely by the merchant's setting. Deliberately NOT
+    // gated on "does a write-review form already exist in the DOM": this block's fetch
+    // and the Reviews widget's own (independent) fetch/render can resolve in either order,
+    // so that check was a timing race that could hide this trigger on a fast/cached
+    // response. If a page genuinely has no Reviews widget at all, the dispatched toggle
+    // event below just has no listener and is a silent no-op.
+    var showWrite = !widgetSettings || widgetSettings.showWriteReviewButton !== false;
 
     if (!showStats && !showEmptyText && !showWrite) {
       root.setAttribute("hidden", "");
