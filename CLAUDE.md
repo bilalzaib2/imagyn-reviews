@@ -130,6 +130,36 @@ the user to run interactive migration commands themselves.
 
 ---
 
+# Known Gotchas
+
+## Shopify `shopify app dev`
+
+Problem:
+Running `shopify app dev` overrides the embedded app URL for the development store.
+
+Symptoms:
+- Embedded admin app loads a dead trycloudflare.com URL.
+- Railway is healthy.
+- Production deployment is healthy.
+- App appears broken.
+
+Fix:
+```
+shopify app dev clean --store=verveonline.myshopify.com
+```
+
+Never:
+- Redeploy blindly.
+- Debug React first.
+- Debug Prisma first.
+
+Always:
+Run `shopify app dev clean` before ending a development session.
+
+Full investigation: `docs/TROUBLESHOOTING.md`. Workflow rule: `docs/SHOPIFY_DEV_WORKFLOW.md`.
+
+---
+
 # UI
 
 Design philosophy:
