@@ -49,8 +49,8 @@ export interface ReviewRequestRecord {
   sendAttempts: number;
   createdAt: Date;
   updatedAt: Date;
-  store: { id: string; name: string };
-  product: { id: string; name: string | null } | null;
+  store: { id: string; name: string; domain: string | null };
+  product: { id: string; name: string | null; featuredImage: string | null } | null;
 }
 
 export interface ReviewRequestListResult {
@@ -59,6 +59,14 @@ export interface ReviewRequestListResult {
   page: number;
   pageSize: number;
 }
+
+// Shared across every query in this file that needs the parent store/product — store.domain
+// (the shop's myshopify.com domain) is needed by r.$token.tsx to get an unauthenticated Admin
+// API session for photo uploads, and product.featuredImage is shown on the public review page.
+const REQUEST_INCLUDE = {
+  store: { select: { id: true, name: true, domain: true } },
+  product: { select: { id: true, name: true, featuredImage: true } },
+} as const;
 
 const buildScheduledFor = (delayDays: number) => {
   const scheduledFor = new Date();
@@ -84,8 +92,8 @@ const mapRequestRecord = (request: {
   sendAttempts: number;
   createdAt: Date;
   updatedAt: Date;
-  store: { id: string; name: string };
-  product: { id: string; name: string | null } | null;
+  store: { id: string; name: string; domain: string | null };
+  product: { id: string; name: string | null; featuredImage: string | null } | null;
 }): ReviewRequestRecord => ({
   id: request.id,
   name: request.name,
@@ -208,10 +216,7 @@ export const dispatchRequestEmail = async (request: ReviewRequestRecord): Promis
       const updated = await prisma.reviewRequest.update({
         where: { id: request.id },
         data: { status: "sent", sendAttempts: attempt + 1 },
-        include: {
-          store: { select: { id: true, name: true } },
-          product: { select: { id: true, name: true } },
-        },
+        include: REQUEST_INCLUDE,
       });
 
       return mapRequestRecord(updated);
@@ -239,10 +244,7 @@ export const dispatchRequestEmail = async (request: ReviewRequestRecord): Promis
   const updated = await prisma.reviewRequest.update({
     where: { id: request.id },
     data: { status: "failed" },
-    include: {
-      store: { select: { id: true, name: true } },
-      product: { select: { id: true, name: true } },
-    },
+    include: REQUEST_INCLUDE,
   });
 
   return mapRequestRecord(updated);
@@ -272,10 +274,7 @@ export const reviewRequestService = {
       prisma.reviewRequest.count({ where }),
       prisma.reviewRequest.findMany({
         where,
-        include: {
-          store: { select: { id: true, name: true } },
-          product: { select: { id: true, name: true } },
-        },
+        include: REQUEST_INCLUDE,
         orderBy: [{ createdAt: "desc" }, { id: "desc" }],
         skip: (page - 1) * pageSize,
         take: pageSize,
@@ -293,10 +292,7 @@ export const reviewRequestService = {
   async getRequest(id: string) {
     const request = await prisma.reviewRequest.findUnique({
       where: { id },
-      include: {
-        store: { select: { id: true, name: true } },
-        product: { select: { id: true, name: true } },
-      },
+      include: REQUEST_INCLUDE,
     });
 
     return request ? mapRequestRecord(request) : null;
@@ -360,10 +356,7 @@ export const reviewRequestService = {
         status,
         ...(status === "sending" ? { sentAt: new Date() } : {}),
       },
-      include: {
-        store: { select: { id: true, name: true } },
-        product: { select: { id: true, name: true } },
-      },
+      include: REQUEST_INCLUDE,
     });
 
     const mapped = mapRequestRecord(created);
@@ -411,10 +404,7 @@ export const reviewRequestService = {
         status,
         ...(status === "sending" ? { sentAt: new Date() } : {}),
       },
-      include: {
-        store: { select: { id: true, name: true } },
-        product: { select: { id: true, name: true } },
-      },
+      include: REQUEST_INCLUDE,
     });
 
     const mapped = mapRequestRecord(created);
@@ -459,10 +449,7 @@ export const reviewRequestService = {
           : {}),
         ...(data.status ? { status: data.status } : {}),
       },
-      include: {
-        store: { select: { id: true, name: true } },
-        product: { select: { id: true, name: true } },
-      },
+      include: REQUEST_INCLUDE,
     }).then(mapRequestRecord);
   },
 
@@ -480,10 +467,7 @@ export const reviewRequestService = {
         scheduledFor: buildScheduledFor(delayDays),
         status: "scheduled",
       },
-      include: {
-        store: { select: { id: true, name: true } },
-        product: { select: { id: true, name: true } },
-      },
+      include: REQUEST_INCLUDE,
     }).then(mapRequestRecord);
   },
 
@@ -508,10 +492,7 @@ export const reviewRequestService = {
         tokenExpiresAt: computeTokenExpiry(),
         tokenUsedAt: null,
       },
-      include: {
-        store: { select: { id: true, name: true } },
-        product: { select: { id: true, name: true } },
-      },
+      include: REQUEST_INCLUDE,
     }).then(mapRequestRecord);
 
     return nextStatus === "sending" ? dispatchRequestEmail(updated) : updated;
@@ -527,10 +508,7 @@ export const reviewRequestService = {
     return prisma.reviewRequest.update({
       where: { id },
       data: { status: "cancelled" },
-      include: {
-        store: { select: { id: true, name: true } },
-        product: { select: { id: true, name: true } },
-      },
+      include: REQUEST_INCLUDE,
     }).then(mapRequestRecord);
   },
 
@@ -554,10 +532,7 @@ export const reviewRequestService = {
   > {
     const existing = await prisma.reviewRequest.findUnique({
       where: { requestToken: token },
-      include: {
-        store: { select: { id: true, name: true } },
-        product: { select: { id: true, name: true } },
-      },
+      include: REQUEST_INCLUDE,
     });
 
     if (!existing) {
@@ -596,10 +571,7 @@ export const reviewRequestService = {
     return prisma.reviewRequest.update({
       where: { id },
       data: { tokenUsedAt: new Date(), reviewedAt: new Date(), status: "completed" },
-      include: {
-        store: { select: { id: true, name: true } },
-        product: { select: { id: true, name: true } },
-      },
+      include: REQUEST_INCLUDE,
     }).then(mapRequestRecord);
   },
 };

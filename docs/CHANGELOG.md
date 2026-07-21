@@ -8,6 +8,24 @@ Notable changes to Imagyn Reviews, newest first. Commit SHAs refer to `main`.
 
 ### Added
 
+- **Completed the public review-link customer journey** (`app/routes/r.$token.tsx`) — the
+  token-secured page now shows the product's featured image, and customers can attach up to
+  `MAX_IMAGES_PER_REVIEW` photos to their submission using the same storage pipeline the
+  storefront widget uses (`uploadReviewImages`). Since this route has no live Shopify session
+  (reached by a public emailed link, not an embedded request), photo uploads use
+  `shopify.server.ts`'s `unauthenticated.admin(shop)` — the SDK's documented mechanism for
+  Admin API access outside a Shopify-originated request — resolved via the store's
+  `domain`, now selected alongside every `ReviewRequest` query
+  (`review-request.server.ts`'s new shared `REQUEST_INCLUDE` constant, replacing 12 duplicated
+  `include` blocks with one). Photo upload is best-effort: a storage/Admin API failure never
+  loses the review itself, only surfaces a warning on the thank-you screen. Extracted the
+  multipart file-parsing helper (`readImageFilesFromFormData`) out of `api.reviews.tsx` into
+  `reviewMedia.server.ts` so both the storefront widget and the review-link page share one
+  implementation. Token validation (not-found/expired/already-used) and completion marking
+  were already built; this pass adds the product image and photo upload, and the whole flow
+  (email → review page → database → merchant dashboard) was verified end-to-end in production.
+  See [DECISIONS.md](./DECISIONS.md).
+
 - **Real Resend email sending** for the Email Review Requests platform — the `EmailProvider`
   abstraction and `ResendProvider` (already built) now use the official `resend` SDK instead of
   a hand-rolled `fetch` call, and the review-request template is now a proper React Email

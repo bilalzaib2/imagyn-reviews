@@ -9,10 +9,9 @@ import {
   rankByHelpfulness,
 } from "../services/review.server";
 import {
-  MAX_IMAGES_PER_REVIEW,
   getProductMediaGallery,
+  readImageFilesFromFormData,
   uploadReviewImages,
-  type ReviewImageFile,
 } from "../services/reviewMedia.server";
 import { getProductForStoreByShopifyId } from "../services/product.server";
 import { getStoreBySlug } from "../services/store.server";
@@ -156,24 +155,6 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
   });
 };
 
-async function readImageFiles(formData: FormData): Promise<ReviewImageFile[]> {
-  const files: ReviewImageFile[] = [];
-
-  for (const entry of formData.getAll("images")) {
-    if (!(entry instanceof File) || entry.size === 0) {
-      continue;
-    }
-
-    files.push({
-      filename: entry.name || "photo",
-      mimeType: entry.type || "application/octet-stream",
-      buffer: Buffer.from(await entry.arrayBuffer()),
-    });
-  }
-
-  return files.slice(0, MAX_IMAGES_PER_REVIEW);
-}
-
 export const action = async ({ request }: ActionFunctionArgs) => {
   if (isPreflight(request)) {
     return preflightResponse();
@@ -209,7 +190,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
   const customerEmail = field("customerEmail");
   const title = field("title");
   const content = field("content");
-  const imageFiles = await readImageFiles(formData);
+  const imageFiles = await readImageFilesFromFormData(formData, "images");
 
   const errors: string[] = [];
   if (!shop) errors.push("Shop is required.");

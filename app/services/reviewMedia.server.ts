@@ -28,6 +28,27 @@ export interface UploadReviewImagesResult {
   failed: Array<{ filename: string; error: string }>;
 }
 
+// Shared by every caller that reads uploaded review photos out of a multipart FormData
+// (app/routes/api.reviews.tsx, app/routes/r.$token.tsx) — one place to change if the
+// filename/mimeType fallback or the MAX_IMAGES_PER_REVIEW cap ever needs adjusting.
+export async function readImageFilesFromFormData(formData: FormData, fieldName: string): Promise<ReviewImageFile[]> {
+  const files: ReviewImageFile[] = [];
+
+  for (const entry of formData.getAll(fieldName)) {
+    if (!(entry instanceof File) || entry.size === 0) {
+      continue;
+    }
+
+    files.push({
+      filename: entry.name || "photo",
+      mimeType: entry.type || "application/octet-stream",
+      buffer: Buffer.from(await entry.arrayBuffer()),
+    });
+  }
+
+  return files.slice(0, MAX_IMAGES_PER_REVIEW);
+}
+
 export function validateImageFile(file: ReviewImageFile): string | null {
   if (!ALLOWED_IMAGE_MIME_TYPES.includes(file.mimeType)) {
     return `${file.filename}: unsupported file type.`;

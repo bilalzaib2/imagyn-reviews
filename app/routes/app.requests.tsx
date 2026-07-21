@@ -531,7 +531,11 @@ export default function RequestsPage() {
           delayDays: parsedDelay,
           scheduledFor: nextScheduled,
           product: matchedProduct
-            ? { id: matchedProduct.id, name: matchedProduct.name }
+            ? {
+                id: matchedProduct.id,
+                name: matchedProduct.name,
+                featuredImage: selectedRequest.product?.featuredImage ?? null,
+              }
             : selectedRequest.product,
         },
       }));

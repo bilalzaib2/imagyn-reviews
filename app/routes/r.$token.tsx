@@ -1,9 +1,11 @@
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { data, Form, isRouteErrorResponse, useActionData, useLoaderData, useNavigation, useRouteError } from "react-router";
 import type { ActionFunctionArgs, LoaderFunctionArgs } from "react-router";
 
 import { reviewRequestService } from "../services/review-request.server";
 import { createReview } from "../services/review.server";
+import { MAX_IMAGES_PER_REVIEW, readImageFilesFromFormData, uploadReviewImages } from "../services/reviewMedia.server";
+import { unauthenticated } from "../shopify.server";
 import { Button } from "../components/ui/Button";
 import { StarRating } from "../components/reviews/StarRating";
 import styles from "../styles/review-link.module.css";
@@ -52,9 +54,11 @@ export const loader = async ({ params }: LoaderFunctionArgs) => {
 
   return {
     productName: result.request.product?.name ?? "your recent purchase",
+    productImage: result.request.product?.featuredImage ?? null,
     storeName: result.request.store.name,
     customerName: result.request.name ?? "",
     customMessage: result.request.customMessage,
+    maxPhotos: MAX_IMAGES_PER_REVIEW,
   };
 };
 
@@ -86,9 +90,12 @@ export const action = async ({ request, params }: ActionFunctionArgs) => {
   const title = String(formData.get("title") || "").trim();
   const content = String(formData.get("content") || "").trim();
   const reviewerName = String(formData.get("reviewerName") || "").trim();
+  const imageFiles = await readImageFilesFromFormData(formData, "photos");
+
+  let reviewId: string;
 
   try {
-    await createReview({
+    const review = await createReview({
       productId: result.request.product.id,
       rating,
       title: title || null,
@@ -100,6 +107,7 @@ export const action = async ({ request, params }: ActionFunctionArgs) => {
       // a default we're fabricating.
       verifiedPurchase: true,
     });
+    reviewId = review.id;
   } catch (error) {
     return data(
       { ok: false as const, error: error instanceof Error ? error.message : "Unable to submit review." },
@@ -107,20 +115,75 @@ export const action = async ({ request, params }: ActionFunctionArgs) => {
     );
   }
 
+  // Photos are best-effort: the review itself has already been created successfully above, so
+  // a storage/Admin API hiccup here only downgrades to a warning, never loses the review. This
+  // route has no live Shopify session (it's reached by a public link, not an embedded request),
+  // so it uses shopify.server.ts's `unauthenticated.admin(shop)` — the SDK's documented mechanism
+  // for Admin API access outside a request Shopify itself originated — to reach the same
+  // uploadReviewImages path api.reviews.tsx's storefront widget submissions use.
+  let mediaWarning: string | null = null;
+
+  if (imageFiles.length > 0) {
+    if (result.request.store.domain) {
+      try {
+        const { admin } = await unauthenticated.admin(result.request.store.domain);
+        const uploadResult = await uploadReviewImages(reviewId, imageFiles, admin);
+
+        if (uploadResult.failed.length > 0) {
+          mediaWarning =
+            uploadResult.uploaded.length > 0
+              ? `${uploadResult.failed.length} photo${uploadResult.failed.length === 1 ? "" : "s"} couldn't be uploaded.`
+              : "Your review was submitted, but the photos couldn't be uploaded.";
+        }
+      } catch (error) {
+        console.error(`Failed to get admin session for photo upload (store ${result.request.store.domain}):`, error);
+        mediaWarning = "Your review was submitted, but the photos couldn't be uploaded.";
+      }
+    } else {
+      mediaWarning = "Your review was submitted, but the photos couldn't be uploaded.";
+    }
+  }
+
   // Token is only consumed after the review is successfully created — a failed submission
-  // (validation error, DB error) leaves the link usable for a retry.
+  // (validation error, DB error) leaves the link usable for a retry. Photo upload outcome
+  // never affects this, since the review itself is what the token guards against duplicating.
   await reviewRequestService.consumeRequestToken(result.request.id);
 
-  return { ok: true as const };
+  return { ok: true as const, mediaWarning };
 };
 
 export default function ReviewLinkPage() {
-  const { productName, storeName, customerName, customMessage } = useLoaderData<typeof loader>();
+  const { productName, productImage, storeName, customerName, customMessage, maxPhotos } = useLoaderData<typeof loader>();
   const actionData = useActionData<typeof action>();
   const navigation = useNavigation();
   const isSubmitting = navigation.state === "submitting";
 
   const [rating, setRating] = useState(5);
+  const [photos, setPhotos] = useState<File[]>([]);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  // Native file inputs expose an immutable FileList, so "add more" and "remove one" both work
+  // by rebuilding the input's .files from our own File[] state via DataTransfer — the standard
+  // technique for a removable multi-file picker (there's no other way to mutate a FileList).
+  const syncFileInput = (files: File[]) => {
+    if (!fileInputRef.current) return;
+    const transfer = new DataTransfer();
+    files.forEach((file) => transfer.items.add(file));
+    fileInputRef.current.files = transfer.files;
+  };
+
+  const handlePhotosSelected = (fileList: FileList | null) => {
+    if (!fileList) return;
+    const next = [...photos, ...Array.from(fileList)].slice(0, maxPhotos);
+    setPhotos(next);
+    syncFileInput(next);
+  };
+
+  const removePhoto = (index: number) => {
+    const next = photos.filter((_, i) => i !== index);
+    setPhotos(next);
+    syncFileInput(next);
+  };
 
   if (actionData?.ok) {
     return (
@@ -132,6 +195,7 @@ export default function ReviewLinkPage() {
             </div>
             <h1 className={styles.title}>Thank you</h1>
             <p className={styles.message}>Your review of {productName} has been submitted.</p>
+            {actionData.mediaWarning ? <p className={styles.mediaWarning}>{actionData.mediaWarning}</p> : null}
           </div>
         </div>
       </div>
@@ -141,6 +205,9 @@ export default function ReviewLinkPage() {
   return (
     <div className={styles.page}>
       <div className={styles.card}>
+        {productImage ? (
+          <img src={productImage} alt={productName} className={styles.productImage} />
+        ) : null}
         <p className={styles.eyebrow}>{storeName}</p>
         <h1 className={styles.title}>How was your {productName}?</h1>
         <p className={styles.message}>
@@ -149,7 +216,7 @@ export default function ReviewLinkPage() {
 
         {actionData && !actionData.ok ? <div className={styles.error}>{actionData.error}</div> : null}
 
-        <Form method="post">
+        <Form method="post" encType="multipart/form-data">
           <div className={styles.field}>
             <span className={styles.label}>Rating</span>
             <StarRating value={rating} onChange={setRating} size={28} />
@@ -182,6 +249,42 @@ export default function ReviewLinkPage() {
               defaultValue={customerName}
               required
             />
+          </div>
+
+          <div className={styles.field}>
+            <label className={styles.label} htmlFor="photos">
+              Photos <span style={{ fontWeight: 400, color: "var(--color-text-muted)" }}>(optional)</span>
+            </label>
+            <input
+              ref={fileInputRef}
+              id="photos"
+              name="photos"
+              type="file"
+              accept="image/png,image/jpeg,image/webp,image/gif"
+              multiple
+              className={styles.photoInput}
+              disabled={photos.length >= maxPhotos}
+              onChange={(event) => handlePhotosSelected(event.target.files)}
+            />
+            <p className={styles.hint}>Up to {maxPhotos} photos, 5MB each.</p>
+
+            {photos.length > 0 ? (
+              <div className={styles.photoPreviewGrid}>
+                {photos.map((file, index) => (
+                  <div key={`${file.name}-${index}`} className={styles.photoThumb}>
+                    <img src={URL.createObjectURL(file)} alt={file.name} />
+                    <button
+                      type="button"
+                      className={styles.photoThumbRemove}
+                      onClick={() => removePhoto(index)}
+                      aria-label={`Remove ${file.name}`}
+                    >
+                      ×
+                    </button>
+                  </div>
+                ))}
+              </div>
+            ) : null}
           </div>
 
           <div className={styles.actions}>
