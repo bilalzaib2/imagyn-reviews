@@ -88,6 +88,48 @@ Store Shopify IDs as unique identifiers.
 
 ---
 
+# Database Safety
+
+This project uses Railway PostgreSQL.
+
+Assume DATABASE_URL is PRODUCTION unless explicitly told otherwise.
+
+Never execute or suggest any command that can modify a database without confirmation.
+
+Forbidden without explicit approval:
+
+- prisma migrate
+- prisma migrate dev
+- prisma migrate deploy
+- prisma migrate reset
+- prisma db push
+- prisma db execute
+- prisma db seed
+- prisma migrate diff with --shadow-database-url
+- DROP
+- DELETE
+- TRUNCATE
+- ALTER
+- CREATE DATABASE
+
+Before ANY database command:
+
+1. Detect environment.
+2. Display a Database Safety Checklist.
+3. Explain whether the command is READ ONLY or WRITE.
+4. Ask for confirmation if any write is possible.
+
+READ operations are allowed.
+
+WRITE operations require explicit approval every time.
+
+This policy exists because `prisma migrate diff --shadow-database-url` was once run
+against the live production DATABASE_URL, which wiped all production data. Never repeat
+this mistake — use a genuinely disposable/local database for shadow operations, or ask
+the user to run interactive migration commands themselves.
+
+---
+
 # UI
 
 Design philosophy:
