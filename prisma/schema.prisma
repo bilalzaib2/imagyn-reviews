@@ -226,7 +226,15 @@ model ReviewRequest {
   name         String?
   orderNumber  String?
   customMessage String?
-  requestToken String?
+  requestToken String?         @unique
+  // Extension seam for link security (README: expiration, single-use validation, fraud
+  // protection) — a single opaque token + these two timestamps is enough for the MVP
+  // resolver (app/routes/r.$token.tsx) to enforce both without a separate token table.
+  // A dedicated ReviewRequestToken model only earns its keep once a request can have
+  // *multiple* concurrent tokens (e.g. reminder emails each with their own link) — that's
+  // explicitly future work, not this pass.
+  tokenExpiresAt DateTime?
+  tokenUsedAt    DateTime?
   delayDays    Int?
   scheduledFor DateTime?
   status       String          @default("pending")

@@ -2,7 +2,7 @@ import { Badge } from "@shopify/polaris";
 import type { ReviewRequestStatus } from "../../services/review-request.server";
 
 const STATUS_LABEL: Record<ReviewRequestStatus, string> = {
-  draft: "Draft",
+  pending: "Pending",
   scheduled: "Scheduled",
   sending: "Sending",
   sent: "Sent",
@@ -13,7 +13,7 @@ const STATUS_LABEL: Record<ReviewRequestStatus, string> = {
 };
 
 const STATUS_TONE: Record<ReviewRequestStatus, "success" | "warning" | "attention" | "info" | "new"> = {
-  draft: "warning",
+  pending: "warning",
   scheduled: "info",
   sending: "info",
   sent: "success",

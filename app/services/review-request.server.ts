@@ -1,7 +1,9 @@
 import prisma from "../db.server";
+import { getEmailProvider } from "./notifications/provider.server";
+import { buildReviewRequestEmail } from "./notifications/templates.server";
 
 export type ReviewRequestStatus =
-  | "draft"
+  | "pending"
   | "scheduled"
   | "sending"
   | "sent"
@@ -136,6 +138,70 @@ const buildDeliveryPayload = (request: ReviewRequestRecord) => ({
   requestToken: request.requestToken,
 });
 
+// How long a review link stays valid after it's sent — the resolver (app/routes/r.$token.tsx)
+// rejects the token past this without needing a merchant-facing setting for the MVP.
+const TOKEN_TTL_DAYS = 30;
+
+const generateRequestToken = () => crypto.randomUUID();
+
+const computeTokenExpiry = () => {
+  const expiresAt = new Date();
+  expiresAt.setDate(expiresAt.getDate() + TOKEN_TTL_DAYS);
+  return expiresAt;
+};
+
+const buildReviewUrl = (requestToken: string) => {
+  const appUrl = process.env.SHOPIFY_APP_URL || process.env.APP_URL || "http://127.0.0.1:3000";
+  return `${appUrl.replace(/\/$/, "")}/r/${requestToken}`;
+};
+
+// Sends the request email and reflects the outcome on the row — never throws, so a Resend
+// error surfaces as status "failed" (visible in the admin UI) instead of crashing the
+// create/resend action and losing the request entirely. Only called when a request's status
+// is already "sending" (delayDays === 0); scheduled requests are left untouched here — actually
+// dispatching them once due is future automation work (see Long-term Roadmap), not this pass.
+const dispatchRequestEmail = async (request: ReviewRequestRecord): Promise<ReviewRequestRecord> => {
+  if (!request.email || !request.requestToken) {
+    return request;
+  }
+
+  try {
+    const { subject, html, text } = buildReviewRequestEmail({
+      customerName: request.name || "there",
+      productName: request.product?.name || "your recent purchase",
+      storeName: request.store.name,
+      reviewUrl: buildReviewUrl(request.requestToken),
+      customMessage: request.customMessage,
+    });
+
+    await getEmailProvider().sendEmail({ to: request.email, subject, html, text });
+
+    const updated = await prisma.reviewRequest.update({
+      where: { id: request.id },
+      data: { status: "sent" },
+      include: {
+        store: { select: { id: true, name: true } },
+        product: { select: { id: true, name: true } },
+      },
+    });
+
+    return mapRequestRecord(updated);
+  } catch (error) {
+    console.error(`Failed to send review request email for request ${request.id}:`, error);
+
+    const updated = await prisma.reviewRequest.update({
+      where: { id: request.id },
+      data: { status: "failed" },
+      include: {
+        store: { select: { id: true, name: true } },
+        product: { select: { id: true, name: true } },
+      },
+    });
+
+    return mapRequestRecord(updated);
+  }
+};
+
 export const reviewRequestService = {
   async listRequests(options: ReviewRequestListOptions = {}): Promise<ReviewRequestListResult> {
     const pageSize = options.pageSize ?? 10;
@@ -243,7 +309,8 @@ export const reviewRequestService = {
         customMessage: data.customMessage?.trim() || null,
         delayDays: normalizedDelay,
         scheduledFor: buildScheduledFor(normalizedDelay),
-        requestToken: crypto.randomUUID(),
+        requestToken: generateRequestToken(),
+        tokenExpiresAt: computeTokenExpiry(),
         status,
         ...(status === "sending" ? { sentAt: new Date() } : {}),
       },
@@ -253,9 +320,12 @@ export const reviewRequestService = {
       },
     });
 
+    const mapped = mapRequestRecord(created);
+    const request = status === "sending" ? await dispatchRequestEmail(mapped) : mapped;
+
     return {
-      request: mapRequestRecord(created),
-      delivery: buildDeliveryPayload(mapRequestRecord(created)),
+      request,
+      delivery: buildDeliveryPayload(request),
     };
   },
 
@@ -328,21 +398,26 @@ export const reviewRequestService = {
     }
 
     const nextDelay = existing.delayDays ?? 0;
+    const nextStatus = nextDelay === 0 ? "sending" : "scheduled";
 
-    return prisma.reviewRequest.update({
+    const updated = await prisma.reviewRequest.update({
       where: { id },
       data: {
-        status: nextDelay === 0 ? "sending" : "scheduled",
+        status: nextStatus,
         delayDays: nextDelay,
         scheduledFor: buildScheduledFor(nextDelay),
         sentAt: nextDelay === 0 ? new Date() : existing.sentAt,
-        requestToken: crypto.randomUUID(),
+        requestToken: generateRequestToken(),
+        tokenExpiresAt: computeTokenExpiry(),
+        tokenUsedAt: null,
       },
       include: {
         store: { select: { id: true, name: true } },
         product: { select: { id: true, name: true } },
       },
     }).then(mapRequestRecord);
+
+    return nextStatus === "sending" ? dispatchRequestEmail(updated) : updated;
   },
 
   async cancelRequest(id: string) {
@@ -370,5 +445,62 @@ export const reviewRequestService = {
     }
 
     return prisma.reviewRequest.delete({ where: { id } });
+  },
+
+  // The three functions below back the public review link (app/routes/r.$token.tsx). They
+  // read/write tokenExpiresAt and tokenUsedAt directly rather than through ReviewRequestRecord
+  // — those columns are a security concern specific to the resolver, not something the admin
+  // list/detail views need on every row.
+  async validateRequestToken(token: string): Promise<
+    | { ok: true; request: ReviewRequestRecord }
+    | { ok: false; reason: "not_found" | "expired" | "used" }
+  > {
+    const existing = await prisma.reviewRequest.findUnique({
+      where: { requestToken: token },
+      include: {
+        store: { select: { id: true, name: true } },
+        product: { select: { id: true, name: true } },
+      },
+    });
+
+    if (!existing) {
+      return { ok: false, reason: "not_found" };
+    }
+
+    if (existing.tokenUsedAt) {
+      return { ok: false, reason: "used" };
+    }
+
+    if (existing.tokenExpiresAt && existing.tokenExpiresAt < new Date()) {
+      return { ok: false, reason: "expired" };
+    }
+
+    return { ok: true, request: mapRequestRecord(existing) };
+  },
+
+  // Idempotent and only moves "sent" -> "opened", so re-viewing an already-reviewed or
+  // already-expired link never regresses its status.
+  async markRequestOpened(token: string) {
+    const existing = await prisma.reviewRequest.findUnique({ where: { requestToken: token } });
+
+    if (!existing || existing.status !== "sent") {
+      return;
+    }
+
+    await prisma.reviewRequest.update({
+      where: { id: existing.id },
+      data: { status: "opened", openedAt: existing.openedAt ?? new Date() },
+    });
+  },
+
+  async consumeRequestToken(id: string) {
+    return prisma.reviewRequest.update({
+      where: { id },
+      data: { tokenUsedAt: new Date(), reviewedAt: new Date(), status: "reviewed" },
+      include: {
+        store: { select: { id: true, name: true } },
+        product: { select: { id: true, name: true } },
+      },
+    }).then(mapRequestRecord);
   },
 };

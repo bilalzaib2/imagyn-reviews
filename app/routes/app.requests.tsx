@@ -95,7 +95,7 @@ const DATE_FILTER_OPTIONS: Array<{ label: string; value: ReviewRequestDateFilter
 
 const STATUS_FILTER_OPTIONS: Array<{ label: string; value: string }> = [
   { label: "All statuses", value: "" },
-  { label: "Draft", value: "draft" },
+  { label: "Pending", value: "pending" },
   { label: "Scheduled", value: "scheduled" },
   { label: "Sending", value: "sending" },
   { label: "Sent", value: "sent" },
