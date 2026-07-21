@@ -45,6 +45,13 @@ model Store {
   reviewRequests ReviewRequest[]
   widgets      Widget[]
   appearances  Appearance[]
+
+  // Order-lifecycle automation settings (see review-request.server.ts's createFromOrder and
+  // webhooks.fulfillments.create.tsx). autoRequestTrigger is a plain string, not an enum, so
+  // future trigger types (e.g. "delivery") are a config addition, not a schema change.
+  autoRequestEnabled   Boolean @default(false)
+  autoRequestDelayDays Int     @default(7)
+  autoRequestTrigger   String  @default("fulfillment")
 }
 
 model Product {
@@ -241,8 +248,25 @@ model ReviewRequest {
   sentAt       DateTime?
   openedAt     DateTime?
   reviewedAt   DateTime?
+
+  // Order-lifecycle linkage (see webhooks.fulfillments.create.tsx and
+  // review-request.server.ts's createFromOrder). Both null for manually-created requests —
+  // the unique constraint below only fires for order-triggered ones, so merchants can still
+  // freely create manual requests for the same product without colliding with it.
+  shopifyOrderId    String?
+  shopifyLineItemId String?
+  // "manual" | "order" — which flow created this row, surfaced in the admin UI.
+  source            String    @default("manual")
+  // Bounded retry count for dispatchRequestEmail — see MAX_SEND_ATTEMPTS in
+  // review-request.server.ts. Never incremented past that constant.
+  sendAttempts      Int       @default(0)
+
   createdAt    DateTime        @default(now())
   updatedAt    DateTime        @updatedAt
+
+  @@unique([shopifyOrderId, productId])
+  @@index([status])
+  @@index([scheduledFor])
 }
 
 model Widget {

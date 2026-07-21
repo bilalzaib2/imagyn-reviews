@@ -45,10 +45,10 @@ export const loader = async ({ params }: LoaderFunctionArgs) => {
     throw data({ reason: result.reason }, { status });
   }
 
-  // Fire on every valid view, not just the first — markRequestOpened only moves
-  // "sent" -> "opened" and is a no-op once the request has moved past that, so this is safe
+  // Fire on every valid view, not just the first — markRequestClicked only moves
+  // "sent" -> "clicked" and is a no-op once the request has moved past that, so this is safe
   // to call unconditionally rather than tracking "have we already recorded this" ourselves.
-  await reviewRequestService.markRequestOpened(token);
+  await reviewRequestService.markRequestClicked(token);
 
   return {
     productName: result.request.product?.name ?? "your recent purchase",

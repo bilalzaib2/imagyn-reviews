@@ -24,8 +24,25 @@ api_version = "2026-10"
   uri = "/webhooks/app/uninstalled"
   topics = [ "app/uninstalled" ]
 
+# fulfillments/create is intentionally NOT subscribed here. Shopify rejected deployment with
+# "This app is not approved to subscribe to webhook topics containing protected customer
+# data" — the topic's payload (destination address, customer email) requires completing
+# Shopify's Protected Customer Data approval first (https://shopify.dev/docs/apps/launch/
+# protected-customer-data), which this app has not done. The handler
+# (app/routes/webhooks.fulfillments.create.tsx), scope, and Settings UI all still exist and
+# are gated off by ORDER_AUTOMATION_ENABLED (app/config/features.server.ts) — re-add the
+# subscription and scope below, and flip that flag, once approval is granted. See
+# docs/DECISIONS.md.
+#
+#   [[webhooks.subscriptions]]
+#   uri = "/webhooks/fulfillments/create"
+#   topics = [ "fulfillments/create" ]
+
 [access_scopes]
 # Learn more at https://shopify.dev/docs/apps/tools/cli/configuration#access_scopes
+# read_fulfillments (required for the fulfillments/create webhook) is deliberately not
+# requested yet — see the comment above; add it back alongside the webhook subscription once
+# Protected Customer Data approval is granted.
 scopes = "write_products,write_metaobjects,write_metaobject_definitions,write_files,read_files"
 
 [auth]

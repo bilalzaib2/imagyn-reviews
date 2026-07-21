@@ -60,6 +60,28 @@ export async function updateStore(
   });
 }
 
+// Order-lifecycle automation settings (app.settings.tsx) — read by
+// webhooks.fulfillments.create.tsx to decide whether/how long to delay an auto-created
+// Review Request. autoRequestTrigger stays a plain string (not an enum) so a future trigger
+// type (e.g. "delivery") is a config addition here, not a schema change.
+export async function updateAutoRequestSettings(
+  id: string,
+  data: {
+    autoRequestEnabled: boolean;
+    autoRequestDelayDays: number;
+  },
+) {
+  return prisma.store.update({
+    where: {
+      id,
+    },
+    data: {
+      autoRequestEnabled: data.autoRequestEnabled,
+      autoRequestDelayDays: Math.max(data.autoRequestDelayDays, 0),
+    },
+  });
+}
+
 export async function deleteStore(id: string) {
   return prisma.store.delete({
     where: {

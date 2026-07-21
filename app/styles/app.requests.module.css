@@ -408,6 +408,53 @@
   color: var(--color-text-muted);
 }
 
+.detailSourceTag {
+  font-size: var(--text-xs);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--color-text-muted);
+}
+
+.detailTimeline {
+  display: grid;
+  gap: var(--space-3);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.detailTimelineStep {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+}
+
+.detailTimelineMarker {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.5rem;
+  height: 1.5rem;
+  border-radius: var(--radius-xl);
+  border: 1px solid var(--color-border-strong);
+  font-size: var(--text-xs);
+  color: var(--color-text-muted);
+  flex-shrink: 0;
+}
+
+.detailTimelineLabel {
+  font-size: var(--text-sm);
+  color: var(--color-text);
+}
+
+.detailTimelineLabelCurrent {
+  font-weight: 600;
+}
+
+.detailTimelineLabelUpcoming {
+  color: var(--color-text-muted);
+}
+
 .detailActions {
   display: flex;
   justify-content: flex-end;

@@ -2,13 +2,22 @@ import prisma from "../db.server";
 import { getEmailProvider } from "./notifications/provider.server";
 import { buildReviewRequestEmail } from "./notifications/templates.server";
 
+// Full lifecycle: pending -> scheduled -> sending -> sent -> delivered -> opened -> clicked
+// -> completed, with failed/cancelled as terminal branches off any pre-completed state.
+// "delivered" and "opened" (true email-open tracking) are populated only by a future Resend
+// inbound webhook — defined here now so the admin UI and filters are ready for it, but no
+// code in this pass ever sets them. "clicked" is what today's link-visit tracking actually
+// observes (a customer following the emailed link), so it replaces the old "opened" value —
+// see markRequestClicked below.
 export type ReviewRequestStatus =
   | "pending"
   | "scheduled"
   | "sending"
   | "sent"
+  | "delivered"
   | "opened"
-  | "reviewed"
+  | "clicked"
+  | "completed"
   | "failed"
   | "cancelled";
 
@@ -35,6 +44,9 @@ export interface ReviewRequestRecord {
   openedAt: Date | null;
   reviewedAt: Date | null;
   status: ReviewRequestStatus;
+  source: string;
+  shopifyOrderId: string | null;
+  sendAttempts: number;
   createdAt: Date;
   updatedAt: Date;
   store: { id: string; name: string };
@@ -67,6 +79,9 @@ const mapRequestRecord = (request: {
   openedAt: Date | null;
   reviewedAt: Date | null;
   status: string;
+  source: string;
+  shopifyOrderId: string | null;
+  sendAttempts: number;
   createdAt: Date;
   updatedAt: Date;
   store: { id: string; name: string };
@@ -84,6 +99,9 @@ const mapRequestRecord = (request: {
   openedAt: request.openedAt,
   reviewedAt: request.reviewedAt,
   status: request.status as ReviewRequestStatus,
+  source: request.source,
+  shopifyOrderId: request.shopifyOrderId,
+  sendAttempts: request.sendAttempts,
   createdAt: request.createdAt,
   updatedAt: request.updatedAt,
   store: request.store,
@@ -155,51 +173,79 @@ const buildReviewUrl = (requestToken: string) => {
   return `${appUrl.replace(/\/$/, "")}/r/${requestToken}`;
 };
 
+// Bounded retry for a transient send failure (e.g. a momentary Resend/network error) — capped
+// by a fixed constant so a persistently-failing provider can never loop forever. Only "failed"
+// after every attempt is exhausted.
+const MAX_SEND_ATTEMPTS = 3;
+const RETRY_DELAY_MS = 1000;
+
+const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
+
 // Sends the request email and reflects the outcome on the row — never throws, so a Resend
 // error surfaces as status "failed" (visible in the admin UI) instead of crashing the
-// create/resend action and losing the request entirely. Only called when a request's status
-// is already "sending" (delayDays === 0); scheduled requests are left untouched here — actually
-// dispatching them once due is future automation work (see Long-term Roadmap), not this pass.
-const dispatchRequestEmail = async (request: ReviewRequestRecord): Promise<ReviewRequestRecord> => {
+// create/resend action and losing the request entirely. Called either synchronously at create
+// time (delayDays === 0) or via enqueueReviewRequestDispatch (reviewRequestDispatch.server.ts) —
+// the seam a future queue worker will call once a scheduled request comes due.
+export const dispatchRequestEmail = async (request: ReviewRequestRecord): Promise<ReviewRequestRecord> => {
   if (!request.email || !request.requestToken) {
     return request;
   }
 
-  try {
-    const { subject, html, text } = buildReviewRequestEmail({
-      customerName: request.name || "there",
-      productName: request.product?.name || "your recent purchase",
-      storeName: request.store.name,
-      reviewUrl: buildReviewUrl(request.requestToken),
-      customMessage: request.customMessage,
-    });
+  const { subject, html, text } = buildReviewRequestEmail({
+    customerName: request.name || "there",
+    productName: request.product?.name || "your recent purchase",
+    storeName: request.store.name,
+    reviewUrl: buildReviewUrl(request.requestToken),
+    customMessage: request.customMessage,
+  });
 
-    await getEmailProvider().sendEmail({ to: request.email, subject, html, text });
+  let lastError: unknown;
 
-    const updated = await prisma.reviewRequest.update({
-      where: { id: request.id },
-      data: { status: "sent" },
-      include: {
-        store: { select: { id: true, name: true } },
-        product: { select: { id: true, name: true } },
-      },
-    });
+  for (let attempt = request.sendAttempts; attempt < MAX_SEND_ATTEMPTS; attempt += 1) {
+    try {
+      await getEmailProvider().sendEmail({ to: request.email, subject, html, text });
 
-    return mapRequestRecord(updated);
-  } catch (error) {
-    console.error(`Failed to send review request email for request ${request.id}:`, error);
+      const updated = await prisma.reviewRequest.update({
+        where: { id: request.id },
+        data: { status: "sent", sendAttempts: attempt + 1 },
+        include: {
+          store: { select: { id: true, name: true } },
+          product: { select: { id: true, name: true } },
+        },
+      });
 
-    const updated = await prisma.reviewRequest.update({
-      where: { id: request.id },
-      data: { status: "failed" },
-      include: {
-        store: { select: { id: true, name: true } },
-        product: { select: { id: true, name: true } },
-      },
-    });
+      return mapRequestRecord(updated);
+    } catch (error) {
+      lastError = error;
+      console.error(
+        `Failed to send review request email for request ${request.id} (attempt ${attempt + 1}/${MAX_SEND_ATTEMPTS}):`,
+        error,
+      );
 
-    return mapRequestRecord(updated);
+      // Record the attempt immediately so a crash mid-retry can't silently lose the count.
+      await prisma.reviewRequest.update({
+        where: { id: request.id },
+        data: { sendAttempts: attempt + 1 },
+      });
+
+      if (attempt + 1 < MAX_SEND_ATTEMPTS) {
+        await sleep(RETRY_DELAY_MS);
+      }
+    }
   }
+
+  console.error(`Exhausted ${MAX_SEND_ATTEMPTS} send attempts for request ${request.id}:`, lastError);
+
+  const updated = await prisma.reviewRequest.update({
+    where: { id: request.id },
+    data: { status: "failed" },
+    include: {
+      store: { select: { id: true, name: true } },
+      product: { select: { id: true, name: true } },
+    },
+  });
+
+  return mapRequestRecord(updated);
 };
 
 export const reviewRequestService = {
@@ -307,6 +353,57 @@ export const reviewRequestService = {
         name: data.name.trim(),
         orderNumber: data.orderNumber?.trim() || null,
         customMessage: data.customMessage?.trim() || null,
+        delayDays: normalizedDelay,
+        scheduledFor: buildScheduledFor(normalizedDelay),
+        requestToken: generateRequestToken(),
+        tokenExpiresAt: computeTokenExpiry(),
+        status,
+        ...(status === "sending" ? { sentAt: new Date() } : {}),
+      },
+      include: {
+        store: { select: { id: true, name: true } },
+        product: { select: { id: true, name: true } },
+      },
+    });
+
+    const mapped = mapRequestRecord(created);
+    const request = status === "sending" ? await dispatchRequestEmail(mapped) : mapped;
+
+    return {
+      request,
+      delivery: buildDeliveryPayload(request),
+    };
+  },
+
+  // Order-triggered counterpart of createRequest — same status/dispatch rules (immediate
+  // send when delayDays is 0, otherwise scheduled), but tags the row with the Shopify
+  // order/line-item it came from and source: "order" so the admin UI can distinguish it.
+  // Duplicate-prevention is enforced by the DB's unique (shopifyOrderId, productId) index —
+  // callers (webhooks.fulfillments.create.tsx) are expected to catch a Prisma P2002 violation
+  // as an idempotent no-op, since Shopify's webhook delivery is at-least-once, not exactly-once.
+  async createFromOrder(data: {
+    storeId: string;
+    productId: string;
+    shopifyOrderId: string;
+    shopifyLineItemId: string;
+    orderNumber: string;
+    email: string;
+    name: string;
+    delayDays: number;
+  }) {
+    const normalizedDelay = Math.max(data.delayDays, 0);
+    const status: ReviewRequestStatus = normalizedDelay === 0 ? "sending" : "scheduled";
+
+    const created = await prisma.reviewRequest.create({
+      data: {
+        storeId: data.storeId,
+        productId: data.productId,
+        shopifyOrderId: data.shopifyOrderId,
+        shopifyLineItemId: data.shopifyLineItemId,
+        source: "order",
+        email: data.email.trim(),
+        name: data.name.trim(),
+        orderNumber: data.orderNumber.trim(),
         delayDays: normalizedDelay,
         scheduledFor: buildScheduledFor(normalizedDelay),
         requestToken: generateRequestToken(),
@@ -478,9 +575,11 @@ export const reviewRequestService = {
     return { ok: true, request: mapRequestRecord(existing) };
   },
 
-  // Idempotent and only moves "sent" -> "opened", so re-viewing an already-reviewed or
-  // already-expired link never regresses its status.
-  async markRequestOpened(token: string) {
+  // Idempotent and only moves "sent" -> "clicked", so re-viewing an already-completed or
+  // already-expired link never regresses its status. Named "clicked" (not "opened") because
+  // this fires when the customer actually follows the emailed link — the true email-open
+  // event (pixel tracking) is a distinct, not-yet-built signal; see ReviewRequestStatus.
+  async markRequestClicked(token: string) {
     const existing = await prisma.reviewRequest.findUnique({ where: { requestToken: token } });
 
     if (!existing || existing.status !== "sent") {
@@ -489,14 +588,14 @@ export const reviewRequestService = {
 
     await prisma.reviewRequest.update({
       where: { id: existing.id },
-      data: { status: "opened", openedAt: existing.openedAt ?? new Date() },
+      data: { status: "clicked", openedAt: existing.openedAt ?? new Date() },
     });
   },
 
   async consumeRequestToken(id: string) {
     return prisma.reviewRequest.update({
       where: { id },
-      data: { tokenUsedAt: new Date(), reviewedAt: new Date(), status: "reviewed" },
+      data: { tokenUsedAt: new Date(), reviewedAt: new Date(), status: "completed" },
       include: {
         store: { select: { id: true, name: true } },
         product: { select: { id: true, name: true } },

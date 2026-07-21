@@ -26,6 +26,7 @@ import { Button } from "../components/ui/Button";
 import { Container } from "../components/ui/Container";
 import { Section } from "../components/ui/Section";
 import { RequestStatusBadge } from "../components/requests/RequestStatusBadge";
+import { RequestLifecycleTimeline } from "../components/requests/RequestLifecycleTimeline";
 import { authenticate } from "../shopify.server";
 import {
   reviewRequestService,
@@ -99,8 +100,10 @@ const STATUS_FILTER_OPTIONS: Array<{ label: string; value: string }> = [
   { label: "Scheduled", value: "scheduled" },
   { label: "Sending", value: "sending" },
   { label: "Sent", value: "sent" },
+  { label: "Delivered", value: "delivered" },
   { label: "Opened", value: "opened" },
-  { label: "Reviewed", value: "reviewed" },
+  { label: "Clicked", value: "clicked" },
+  { label: "Completed", value: "completed" },
   { label: "Failed", value: "failed" },
   { label: "Cancelled", value: "cancelled" },
 ];
@@ -737,6 +740,7 @@ export default function RequestsPage() {
                                   {productName}
                                   {request.orderNumber ? ` · #${request.orderNumber}` : ""}
                                   {request.email ? ` · ${request.email}` : ""}
+                                  {request.source === "order" ? " · Automatic" : ""}
                                 </p>
                               </div>
                               <p className={styles.requestDate}>{formatDateTime(request.scheduledFor)}</p>
@@ -783,6 +787,9 @@ export default function RequestsPage() {
                         <p className={styles.detailEyebrow}>Selected request</p>
                         <div className={styles.detailStatusRow}>
                           <RequestStatusBadge status={selectedRequest.status} />
+                          <span className={styles.detailSourceTag}>
+                            {selectedRequest.source === "order" ? "Automatic" : "Manual"}
+                          </span>
                         </div>
                         <h2 className={styles.detailTitle}>{selectedRequest.name ?? "Unnamed customer"}</h2>
                       </div>
@@ -833,6 +840,19 @@ export default function RequestsPage() {
                             <span className={styles.detailValue}>{formatDateTime(selectedRequest.createdAt)}</span>
                           </div>
                         </div>
+                      </div>
+
+                      <div className={styles.detailDivider} />
+
+                      <div className={styles.detailSection}>
+                        <p className={styles.detailLabel}>Lifecycle</p>
+                        <RequestLifecycleTimeline status={selectedRequest.status} />
+                        {selectedRequest.status === "failed" ? (
+                          <p className={styles.detailValue}>
+                            Failed after {selectedRequest.sendAttempts} attempt
+                            {selectedRequest.sendAttempts === 1 ? "" : "s"}.
+                          </p>
+                        ) : null}
                       </div>
 
                       <div className={styles.detailDivider} />
