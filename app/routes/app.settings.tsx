@@ -8,6 +8,7 @@ import { Container } from "../components/ui/Container";
 import { Section } from "../components/ui/Section";
 import { authenticate } from "../shopify.server";
 import { getOrCreateStore, updateAutoRequestSettings } from "../services/store.server";
+import { sendTestReviewRequestEmail } from "../services/notifications/testEmail.server";
 import { ORDER_AUTOMATION_ENABLED } from "../config/features";
 import shellStyles from "../styles/app.shell.module.css";
 import styles from "../styles/app.management.module.css";
@@ -21,6 +22,7 @@ type LoaderData = {
 type ActionData = {
   ok: boolean;
   error?: string;
+  message?: string;
 };
 
 export const loader = async ({ request }: LoaderFunctionArgs): Promise<LoaderData> => {
@@ -34,16 +36,34 @@ export const loader = async ({ request }: LoaderFunctionArgs): Promise<LoaderDat
   };
 };
 
+const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
 export const action = async ({ request }: ActionFunctionArgs): Promise<ActionData> => {
   const { session } = await authenticate.admin(request);
+  const store = await getOrCreateStore(session.shop);
+
+  const formData = await request.formData();
+  const intent = String(formData.get("_intent") || "");
+
+  if (intent === "send-test-email") {
+    const testEmail = String(formData.get("testEmail") || "").trim();
+
+    if (!EMAIL_PATTERN.test(testEmail)) {
+      return { ok: false, error: "Enter a valid email address." };
+    }
+
+    try {
+      await sendTestReviewRequestEmail(testEmail, store.name);
+      return { ok: true, message: `Test email sent to ${testEmail}.` };
+    } catch (error) {
+      return { ok: false, error: error instanceof Error ? error.message : "Unable to send test email." };
+    }
+  }
 
   if (!ORDER_AUTOMATION_ENABLED) {
     return { ok: false, error: "Automatic review requests are not available yet." };
   }
 
-  const store = await getOrCreateStore(session.shop);
-
-  const formData = await request.formData();
   const autoRequestEnabled = formData.get("autoRequestEnabled") === "true";
   const autoRequestDelayDays = Number(formData.get("autoRequestDelayDays") || "0");
 
@@ -76,6 +96,10 @@ export default function SettingsPage() {
   const [delayDays, setDelayDays] = useState(String(autoRequestDelayDays));
   const [toast, setToast] = useState<{ content: string; error?: boolean } | null>(null);
 
+  const testEmailFetcher = useFetcher<ActionData>();
+  const isSendingTestEmail = testEmailFetcher.state !== "idle";
+  const [testEmail, setTestEmail] = useState("");
+
   useEffect(() => {
     if (!saveFetcher.data) return;
     if (!saveFetcher.data.ok) {
@@ -86,11 +110,29 @@ export default function SettingsPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [saveFetcher.data]);
 
+  useEffect(() => {
+    if (!testEmailFetcher.data) return;
+    if (!testEmailFetcher.data.ok) {
+      setToast({ content: testEmailFetcher.data.error || "Unable to send test email.", error: true });
+      return;
+    }
+    setToast({ content: testEmailFetcher.data.message || "Test email sent." });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [testEmailFetcher.data]);
+
   const handleSave = () => {
     const formData = new FormData();
+    formData.set("_intent", "save-automation");
     formData.set("autoRequestEnabled", String(enabled));
     formData.set("autoRequestDelayDays", delayDays ?? "7");
     saveFetcher.submit(formData, { method: "post" });
+  };
+
+  const handleSendTestEmail = () => {
+    const formData = new FormData();
+    formData.set("_intent", "send-test-email");
+    formData.set("testEmail", testEmail);
+    testEmailFetcher.submit(formData, { method: "post" });
   };
 
   return (
@@ -145,6 +187,28 @@ export default function SettingsPage() {
             />
             <Button type="button" variant="primary" onClick={handleSave} disabled={isSaving || !ORDER_AUTOMATION_ENABLED}>
               {isSaving ? "Saving…" : "Save"}
+            </Button>
+          </Section>
+
+          <Section
+            title="Email delivery"
+            description="Send a real test email using the same template and provider real review requests use, to verify Resend is configured correctly."
+          >
+            <TextField
+              label="Send test email to"
+              type="email"
+              autoComplete="off"
+              placeholder="you@example.com"
+              value={testEmail}
+              onChange={setTestEmail}
+            />
+            <Button
+              type="button"
+              variant="secondary"
+              onClick={handleSendTestEmail}
+              disabled={isSendingTestEmail || !testEmail}
+            >
+              {isSendingTestEmail ? "Sending…" : "Send Test Email"}
             </Button>
           </Section>
 

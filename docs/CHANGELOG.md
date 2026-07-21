@@ -8,6 +8,18 @@ Notable changes to Imagyn Reviews, newest first. Commit SHAs refer to `main`.
 
 ### Added
 
+- **Real Resend email sending** for the Email Review Requests platform — the `EmailProvider`
+  abstraction and `ResendProvider` (already built) now use the official `resend` SDK instead of
+  a hand-rolled `fetch` call, and the review-request template is now a proper React Email
+  component (`app/services/notifications/emails/ReviewRequestEmail.tsx`, rendered via
+  `@react-email/render`) matching the app's monochrome, typography-first design language.
+  Added a "Send Test Email" control in Settings → Email delivery, which sends a real email
+  through the exact same template/provider path as a live review request
+  (`sendTestReviewRequestEmail`), so Resend configuration can be verified before any customer
+  ever receives one. Requires `RESEND_API_KEY` and `RESEND_FROM_EMAIL` to be set — without
+  them, sending fails with a clear, existing configuration error rather than a silent no-op.
+  No automatic sending, scheduling, or webhooks were added this pass — manual dispatch only.
+
 - **Order Lifecycle Automation foundation** for the Email Review Requests platform — connects
   it to the Shopify order lifecycle. Added: `ReviewRequest.shopifyOrderId` /
   `shopifyLineItemId` / `source` / `sendAttempts` and `Store.autoRequestEnabled` /

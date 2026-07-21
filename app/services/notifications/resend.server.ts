@@ -1,3 +1,4 @@
+import { Resend } from "resend";
 import {
   NotificationProviderError,
   type EmailProvider,
@@ -25,31 +26,20 @@ export function createResendEmailProvider(): EmailProvider {
         );
       }
 
-      const response = await fetch("https://api.resend.com/emails", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${apiKey}`,
-        },
-        body: JSON.stringify({
-          from,
-          to: request.to,
-          subject: request.subject,
-          html: request.html,
-          text: request.text,
-        }),
+      const resend = new Resend(apiKey);
+      const { data, error } = await resend.emails.send({
+        from,
+        to: request.to,
+        subject: request.subject,
+        html: request.html,
+        text: request.text,
       });
 
-      if (!response.ok) {
-        const errorText = await response.text().catch(() => "");
-        throw new NotificationProviderError(
-          `Resend request failed (${response.status}): ${errorText.slice(0, 300)}`,
-          "resend",
-        );
+      if (error) {
+        throw new NotificationProviderError(`Resend request failed: ${error.message}`, "resend");
       }
 
-      const data = (await response.json()) as { id?: string };
-      if (!data.id) {
+      if (!data?.id) {
         throw new NotificationProviderError("Resend response did not include a message id.", "resend");
       }
 

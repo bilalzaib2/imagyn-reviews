@@ -191,7 +191,7 @@ export const dispatchRequestEmail = async (request: ReviewRequestRecord): Promis
     return request;
   }
 
-  const { subject, html, text } = buildReviewRequestEmail({
+  const { subject, html, text } = await buildReviewRequestEmail({
     customerName: request.name || "there",
     productName: request.product?.name || "your recent purchase",
     storeName: request.store.name,
