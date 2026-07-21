@@ -32,7 +32,13 @@
 }
 
 .imagyn-reviews--layout-list .imagyn-review-card {
-  border-width: var(--imagyn-border-width, 1px) 0 0 0;
+  /* --imagyn-review-card-border-width is the Appearance System's dedicated seam for the
+     Review Card separator choice (border vs. spacing-only, STOREFRONT_DESIGN_SYSTEM.md
+     §16's "pick one, never both") — deliberately its own variable, not a reuse of the
+     generic --imagyn-border-width (which also drives form fields/sort-select/filter
+     chips and shouldn't move when a merchant only means to change the card separator).
+     Falls back to --imagyn-border-width so unconfigured stores are unaffected. */
+  border-width: var(--imagyn-review-card-border-width, var(--imagyn-border-width, 1px)) 0 0 0;
   border-radius: 0;
   padding: var(--imagyn-space-px-xl, 40px) 0 0;
   background: transparent;

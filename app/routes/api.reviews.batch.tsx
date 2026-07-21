@@ -3,6 +3,7 @@ import { authenticate } from "../shopify.server";
 import { getPublicReviewSummaryBatch } from "../services/review.server";
 import { getProductsForStoreByIdentifiers } from "../services/product.server";
 import { getStoreBySlug } from "../services/store.server";
+import { getStorefrontAppearance } from "../services/appearance.server";
 import { json, isPreflight, preflightResponse, storeSlugFromShop } from "./api.reviews";
 
 const MAX_IDENTIFIERS = 100;
@@ -52,10 +53,15 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
     return json({ ok: false, error: "Shop not found." }, { status: 404 });
   }
 
-  const products = await getProductsForStoreByIdentifiers(store.id, {
-    shopifyProductIds: productIds,
-    handles,
-  });
+  const [products, appearance] = await Promise.all([
+    getProductsForStoreByIdentifiers(store.id, {
+      shopifyProductIds: productIds,
+      handles,
+    }),
+    // Store-level, not per-product — every Collection Rating Badge on the page resolves
+    // the same tokens the Product Reviews widget and Product Rating Badge do.
+    getStorefrontAppearance(store.id),
+  ]);
 
   const summaries = await getPublicReviewSummaryBatch(products.map((product) => product.id));
 
@@ -77,5 +83,5 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
     }
   }
 
-  return json({ ok: true, byProductId, byHandle });
+  return json({ ok: true, byProductId, byHandle, appearance });
 };

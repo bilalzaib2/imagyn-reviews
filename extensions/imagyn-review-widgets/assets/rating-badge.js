@@ -125,6 +125,26 @@
           if (!data || !data.ok) {
             throw new Error((data && data.error) || "Unable to load rating");
           }
+
+          // Appearance System: applied at :root first (imagyn-appearance.js) so every
+          // widget inherits it, then this badge's own legacy override variables are
+          // re-applied from the same resolved tokens — rating-badge.css's
+          // .imagyn-rating-badge__stars falls back straight to a hardcoded color, not
+          // through --imagyn-color-star, so :root alone wouldn't reach it. The
+          // merchant's own Theme Editor color settings (starColor/textColor read above)
+          // are re-applied last so they still win locally over the store-wide default.
+          if (window.ImagynAppearance) {
+            window.ImagynAppearance.apply(data.appearance);
+            if (data.appearance && data.appearance.colors) {
+              root.style.setProperty("--imagyn-badge-star-color", data.appearance.colors.starColor);
+              if (data.appearance.colors.textColor) {
+                root.style.setProperty("--imagyn-badge-text-color", data.appearance.colors.textColor);
+              }
+            }
+            if (starColor) root.style.setProperty("--imagyn-badge-star-color", starColor);
+            if (textColor) root.style.setProperty("--imagyn-badge-text-color", textColor);
+          }
+
           render(root, data.summary, data.widget, emptyState);
         })
         .catch(function () {

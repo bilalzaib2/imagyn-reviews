@@ -817,6 +817,13 @@
 
           currentData = data;
 
+          // Appearance System: applied at :root (imagyn-appearance.js), before this
+          // widget's own narrower applyStyle() override below — separate variable
+          // families (--imagyn-color-* vs. --imagyn-star-color/etc.), no collision.
+          if (window.ImagynAppearance) {
+            window.ImagynAppearance.apply(data.appearance);
+          }
+
           var s = resolveSettings(data.widget, themeOverrides);
           applyStyle(root, s);
 

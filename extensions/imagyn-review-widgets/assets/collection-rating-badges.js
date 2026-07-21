@@ -134,6 +134,16 @@
           throw new Error("Unable to load ratings");
         }
 
+        // Appearance System: applied once at :root. .imagyn-card-badge's own CSS
+        // already chains through --imagyn-color-star (imagyn-component-badge.css), so
+        // every badge injected below inherits it automatically — no per-badge variable
+        // needed here. injectBadge's own starColor/textColor (the merchant's Theme
+        // Editor setting, read once at script load) still wins locally per badge, since
+        // that's an inline style set directly on the element, applied after this.
+        if (window.ImagynAppearance) {
+          window.ImagynAppearance.apply(data.appearance);
+        }
+
         entries.forEach(function (entry) {
           injectBadge(entry, data.byHandle[entry.handle]);
         });

@@ -72,6 +72,7 @@
   --imagyn-color-text: currentColor;
   --imagyn-color-text-muted-opacity: 0.6;
   --imagyn-color-star: #f5a623;
+  --imagyn-color-star-empty: rgba(0, 0, 0, 0.15);
   --imagyn-color-border: rgba(0, 0, 0, 0.08);
   --imagyn-color-surface: #ffffff;
   --imagyn-color-success: #1a7f4b;

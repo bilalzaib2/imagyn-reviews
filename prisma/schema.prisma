@@ -44,6 +44,7 @@ model Store {
   reviews      Review[]
   reviewRequests ReviewRequest[]
   widgets      Widget[]
+  appearances  Appearance[]
 }
 
 model Product {
@@ -247,4 +248,38 @@ model Widget {
   settings     String?
   createdAt    DateTime        @default(now())
   updatedAt    DateTime        @updatedAt
+}
+
+// The centralized, store-wide design-token system every storefront widget (Product
+// Reviews, Product Rating Badge, Collection Rating Badge, and future ones) consumes —
+// see app/services/appearance.shared.ts for the token contract and
+// docs/STOREFRONT_DESIGN_SYSTEM.md for the underlying --imagyn-* CSS custom properties
+// these tokens resolve onto. Deliberately store-wide (no productId), unlike Widget:
+// the whole point is one shared source of truth, not per-widget-type duplication.
+//
+// Multiple rows per store are allowed (only one isActive) rather than a hard singleton,
+// so "Saved Presets"/"Brand Themes" (both documented future work) are additive later —
+// more rows, isActive toggled — with no schema change.
+model Appearance {
+  id           String          @id @default(cuid())
+  storeId      String
+  store        Store           @relation(fields: [storeId], references: [id], onDelete: Cascade)
+
+  name         String          @default("Default")
+  // "minimal" | "modern" | "editorial" | "classic" | "custom" — see
+  // app/services/appearance.presets.ts. Only "custom" is functional today.
+  preset       String          @default("custom")
+  // Exactly one true per store; enforced in appearance.server.ts (not a DB constraint —
+  // see that file for why), same application-level-enforcement convention already used
+  // for widget resolution in widget.server.ts.
+  isActive     Boolean         @default(true)
+
+  // JSON-encoded AppearanceTokens (appearance.shared.ts) — same JSON-as-String precedent
+  // as Widget.settings, so the token contract can grow without a migration per field.
+  tokens       String
+
+  createdAt    DateTime        @default(now())
+  updatedAt    DateTime        @updatedAt
+
+  @@index([storeId, isActive])
 }

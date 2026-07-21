@@ -22,7 +22,10 @@
 }
 
 .imagyn-ratings-section__inner {
-  max-width: 1200px;
+  /* --imagyn-ratings-section-max-width is the Appearance System's Layout seam
+     (AppearanceLayoutTokens.maxContentWidth) — falls back to today's fixed 1200px so
+     unconfigured stores are unaffected. */
+  max-width: var(--imagyn-ratings-section-max-width, 1200px);
   margin-inline: auto;
   padding-inline: var(--imagyn-space-px-lg, 24px);
 }

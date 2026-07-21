@@ -18,6 +18,7 @@ import { getProductForStoreByShopifyId } from "../services/product.server";
 import { getStoreBySlug } from "../services/store.server";
 import { getStorefrontWidgetSettings } from "../services/widget.server";
 import { getAiSummary } from "../services/aiSummary.server";
+import { getStorefrontAppearance } from "../services/appearance.server";
 
 // Shared with api.reviews.batch.tsx so the two public review endpoints respond identically.
 export function json(data: unknown, init?: ResponseInit) {
@@ -102,7 +103,7 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
     return json({ ok: false, error: "Product not found for this shop." }, { status: 404 });
   }
 
-  const [summary, result, widget, aiSummary, gallery] = await Promise.all([
+  const [summary, result, widget, aiSummary, gallery, appearance] = await Promise.all([
     getPublicReviewSummary(product.id),
     getProductReviews(product.id, { status: ReviewStatus.APPROVED, limit: 50 }),
     getStorefrontWidgetSettings(store.id, product.id),
@@ -112,6 +113,10 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
     // The aggregated, product-level Media Gallery — every customer photo across this
     // product's approved reviews, independent of which review page/sort is showing.
     getProductMediaGallery(product.id),
+    // The centralized Appearance System's resolved tokens — every widget on this page
+    // (this one, plus the Rating Badge fetching the same endpoint independently)
+    // consumes the same resolved value. See imagyn-appearance.js.
+    getStorefrontAppearance(store.id),
   ]);
 
   const orderedReviews = sort === "helpful" ? rankByHelpfulness(result.reviews) : result.reviews;
@@ -124,6 +129,7 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
     ok: true,
     summary,
     widget,
+    appearance,
     aiSummary: aiSummary
       ? { summary: aiSummary.summary, recommendation: aiSummary.recommendation }
       : null,

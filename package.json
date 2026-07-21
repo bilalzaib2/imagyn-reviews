@@ -2,6 +2,7 @@
   "name": "imagyn-reviews",
   "private": true,
   "scripts": {
+    "prebuild": "node scripts/copy-preview-assets.mjs",
     "build": "react-router build",
     "dev": "shopify app dev",
     "config:link": "shopify app config link",
