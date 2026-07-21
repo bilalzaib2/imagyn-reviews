@@ -52,6 +52,27 @@
   </div>
 </div>
 
+{% comment %}
+  Server-rendered JSON-LD (app/services/structuredData/) — written to this metafield by
+  syncProductStructuredData whenever a product's approved review data changes (see
+  app/routes/app.reviews.tsx and app.reviews.$id.edit.tsx). Read directly here with zero
+  extra request, so search engines see it in the initial page HTML rather than depending
+  on JS execution. Guarding on `.value` (not just the metafield's presence) means a
+  product with zero approved reviews — whose synced value is the JSON literal `null` —
+  correctly renders no tag at all, matching Google's requirement that a Product node
+  carry real review/aggregateRating data or not exist.
+
+  NOTE ON SYNTAX: bracket notation with the literal "$app" reserved-namespace string
+  (product.metafields["$app"].key) — NOT the dot-notation product.metafields.app.key
+  shown in Shopify's general metafields docs. Verified empirically: dot-notation silently
+  resolves to nothing inside a theme app extension block, even in a fully deployed app
+  version; Shopify's theme-app-extension-specific configuration docs confirm bracket
+  notation is the actual required form here.
+{% endcomment %}
+{% if block.settings.show_structured_data and product.metafields["$app"].reviews_jsonld.value %}
+  <script type="application/ld+json">{{ product.metafields["$app"].reviews_jsonld.value | json }}</script>
+{% endif %}
+
 {{ 'imagyn-appearance.js' | asset_url | script_tag }}
 {{ 'reviews-widget.js' | asset_url | script_tag }}
 
@@ -92,7 +113,16 @@
     },
 
     { "type": "header", "content": "Behavior" },
-    { "type": "checkbox", "id": "show_load_more_button", "label": "Show Load More button (pagination)", "default": true }
+    { "type": "checkbox", "id": "show_load_more_button", "label": "Show Load More button (pagination)", "default": true },
+
+    { "type": "header", "content": "SEO" },
+    {
+      "type": "checkbox",
+      "id": "show_structured_data",
+      "label": "Include reviews in search engine markup (JSON-LD)",
+      "default": true,
+      "info": "Helps search engines show star ratings on this product. Turn off if another installed app already adds product review markup, to avoid duplicates."
+    }
   ]
 }
 {% endschema %}

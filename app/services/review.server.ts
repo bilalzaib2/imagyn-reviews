@@ -478,7 +478,7 @@ export async function deleteReply(id: string) {
   });
 }
 
-async function distinctProductIdsFor(ids: string[]) {
+export async function distinctProductIdsFor(ids: string[]) {
   const reviews = await prisma.review.findMany({
     where: { id: { in: ids }, deletedAt: null },
     select: { productId: true },

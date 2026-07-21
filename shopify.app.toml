@@ -43,6 +43,21 @@ description = "Tracks products created by the Shopify app template for developme
   [product.metafields.app.demo_info.access]
   admin = "merchant_read_write"
 
+# Written by app/services/structuredData/sync.server.ts (namespace "$app", key
+# "reviews_jsonld" — verified against shopify.dev that TOML's [product.metafields.app.*]
+# maps to the literal "$app" GraphQL namespace, not "app") whenever a product's approved
+# review data changes. Read directly by extensions/imagyn-review-widgets/blocks/
+# star_rating.liquid to render a server-side JSON-LD <script> tag with zero extra
+# request. storefront = "public_read" is required for Liquid to see it at all.
+[product.metafields.app.reviews_jsonld]
+type = "json"
+name = "Reviews Structured Data"
+description = "Server-synced schema.org Product/AggregateRating/Review JSON-LD for search engine rich snippets. Written by the app; never edited by merchants."
+
+  [product.metafields.app.reviews_jsonld.access]
+  admin = "merchant_read"
+  storefront = "public_read"
+
 [metaobjects.app.example]
 name = "Example"
 description = "An example metaobject definition created by this template"

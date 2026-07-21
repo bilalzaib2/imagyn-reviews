@@ -12,6 +12,8 @@ import { authenticate } from "../shopify.server";
 import { getOrCreateStore } from "../services/store.server";
 import { getProducts } from "../services/product.server";
 import { getReview, updateReview } from "../services/review.server";
+import { ReviewStatus } from "../services/review.shared";
+import { syncProductStructuredData } from "../services/structuredData/sync.server";
 import shellStyles from "../styles/app.shell.module.css";
 import styles from "../styles/app.review-form.module.css";
 
@@ -50,7 +52,7 @@ const parseValues = (formData: FormData): ReviewFormValues => ({
 });
 
 export const action = async ({ request, params }: ActionFunctionArgs) => {
-  await authenticate.admin(request);
+  const { admin } = await authenticate.admin(request);
   const reviewId = params.id ?? "";
 
   if (!reviewId) {
@@ -61,7 +63,13 @@ export const action = async ({ request, params }: ActionFunctionArgs) => {
   const values = parseValues(formData);
 
   try {
-    await updateReview(reviewId, {
+    // Fetched before the update so the sync-or-not decision below reflects the review's
+    // status going into this edit, not after — an edited PENDING/REJECTED review was never
+    // part of the public structured data in the first place, so editing its content is a
+    // no-op for search engines and shouldn't trigger a write.
+    const existingReview = await getReview(reviewId);
+
+    const updated = await updateReview(reviewId, {
       rating: values.rating,
       title: values.title || null,
       content: values.content,
@@ -71,6 +79,10 @@ export const action = async ({ request, params }: ActionFunctionArgs) => {
       verifiedPurchase: values.verifiedPurchase,
       featured: values.featured,
     });
+
+    if (existingReview?.status === ReviewStatus.APPROVED) {
+      void syncProductStructuredData(admin, updated.productId);
+    }
   } catch (error) {
     return {
       ok: false,
