@@ -17,16 +17,6 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
   return { apiKey: process.env.SHOPIFY_API_KEY || "" };
 };
 
-// This loader only returns a static SHOPIFY_API_KEY (fixed at process start) and its only
-// side effect, authenticate.admin(), is redundant with the same call every child route's own
-// loader already makes on every request — so re-running it on ordinary sidebar navigation
-// (Dashboard -> Reviews -> Products, etc.) repeats work whose result can never differ, without
-// it being the thing actually protecting the request. Has no effect on initial/full document
-// loads; child loaders are unaffected and keep authenticating every request themselves.
-export function shouldRevalidate() {
-  return false;
-}
-
 export default function App() {
   const { apiKey } = useLoaderData<typeof loader>();
   const location = useLocation();
