@@ -563,7 +563,12 @@ export default function RequestsPage() {
     submitAction({ _intent: "reschedule", requestId: selectedRequest.id, delayDays: formState.delayDays });
   };
 
-  const selectedCustomerLabel = customerOptions.find((option) => option.value === formState.customer)?.label ?? "No customer selected";
+  const [customerNameValue, customerEmailValue] = formState.customer.split("||");
+  const selectedCustomerLabel = customerEmailValue
+    ? customerNameValue
+      ? `${customerNameValue} (${customerEmailValue})`
+      : customerEmailValue
+    : "No customer selected";
   const selectedProductLabel = productOptions.find((option) => option.value === formState.productId)?.label ?? "No product selected";
   const previewSendDate = formatDateTime(optimisticScheduleDate(Number(formState.delayDays || "0")));
 
@@ -583,7 +588,7 @@ export default function RequestsPage() {
               <Button
                 variant="primary"
                 onClick={openCreateModal}
-                disabled={customerOptions.length === 0 || productOptions.length === 0 || isMutating}
+                disabled={productOptions.length === 0 || isMutating}
               >
                 Send Request
               </Button>
@@ -697,7 +702,7 @@ export default function RequestsPage() {
                     <Button
                       type="button"
                       onClick={openCreateModal}
-                      disabled={customerOptions.length === 0 || productOptions.length === 0}
+                      disabled={productOptions.length === 0}
                     >
                       Send Request
                     </Button>
@@ -968,7 +973,7 @@ export default function RequestsPage() {
           onAction: handleModalSubmit,
           disabled:
             isMutating ||
-            (requestModalMode !== "reschedule" && (!formState.customer || !formState.productId)) ||
+            (requestModalMode !== "reschedule" && (!customerEmailValue || !formState.productId)) ||
             !formState.delayDays,
         }}
         secondaryActions={[
@@ -983,11 +988,26 @@ export default function RequestsPage() {
           <div className={styles.modalFields}>
             {requestModalMode !== "reschedule" ? (
               <>
-                <Select
-                  label="Customer"
-                  options={[{ label: "Select a customer", value: "" }, ...customerOptions]}
-                  value={formState.customer}
-                  onChange={(value) => setFormState((prev) => ({ ...prev, customer: value }))}
+                {customerOptions.length > 0 ? (
+                  <Select
+                    label="Fill from a previous customer"
+                    options={[{ label: "Select a previous customer", value: "" }, ...customerOptions]}
+                    value=""
+                    onChange={(value) => value && setFormState((prev) => ({ ...prev, customer: value }))}
+                  />
+                ) : null}
+                <TextField
+                  label="Customer name"
+                  autoComplete="off"
+                  value={customerNameValue}
+                  onChange={(value) => setFormState((prev) => ({ ...prev, customer: buildCustomerValue(value, customerEmailValue) }))}
+                />
+                <TextField
+                  label="Customer email"
+                  type="email"
+                  autoComplete="off"
+                  value={customerEmailValue}
+                  onChange={(value) => setFormState((prev) => ({ ...prev, customer: buildCustomerValue(customerNameValue, value) }))}
                 />
                 <Select
                   label="Product"
