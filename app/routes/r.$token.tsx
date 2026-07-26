@@ -152,6 +152,16 @@ export const action = async ({ request, params }: ActionFunctionArgs) => {
   return { ok: true as const, mediaWarning };
 };
 
+// Without this, React Router's default post-action revalidation re-runs the loader
+// immediately after a successful submission — which re-validates the token this exact
+// submission just consumed, gets "used" back, and throws the ErrorBoundary's "Already
+// submitted" state instead of ever rendering the actionData.ok success screen below. This
+// route's loader data (product/store info) never changes during a visit, so it never needs
+// to revalidate after the one action this page has.
+export function shouldRevalidate() {
+  return false;
+}
+
 export default function ReviewLinkPage() {
   const { productName, productImage, storeName, customerName, customMessage, maxPhotos } = useLoaderData<typeof loader>();
   const actionData = useActionData<typeof action>();
