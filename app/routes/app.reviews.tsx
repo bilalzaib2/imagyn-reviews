@@ -589,6 +589,36 @@ export default function ReviewsPage() {
     submitMutation({ _intent: intent, reviewIds: selectedIds });
   };
 
+  const [isExporting, setIsExporting] = useState(false);
+
+  const handleExport = async () => {
+    setIsExporting(true);
+    try {
+      // A plain <a href> would let App Bridge's link interception route this as an in-app
+      // navigation instead of a real download, leaving the iframe blank on the raw CSV
+      // response. Fetching the bytes and driving a synthetic, in-memory-object-URL anchor
+      // keeps everything inside the iframe's own JS context, so the browser's native download
+      // handling takes over regardless of App Bridge's click interception.
+      const response = await fetch("/app/reviews/export");
+      if (!response.ok) {
+        throw new Error("Export failed.");
+      }
+      const blob = await response.blob();
+      const objectUrl = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = objectUrl;
+      link.download = "reviews-export.csv";
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      URL.revokeObjectURL(objectUrl);
+    } catch {
+      setToastState({ content: "Export failed. Please try again.", error: true });
+    } finally {
+      setIsExporting(false);
+    }
+  };
+
   const onListKeyDown = (event: KeyboardEvent<HTMLDivElement>) => {
     if (effectiveReviews.length === 0) {
       return;
@@ -655,7 +685,9 @@ export default function ReviewsPage() {
             <Button type="button" variant="secondary" onClick={() => setIsImportModalOpen(true)}>
               Import
             </Button>
-            <PolarisButton url="/app/reviews/export">Export</PolarisButton>
+            <PolarisButton onClick={handleExport} loading={isExporting} disabled={isExporting}>
+              Export
+            </PolarisButton>
             <LinkButton to={`/app/reviews/new${location.search}`} variant="primary">
               New Review
             </LinkButton>
