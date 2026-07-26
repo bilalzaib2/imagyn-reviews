@@ -204,3 +204,43 @@
     production block" status Button Style already had. `imagyn-utilities.css` and
     `imagyn-component-tag.css` were added to `copy-preview-assets.mjs`'s file list so the
     preview iframe can load them; no new CSS was authored.
+
+## Brand Studio → live storefront wiring (2026-07-26)
+
+-   **Most of this was already wired before this pass** — `ImagynAppearance.apply(data.
+    appearance)` (the real, DB-resolved tokens, via `getStorefrontAppearance`) was already
+    called on every real storefront page load in all three blocks (`star_rating.liquid`,
+    `rating_badge.liquid`, `collection_rating_badges.liquid` all already load
+    `imagyn-appearance.js` and their JS already calls `.apply()`). Card Style
+    (flat/spacing/boxed), Border Radius on `.imagyn-review-card`, and Accent Color on the
+    Summary/Badge stars (`.imagyn-summary__quickbar-stars`, `.imagyn-card-badge__stars`)
+    were already real — confirmed by reading the shipped code, not assumed. The actual gap
+    was narrower: two elements plus one anchor property that still read *only* the older,
+    per-widget-instance `WidgetSettings` variable family (`--imagyn-button-color`,
+    `--imagyn-border-radius`, `--imagyn-body-font-size` — set by `reviews-widget.js`'s
+    `applyStyle()`, sourced from the Widget Builder's own separate "Appearance" tab, not
+    Brand Studio).
+-   **Fixed, specifically:** `.imagyn-reviews__submit` (the real review-form submit button)
+    now reads `--imagyn-btn-background` / `--imagyn-btn-color` / `--imagyn-btn-border-color`
+    (Button Style) and `--imagyn-radius-md` (Border Radius); `.imagyn-reviews__load-more`
+    reads `--imagyn-radius-md`; `.imagyn-reviews`'s own base `font-size` reads
+    `--imagyn-font-size-base` (Typography Scale) — this last one matters beyond text size,
+    since it's the em-anchor every `--imagyn-space-*` gap inside the widget scales from.
+    Each is a `var(--new-name, var(--old-name, static-fallback))` chain: because old and new
+    are genuinely different property names (not the same property re-cascaded), redirecting
+    which name a rule reads is enough — no precedence trick needed, and nothing in the old
+    `applyStyle()`/Widget Builder code was touched, so it keeps working exactly as before for
+    every property Brand Studio doesn't claim.
+-   **Deliberately left alone:** `.imagyn-summary__quickbar-write` (the "Write a review"
+    quickbar trigger) was already fully on Brand Studio tokens (font size, color, border,
+    spacing, motion) — it just doesn't participate in Button Style's Filled/Outline/Ghost
+    switch, by the same pre-existing, explicitly documented restraint choice as before
+    ("a quiet outline pill, not a filled button... restrained to match"). Per-review star
+    color (`.imagyn-review-card__stars`) stays monochrome for the same pre-existing,
+    documented reason (§16 — the accent stays reserved for the Summary/Badge, not repeated
+    down the whole list). Neither is a gap; both are prior, intentional design decisions
+    this pass didn't reopen.
+-   **Widget Style presets need no additional wiring of their own** — a preset is just a
+    bundle of the same categories (typography, spacing, corners, borders, buttons,
+    reviewCards, cards) already resolved above, so once each category's real storefront
+    consumer was fixed, presets render correctly by construction.

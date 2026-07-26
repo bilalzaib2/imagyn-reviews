@@ -8,6 +8,15 @@ Notable changes to Imagyn Reviews, newest first. Commit SHAs refer to `main`.
 
 ### Added
 
+- **Brand Studio wired to the live storefront.** Most of the wiring already existed (Card
+  Style, Border Radius on review cards, Accent Color on stars) — this closed the remaining
+  gap: the real "Submit review" button now reflects Button Style (Filled/Outline/Ghost) and
+  Border Radius instead of only the Widget Builder's older per-widget color; the widget's
+  base font-size (the em-anchor every internal spacing gap scales from) now reflects
+  Typography Scale. Nothing in the older per-widget `WidgetSettings`/Widget Builder
+  "Appearance" tab was changed or removed — it still works exactly as before for every
+  property Brand Studio doesn't claim. See [DECISIONS.md](./DECISIONS.md).
+
 - **Brand Studio UX polish pass.** The page (still at `/app/appearance`) and nav item are
   now branded "Brand Studio" throughout the UI. Every color field is a native swatch + hex
   pair — no field ever shows a merchant raw `rgba(...)` — while transparent, theme-adaptive
