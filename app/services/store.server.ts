@@ -7,7 +7,7 @@ function getShopName(shop: string) {
     .replace(/\b\w/g, (char) => char.toUpperCase());
 }
 
-function getSlug(shop: string) {
+export function getSlug(shop: string) {
   return shop.replace(".myshopify.com", "");
 }
 

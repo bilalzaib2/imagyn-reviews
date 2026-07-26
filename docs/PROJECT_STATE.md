@@ -23,8 +23,11 @@ App Store submission readiness (Shopify Billing shipped; hardening and polish ne
 -   Appearance System (storefront design tokens)
 -   **Shopify Billing** — Starter (free) / Growth ($9.99/mo) / Pro ($29.99/mo), 14-day trial on
     paid tiers, official Shopify Billing API, development-store bypass, centralized access
-    gate (`app.tsx`) and feature gating (`services/billing/`). See
-    [DECISIONS.md](./DECISIONS.md).
+    gate (`app.tsx`) and feature gating (`services/billing/`), verified end-to-end in
+    production (subscription creation, trial, upgrade/downgrade, cancellation, webhook sync).
+    See [DECISIONS.md](./DECISIONS.md).
+-   **Mandatory GDPR compliance webhooks** (`customers/data_request`, `customers/redact`,
+    `shop/redact`) — required for App Store approval independent of billing.
 
 ## Blocked
 
@@ -38,7 +41,11 @@ App Store submission readiness (Shopify Billing shipped; hardening and polish ne
 ## Next
 
 1.  Shopify Protected Customer Data approval → unblock order-triggered auto-creation
-2.  Resend inbound webhook (populates `delivered` / `opened` statuses)
-3.  App Store listing assets (screenshots, demo store, listing copy)
-4.  Widget Customization
-5.  Public Review Pages
+2.  Resolve Pro-tier entitlements with no code behind them yet (video reviews, multiple email
+    templates, advanced branding controls, priority support, API access) before submission
+3.  Confirm manual/legacy Billing API is still selectable in the Partner Dashboard submission
+    flow for this (not yet published) app
+4.  App Store listing assets (screenshots, demo store, listing copy, privacy policy)
+5.  Resend inbound webhook (populates `delivered` / `opened` statuses)
+6.  Widget Customization
+7.  Public Review Pages

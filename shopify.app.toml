@@ -31,6 +31,21 @@ api_version = "2026-10"
   uri = "/webhooks/app_subscriptions/update"
   topics = [ "app_subscriptions/update" ]
 
+  # Mandatory GDPR compliance webhooks, required for every public Shopify app regardless of
+  # what data it stores. See app/routes/webhooks.customers.data_request.tsx,
+  # webhooks.customers.redact.tsx, webhooks.shop.redact.tsx.
+  [[webhooks.subscriptions]]
+  uri = "/webhooks/customers/data_request"
+  topics = [ "customers/data_request" ]
+
+  [[webhooks.subscriptions]]
+  uri = "/webhooks/customers/redact"
+  topics = [ "customers/redact" ]
+
+  [[webhooks.subscriptions]]
+  uri = "/webhooks/shop/redact"
+  topics = [ "shop/redact" ]
+
 # fulfillments/create is intentionally NOT subscribed here. Shopify rejected deployment with
 # "This app is not approved to subscribe to webhook topics containing protected customer
 # data" — the topic's payload (destination address, customer email) requires completing
