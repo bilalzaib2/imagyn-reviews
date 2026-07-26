@@ -48,7 +48,7 @@ export default function App() {
     { label: "Products", path: "/app/products" },
     { label: "Requests", path: "/app/requests" },
     { label: "Widgets", path: "/app/widgets" },
-    { label: "Appearance", path: "/app/appearance" },
+    { label: "Brand Studio", path: "/app/appearance" },
     { label: "Settings", path: "/app/settings" },
     { label: "Billing", path: "/app/billing" },
   ];

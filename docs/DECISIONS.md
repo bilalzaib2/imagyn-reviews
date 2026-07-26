@@ -163,7 +163,44 @@
     defaults for any old stored value).
 -   **The live preview and the real storefront share one CSS/JS code path with no
     divergence** — Card Appearance, Border Radius, and Button Style are all visible in the
-    Appearance page's iframe preview using the exact same fixture markup as before (no
-    changes to `appearance-preview.tsx` were needed), because the boxed/flat card treatment
-    and button style are both purely CSS-variable-driven on the *same* classes the fixture
-    already renders, not a class the fixture would need to add or remove.
+    Appearance page's iframe preview, because the boxed/flat card treatment and button
+    style are both purely CSS-variable-driven on the same classes reviews-widget.js already
+    renders in production, not a class only the preview fixture would add or remove.
+
+## Brand Studio UX polish pass (2026-07-26)
+
+-   **Renamed "Appearance" to "Brand Studio" in user-facing text only** (nav label, page
+    title) — the route path (`/app/appearance`), file names, and every internal
+    identifier (`appearanceService`, `AppearanceTokens`, `app.appearance.module.css`, ...)
+    are unchanged. Renaming the URL too would need a redirect for zero real benefit; the
+    internal names are accurate technical descriptions of what the system does
+    (design-token appearance state), independent of what the page is branded as today.
+-   **Color fields never show a merchant raw `rgba(...)`, without changing any default's
+    real resolved value.** Border and Empty Star both default to a transparent black
+    overlay (`rgba(0,0,0,0.08)` / `0.15`) specifically so they adapt to *any* theme
+    background — a flat hex can't do that, so changing the underlying default would be a
+    real regression for every store that never touches these fields. Instead, a small
+    `toDisplayHex()` helper (`app.appearance.tsx`, admin-UI-only, not part of the token
+    contract) approximates the overlay as a flat hex over white purely for the swatch/text
+    field's display value. The stored token is only ever rewritten once a merchant actually
+    edits the field — at which point it becomes a real, fixed hex, the same tradeoff Accent
+    Color already made with its own non-transparent default.
+-   **Border Radius and Text Size use a shared `ValueSlider` pattern** (label + a large,
+    persistent numeric value beside it, not Polaris `RangeSlider`'s small floating output
+    bubble) — closer to an Apple Settings row than a raw dev control. Text Size is
+    displayed as a percentage (`105%`) rather than the raw `1.05` multiplier stored in
+    `typography.scale`; the stored value and its resolver are unchanged, only the label.
+-   **The four named groups (Style / Typography / Colors / Layout) are a presentation-only
+    grouping of the existing Sections**, not a new data structure — `AppearanceTokens`'
+    categories don't map 1:1 to the four groups (e.g. Text Color lives in `colors` but is
+    grouped under Typography, matching how a merchant thinks about it) and don't need to.
+    "Advanced" (max content width, motion, reserved star/image notes) is kept, ungrouped,
+    at the bottom — present per "never remove existing functionality," not surfaced as a
+    fifth named group since the request didn't ask for one.
+-   **The live preview now shows three sample reviews, an overall-rating quickbar, and a
+    Verified Buyer tag**, using the summary/tag CSS classes that were already shipped but
+    unused in production (`imagyn-component-summary.css`'s quickbar, the reserved
+    `.imagyn-tag`/`.imagyn-pill` primitives) — the same "real CSS, not yet wired into a
+    production block" status Button Style already had. `imagyn-utilities.css` and
+    `imagyn-component-tag.css` were added to `copy-preview-assets.mjs`'s file list so the
+    preview iframe can load them; no new CSS was authored.

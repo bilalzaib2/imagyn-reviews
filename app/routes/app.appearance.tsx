@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useFetcher, useLoaderData } from "react-router";
 import type { ActionFunctionArgs, LoaderFunctionArgs } from "react-router";
-import { Frame, RangeSlider, Select, TextField, Toast } from "@shopify/polaris";
+import { RangeSlider, Select, TextField, Frame, Toast } from "@shopify/polaris";
 
 import { Button } from "../components/ui/Button";
 import { Container } from "../components/ui/Container";
@@ -52,15 +52,105 @@ export const action = async ({ request }: ActionFunctionArgs): Promise<ActionDat
     await appearanceService.upsertActive(store.id, { tokens, preset });
     return { ok: true };
   } catch (error) {
-    return { ok: false, error: error instanceof Error ? error.message : "Unable to save appearance." };
+    return { ok: false, error: error instanceof Error ? error.message : "Unable to save. Please try again." };
   }
 };
+
+// A merchant should never have to read or type rgba(...) — but the underlying default for
+// a couple of tokens (border, empty star) is a transparent black overlay so it adapts to
+// any theme background, which a plain hex value can't do. This approximates that overlay
+// as a flat hex over white purely for display in the swatch/text field; the moment a
+// merchant actually edits the field, the stored value becomes a real hex color like any
+// other — the same tradeoff Accent Color already makes with its own fixed hex default.
+function toDisplayHex(value: string): string {
+  if (/^#[0-9a-fA-F]{6}$/.test(value)) {
+    return value;
+  }
+
+  const match = value.match(/rgba?\(\s*(\d+)\s*,\s*(\d+)\s*,\s*(\d+)\s*(?:,\s*([\d.]+))?\)/);
+  if (!match) {
+    return "#cccccc";
+  }
+
+  const alpha = match[4] !== undefined ? parseFloat(match[4]) : 1;
+  const blend = (channel: string) => Math.round(Number(channel) * alpha + 255 * (1 - alpha));
+  const toHex = (n: number) => n.toString(16).padStart(2, "0");
+  return `#${toHex(blend(match[1]))}${toHex(blend(match[2]))}${toHex(blend(match[3]))}`;
+}
+
+function ColorField({
+  label,
+  value,
+  onChange,
+}: {
+  label: string;
+  value: string;
+  onChange: (value: string) => void;
+}) {
+  const displayValue = toDisplayHex(value);
+
+  return (
+    <div className={styles.colorField}>
+      <span className={styles.colorFieldLabel}>{label}</span>
+      <div className={styles.colorFieldControl}>
+        <input
+          type="color"
+          className={styles.colorSwatchInput}
+          value={displayValue}
+          onChange={(event) => onChange(event.target.value)}
+          aria-label={`${label} color`}
+        />
+        <TextField label={label} labelHidden value={displayValue} onChange={onChange} autoComplete="off" />
+      </div>
+    </div>
+  );
+}
+
+function ValueSlider({
+  label,
+  value,
+  min,
+  max,
+  step,
+  format,
+  onChange,
+}: {
+  label: string;
+  value: number;
+  min: number;
+  max: number;
+  step: number;
+  format: (value: number) => string;
+  onChange: (value: number) => void;
+}) {
+  return (
+    <div className={styles.valueSlider}>
+      <div className={styles.valueSliderHeader}>
+        <span className={styles.valueSliderLabel}>{label}</span>
+        <span className={styles.valueSliderValue}>{format(value)}</span>
+      </div>
+      <RangeSlider
+        label={label}
+        labelHidden
+        min={min}
+        max={max}
+        step={step}
+        value={value}
+        onChange={(next) => onChange(Array.isArray(next) ? next[0] : next)}
+      />
+    </div>
+  );
+}
+
+function GroupLabel({ children }: { children: string }) {
+  return <p className={styles.groupLabel}>{children}</p>;
+}
 
 function ReservedNote({ label }: { label: string }) {
   return (
     <div className={styles.reservedNote}>
       <span>{label}</span>
-      <span className={styles.comingSoonTag}>Reserved for future widgets</span>
+      <span className={styles.comingSoonTag}>Coming later</span>
     </div>
   );
 }
@@ -95,10 +185,10 @@ export default function AppearancePage() {
   useEffect(() => {
     if (!fetcher.data) return;
     if (!fetcher.data.ok) {
-      setToastState({ content: fetcher.data.error || "Unable to save appearance.", error: true });
+      setToastState({ content: fetcher.data.error || "Unable to save. Please try again.", error: true });
       return;
     }
-    setToastState({ content: "Appearance saved." });
+    setToastState({ content: "Saved. Your storefront now reflects these changes." });
     setBaselineTokens(draftTokens);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [fetcher.data]);
@@ -139,17 +229,19 @@ export default function AppearancePage() {
           <header className={shellStyles.header}>
             <div className={shellStyles.headerContent}>
               <p className={shellStyles.eyebrow}>Imagyn Reviews</p>
-              <h1 className={shellStyles.title}>Appearance</h1>
+              <h1 className={shellStyles.title}>Brand Studio</h1>
               <p className={shellStyles.subtitle}>
-                The design system every storefront widget shares — Product Reviews, Rating Badge, Collection
-                Ratings, and everything built after them.
+                Design how reviews look on your storefront — no code, no theme editing. Changes preview instantly
+                on the right and apply the moment you save.
               </p>
             </div>
           </header>
 
           <div className={styles.layout}>
             <div className={styles.settingsColumn}>
-              <Section title="Widget Style" description="A complete look, applied instantly — fine-tune any of it below.">
+              <GroupLabel>Style</GroupLabel>
+
+              <Section title="Widget Style" description="Start from a look, then fine-tune anything below.">
                 <div className={styles.presetGrid}>
                   {appearancePresets.map((definition) =>
                     definition.available ? (
@@ -172,55 +264,7 @@ export default function AppearancePage() {
                 </div>
               </Section>
 
-              <Section title="Accent Color" description="The one deliberate brand accent color in the entire system.">
-                <div className={styles.accentRow}>
-                  <input
-                    type="color"
-                    className={styles.colorSwatchInput}
-                    value={draftTokens.colors.starColor}
-                    onChange={(event) => update("colors", { starColor: event.target.value })}
-                    aria-label="Accent color picker"
-                  />
-                  <div className={styles.accentField}>
-                    <TextField
-                      label="Accent color"
-                      labelHidden
-                      value={draftTokens.colors.starColor}
-                      onChange={(value) => update("colors", { starColor: value })}
-                      autoComplete="off"
-                    />
-                  </div>
-                  <div className={styles.accentPreview} aria-hidden="true">
-                    <span className={styles.accentPreviewStars} style={{ color: draftTokens.colors.starColor }}>
-                      &#9733;&#9733;&#9733;&#9733;&#9733;
-                    </span>
-                  </div>
-                </div>
-                <div className={styles.fieldGrid}>
-                  <TextField
-                    label="Empty star"
-                    value={draftTokens.colors.starEmptyColor}
-                    onChange={(value) => update("colors", { starEmptyColor: value })}
-                    autoComplete="off"
-                  />
-                </div>
-              </Section>
-
-              <Section title="Border Radius" description="0–24px — every rounded surface scales together from this one value.">
-                <RangeSlider
-                  label="Radius"
-                  labelHidden
-                  min={0}
-                  max={24}
-                  step={1}
-                  value={draftTokens.corners.radius}
-                  onChange={(value) => update("corners", { radius: Array.isArray(value) ? value[0] : value })}
-                  output
-                  suffix={<span className={styles.sliderSuffix}>{draftTokens.corners.radius}px</span>}
-                />
-              </Section>
-
-              <Section title="Button Style" description="Applied to buttons built on the shared button primitive.">
+              <Section title="Button Style" description="How buttons appear across your reviews.">
                 <Select
                   label="Style"
                   labelHidden
@@ -234,76 +278,121 @@ export default function AppearancePage() {
                 />
               </Section>
 
-              <Section title="Typography" description="How type establishes hierarchy across every widget.">
-                <div className={styles.fieldGrid}>
-                  <RangeSlider
-                    label="Scale"
-                    min={0.9}
-                    max={1.15}
-                    step={0.01}
-                    value={draftTokens.typography.scale}
-                    onChange={(value) => update("typography", { scale: Array.isArray(value) ? value[0] : value })}
-                    output
-                  />
-                  <Select
-                    label="Letter spacing"
-                    options={[
-                      { label: "Tight", value: "tight" },
-                      { label: "Normal", value: "normal" },
-                    ]}
-                    value={draftTokens.typography.letterSpacing}
-                    onChange={(value) => update("typography", { letterSpacing: value as "tight" | "normal" })}
-                  />
-                  <TextField
-                    label="Text color (blank = inherit theme)"
-                    value={draftTokens.colors.textColor ?? ""}
-                    onChange={(value) => update("colors", { textColor: value || null })}
-                    autoComplete="off"
-                  />
-                </div>
+              <Section title="Border Radius" description="Sharp to soft — how rounded corners feel.">
+                <ValueSlider
+                  label="Border radius"
+                  min={0}
+                  max={24}
+                  step={1}
+                  value={draftTokens.corners.radius}
+                  format={(value) => `${value}px`}
+                  onChange={(value) => update("corners", { radius: value })}
+                />
+              </Section>
+
+              <GroupLabel>Typography</GroupLabel>
+
+              <Section title="Text Size" description="Make review text larger or smaller.">
+                <ValueSlider
+                  label="Text size"
+                  min={0.9}
+                  max={1.15}
+                  step={0.01}
+                  value={draftTokens.typography.scale}
+                  format={(value) => `${Math.round(value * 100)}%`}
+                  onChange={(value) => update("typography", { scale: value })}
+                />
+              </Section>
+
+              <Section title="Letter Spacing" description="Tight feels compact; Normal feels relaxed.">
+                <Select
+                  label="Letter spacing"
+                  labelHidden
+                  options={[
+                    { label: "Tight", value: "tight" },
+                    { label: "Normal", value: "normal" },
+                  ]}
+                  value={draftTokens.typography.letterSpacing}
+                  onChange={(value) => update("typography", { letterSpacing: value as "tight" | "normal" })}
+                />
                 <div className={styles.reservedNote}>
                   <span>Custom fonts</span>
-                  <span className={styles.comingSoonTag}>Coming soon — Brand Studio</span>
+                  <span className={styles.comingSoonTag}>Coming later</span>
                 </div>
               </Section>
+
+              <Section title="Text Color" description="Leave blank to match your store's theme.">
+                <TextField
+                  label="Text color"
+                  labelHidden
+                  placeholder="Matches your theme"
+                  value={draftTokens.colors.textColor ?? ""}
+                  onChange={(value) => update("colors", { textColor: value || null })}
+                  autoComplete="off"
+                />
+              </Section>
+
+              <GroupLabel>Colors</GroupLabel>
+
+              <Section title="Accent Color" description="Your brand's one accent color — used for star ratings.">
+                <div className={styles.fieldGrid}>
+                  <ColorField
+                    label="Filled Star"
+                    value={draftTokens.colors.starColor}
+                    onChange={(value) => update("colors", { starColor: value })}
+                  />
+                  <ColorField
+                    label="Empty Star"
+                    value={draftTokens.colors.starEmptyColor}
+                    onChange={(value) => update("colors", { starEmptyColor: value })}
+                  />
+                </div>
+                <div className={styles.accentPreview} aria-hidden="true">
+                  <span className={styles.accentPreviewStars} style={{ color: toDisplayHex(draftTokens.colors.starColor) }}>
+                    &#9733;&#9733;&#9733;&#9733;&#9733;
+                  </span>
+                </div>
+              </Section>
+
+              <GroupLabel>Layout</GroupLabel>
 
               <Section title="Card Appearance" description="How individual reviews separate from one another.">
                 <Select
                   label="Card style"
                   labelHidden
                   options={[
-                    { label: "Hairline divider", value: "border" },
-                    { label: "Whitespace only", value: "spacing" },
+                    { label: "Simple line", value: "border" },
+                    { label: "Clean spacing", value: "spacing" },
                     { label: "Boxed card", value: "boxed" },
                   ]}
                   value={draftTokens.reviewCards.separator}
                   onChange={(value) => update("reviewCards", { separator: value as "border" | "spacing" | "boxed" })}
                 />
                 {isBoxed ? (
-                  <div className={styles.fieldGrid}>
-                    <TextField
-                      label="Background"
-                      value={draftTokens.colors.surfaceColor}
-                      onChange={(value) => update("colors", { surfaceColor: value })}
-                      autoComplete="off"
-                    />
-                    <TextField
-                      label="Border color"
-                      value={draftTokens.colors.borderColor}
-                      onChange={(value) => update("colors", { borderColor: value })}
-                      autoComplete="off"
-                    />
-                    <RangeSlider
+                  <div className={styles.cardAppearanceFields}>
+                    <div className={styles.fieldGrid}>
+                      <ColorField
+                        label="Background"
+                        value={draftTokens.colors.surfaceColor}
+                        onChange={(value) => update("colors", { surfaceColor: value })}
+                      />
+                      <ColorField
+                        label="Border"
+                        value={draftTokens.colors.borderColor}
+                        onChange={(value) => update("colors", { borderColor: value })}
+                      />
+                    </div>
+                    <ValueSlider
                       label="Border width"
                       min={0}
                       max={2}
                       step={1}
                       value={draftTokens.borders.width}
-                      onChange={(value) => update("borders", { width: Array.isArray(value) ? value[0] : value })}
-                      output
+                      format={(value) => `${value}px`}
+                      onChange={(value) => update("borders", { width: value })}
                     />
                     <Select
-                      label="Shadow intensity"
+                      label="Shadow"
                       options={[
                         { label: "None", value: "none" },
                         { label: "Subtle", value: "subtle" },
@@ -314,11 +403,11 @@ export default function AppearancePage() {
                     />
                   </div>
                 ) : (
-                  <p className={styles.mutedHint}>Choose &ldquo;Boxed card&rdquo; to reveal background, border, and shadow controls.</p>
+                  <p className={styles.mutedHint}>Choose &ldquo;Boxed card&rdquo; to set a background, border, and shadow.</p>
                 )}
               </Section>
 
-              <Section title="Spacing" description="A single density control keeps within- and between-component spacing in sync.">
+              <Section title="Spacing" description="How much breathing room reviews get.">
                 <Select
                   label="Density"
                   labelHidden
@@ -332,7 +421,7 @@ export default function AppearancePage() {
                 />
               </Section>
 
-              <Section title="Advanced" description="Occasional-use settings.">
+              <Section title="Advanced" description="Rarely needed.">
                 <div className={styles.fieldGrid}>
                   <TextField
                     label="Max content width (px, blank = default)"
@@ -352,7 +441,7 @@ export default function AppearancePage() {
                   />
                 </div>
                 <ReservedNote label="Star size & shape" />
-                <ReservedNote label="Media Gallery & avatar treatments" />
+                <ReservedNote label="Media gallery & avatar treatments" />
               </Section>
             </div>
 
@@ -362,7 +451,7 @@ export default function AppearancePage() {
                   ref={previewFrameRef}
                   className={styles.previewFrame}
                   src="/appearance-preview"
-                  title="Appearance live preview"
+                  title="Live preview"
                   onLoad={() =>
                     previewFrameRef.current?.contentWindow?.postMessage(
                       { source: "imagyn-appearance-draft", tokens: draftTokens },

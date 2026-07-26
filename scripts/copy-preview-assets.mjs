@@ -16,10 +16,12 @@ const TARGET_DIR = join(root, "public/appearance-preview");
 const FILES = [
   "imagyn-tokens.css",
   "imagyn-typography.css",
+  "imagyn-utilities.css",
   "imagyn-component-badge.css",
   "imagyn-component-summary.css",
   "imagyn-component-review-card.css",
   "imagyn-component-button.css",
+  "imagyn-component-tag.css",
   "imagyn-appearance.js",
 ];
 

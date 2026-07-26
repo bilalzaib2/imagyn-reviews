@@ -8,6 +8,18 @@ Notable changes to Imagyn Reviews, newest first. Commit SHAs refer to `main`.
 
 ### Added
 
+- **Brand Studio UX polish pass.** The page (still at `/app/appearance`) and nav item are
+  now branded "Brand Studio" throughout the UI. Every color field is a native swatch + hex
+  pair — no field ever shows a merchant raw `rgba(...)` — while transparent, theme-adaptive
+  defaults (Border, Empty Star) keep their real resolved value until a merchant actually
+  edits them. Border Radius and Text Size use a shared, Apple-Settings-style slider with a
+  large persistent value label instead of a small floating bubble. Controls are grouped
+  into Style / Typography / Colors / Layout, matching how a merchant thinks about the page
+  rather than the token schema underneath it. The live preview now shows three sample
+  reviews with a Verified Buyer tag and an overall-rating quickbar, using real CSS classes
+  that were already shipped but unused (no new components). See
+  [DECISIONS.md](./DECISIONS.md).
+
 - **Appearance page rebuilt into the Brand Studio foundation.** The four Widget Style
   presets (Minimal, Modern, Editorial, Luxury) went from inert "Coming soon" placeholders
   to real, selectable token bundles; Border Radius became a single 0–24px slider (was a
