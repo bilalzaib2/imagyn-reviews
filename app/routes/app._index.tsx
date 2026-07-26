@@ -1,5 +1,5 @@
 import type { LoaderFunctionArgs } from "react-router";
-import { useLoaderData } from "react-router";
+import { Link, useLoaderData } from "react-router";
 
 import { Container } from "../components/ui/Container";
 import { Card } from "../components/ui/Card";
@@ -25,16 +25,31 @@ const formatDate = (value: Date) =>
 export default function Index() {
   const { stats } = useLoaderData<typeof loader>();
 
-  const statCards = [
+  const attentionCards = [
+    {
+      key: "pending",
+      label: "Needs moderation",
+      value: stats.pendingReviews,
+      description: "Awaiting your approval or rejection.",
+      href: "/app/reviews?status=PENDING",
+    },
+    {
+      key: "held",
+      label: "Held by Moderation Rules",
+      value: stats.heldByRules,
+      description: "Flagged automatically — worth a second look.",
+      href: "/app/reviews?status=PENDING",
+    },
+  ];
+
+  const glanceCards = [
     { label: "Total Reviews", value: String(stats.totalReviews) },
     {
       label: "Average Rating",
       value: stats.publishedReviews > 0 ? stats.averageRating.toFixed(1) : "—",
     },
-    { label: "Pending Reviews", value: String(stats.pendingReviews) },
     { label: "Published Reviews", value: String(stats.publishedReviews) },
     { label: "Auto-Published Today", value: String(stats.autoPublishedToday) },
-    { label: "Held by Rules", value: String(stats.heldByRules) },
   ];
 
   return (
@@ -46,9 +61,30 @@ export default function Index() {
           <p className={shellStyles.subtitle}>Monitor your reviews and customer feedback.</p>
         </header>
 
+        <div className={styles.attentionGrid}>
+          {attentionCards.map((item) => (
+            <Link
+              key={item.key}
+              to={item.href}
+              className={`${styles.attentionCard} ${item.value > 0 ? styles.attentionCardActive : ""}`}
+            >
+              <div className={styles.attentionCopy}>
+                <p className={styles.attentionLabel}>{item.label}</p>
+                <p className={styles.attentionValue}>{item.value}</p>
+                <p className={styles.attentionDescription}>
+                  {item.value > 0 ? item.description : "All caught up."}
+                </p>
+              </div>
+              <span className={styles.attentionArrow} aria-hidden="true">
+                &rarr;
+              </span>
+            </Link>
+          ))}
+        </div>
+
         <div className={styles.statsGrid}>
-          {statCards.map((stat) => (
-            <Card key={stat.label}>
+          {glanceCards.map((stat) => (
+            <Card key={stat.label} tone="subtle">
               <div className={styles.statContent}>
                 <p className={styles.statLabel}>{stat.label}</p>
                 <p className={styles.statValue}>{stat.value}</p>
