@@ -73,9 +73,11 @@
   <script type="application/ld+json">{{ product.metafields["$app"].reviews_jsonld.value | json }}</script>
 {% endif %}
 
-{# `defer` (not the blocking script_tag filter) — theme-check flags parser-blocking
-   scripts; both stay in document order so imagyn-appearance.js still finishes applying
-   tokens before reviews-widget.js reads them (deferred scripts run in source order). #}
+{% comment %}
+  `defer` (not the blocking script_tag filter) — theme-check flags parser-blocking
+  scripts; both stay in document order so imagyn-appearance.js still finishes applying
+  tokens before reviews-widget.js reads them (deferred scripts run in source order).
+{% endcomment %}
 <script src="{{ 'imagyn-appearance.js' | asset_url }}" defer></script>
 <script src="{{ 'reviews-widget.js' | asset_url }}" defer></script>
 

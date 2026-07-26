@@ -13,9 +13,11 @@
   hidden
 ></div>
 
-{# `defer` (not the blocking script_tag filter) — theme-check flags parser-blocking
-   scripts; both stay in document order so imagyn-appearance.js still finishes applying
-   tokens before rating-badge.js reads them (deferred scripts run in source order). #}
+{% comment %}
+  `defer` (not the blocking script_tag filter) — theme-check flags parser-blocking
+  scripts; both stay in document order so imagyn-appearance.js still finishes applying
+  tokens before rating-badge.js reads them (deferred scripts run in source order).
+{% endcomment %}
 <script src="{{ 'imagyn-appearance.js' | asset_url }}" defer></script>
 <script src="{{ 'rating-badge.js' | asset_url }}" defer></script>
 
