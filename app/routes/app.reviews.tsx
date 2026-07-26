@@ -315,6 +315,19 @@ export default function ReviewsPage() {
   const [toastState, setToastState] = useState<{ content: string; error?: boolean } | null>(null);
   const [isReplyEditing, setIsReplyEditing] = useState(false);
   const [actionsMenuOpen, setActionsMenuOpen] = useState(false);
+  const [moreActionsMenuOpen, setMoreActionsMenuOpen] = useState(false);
+
+  // Defaults open if a link/bookmark already points at one of these filters, so a merchant
+  // never lands on a filtered view without seeing which filter is actually active.
+  const [showMoreFilters, setShowMoreFilters] = useState(
+    () =>
+      Boolean(initialRating) ||
+      Boolean(initialProduct) ||
+      Boolean(initialDateFrom) ||
+      Boolean(initialDateTo) ||
+      initialVerifiedPurchase ||
+      initialSort === "helpful",
+  );
 
   const [isImportModalOpen, setIsImportModalOpen] = useState(false);
   const [importFileName, setImportFileName] = useState<string | null>(null);
@@ -682,12 +695,47 @@ export default function ReviewsPage() {
             </p>
           </div>
           <div className={styles.headerActions}>
-            <Button type="button" variant="secondary" onClick={() => setIsImportModalOpen(true)}>
-              Import
-            </Button>
-            <PolarisButton onClick={handleExport} loading={isExporting} disabled={isExporting}>
-              Export
-            </PolarisButton>
+            <Popover
+              active={moreActionsMenuOpen}
+              onClose={() => setMoreActionsMenuOpen(false)}
+              activator={
+                <Button
+                  type="button"
+                  variant="secondary"
+                  onClick={() => setMoreActionsMenuOpen((open) => !open)}
+                  aria-label="More review actions"
+                  aria-haspopup="menu"
+                  aria-expanded={moreActionsMenuOpen}
+                >
+                  <span aria-hidden="true">&#8226;&#8226;&#8226;</span>
+                  <span>More</span>
+                </Button>
+              }
+            >
+              <ActionList
+                sections={[
+                  {
+                    items: [
+                      {
+                        content: "Import reviews",
+                        onAction: () => {
+                          setMoreActionsMenuOpen(false);
+                          setIsImportModalOpen(true);
+                        },
+                      },
+                      {
+                        content: isExporting ? "Exporting…" : "Export reviews",
+                        disabled: isExporting,
+                        onAction: () => {
+                          setMoreActionsMenuOpen(false);
+                          void handleExport();
+                        },
+                      },
+                    ],
+                  },
+                ]}
+              />
+            </Popover>
             <LinkButton to={`/app/reviews/new${location.search}`} variant="primary">
               New Review
             </LinkButton>
@@ -721,75 +769,83 @@ export default function ReviewsPage() {
               </select>
             </label>
 
-            <label className={styles.filterGroup}>
-              <span className={styles.filterLabel}>Rating</span>
-              <select
-                className={styles.filterSelect}
-                value={initialRating}
-                onChange={(event) => updateQuery({ rating: event.target.value || undefined })}
-              >
-                <option value="">Any</option>
-                <option value="5">5 stars</option>
-                <option value="4">4 stars</option>
-                <option value="3">3 stars</option>
-                <option value="2">2 stars</option>
-                <option value="1">1 star</option>
-              </select>
-            </label>
-
-            <label className={styles.filterGroup}>
-              <span className={styles.filterLabel}>Product</span>
-              <input
-                className={styles.filterInput}
-                type="text"
-                value={initialProduct}
-                onChange={(event) => updateQuery({ product: event.target.value || undefined })}
-                placeholder="Any product"
-              />
-            </label>
-
-            <label className={styles.filterGroup}>
-              <span className={styles.filterLabel}>Date from</span>
-              <input
-                className={styles.filterInput}
-                type="date"
-                value={initialDateFrom}
-                onChange={(event) => updateQuery({ dateFrom: event.target.value || undefined })}
-              />
-            </label>
-
-            <label className={styles.filterGroup}>
-              <span className={styles.filterLabel}>Date to</span>
-              <input
-                className={styles.filterInput}
-                type="date"
-                value={initialDateTo}
-                onChange={(event) => updateQuery({ dateTo: event.target.value || undefined })}
-              />
-            </label>
-
-            <label className={styles.checkboxGroup}>
-              <input
-                className={styles.checkboxInput}
-                type="checkbox"
-                checked={initialVerifiedPurchase}
-                onChange={(event) => updateQuery({ verifiedPurchase: event.target.checked })}
-              />
-              <span className={styles.checkboxLabel}>Verified purchase</span>
-            </label>
-
-            <label className={styles.filterGroup}>
-              <span className={styles.filterLabel}>Sort</span>
-              <select
-                className={styles.filterSelect}
-                value={initialSort}
-                onChange={(event) => updateQuery({ sort: event.target.value === "helpful" ? "helpful" : undefined })}
-              >
-                <option value="newest">Newest</option>
-                <option value="helpful">Most Helpful</option>
-              </select>
-            </label>
+            <Button type="button" variant="ghost" onClick={() => setShowMoreFilters((open) => !open)}>
+              {showMoreFilters ? "Fewer filters" : "More filters"}
+            </Button>
           </div>
+
+          {showMoreFilters ? (
+            <div className={styles.toolbarControls}>
+              <label className={styles.filterGroup}>
+                <span className={styles.filterLabel}>Rating</span>
+                <select
+                  className={styles.filterSelect}
+                  value={initialRating}
+                  onChange={(event) => updateQuery({ rating: event.target.value || undefined })}
+                >
+                  <option value="">Any</option>
+                  <option value="5">5 stars</option>
+                  <option value="4">4 stars</option>
+                  <option value="3">3 stars</option>
+                  <option value="2">2 stars</option>
+                  <option value="1">1 star</option>
+                </select>
+              </label>
+
+              <label className={styles.filterGroup}>
+                <span className={styles.filterLabel}>Product</span>
+                <input
+                  className={styles.filterInput}
+                  type="text"
+                  value={initialProduct}
+                  onChange={(event) => updateQuery({ product: event.target.value || undefined })}
+                  placeholder="Any product"
+                />
+              </label>
+
+              <label className={styles.filterGroup}>
+                <span className={styles.filterLabel}>Date from</span>
+                <input
+                  className={styles.filterInput}
+                  type="date"
+                  value={initialDateFrom}
+                  onChange={(event) => updateQuery({ dateFrom: event.target.value || undefined })}
+                />
+              </label>
+
+              <label className={styles.filterGroup}>
+                <span className={styles.filterLabel}>Date to</span>
+                <input
+                  className={styles.filterInput}
+                  type="date"
+                  value={initialDateTo}
+                  onChange={(event) => updateQuery({ dateTo: event.target.value || undefined })}
+                />
+              </label>
+
+              <label className={styles.checkboxGroup}>
+                <input
+                  className={styles.checkboxInput}
+                  type="checkbox"
+                  checked={initialVerifiedPurchase}
+                  onChange={(event) => updateQuery({ verifiedPurchase: event.target.checked })}
+                />
+                <span className={styles.checkboxLabel}>Verified purchase</span>
+              </label>
+
+              <label className={styles.filterGroup}>
+                <span className={styles.filterLabel}>Sort</span>
+                <select
+                  className={styles.filterSelect}
+                  value={initialSort}
+                  onChange={(event) => updateQuery({ sort: event.target.value === "helpful" ? "helpful" : undefined })}
+                >
+                  <option value="newest">Newest</option>
+                  <option value="helpful">Most Helpful</option>
+                </select>
+              </label>
+            </div>
+          ) : null}
         </div>
 
         {mutationError ? <p className={styles.feedbackError}>{mutationError}</p> : null}
@@ -809,28 +865,32 @@ export default function ReviewsPage() {
                 />
                 <span>Select page</span>
               </label>
-              <span className={styles.bulkCount}>{selectedIds.length} selected</span>
-              <Button
-                type="button"
-                onClick={() => applyBulkAction("bulkApprove")}
-                disabled={selectedIds.length === 0 || isMutating}
-              >
-                Approve
-              </Button>
-              <Button
-                type="button"
-                onClick={() => applyBulkAction("bulkReject")}
-                disabled={selectedIds.length === 0 || isMutating}
-              >
-                Reject
-              </Button>
-              <Button
-                type="button"
-                onClick={() => applyBulkAction("bulkDelete")}
-                disabled={selectedIds.length === 0 || isMutating}
-              >
-                Delete
-              </Button>
+              {selectedIds.length > 0 ? (
+                <>
+                  <span className={styles.bulkCount}>{selectedIds.length} selected</span>
+                  <Button
+                    type="button"
+                    onClick={() => applyBulkAction("bulkApprove")}
+                    disabled={isMutating}
+                  >
+                    Approve
+                  </Button>
+                  <Button
+                    type="button"
+                    onClick={() => applyBulkAction("bulkReject")}
+                    disabled={isMutating}
+                  >
+                    Reject
+                  </Button>
+                  <Button
+                    type="button"
+                    onClick={() => applyBulkAction("bulkDelete")}
+                    disabled={isMutating}
+                  >
+                    Delete
+                  </Button>
+                </>
+              ) : null}
             </div>
           }
         >
@@ -981,46 +1041,42 @@ export default function ReviewsPage() {
 
                     <div className={styles.detailDivider} />
 
-                    {selectedReview.moderationReason ? (
-                      <>
-                        <div className={styles.detailSection}>
-                          <p className={styles.detailLabel}>Moderation</p>
-                          <p className={styles.detailText}>{selectedReview.moderationReason}</p>
+                    <div className={styles.detailMeta}>
+                      <div className={styles.detailMetaRow}>
+                        <span className={styles.detailMetaLabel}>Customer</span>
+                        <span className={styles.detailMetaValue}>
+                          {selectedReview.reviewerName}
+                          {selectedReview.verifiedPurchase ? " · Verified buyer" : ""}
+                        </span>
+                      </div>
+                      {selectedReview.reviewerEmail ? (
+                        <div className={styles.detailMetaRow}>
+                          <span className={styles.detailMetaLabel}>Email</span>
+                          <span className={styles.detailMetaValue}>{selectedReview.reviewerEmail}</span>
                         </div>
-                        <div className={styles.detailDivider} />
-                      </>
-                    ) : null}
-
-                    <div className={styles.detailSection}>
-                      <p className={styles.detailLabel}>AI Summary</p>
-                      <p className={styles.detailText}>
-                        AI summaries are generated per product, from all of that product&apos;s approved reviews —{" "}
-                        <RemixLink to={`/app/products/${selectedReview.productId}`}>
-                          view it on the product page
-                        </RemixLink>
-                        .
-                      </p>
-                    </div>
-
-                    <div className={styles.detailDivider} />
-
-                    <div className={styles.detailSection}>
-                      <p className={styles.detailLabel}>Customer</p>
-                      <p className={styles.detailValue}>{selectedReview.reviewerName}</p>
-                      <p className={styles.detailSubvalue}>{selectedReview.reviewerEmail ?? "No email provided"}</p>
-                      <p className={styles.detailSubvalue}>{selectedReview.reviewerLocation ?? "No location provided"}</p>
-                      <p className={styles.detailSubvalue}>
-                        {selectedReview.verifiedPurchase ? "Verified buyer" : "Unverified purchase"}
-                      </p>
-                    </div>
-
-                    <div className={styles.detailDivider} />
-
-                    <div className={styles.detailSection}>
-                      <p className={styles.detailLabel}>Product</p>
-                      <p className={styles.detailValue}>
-                        {selectedReview.productTitle ?? selectedReview.product?.name ?? "Unassigned product"}
-                      </p>
+                      ) : null}
+                      {selectedReview.reviewerLocation ? (
+                        <div className={styles.detailMetaRow}>
+                          <span className={styles.detailMetaLabel}>Location</span>
+                          <span className={styles.detailMetaValue}>{selectedReview.reviewerLocation}</span>
+                        </div>
+                      ) : null}
+                      <div className={styles.detailMetaRow}>
+                        <span className={styles.detailMetaLabel}>Product</span>
+                        <span className={styles.detailMetaValue}>
+                          {selectedReview.productTitle ?? selectedReview.product?.name ?? "Unassigned product"}
+                        </span>
+                      </div>
+                      <div className={styles.detailMetaRow}>
+                        <span className={styles.detailMetaLabel}>Created</span>
+                        <span className={styles.detailMetaValue}>{formatLongDate(selectedReview.createdAt)}</span>
+                      </div>
+                      {selectedReview.moderationReason ? (
+                        <div className={styles.detailMetaRow}>
+                          <span className={styles.detailMetaLabel}>Moderation</span>
+                          <span className={styles.detailMetaValue}>{selectedReview.moderationReason}</span>
+                        </div>
+                      ) : null}
                     </div>
 
                     <div className={styles.detailDivider} />
@@ -1142,35 +1198,15 @@ export default function ReviewsPage() {
 
                     <div className={styles.detailDivider} />
 
-                    <div className={styles.detailSection}>
-                      <p className={styles.detailLabel}>Helpful Votes</p>
-                      <div className={styles.helpfulVoteRow}>
-                        <span className={styles.helpfulVoteStat}>
-                          <span className={styles.helpfulVoteCount}>{selectedReview.helpfulCount}</span>
-                          <span className={styles.helpfulVoteLabel}>Helpful 👍</span>
-                        </span>
-                        <span className={styles.helpfulVoteStat}>
-                          <span className={styles.helpfulVoteCount}>{selectedReview.notHelpfulCount}</span>
-                          <span className={styles.helpfulVoteLabel}>Not Helpful 👎</span>
-                        </span>
-                      </div>
-                    </div>
-
-                    <div className={styles.detailDivider} />
-
-                    <div className={styles.detailSection}>
-                      <p className={styles.detailLabel}>Created</p>
-                      <p className={styles.detailValue}>{formatLongDate(selectedReview.createdAt)}</p>
-                    </div>
-
-                    <div className={styles.detailDivider} />
-
-                    <div className={styles.detailSection}>
-                      <p className={styles.detailLabel}>Coming Soon</p>
-                      <div className={styles.comingSoonRow}>
-                        <span className={styles.comingSoonPill}>Merchant Notes</span>
-                        <span className={styles.comingSoonPill}>Internal Tags</span>
-                      </div>
+                    <div className={styles.detailFooterRow}>
+                      <span className={styles.detailFooterStat}>{selectedReview.helpfulCount} helpful</span>
+                      <span className={styles.detailFooterStat}>{selectedReview.notHelpfulCount} not helpful</span>
+                      <RemixLink
+                        to={`/app/products/${selectedReview.productId}`}
+                        className={styles.detailFooterLink}
+                      >
+                        View AI summary
+                      </RemixLink>
                     </div>
 
                     <div className={styles.detailDivider} />

@@ -490,43 +490,55 @@
   line-height: 1.6;
 }
 
-.comingSoonRow {
-  display: flex;
-  flex-wrap: wrap;
+/* Compact customer/product/date/moderation block — deliberately quieter than the review
+   content below it (smaller text, muted labels, tight rows) so the panel reads as
+   "here's the review, here's context about it" instead of nine same-weight sections. */
+.detailMeta {
+  display: grid;
   gap: var(--space-2);
 }
 
-.helpfulVoteRow {
+.detailMetaRow {
   display: flex;
-  gap: var(--space-5);
+  align-items: baseline;
+  gap: var(--space-3);
+  font-size: var(--text-sm);
 }
 
-.helpfulVoteStat {
-  display: grid;
-  gap: 0.15rem;
-}
-
-.helpfulVoteCount {
-  font-size: var(--text-lg);
-  font-weight: 600;
-  font-variant-numeric: tabular-nums;
-  letter-spacing: -0.01em;
-}
-
-.helpfulVoteLabel {
-  font-size: var(--text-xs);
+.detailMetaLabel {
+  flex: none;
+  width: 5.5rem;
   color: var(--color-text-muted);
+  font-size: var(--text-xs);
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
 }
 
-.comingSoonPill {
-  display: inline-flex;
+.detailMetaValue {
+  color: var(--color-text);
+  overflow-wrap: anywhere;
+}
+
+/* Helpful-vote counts + the AI-summary pointer, demoted to one quiet closing line instead
+   of their own bordered sections — neither is something a merchant edits or acts on here. */
+.detailFooterRow {
+  display: flex;
   align-items: center;
-  width: fit-content;
-  border: 1px dashed var(--color-border-strong);
-  border-radius: var(--radius-full);
-  padding: 0.25rem 0.6rem;
-  font-size: var(--text-xs);
+  flex-wrap: wrap;
+  gap: var(--space-2) var(--space-4);
   color: var(--color-text-muted);
+  font-size: var(--text-xs);
+}
+
+.detailFooterStat {
+  font-variant-numeric: tabular-nums;
+}
+
+.detailFooterLink {
+  margin-left: auto;
+  color: var(--color-text-muted);
+  text-decoration: underline;
+  text-underline-offset: 2px;
 }
 
 .replyLabel {
