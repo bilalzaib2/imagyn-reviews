@@ -223,9 +223,23 @@ export async function selectStarterPlan(storeId: string) {
 // Shopify's Billing API requires returnUrl as a fully-qualified `URL!` GraphQL scalar — a
 // relative path fails with 'Variable "$returnUrl" of type URL! was provided invalid value.'
 // Same env-var precedent as review-request.server.ts's buildReviewUrl.
-function buildBillingReturnUrl(): string {
+//
+// Just as important: Shopify's redirect back from the charge confirmation screen only ever
+// APPENDS `charge_id` to whatever returnUrl you gave it — it does not restore `shop`/`host`.
+// Without those two params already present, authenticate.admin() has no way to recognize the
+// landing request as belonging to an embedded session, and falls back to rendering a bare,
+// blank App Bridge bootstrap page (HTTP 200, no visible content — this is
+// @shopify/shopify-app-react-router's own documented fallback for a document request missing
+// shop/host, not a bug in that fallback itself). Embedding shop+host in returnUrl up front is
+// what makes the landing request self-sufficient.
+export function buildBillingReturnUrl(shop: string, host: string | null): string {
   const appUrl = process.env.SHOPIFY_APP_URL || process.env.APP_URL || "http://127.0.0.1:3000";
-  return `${appUrl.replace(/\/$/, "")}/app/billing`;
+  const url = new URL(`${appUrl.replace(/\/$/, "")}/app/billing`);
+  url.searchParams.set("shop", shop);
+  if (host) {
+    url.searchParams.set("host", host);
+  }
+  return url.toString();
 }
 
 // Always throws (redirects to Shopify's charge confirmation screen) — matches the SDK's own
@@ -235,11 +249,12 @@ export async function requestPaidPlan(
   billing: Billing,
   planId: "growth" | "pro",
   isDevelopmentStore: boolean,
+  returnUrl: string,
 ): Promise<never> {
   return billing.request({
     plan: planId === "growth" ? "Growth" : "Pro",
     isTest: isDevelopmentStore,
-    returnUrl: buildBillingReturnUrl(),
+    returnUrl,
     replacementBehavior: BillingReplacementBehavior.ApplyImmediately,
   });
 }

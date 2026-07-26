@@ -8,6 +8,7 @@ import { Container } from "../components/ui/Container";
 import { authenticate } from "../shopify.server";
 import { getOrCreateStore } from "../services/store.server";
 import {
+  buildBillingReturnUrl,
   cancelPaidPlan,
   ensureDevelopmentStoreFlag,
   getAllPlans,
@@ -69,8 +70,13 @@ export const action = async ({ request }: ActionFunctionArgs): Promise<ActionDat
       if (planId !== "growth" && planId !== "pro") {
         return { ok: false, error: "Choose a valid plan." };
       }
+      // shop/host must be embedded in returnUrl itself — Shopify's redirect back only
+      // appends charge_id, it doesn't restore them (see buildBillingReturnUrl).
+      const host = new URL(request.url).searchParams.get("host");
+      const returnUrl = buildBillingReturnUrl(session.shop, host);
+
       // Always throws — redirects to Shopify's charge confirmation screen.
-      await requestPaidPlan(billing, planId, isDevelopmentStore);
+      await requestPaidPlan(billing, planId, isDevelopmentStore, returnUrl);
     }
 
     if (intent === "cancel") {
