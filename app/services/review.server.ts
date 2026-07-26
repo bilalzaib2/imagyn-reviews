@@ -60,6 +60,11 @@ export interface CreateReviewInput {
   // moderation again. Neither is settable by a customer-facing submission path.
   createdAt?: Date;
   autoApprove?: boolean;
+  // Set by the calling route's moderationRules.server.ts's evaluateReview() for genuine
+  // customer submissions (api.reviews.tsx, r.$token.tsx) — null for every other caller
+  // (manual admin creation, CSV import), which never ran through Moderation Rules at all.
+  moderationStatus?: string | null;
+  moderationReason?: string | null;
 }
 
 export interface UpdateReviewInput {
@@ -202,6 +207,9 @@ export interface StoreReviewStats {
   pendingReviews: number;
   averageRating: number;
   recentReviews: ReviewWithProduct[];
+  // Moderation Rules automation metrics (see app/services/moderationRules.server.ts).
+  autoPublishedToday: number;
+  heldByRules: number;
 }
 
 // Store-wide dashboard stats, queried directly off the Review table with the same
@@ -215,24 +223,39 @@ export interface StoreReviewStats {
 export async function getStoreReviewStats(storeId: string, options: { recentLimit?: number } = {}): Promise<StoreReviewStats> {
   const recentLimit = options.recentLimit ?? 5;
 
-  const [totalReviews, statusGroups, approvedAggregate, recentReviews] = await Promise.all([
-    prisma.review.count({ where: { storeId, deletedAt: null } }),
-    prisma.review.groupBy({
-      by: ["status"],
-      where: { storeId, deletedAt: null },
-      _count: { status: true },
-    }),
-    prisma.review.aggregate({
-      where: { storeId, deletedAt: null, status: ReviewStatus.APPROVED },
-      _avg: { rating: true },
-    }),
-    prisma.review.findMany({
-      where: { storeId, deletedAt: null },
-      include: reviewInclude,
-      orderBy: [{ createdAt: "desc" }, { id: "desc" }],
-      take: recentLimit,
-    }),
-  ]);
+  const startOfToday = new Date();
+  startOfToday.setHours(0, 0, 0, 0);
+
+  const [totalReviews, statusGroups, approvedAggregate, recentReviews, autoPublishedToday, heldByRules] =
+    await Promise.all([
+      prisma.review.count({ where: { storeId, deletedAt: null } }),
+      prisma.review.groupBy({
+        by: ["status"],
+        where: { storeId, deletedAt: null },
+        _count: { status: true },
+      }),
+      prisma.review.aggregate({
+        where: { storeId, deletedAt: null, status: ReviewStatus.APPROVED },
+        _avg: { rating: true },
+      }),
+      prisma.review.findMany({
+        where: { storeId, deletedAt: null },
+        include: reviewInclude,
+        orderBy: [{ createdAt: "desc" }, { id: "desc" }],
+        take: recentLimit,
+      }),
+      // "Today" set once, at creation, by moderationRules.server.ts's evaluateReview — a
+      // review can only ever be auto-published at the moment it's submitted.
+      prisma.review.count({
+        where: { storeId, deletedAt: null, moderationStatus: "auto_approved", createdAt: { gte: startOfToday } },
+      }),
+      // Still-pending reviews a Moderation Rule held — distinct from pendingReviews below,
+      // which also includes ordinary manually-created/imported reviews Moderation Rules
+      // never touched.
+      prisma.review.count({
+        where: { storeId, deletedAt: null, moderationStatus: "held", status: ReviewStatus.PENDING },
+      }),
+    ]);
 
   const countByStatus = new Map(statusGroups.map((group) => [group.status, group._count.status]));
 
@@ -242,6 +265,8 @@ export async function getStoreReviewStats(storeId: string, options: { recentLimi
     pendingReviews: countByStatus.get(ReviewStatus.PENDING) ?? 0,
     averageRating: Number((approvedAggregate._avg.rating ?? 0).toFixed(1)),
     recentReviews,
+    autoPublishedToday,
+    heldByRules,
   };
 }
 
@@ -363,6 +388,8 @@ export async function createReview(data: CreateReviewInput) {
       verifiedPurchase: data.verifiedPurchase ?? false,
       featured: data.featured ?? false,
       photoUrls: data.photoUrls || null,
+      moderationStatus: data.moderationStatus ?? null,
+      moderationReason: data.moderationReason ?? null,
       ...(data.createdAt ? { createdAt: data.createdAt } : {}),
       ...(approveNow ? { status: ReviewStatus.APPROVED, isPublished: true } : {}),
     },

@@ -71,6 +71,22 @@ model Store {
   // development status essentially never changes in practice, so this avoids a live check on
   // every request. Development stores always bypass billing entirely (see billing.server.ts).
   isDevelopmentStore   Boolean?
+
+  // Moderation Rules (see app/services/moderationRules.server.ts) — automatic screening for
+  // new customer-submitted reviews, applied in the submission pipeline (api.reviews.tsx,
+  // r.$token.tsx) before a review row is even created. Off by default so an existing store's
+  // all-manual moderation behavior never changes until a merchant explicitly opts in.
+  moderationRulesEnabled    Boolean @default(false)
+  moderationMinRating       Int     @default(4)
+  moderationRequireVerified Boolean @default(false)
+  moderationHoldLinks       Boolean @default(true)
+  moderationHoldProfanity   Boolean @default(true)
+  // Merchant-entered, one phrase per line — parsed by moderationRules.server.ts's
+  // parseBannedWords, not stored as a separate table since it's always read/written as one
+  // whole list, never queried per-word.
+  moderationBannedWords     String  @default("")
+  moderationNotifyOnHold    Boolean @default(false)
+  moderationNotifyEmail     String?
 }
 
 model Product {
@@ -147,6 +163,13 @@ model Review {
 
   photoUrls        String?
   deletedAt        DateTime?
+
+  // Set once, at creation, by the Moderation Rules pipeline (see
+  // app/services/moderationRules.server.ts) — never updated afterward, even if a merchant
+  // later manually approves/rejects the review, so this always answers "how did this review
+  // originally get its first status," not "what is its status now."
+  moderationStatus String?
+  moderationReason String?
 
   createdAt        DateTime     @default(now())
   updatedAt        DateTime     @updatedAt

@@ -4,6 +4,7 @@ import type { ActionFunctionArgs, LoaderFunctionArgs } from "react-router";
 
 import { reviewRequestService } from "../services/review-request.server";
 import { createReview } from "../services/review.server";
+import { evaluateReview, getModerationSettings, sendHeldReviewNotification } from "../services/moderationRules.server";
 import { MAX_IMAGES_PER_REVIEW, readImageFilesFromFormData, uploadReviewImages } from "../services/reviewMedia.server";
 import { unauthenticated } from "../shopify.server";
 import { Button } from "../components/ui/Button";
@@ -95,6 +96,14 @@ export const action = async ({ request, params }: ActionFunctionArgs) => {
   let reviewId: string;
 
   try {
+    const moderationSettings = await getModerationSettings(result.request.store.id);
+    const decision = evaluateReview(moderationSettings, {
+      rating,
+      title: title || null,
+      content,
+      verifiedPurchase: true,
+    });
+
     const review = await createReview({
       productId: result.request.product.id,
       rating,
@@ -106,8 +115,22 @@ export const action = async ({ request, params }: ActionFunctionArgs) => {
       // a real, identified purchase, so this is a correct verified-purchase signal, not
       // a default we're fabricating.
       verifiedPurchase: true,
+      autoApprove: decision.autoApprove,
+      moderationStatus: decision.moderationStatus,
+      moderationReason: decision.moderationReason,
     });
     reviewId = review.id;
+
+    if (decision.moderationStatus === "held" && moderationSettings.notifyOnHold && moderationSettings.notifyEmail) {
+      void sendHeldReviewNotification({
+        storeName: result.request.store.name,
+        notifyEmail: moderationSettings.notifyEmail,
+        reviewerName,
+        productName: result.request.product.name ?? "your product",
+        rating,
+        reason: decision.moderationReason ?? "Held by a Moderation Rule.",
+      });
+    }
   } catch (error) {
     return data(
       { ok: false as const, error: error instanceof Error ? error.message : "Unable to submit review." },

@@ -102,6 +102,39 @@ export async function updateBillingState(
   });
 }
 
+// Moderation Rules (see app/services/moderationRules.server.ts). bannedWords arrives here
+// already newline-joined (Settings' textarea value) and is stored as-is — parsing into an
+// array only happens on read, in moderationRules.server.ts's getModerationSettings.
+export async function updateModerationSettings(
+  id: string,
+  data: {
+    moderationRulesEnabled: boolean;
+    moderationMinRating: number;
+    moderationRequireVerified: boolean;
+    moderationHoldLinks: boolean;
+    moderationHoldProfanity: boolean;
+    moderationBannedWords: string;
+    moderationNotifyOnHold: boolean;
+    moderationNotifyEmail: string | null;
+  },
+) {
+  return prisma.store.update({
+    where: {
+      id,
+    },
+    data: {
+      moderationRulesEnabled: data.moderationRulesEnabled,
+      moderationMinRating: Math.min(Math.max(Math.round(data.moderationMinRating), 1), 5),
+      moderationRequireVerified: data.moderationRequireVerified,
+      moderationHoldLinks: data.moderationHoldLinks,
+      moderationHoldProfanity: data.moderationHoldProfanity,
+      moderationBannedWords: data.moderationBannedWords,
+      moderationNotifyOnHold: data.moderationNotifyOnHold,
+      moderationNotifyEmail: data.moderationNotifyOnHold ? data.moderationNotifyEmail?.trim() || null : null,
+    },
+  });
+}
+
 export async function setDevelopmentStoreFlag(id: string, isDevelopmentStore: boolean) {
   return prisma.store.update({
     where: {

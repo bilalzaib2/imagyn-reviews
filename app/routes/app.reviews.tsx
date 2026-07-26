@@ -934,6 +934,9 @@ export default function ReviewsPage() {
                                 <h2 className={styles.reviewTitle}>{reviewTitle}</h2>
                                 <div className={styles.reviewBadgeRow}>
                                   <ReviewStatusBadge status={review.status} />
+                                  {review.moderationStatus === "auto_approved" ? (
+                                    <span className={styles.autoApprovedBadge}>Auto Approved</span>
+                                  ) : null}
                                   {review.verifiedPurchase ? (
                                     <span className={styles.verifiedBadge}>Verified buyer</span>
                                   ) : null}
@@ -966,6 +969,9 @@ export default function ReviewsPage() {
                       <p className={styles.detailEyebrow}>Selected review</p>
                       <div className={styles.detailStatusRow}>
                         <ReviewStatusBadge status={selectedReview.status} />
+                        {selectedReview.moderationStatus === "auto_approved" ? (
+                          <span className={styles.autoApprovedBadge}>Auto Approved</span>
+                        ) : null}
                       </div>
                       <h2 className={styles.detailTitle}>{selectedReview.title ?? "Untitled review"}</h2>
                       <div className={styles.ratingLarge} aria-label={`${selectedReview.rating} out of 5 stars`}>
@@ -974,6 +980,16 @@ export default function ReviewsPage() {
                     </div>
 
                     <div className={styles.detailDivider} />
+
+                    {selectedReview.moderationReason ? (
+                      <>
+                        <div className={styles.detailSection}>
+                          <p className={styles.detailLabel}>Moderation</p>
+                          <p className={styles.detailText}>{selectedReview.moderationReason}</p>
+                        </div>
+                        <div className={styles.detailDivider} />
+                      </>
+                    ) : null}
 
                     <div className={styles.detailSection}>
                       <p className={styles.detailLabel}>AI Summary</p>

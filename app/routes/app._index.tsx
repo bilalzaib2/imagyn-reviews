@@ -32,6 +32,8 @@ export default function Index() {
     },
     { label: "Pending Reviews", value: String(stats.pendingReviews) },
     { label: "Published Reviews", value: String(stats.publishedReviews) },
+    { label: "Auto-Published Today", value: String(stats.autoPublishedToday) },
+    { label: "Held by Rules", value: String(stats.heldByRules) },
   ];
 
   return (

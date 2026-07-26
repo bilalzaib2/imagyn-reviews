@@ -18,6 +18,7 @@ import { getStoreBySlug } from "../services/store.server";
 import { getStorefrontWidgetSettings } from "../services/widget.server";
 import { getAiSummary } from "../services/aiSummary.server";
 import { getStorefrontAppearance } from "../services/appearance.server";
+import { evaluateReview, getModerationSettings, sendHeldReviewNotification } from "../services/moderationRules.server";
 
 // Shared with api.reviews.batch.tsx so the two public review endpoints respond identically.
 export function json(data: unknown, init?: ResponseInit) {
@@ -218,6 +219,16 @@ export const action = async ({ request }: ActionFunctionArgs) => {
   }
 
   try {
+    const moderationSettings = await getModerationSettings(store.id);
+    const decision = evaluateReview(moderationSettings, {
+      rating,
+      title: title || null,
+      content,
+      // Storefront widget submissions never carry a verified-purchase signal (contrast
+      // r.$token.tsx, reached only via a merchant-issued, order-linked request link).
+      verifiedPurchase: false,
+    });
+
     const review = await createReview({
       productId: product.id,
       rating,
@@ -225,7 +236,21 @@ export const action = async ({ request }: ActionFunctionArgs) => {
       content,
       reviewerName: customerName,
       reviewerEmail: customerEmail || null,
+      autoApprove: decision.autoApprove,
+      moderationStatus: decision.moderationStatus,
+      moderationReason: decision.moderationReason,
     });
+
+    if (decision.moderationStatus === "held" && moderationSettings.notifyOnHold && moderationSettings.notifyEmail) {
+      void sendHeldReviewNotification({
+        storeName: store.name,
+        notifyEmail: moderationSettings.notifyEmail,
+        reviewerName: customerName,
+        productName: product.name,
+        rating,
+        reason: decision.moderationReason ?? "Held by a Moderation Rule.",
+      });
+    }
 
     let media: { uploaded: number; failed: Array<{ filename: string; error: string }> } | null = null;
 

@@ -7,7 +7,8 @@ import { Button } from "../components/ui/Button";
 import { Container } from "../components/ui/Container";
 import { Section } from "../components/ui/Section";
 import { authenticate } from "../shopify.server";
-import { getOrCreateStore, updateAutoRequestSettings } from "../services/store.server";
+import { getOrCreateStore, updateAutoRequestSettings, updateModerationSettings } from "../services/store.server";
+import { getModerationSettings } from "../services/moderationRules.server";
 import { sendTestReviewRequestEmail } from "../services/notifications/testEmail.server";
 import { getPlanLimits, getStorePlanId } from "../services/billing/billing.server";
 import { ORDER_AUTOMATION_ENABLED } from "../config/features";
@@ -19,6 +20,16 @@ type LoaderData = {
   autoRequestDelayDays: number;
   autoRequestTrigger: string;
   planIncludesAutomaticRequests: boolean;
+  moderation: {
+    enabled: boolean;
+    minRating: number;
+    requireVerified: boolean;
+    holdLinks: boolean;
+    holdProfanity: boolean;
+    bannedWords: string;
+    notifyOnHold: boolean;
+    notifyEmail: string;
+  };
 };
 
 type ActionData = {
@@ -31,12 +42,23 @@ export const loader = async ({ request }: LoaderFunctionArgs): Promise<LoaderDat
   const { session } = await authenticate.admin(request);
   const store = await getOrCreateStore(session.shop);
   const plan = await getStorePlanId(store.id);
+  const moderation = await getModerationSettings(store.id);
 
   return {
     autoRequestEnabled: store.autoRequestEnabled,
     autoRequestDelayDays: store.autoRequestDelayDays,
     autoRequestTrigger: store.autoRequestTrigger,
     planIncludesAutomaticRequests: getPlanLimits(plan).automaticReviewRequests,
+    moderation: {
+      enabled: moderation.enabled,
+      minRating: moderation.minRating,
+      requireVerified: moderation.requireVerified,
+      holdLinks: moderation.holdLinks,
+      holdProfanity: moderation.holdProfanity,
+      bannedWords: moderation.bannedWords.join("\n"),
+      notifyOnHold: moderation.notifyOnHold,
+      notifyEmail: moderation.notifyEmail ?? "",
+    },
   };
 };
 
@@ -61,6 +83,37 @@ export const action = async ({ request }: ActionFunctionArgs): Promise<ActionDat
       return { ok: true, message: `Test email sent to ${testEmail}.` };
     } catch (error) {
       return { ok: false, error: error instanceof Error ? error.message : "Unable to send test email." };
+    }
+  }
+
+  if (intent === "save-moderation") {
+    const minRating = Number(formData.get("moderationMinRating") || "4");
+
+    if (!Number.isInteger(minRating) || minRating < 1 || minRating > 5) {
+      return { ok: false, error: "Minimum rating must be a whole number between 1 and 5." };
+    }
+
+    const notifyOnHold = formData.get("moderationNotifyOnHold") === "true";
+    const notifyEmail = String(formData.get("moderationNotifyEmail") || "").trim();
+
+    if (notifyOnHold && !EMAIL_PATTERN.test(notifyEmail)) {
+      return { ok: false, error: "Enter a valid notification email address." };
+    }
+
+    try {
+      await updateModerationSettings(store.id, {
+        moderationRulesEnabled: formData.get("moderationRulesEnabled") === "true",
+        moderationMinRating: minRating,
+        moderationRequireVerified: formData.get("moderationRequireVerified") === "true",
+        moderationHoldLinks: formData.get("moderationHoldLinks") === "true",
+        moderationHoldProfanity: formData.get("moderationHoldProfanity") === "true",
+        moderationBannedWords: String(formData.get("moderationBannedWords") || ""),
+        moderationNotifyOnHold: notifyOnHold,
+        moderationNotifyEmail: notifyEmail || null,
+      });
+      return { ok: true, message: "Moderation Rules saved." };
+    } catch (error) {
+      return { ok: false, error: error instanceof Error ? error.message : "Unable to save Moderation Rules." };
     }
   }
 
@@ -94,8 +147,17 @@ export const action = async ({ request }: ActionFunctionArgs): Promise<ActionDat
 // delivery-confirmation signal is wired in) is a config addition here, not a schema change.
 const TRIGGER_OPTIONS = [{ label: "After fulfillment", value: "fulfillment" }];
 
+const MIN_RATING_OPTIONS = [
+  { label: "5 stars only", value: "5" },
+  { label: "4 stars and up", value: "4" },
+  { label: "3 stars and up", value: "3" },
+  { label: "2 stars and up", value: "2" },
+  { label: "1 star and up", value: "1" },
+];
+
 export default function SettingsPage() {
-  const { autoRequestEnabled, autoRequestDelayDays, planIncludesAutomaticRequests } = useLoaderData<typeof loader>();
+  const { autoRequestEnabled, autoRequestDelayDays, planIncludesAutomaticRequests, moderation } =
+    useLoaderData<typeof loader>();
   const navigation = useNavigation();
   const isLoading = navigation.state !== "idle";
   const saveFetcher = useFetcher<ActionData>();
@@ -110,6 +172,17 @@ export default function SettingsPage() {
   const testEmailFetcher = useFetcher<ActionData>();
   const isSendingTestEmail = testEmailFetcher.state !== "idle";
   const [testEmail, setTestEmail] = useState("");
+
+  const moderationFetcher = useFetcher<ActionData>();
+  const isSavingModeration = moderationFetcher.state !== "idle";
+  const [moderationEnabled, setModerationEnabled] = useState(moderation.enabled);
+  const [minRating, setMinRating] = useState(String(moderation.minRating));
+  const [requireVerified, setRequireVerified] = useState(moderation.requireVerified);
+  const [holdLinks, setHoldLinks] = useState(moderation.holdLinks);
+  const [holdProfanity, setHoldProfanity] = useState(moderation.holdProfanity);
+  const [bannedWords, setBannedWords] = useState(moderation.bannedWords);
+  const [notifyOnHold, setNotifyOnHold] = useState(moderation.notifyOnHold);
+  const [notifyEmail, setNotifyEmail] = useState(moderation.notifyEmail);
 
   useEffect(() => {
     if (!saveFetcher.data) return;
@@ -131,6 +204,16 @@ export default function SettingsPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [testEmailFetcher.data]);
 
+  useEffect(() => {
+    if (!moderationFetcher.data) return;
+    if (!moderationFetcher.data.ok) {
+      setToast({ content: moderationFetcher.data.error || "Unable to save Moderation Rules.", error: true });
+      return;
+    }
+    setToast({ content: moderationFetcher.data.message || "Moderation Rules saved." });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [moderationFetcher.data]);
+
   const handleSave = () => {
     const formData = new FormData();
     formData.set("_intent", "save-automation");
@@ -144,6 +227,20 @@ export default function SettingsPage() {
     formData.set("_intent", "send-test-email");
     formData.set("testEmail", testEmail);
     testEmailFetcher.submit(formData, { method: "post" });
+  };
+
+  const handleSaveModeration = () => {
+    const formData = new FormData();
+    formData.set("_intent", "save-moderation");
+    formData.set("moderationRulesEnabled", String(moderationEnabled));
+    formData.set("moderationMinRating", minRating);
+    formData.set("moderationRequireVerified", String(requireVerified));
+    formData.set("moderationHoldLinks", String(holdLinks));
+    formData.set("moderationHoldProfanity", String(holdProfanity));
+    formData.set("moderationBannedWords", bannedWords);
+    formData.set("moderationNotifyOnHold", String(notifyOnHold));
+    formData.set("moderationNotifyEmail", notifyEmail);
+    moderationFetcher.submit(formData, { method: "post" });
   };
 
   return (
@@ -203,6 +300,75 @@ export default function SettingsPage() {
             />
             <Button type="button" variant="primary" onClick={handleSave} disabled={isSaving || !isAutomationAvailable}>
               {isSaving ? "Saving…" : "Save"}
+            </Button>
+          </Section>
+
+          <Section
+            title="Moderation Rules"
+            description="Automatically publish trustworthy reviews and hold the rest for your review — reducing manual moderation without a complex rules builder."
+          >
+            <Checkbox
+              label="Enable Moderation Rules"
+              checked={moderationEnabled}
+              onChange={setModerationEnabled}
+            />
+            <Select
+              label="Auto-publish reviews rated"
+              options={MIN_RATING_OPTIONS}
+              value={minRating}
+              disabled={!moderationEnabled}
+              onChange={setMinRating}
+            />
+            <Checkbox
+              label="Only auto-publish verified buyers"
+              checked={requireVerified}
+              disabled={!moderationEnabled}
+              onChange={setRequireVerified}
+            />
+            <Checkbox
+              label="Hold reviews containing links"
+              checked={holdLinks}
+              disabled={!moderationEnabled}
+              onChange={setHoldLinks}
+            />
+            <Checkbox
+              label="Hold reviews containing profanity"
+              checked={holdProfanity}
+              disabled={!moderationEnabled}
+              onChange={setHoldProfanity}
+            />
+            <TextField
+              label="Banned words"
+              value={bannedWords}
+              disabled={!moderationEnabled}
+              onChange={setBannedWords}
+              multiline={3}
+              autoComplete="off"
+              placeholder={"One word or phrase per line"}
+              helpText="A review containing any of these words or phrases is always held, regardless of rating."
+            />
+            <Checkbox
+              label="Email me when a review is held"
+              checked={notifyOnHold}
+              disabled={!moderationEnabled}
+              onChange={setNotifyOnHold}
+            />
+            <TextField
+              label="Notification email"
+              type="email"
+              autoComplete="off"
+              placeholder="you@example.com"
+              value={notifyEmail}
+              disabled={!moderationEnabled || !notifyOnHold}
+              onChange={setNotifyEmail}
+            />
+            <Button
+              type="button"
+              variant="primary"
+              onClick={handleSaveModeration}
+              disabled={isSavingModeration}
+            >
+              {isSavingModeration ? "Saving…" : "Save"}
             </Button>
           </Section>
 
