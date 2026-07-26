@@ -15,9 +15,21 @@
 }
 
 .skeletonShimmer {
-  background: linear-gradient(90deg, rgba(17, 17, 17, 0.06) 0%, rgba(17, 17, 17, 0.03) 50%, rgba(17, 17, 17, 0.06) 100%);
+  background: linear-gradient(
+    90deg,
+    color-mix(in srgb, var(--color-text) 6%, transparent) 0%,
+    color-mix(in srgb, var(--color-text) 3%, transparent) 50%,
+    color-mix(in srgb, var(--color-text) 6%, transparent) 100%
+  );
   background-size: 200% 100%;
   animation: shimmer 1.2s linear infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .skeletonShimmer {
+    animation: none;
+    background: color-mix(in srgb, var(--color-text) 5%, transparent);
+  }
 }
 
 /* Error panel — shown when a route's own data fetch fails. Tinted from --color-danger via

@@ -192,11 +192,11 @@ export default function BillingPage() {
   return (
     <>
       <Container as="main">
-        <div className={`${shellStyles.page} ${styles.page}`}>
-          <header className={styles.header}>
-            <p className={`${shellStyles.eyebrow} ${styles.eyebrow}`}>Imagyn Reviews</p>
-            <h1 className={`${shellStyles.title} ${styles.title}`}>Continue using Imagyn Reviews</h1>
-            <p className={styles.subtitle}>
+        <div className={shellStyles.page}>
+          <header className={`${shellStyles.header} ${styles.header}`}>
+            <p className={shellStyles.eyebrow}>Imagyn Reviews</p>
+            <h1 className={shellStyles.title}>Continue using Imagyn Reviews</h1>
+            <p className={shellStyles.subtitle}>
               Choose a plan to continue collecting reviews, sending review requests, and growing customer trust.
             </p>
             {snapshot.isDevelopmentStore ? (

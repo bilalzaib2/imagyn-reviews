@@ -499,12 +499,12 @@ export default function WidgetsPage() {
   return (
     <>
       <Container as="main">
-        <div className={`${shellStyles.page} ${styles.page}`}>
+        <div className={shellStyles.page}>
           <header className={`${shellStyles.header} ${styles.header}`}>
             <div className={shellStyles.headerContent}>
-              <p className={`${shellStyles.eyebrow} ${styles.eyebrow}`}>Imagyn Reviews</p>
-              <h1 className={`${shellStyles.title} ${styles.title}`}>Widgets</h1>
-              <p className={`${shellStyles.subtitle} ${styles.subtitle}`}>
+              <p className={shellStyles.eyebrow}>Imagyn Reviews</p>
+              <h1 className={shellStyles.title}>Widgets</h1>
+              <p className={shellStyles.subtitle}>
                 Customize how reviews present across your storefront.
               </p>
             </div>

@@ -1,26 +1,9 @@
-.page {
-  gap: var(--space-8);
-}
-
+/* .page/.eyebrow/.title/.subtitle intentionally not redeclared — see
+   app.products.module.css's header comment for why. Only .header stays local, to cap the
+   pricing intro's line length (40rem matches the same measure shellStyles.headerContent/
+   .subtitle already use elsewhere, not a one-off value). */
 .header {
-  display: grid;
-  gap: var(--space-3);
-  max-width: 640px;
-}
-
-.eyebrow {
-  margin: 0;
-}
-
-.title {
-  margin: 0;
-}
-
-.subtitle {
-  margin: 0;
-  font-size: var(--text-base);
-  line-height: 1.6;
-  color: var(--color-text-muted);
+  max-width: 40rem;
 }
 
 .devNote,

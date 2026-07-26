@@ -67,12 +67,6 @@
   background: var(--color-surface);
 }
 
-.input:focus,
-.textarea:focus {
-  outline: 2px solid var(--color-accent);
-  outline-offset: 1px;
-}
-
 .textarea {
   resize: vertical;
   min-height: 8rem;

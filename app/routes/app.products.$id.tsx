@@ -230,14 +230,14 @@ export default function ProductDetailPage() {
   return (
     <>
     <Container as="main">
-      <div className={`${shellStyles.page} ${styles.page}`}>
+      <div className={shellStyles.page}>
         <header className={`${shellStyles.header} ${styles.header}`}>
           <div className={shellStyles.headerContent}>
-            <p className={`${shellStyles.eyebrow} ${styles.eyebrow}`}>Imagyn Reviews</p>
-            <h1 className={`${shellStyles.title} ${styles.title}`}>
+            <p className={shellStyles.eyebrow}>Imagyn Reviews</p>
+            <h1 className={shellStyles.title}>
               {product ? product.name : "Product"}
             </h1>
-            <p className={`${shellStyles.subtitle} ${styles.subtitle}`}>
+            <p className={shellStyles.subtitle}>
               Product overview and connected reviews.
             </p>
           </div>

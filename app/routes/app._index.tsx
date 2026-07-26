@@ -8,6 +8,7 @@ import { StarRating } from "../components/reviews/StarRating";
 import { getStoreReviewStats } from "../services/review.server";
 import { getOrCreateStore } from "../services/store.server";
 import { authenticate } from "../shopify.server";
+import shellStyles from "../styles/app.shell.module.css";
 import styles from "../styles/app._index.module.css";
 
 export const loader = async ({ request }: LoaderFunctionArgs) => {
@@ -38,11 +39,11 @@ export default function Index() {
 
   return (
     <Container as="main">
-      <div className={styles.page}>
+      <div className={shellStyles.page}>
         <header className={styles.header}>
-          <p className={styles.eyebrow}>Imagyn Reviews</p>
-          <h1 className={styles.title}>Dashboard</h1>
-          <p className={styles.subtitle}>Monitor your reviews and customer feedback.</p>
+          <p className={shellStyles.eyebrow}>Imagyn Reviews</p>
+          <h1 className={shellStyles.title}>Dashboard</h1>
+          <p className={shellStyles.subtitle}>Monitor your reviews and customer feedback.</p>
         </header>
 
         <div className={styles.statsGrid}>

@@ -8,17 +8,35 @@
   cursor: pointer;
   font-weight: 600;
   line-height: 1;
-  padding: 0.8rem 1rem;
-  transition: transform 160ms ease, box-shadow 160ms ease, background-color 160ms ease;
+  padding: var(--space-3) var(--space-4);
+  transition: transform var(--transition-base), box-shadow var(--transition-base), background-color var(--transition-base), opacity var(--transition-base);
 }
 
 .button:hover {
   transform: translateY(-1px);
 }
 
-.button:focus-visible {
-  outline: 2px solid var(--color-accent);
-  outline-offset: 2px;
+.button:active {
+  transform: translateY(0);
+  transition-duration: 60ms;
+}
+
+.button:disabled {
+  cursor: not-allowed;
+  opacity: 0.5;
+  transform: none;
+  box-shadow: none;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .button {
+    transition: none;
+  }
+
+  .button:hover,
+  .button:active {
+    transform: none;
+  }
 }
 
 .primary {

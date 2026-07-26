@@ -175,12 +175,12 @@ export default function ProductsPage() {
   return (
     <>
       <Container as="main">
-        <div className={`${shellStyles.page} ${styles.page}`}>
+        <div className={shellStyles.page}>
           <header className={`${shellStyles.header} ${styles.header}`}>
             <div className={shellStyles.headerContent}>
-              <p className={`${shellStyles.eyebrow} ${styles.eyebrow}`}>Imagyn Reviews</p>
-              <h1 className={`${shellStyles.title} ${styles.title}`}>Products</h1>
-              <p className={`${shellStyles.subtitle} ${styles.subtitle}`}>
+              <p className={shellStyles.eyebrow}>Imagyn Reviews</p>
+              <h1 className={shellStyles.title}>Products</h1>
+              <p className={shellStyles.subtitle}>
                 Sync your Shopify catalog to connect products with reviews and widgets.
               </p>
             </div>

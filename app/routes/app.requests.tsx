@@ -575,12 +575,12 @@ export default function RequestsPage() {
   return (
     <>
       <Container as="main">
-      <div className={`${shellStyles.page} ${styles.page}`}>
+      <div className={shellStyles.page}>
           <header className={`${shellStyles.header} ${styles.header}`}>
             <div className={shellStyles.headerContent}>
-              <p className={`${shellStyles.eyebrow} ${styles.eyebrow}`}>Imagyn Reviews</p>
-              <h1 className={`${shellStyles.title} ${styles.title}`}>Requests</h1>
-              <p className={`${shellStyles.subtitle} ${styles.subtitle}`}>
+              <p className={shellStyles.eyebrow}>Imagyn Reviews</p>
+              <h1 className={shellStyles.title}>Requests</h1>
+              <p className={shellStyles.subtitle}>
                 Premium review request scheduling with clean merchant workflows and future-ready delivery architecture.
               </p>
             </div>
@@ -793,12 +793,15 @@ export default function RequestsPage() {
                   {selectedRequest ? (
                     <aside className={styles.detailPanel} aria-label="Request details">
                       <div className={styles.detailHeader}>
-                        <p className={styles.detailEyebrow}>Selected request</p>
+                        <p className={styles.detailEyebrow}>
+                          Selected request
+                          <span className={styles.detailSourceTag}>
+                            {" "}
+                            &middot; {selectedRequest.source === "order" ? "Automatic" : "Manual"}
+                          </span>
+                        </p>
                         <div className={styles.detailStatusRow}>
                           <RequestStatusBadge status={selectedRequest.status} />
-                          <span className={styles.detailSourceTag}>
-                            {selectedRequest.source === "order" ? "Automatic" : "Manual"}
-                          </span>
                         </div>
                         <h2 className={styles.detailTitle}>{selectedRequest.name ?? "Unnamed customer"}</h2>
                       </div>

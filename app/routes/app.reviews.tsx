@@ -672,12 +672,12 @@ export default function ReviewsPage() {
   return (
     <>
       <Container as="main">
-      <div className={`${shellStyles.page} ${styles.page}`}>
+      <div className={shellStyles.page}>
         <header className={`${shellStyles.header} ${styles.header}`}>
-          <div className={`${shellStyles.headerContent} ${styles.headerContent}`}>
-            <p className={`${shellStyles.eyebrow} ${styles.eyebrow}`}>Imagyn Reviews</p>
-            <h1 className={`${shellStyles.title} ${styles.title}`}>Reviews</h1>
-            <p className={`${shellStyles.subtitle} ${styles.subtitle}`}>
+          <div className={shellStyles.headerContent}>
+            <p className={shellStyles.eyebrow}>Imagyn Reviews</p>
+            <h1 className={shellStyles.title}>Reviews</h1>
+            <p className={shellStyles.subtitle}>
               Moderate feedback with live workflow actions and bulk operations.
             </p>
           </div>
