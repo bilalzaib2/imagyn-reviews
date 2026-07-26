@@ -36,8 +36,15 @@
     medium: "0 2px 8px rgba(0, 0, 0, 0.06)",
   };
   var BUTTON_STYLE = {
+    // A solid button's background must be a real, independently-resolving color, not
+    // currentColor/--imagyn-color-text — this same element's `color` is set to a literal
+    // white just below, and `background: currentColor` would resolve against THIS
+    // element's own (white) color, not an ambient/inherited one, producing an invisible
+    // white-on-white button. Outline/ghost don't have this problem: their background stays
+    // literally "transparent", so their currentColor-based text/border can safely refer to
+    // the ambient inherited color instead.
     solid: {
-      background: "var(--imagyn-color-text, #111111)",
+      background: "#111111",
       color: "var(--imagyn-color-surface, #ffffff)",
       borderColor: "transparent",
     },
