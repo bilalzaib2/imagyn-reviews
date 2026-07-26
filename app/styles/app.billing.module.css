@@ -1,0 +1,125 @@
+.page {
+  gap: var(--space-8);
+}
+
+.header {
+  display: grid;
+  gap: var(--space-3);
+  max-width: 640px;
+}
+
+.eyebrow {
+  margin: 0;
+}
+
+.title {
+  margin: 0;
+}
+
+.subtitle {
+  margin: 0;
+  font-size: var(--text-base);
+  line-height: 1.6;
+  color: var(--color-text-muted);
+}
+
+.devNote,
+.trialBanner,
+.frozenBanner {
+  margin: var(--space-2) 0 0;
+  font-size: var(--text-sm);
+  padding: var(--space-3) var(--space-4);
+  border-radius: var(--radius-md);
+  background: var(--color-surface-muted);
+  color: var(--color-text);
+  width: fit-content;
+}
+
+.frozenBanner {
+  background: #fbf1ef;
+  color: var(--color-danger);
+}
+
+.grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+  gap: var(--space-6);
+  align-items: stretch;
+}
+
+.card {
+  display: grid;
+  align-content: start;
+  gap: var(--space-3);
+  padding: var(--space-6);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  background: var(--color-surface);
+  position: relative;
+}
+
+.cardCurrent {
+  border-color: var(--color-accent);
+  box-shadow: var(--shadow-sm);
+}
+
+.currentBadge {
+  margin: 0;
+  font-size: var(--text-xs);
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--color-accent);
+  font-weight: 600;
+}
+
+.planName {
+  margin: 0;
+  font-size: var(--text-xl);
+  font-weight: 600;
+  color: var(--color-text);
+}
+
+.planPrice {
+  margin: 0;
+  font-size: var(--text-2xl);
+  font-weight: 600;
+  color: var(--color-text);
+}
+
+.planTagline {
+  margin: 0;
+  font-size: var(--text-sm);
+  color: var(--color-text-muted);
+  line-height: 1.5;
+}
+
+.trialNote {
+  margin: 0;
+  font-size: var(--text-xs);
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--color-text-muted);
+}
+
+.featureList {
+  margin: var(--space-2) 0;
+  padding: 0;
+  list-style: none;
+  display: grid;
+  gap: var(--space-2);
+}
+
+.featureList li {
+  font-size: var(--text-sm);
+  color: var(--color-text);
+  line-height: 1.5;
+  padding-left: var(--space-4);
+  position: relative;
+}
+
+.featureList li::before {
+  content: "✓";
+  position: absolute;
+  left: 0;
+  color: var(--color-text-muted);
+}

@@ -5,6 +5,7 @@ import { getOrCreateStore } from "../services/store.server";
 import { getProductForStoreByShopifyId } from "../services/product.server";
 import { reviewRequestService } from "../services/review-request.server";
 import { ORDER_AUTOMATION_ENABLED } from "../config/features";
+import { getPlanLimits, getStorePlanId } from "../services/billing/billing.server";
 
 interface FulfillmentLineItem {
   id: number;
@@ -46,6 +47,12 @@ export const action = async ({ request }: ActionFunctionArgs) => {
     const store = await getOrCreateStore(shop);
 
     if (!store.autoRequestEnabled) {
+      return new Response();
+    }
+
+    const plan = await getStorePlanId(store.id);
+    if (!getPlanLimits(plan).automaticReviewRequests) {
+      console.log(`Skipping ${topic} for ${shop}: automatic review requests require the Growth plan or higher.`);
       return new Response();
     }
 

@@ -4,6 +4,46 @@ Notable changes to Imagyn Reviews, newest first. Commit SHAs refer to `main`.
 
 ---
 
+## 2026-07-26
+
+### Added
+
+- **Shopify Billing** — three-tier subscription (Starter free, Growth $9.99/mo, Pro
+  $29.99/mo, both paid tiers with a 14-day free trial), built on Shopify's official Billing
+  API (`shopifyApp({ billing: {...} })` + `authenticate.admin().billing`), not a third-party
+  or off-platform billing system.
+  - `app/services/billing/plans.ts` — single source of truth for plan pricing, trial length,
+    and feature entitlements; both the pricing page and every feature gate read from here.
+  - `app/services/billing/billing.server.ts` — plan selection, upgrade/downgrade (via
+    `replacementBehavior: ApplyImmediately`, no manual cancel+recreate step), cancellation,
+    live reconciliation with Shopify (`syncBillingFromShopify`), and development-store
+    detection (`shop.plan.partnerDevelopment`, cached on `Store.isDevelopmentStore` after the
+    first check).
+  - `app/routes/app.billing.tsx` — the pricing/plan-selection page merchants land on both
+    voluntarily (via the new "Billing" nav item) and involuntarily (the access gate below).
+  - `app/routes/webhooks.app_subscriptions.update.tsx` — keeps `Store.plan`/`planStatus` in
+    sync when a subscription changes outside the app (trial ending, payment declined,
+    cancellation from Shopify's own subscription screen).
+  - **Centralized access control**: `app/routes/app.tsx`'s root loader (parent of every
+    `/app/*` route) redirects to `/app/billing` whenever a store has no active plan/trial and
+    isn't a development store — one gate, not scattered per-route checks. The billing page
+    itself, and everything outside `/app/*` (OAuth, webhooks), is exempt by construction.
+  - **Centralized feature gating**, enforced at the points that already exist (no new product
+    features were built to justify the tiers): the Starter plan's 50-published-review cap
+    (`review.server.ts`, both single and bulk approve), AI summaries (`aiSummary.server.ts`),
+    photo reviews (`reviewMedia.server.ts`, shared by the storefront widget and the review-link
+    page), and automatic review requests (`webhooks.fulfillments.create.tsx` /
+    `app.settings.tsx`, alongside the existing Protected-Customer-Data gate). Entitlements
+    listed on the pricing page that have no corresponding app feature yet (video reviews,
+    multiple email templates, advanced branding controls, priority support, future API access)
+    are recorded in `plans.ts` but intentionally not enforced anywhere — see
+    [DECISIONS.md](./DECISIONS.md).
+  - `Store.plan` / `planStatus` / `shopifySubscriptionId` / `trialEndsAt` /
+    `isDevelopmentStore` — migration `20260726082648_add_billing`, additive only, applied to
+    production (verified: no errors, all new columns present, existing row unaffected).
+  - New webhook subscription `app_subscriptions/update` added to `shopify.app.toml` — no new
+    OAuth scope required.
+
 ## 2026-07-22
 
 ### Added

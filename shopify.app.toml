@@ -24,6 +24,13 @@ api_version = "2026-10"
   uri = "/webhooks/app/uninstalled"
   topics = [ "app/uninstalled" ]
 
+  # Keeps Store.plan/planStatus in sync when a subscription changes outside the app's own
+  # billing page (trial ending, payment declined, merchant cancels from Shopify's own
+  # subscription screen). See app/services/billing/billing.server.ts's syncBillingFromShopify.
+  [[webhooks.subscriptions]]
+  uri = "/webhooks/app_subscriptions/update"
+  topics = [ "app_subscriptions/update" ]
+
 # fulfillments/create is intentionally NOT subscribed here. Shopify rejected deployment with
 # "This app is not approved to subscribe to webhook topics containing protected customer
 # data" — the topic's payload (destination address, customer email) requires completing

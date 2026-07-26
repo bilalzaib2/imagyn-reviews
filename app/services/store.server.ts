@@ -82,6 +82,37 @@ export async function updateAutoRequestSettings(
   });
 }
 
+// Shopify Billing state (app/services/billing/billing.server.ts) — this is the only place
+// that writes these columns, so the cache's write path stays in one function regardless of
+// which billing flow (plan selection, webhook, live reconciliation) triggered the update.
+export async function updateBillingState(
+  id: string,
+  data: {
+    plan: string;
+    planStatus: string;
+    shopifySubscriptionId?: string | null;
+    trialEndsAt?: Date | null;
+  },
+) {
+  return prisma.store.update({
+    where: {
+      id,
+    },
+    data,
+  });
+}
+
+export async function setDevelopmentStoreFlag(id: string, isDevelopmentStore: boolean) {
+  return prisma.store.update({
+    where: {
+      id,
+    },
+    data: {
+      isDevelopmentStore,
+    },
+  });
+}
+
 export async function deleteStore(id: string) {
   return prisma.store.delete({
     where: {

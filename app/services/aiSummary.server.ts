@@ -1,6 +1,7 @@
 import prisma from "../db.server";
 import { getAiProvider } from "./ai/provider.server";
 import { ReviewStatus } from "./review.shared";
+import { assertPlanFeature, getStorePlanId, PlanLimitError } from "./billing/billing.server";
 
 export interface ProductAiSummaryRecord {
   id: string;
@@ -88,12 +89,15 @@ async function getApprovedReviewCount(productId: string): Promise<number> {
 export async function regenerateAiSummary(productId: string): Promise<ProductAiSummaryRecord> {
   const product = await prisma.product.findUnique({
     where: { id: productId },
-    select: { id: true, name: true },
+    select: { id: true, name: true, storeId: true },
   });
 
   if (!product) {
     throw new Error("Product not found.");
   }
+
+  const plan = await getStorePlanId(product.storeId);
+  assertPlanFeature(plan, "aiSummaries", "AI review summaries require the Growth plan or higher.", "growth");
 
   const reviews = await prisma.review.findMany({
     where: { productId, deletedAt: null, status: ReviewStatus.APPROVED },
@@ -161,6 +165,12 @@ export async function maybeAutoRegenerateAiSummary(productId: string): Promise<v
 
     await regenerateAiSummary(productId);
   } catch (error) {
+    // A Starter-plan store hitting the AI-summaries plan gate is expected, not a failure —
+    // nothing to log. Any other error (AI provider issue, etc.) still gets logged.
+    if (error instanceof PlanLimitError) {
+      return;
+    }
+
     // Never let a background summary failure surface as a moderation-action error — the
     // merchant's approve/reject request already completed before this runs.
     console.error("[aiSummary] auto-regeneration failed:", error instanceof Error ? error.message : error);

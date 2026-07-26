@@ -1,6 +1,6 @@
 import type { MouseEvent } from "react";
 import type { HeadersFunction, LoaderFunctionArgs } from "react-router";
-import { Outlet, useLoaderData, useLocation, useNavigate, useNavigation, useRouteError } from "react-router";
+import { Outlet, redirect, useLoaderData, useLocation, useNavigate, useNavigation, useRouteError } from "react-router";
 import { boundary } from "@shopify/shopify-app-react-router/server";
 import { AppProvider } from "@shopify/shopify-app-react-router/react";
 import { AppProvider as PolarisAppProvider } from "@shopify/polaris";
@@ -8,10 +8,28 @@ import { NavMenu } from "@shopify/app-bridge-react";
 import enTranslations from "@shopify/polaris/locales/en.json";
 
 import { authenticate } from "../shopify.server";
+import { getOrCreateStore } from "../services/store.server";
+import { ensureDevelopmentStoreFlag, getBillingSnapshot } from "../services/billing/billing.server";
 import styles from "../styles/app.shell.module.css";
 
+// The billing page must stay reachable even for a store with no access — otherwise a
+// gated-out merchant could never reach the page that lets them fix that. This is the only
+// route exempted; every other /app/* route goes through the gate below.
+const BILLING_PATH = "/app/billing";
+
 export const loader = async ({ request }: LoaderFunctionArgs) => {
-  await authenticate.admin(request);
+  const { session, admin } = await authenticate.admin(request);
+
+  const url = new URL(request.url);
+  if (url.pathname !== BILLING_PATH) {
+    const store = await getOrCreateStore(session.shop);
+    const isDevelopmentStore = await ensureDevelopmentStoreFlag(admin, store);
+    const snapshot = getBillingSnapshot({ ...store, isDevelopmentStore });
+
+    if (!snapshot.hasAccess) {
+      throw redirect(`${BILLING_PATH}${url.search}`);
+    }
+  }
 
   // eslint-disable-next-line no-undef
   return { apiKey: process.env.SHOPIFY_API_KEY || "" };
@@ -32,6 +50,7 @@ export default function App() {
     { label: "Widgets", path: "/app/widgets" },
     { label: "Appearance", path: "/app/appearance" },
     { label: "Settings", path: "/app/settings" },
+    { label: "Billing", path: "/app/billing" },
   ];
 
   // NavMenu renders real <a> elements for Shopify Admin's own sidebar chrome. Left-clicking

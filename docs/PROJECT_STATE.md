@@ -2,7 +2,7 @@
 
 ## Current Phase
 
-Order Lifecycle Automation (Email Review Requests, connected to Shopify orders)
+App Store submission readiness (Shopify Billing shipped; hardening and polish next)
 
 ## Completed
 
@@ -15,11 +15,16 @@ Order Lifecycle Automation (Email Review Requests, connected to Shopify orders)
 -   Photo Upload
 -   Media Gallery
 -   JSON-LD Rich Snippets
--   Email Review Requests (token-secured public link, Resend provider)
+-   Email Review Requests (token-secured public link, Resend provider), full customer journey
+    verified end-to-end in production (email → review page → database → merchant dashboard)
 -   Order Lifecycle Automation — foundation (schema, service layer, bounded retry,
     queue-ready dispatch seam, admin UI: statuses, lifecycle timeline, automation settings).
     Manual review requests use this fully today.
 -   Appearance System (storefront design tokens)
+-   **Shopify Billing** — Starter (free) / Growth ($9.99/mo) / Pro ($29.99/mo), 14-day trial on
+    paid tiers, official Shopify Billing API, development-store bypass, centralized access
+    gate (`app.tsx`) and feature gating (`services/billing/`). See
+    [DECISIONS.md](./DECISIONS.md).
 
 ## Blocked
 
@@ -34,6 +39,6 @@ Order Lifecycle Automation (Email Review Requests, connected to Shopify orders)
 
 1.  Shopify Protected Customer Data approval → unblock order-triggered auto-creation
 2.  Resend inbound webhook (populates `delivered` / `opened` statuses)
-3.  Billing
+3.  App Store listing assets (screenshots, demo store, listing copy)
 4.  Widget Customization
 5.  Public Review Pages

@@ -9,6 +9,7 @@ import { Section } from "../components/ui/Section";
 import { authenticate } from "../shopify.server";
 import { getOrCreateStore, updateAutoRequestSettings } from "../services/store.server";
 import { sendTestReviewRequestEmail } from "../services/notifications/testEmail.server";
+import { getPlanLimits, getStorePlanId } from "../services/billing/billing.server";
 import { ORDER_AUTOMATION_ENABLED } from "../config/features";
 import shellStyles from "../styles/app.shell.module.css";
 import styles from "../styles/app.management.module.css";
@@ -17,6 +18,7 @@ type LoaderData = {
   autoRequestEnabled: boolean;
   autoRequestDelayDays: number;
   autoRequestTrigger: string;
+  planIncludesAutomaticRequests: boolean;
 };
 
 type ActionData = {
@@ -28,11 +30,13 @@ type ActionData = {
 export const loader = async ({ request }: LoaderFunctionArgs): Promise<LoaderData> => {
   const { session } = await authenticate.admin(request);
   const store = await getOrCreateStore(session.shop);
+  const plan = await getStorePlanId(store.id);
 
   return {
     autoRequestEnabled: store.autoRequestEnabled,
     autoRequestDelayDays: store.autoRequestDelayDays,
     autoRequestTrigger: store.autoRequestTrigger,
+    planIncludesAutomaticRequests: getPlanLimits(plan).automaticReviewRequests,
   };
 };
 
@@ -64,6 +68,11 @@ export const action = async ({ request }: ActionFunctionArgs): Promise<ActionDat
     return { ok: false, error: "Automatic review requests are not available yet." };
   }
 
+  const plan = await getStorePlanId(store.id);
+  if (!getPlanLimits(plan).automaticReviewRequests) {
+    return { ok: false, error: "Automatic review requests require the Growth plan or higher." };
+  }
+
   const autoRequestEnabled = formData.get("autoRequestEnabled") === "true";
   const autoRequestDelayDays = Number(formData.get("autoRequestDelayDays") || "0");
 
@@ -86,11 +95,13 @@ export const action = async ({ request }: ActionFunctionArgs): Promise<ActionDat
 const TRIGGER_OPTIONS = [{ label: "After fulfillment", value: "fulfillment" }];
 
 export default function SettingsPage() {
-  const { autoRequestEnabled, autoRequestDelayDays } = useLoaderData<typeof loader>();
+  const { autoRequestEnabled, autoRequestDelayDays, planIncludesAutomaticRequests } = useLoaderData<typeof loader>();
   const navigation = useNavigation();
   const isLoading = navigation.state !== "idle";
   const saveFetcher = useFetcher<ActionData>();
   const isSaving = saveFetcher.state !== "idle";
+
+  const isAutomationAvailable = ORDER_AUTOMATION_ENABLED && planIncludesAutomaticRequests;
 
   const [enabled, setEnabled] = useState(autoRequestEnabled);
   const [delayDays, setDelayDays] = useState(String(autoRequestDelayDays));
@@ -160,11 +171,16 @@ export default function SettingsPage() {
                 activate automatically once that&apos;s granted &mdash; manual review requests are unaffected
                 and fully available today.
               </Banner>
+            ) : !planIncludesAutomaticRequests ? (
+              <Banner tone="info">
+                Automatic review requests require the Growth plan or higher.{" "}
+                <a href="/app/billing">Upgrade to Growth</a> to turn this on.
+              </Banner>
             ) : null}
             <Checkbox
               label="Automatically request reviews after fulfillment"
-              checked={ORDER_AUTOMATION_ENABLED && enabled}
-              disabled={!ORDER_AUTOMATION_ENABLED}
+              checked={isAutomationAvailable && enabled}
+              disabled={!isAutomationAvailable}
               onChange={setEnabled}
             />
             <Select
@@ -181,11 +197,11 @@ export default function SettingsPage() {
               min={0}
               autoComplete="off"
               value={delayDays}
-              disabled={!ORDER_AUTOMATION_ENABLED}
+              disabled={!isAutomationAvailable}
               onChange={setDelayDays}
               helpText="How long to wait after fulfillment before sending the review request email."
             />
-            <Button type="button" variant="primary" onClick={handleSave} disabled={isSaving || !ORDER_AUTOMATION_ENABLED}>
+            <Button type="button" variant="primary" onClick={handleSave} disabled={isSaving || !isAutomationAvailable}>
               {isSaving ? "Saving…" : "Save"}
             </Button>
           </Section>

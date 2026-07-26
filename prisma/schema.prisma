@@ -52,6 +52,25 @@ model Store {
   autoRequestEnabled   Boolean @default(false)
   autoRequestDelayDays Int     @default(7)
   autoRequestTrigger   String  @default("fulfillment")
+
+  // Shopify Billing (see app/services/billing/). This is a local cache of Shopify's own
+  // billing state — kept in sync by the app_subscriptions/update webhook and by the billing
+  // page's own live billing.check() calls — so the access-control gate in app.tsx doesn't
+  // need a live Admin API round-trip on every page load. Shopify's Admin API remains the
+  // source of truth; this table can always be rebuilt from a fresh billing.check().
+  // plan: "starter" | "growth" | "pro". planStatus: "pending" | "active" | "trialing" |
+  // "cancelled" | "frozen" | "declined" — mirrors Shopify's AppSubscription.status (collapsed
+  // to what the access gate needs), plus "pending" for a store that has never explicitly
+  // chosen a plan yet (including Starter, which is free but still an explicit choice on the
+  // billing page) — this is what the access gate in app.tsx actually checks.
+  plan                 String    @default("starter")
+  planStatus           String    @default("pending")
+  shopifySubscriptionId String?
+  trialEndsAt          DateTime?
+  // Computed once via Admin GraphQL (shop.plan.partnerDevelopment) and cached — a store's
+  // development status essentially never changes in practice, so this avoids a live check on
+  // every request. Development stores always bypass billing entirely (see billing.server.ts).
+  isDevelopmentStore   Boolean?
 }
 
 model Product {

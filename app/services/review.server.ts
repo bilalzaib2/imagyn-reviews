@@ -2,6 +2,7 @@ import type { Prisma } from "@prisma/client";
 import prisma from "../db.server";
 import { maybeAutoRegenerateAiSummary } from "./aiSummary.server";
 import { HelpfulVoteValue, ReviewStatus } from "./review.shared";
+import { getPlanLimits, getStorePlanId, PlanLimitError } from "./billing/billing.server";
 
 export { HelpfulVoteValue, ReviewStatus };
 
@@ -426,6 +427,26 @@ export async function deleteReview(id: string) {
 async function setReviewStatus(id: string, status: typeof ReviewStatus.APPROVED | typeof ReviewStatus.REJECTED) {
   const existing = await requireReview(id);
 
+  // Only a transition INTO published state can push a store over its plan's published-review
+  // cap — re-approving an already-published review, or rejecting one, never needs this check.
+  if (status === ReviewStatus.APPROVED && !existing.isPublished) {
+    const plan = await getStorePlanId(existing.storeId);
+    const limit = getPlanLimits(plan).maxPublishedReviews;
+
+    if (limit !== null) {
+      const publishedCount = await prisma.review.count({
+        where: { storeId: existing.storeId, deletedAt: null, isPublished: true },
+      });
+
+      if (publishedCount >= limit) {
+        throw new PlanLimitError(
+          `The Starter plan is limited to ${limit} published reviews. Upgrade to Growth for unlimited reviews.`,
+          "growth",
+        );
+      }
+    }
+  }
+
   const review = await prisma.review.update({
     where: { id },
     data: { status, isPublished: status === ReviewStatus.APPROVED },
@@ -496,6 +517,38 @@ export async function bulkModerateReviews(
   }
 
   const affectedProductIds = await distinctProductIdsFor(ids);
+
+  // Same cap setReviewStatus enforces for a single approval, applied per store — bulk-approve
+  // is a separate updateMany() call, not a loop over setReviewStatus, so it needs its own check.
+  if (status === ReviewStatus.APPROVED) {
+    const targets = await prisma.review.findMany({
+      where: { id: { in: ids }, deletedAt: null, isPublished: false },
+      select: { storeId: true },
+    });
+
+    const storeIds = new Set(targets.map((target) => target.storeId));
+
+    for (const storeId of storeIds) {
+      const plan = await getStorePlanId(storeId);
+      const limit = getPlanLimits(plan).maxPublishedReviews;
+
+      if (limit === null) {
+        continue;
+      }
+
+      const alreadyPublished = await prisma.review.count({
+        where: { storeId, deletedAt: null, isPublished: true },
+      });
+      const aboutToApprove = targets.filter((target) => target.storeId === storeId).length;
+
+      if (alreadyPublished + aboutToApprove > limit) {
+        throw new PlanLimitError(
+          `The Starter plan is limited to ${limit} published reviews. Upgrade to Growth for unlimited reviews.`,
+          "growth",
+        );
+      }
+    }
+  }
 
   const result = await prisma.review.updateMany({
     where: { id: { in: ids }, deletedAt: null },
