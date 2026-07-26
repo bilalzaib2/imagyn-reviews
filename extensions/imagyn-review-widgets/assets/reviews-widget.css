@@ -13,8 +13,9 @@
 .imagyn-reviews__loading,
 .imagyn-reviews__empty,
 .imagyn-reviews__error {
-  font-size: 0.9em;
-  opacity: 0.75;
+  font-size: var(--imagyn-font-size-base, 15px);
+  color: var(--imagyn-color-text, inherit);
+  opacity: var(--imagyn-color-text-muted-opacity, 0.6);
 }
 
 /* Layout setting: list (default), grid, carousel. */
@@ -52,18 +53,32 @@
   border-radius: var(--imagyn-radius-md, var(--imagyn-border-radius, 4px));
   background: transparent;
   color: inherit;
+  opacity: 0.85;
+  transition:
+    opacity var(--imagyn-duration-fast, 120ms) var(--imagyn-easing, ease-out),
+    background-color var(--imagyn-duration-fast, 120ms) var(--imagyn-easing, ease-out);
+}
+
+.imagyn-reviews__load-more:hover {
+  opacity: 1;
+  background: rgba(0, 0, 0, 0.03);
+}
+
+.imagyn-reviews__load-more:focus-visible {
+  outline: 2px solid var(--imagyn-color-focus, #2563eb);
+  outline-offset: 2px;
 }
 
 .imagyn-reviews__write {
   margin-top: 1.5em;
   padding-top: 1.5em;
-  border-top: 1px solid var(--imagyn-border-color, rgba(0, 0, 0, 0.08));
+  border-top: 1px solid var(--imagyn-color-border, var(--imagyn-border-color, rgba(0, 0, 0, 0.08)));
 }
 
 .imagyn-reviews__form {
   display: flex;
   flex-direction: column;
-  gap: 0.9em;
+  gap: var(--imagyn-space-px-md, 16px);
   max-width: 28em;
   margin-top: 1em;
   text-align: left;
@@ -79,55 +94,102 @@
 .imagyn-reviews__field {
   display: flex;
   flex-direction: column;
-  gap: 0.3em;
+  gap: var(--imagyn-space-2xs, 0.3em);
 }
 
 .imagyn-reviews__field label {
-  font-size: 0.85em;
-  font-weight: 600;
+  font-size: var(--imagyn-font-size-sm, 13px);
+  font-weight: var(--imagyn-font-weight-semibold, 600);
+  color: var(--imagyn-color-text, inherit);
 }
 
 .imagyn-reviews__field input,
 .imagyn-reviews__field textarea {
   font: inherit;
-  padding: 0.55em 0.7em;
-  border: 1px solid rgba(0, 0, 0, 0.2);
-  border-radius: var(--imagyn-border-radius, 4px);
-  background: #fff;
-  color: #111;
+  font-size: var(--imagyn-font-size-base, 15px);
+  min-height: 44px;
+  padding: 0.6em 0.8em;
+  border: 1px solid var(--imagyn-color-border, rgba(0, 0, 0, 0.16));
+  border-radius: var(--imagyn-radius-md, var(--imagyn-border-radius, 8px));
+  background: var(--imagyn-color-surface, #fff);
+  color: var(--imagyn-color-text, #111);
+  transition:
+    border-color var(--imagyn-duration-fast, 120ms) var(--imagyn-easing, ease-out),
+    box-shadow var(--imagyn-duration-fast, 120ms) var(--imagyn-easing, ease-out);
+}
+
+.imagyn-reviews__field textarea {
+  min-height: 8em;
+  resize: vertical;
+}
+
+.imagyn-reviews__field input:hover,
+.imagyn-reviews__field textarea:hover {
+  border-color: var(--imagyn-color-text, rgba(0, 0, 0, 0.3));
+}
+
+.imagyn-reviews__field input:focus,
+.imagyn-reviews__field textarea:focus {
+  outline: none;
+  border-color: var(--imagyn-color-focus, #2563eb);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--imagyn-color-focus, #2563eb) 15%, transparent);
 }
 
 .imagyn-reviews__rating-picker {
   display: flex;
-  gap: 0.2em;
+  gap: var(--imagyn-space-3xs, 0.2em);
 }
 
 .imagyn-reviews__star-btn {
-  font-size: 1.4em;
+  font-size: 1.5em;
   line-height: 1;
   cursor: pointer;
   border: none;
   background: transparent;
-  color: var(--imagyn-star-color, #f5a623);
-  padding: 0.1em;
+  color: var(--imagyn-color-star, var(--imagyn-star-color, #f5a623));
+  padding: 0.15em;
+  border-radius: var(--imagyn-radius-sm, 4px);
+  transition:
+    transform var(--imagyn-duration-fast, 120ms) var(--imagyn-easing, ease-out),
+    opacity var(--imagyn-duration-fast, 120ms) var(--imagyn-easing, ease-out);
+}
+
+.imagyn-reviews__star-btn:hover {
+  transform: scale(1.12);
+}
+
+.imagyn-reviews__star-btn:focus-visible {
+  outline: 2px solid var(--imagyn-color-focus, #2563eb);
+  outline-offset: 2px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .imagyn-reviews__star-btn {
+    transition: none;
+  }
+
+  .imagyn-reviews__star-btn:hover {
+    transform: none;
+  }
 }
 
 .imagyn-reviews__form-error {
-  color: #c0392b;
-  font-size: 0.85em;
+  color: var(--imagyn-color-danger, #c0392b);
+  font-size: var(--imagyn-font-size-sm, 13px);
   margin: 0;
 }
 
 .imagyn-reviews__form-success {
-  color: #1e7e34;
-  font-size: 0.85em;
+  color: var(--imagyn-color-success, #1a7f4b);
+  font-size: var(--imagyn-font-size-sm, 13px);
   margin: 0;
 }
 
 .imagyn-reviews__submit {
   font: inherit;
   cursor: pointer;
-  padding: 0.65em 1.2em;
+  min-height: 44px;
+  padding: 0.65em 1.4em;
   border-radius: var(--imagyn-radius-md, var(--imagyn-border-radius, 4px));
   width: fit-content;
   /* Brand Studio's Button Style (Filled/Outline/Ghost) — same three variables the
@@ -137,6 +199,22 @@
   background: var(--imagyn-btn-background, var(--imagyn-button-color, #111));
   color: var(--imagyn-btn-color, #fff);
   border: var(--imagyn-border-width, 1px) solid var(--imagyn-btn-border-color, transparent);
+  transition:
+    opacity var(--imagyn-duration-fast, 120ms) var(--imagyn-easing, ease-out),
+    transform var(--imagyn-duration-fast, 120ms) var(--imagyn-easing, ease-out);
+}
+
+.imagyn-reviews__submit:hover:not(:disabled) {
+  opacity: 0.9;
+}
+
+.imagyn-reviews__submit:active:not(:disabled) {
+  transform: scale(0.98);
+}
+
+.imagyn-reviews__submit:focus-visible {
+  outline: 2px solid var(--imagyn-color-focus, #2563eb);
+  outline-offset: 2px;
 }
 
 .imagyn-reviews__submit:disabled {
@@ -144,16 +222,104 @@
   cursor: not-allowed;
 }
 
+@media (prefers-reduced-motion: reduce) {
+  .imagyn-reviews__submit {
+    transition: none;
+  }
+
+  .imagyn-reviews__submit:active:not(:disabled) {
+    transform: none;
+  }
+}
+
+/*
+ * Custom upload dropzone (Apple Polish Sprint) — replaces the bare native
+ * <input type="file"> entirely. The real input is still present and still the thing
+ * that's actually clicked/focused/keyboard-activated (kept accessible, just visually
+ * invisible via opacity, not display:none or visibility:hidden), covering the full box;
+ * drag-and-drop is handled on the wrapper directly (see reviews-widget.js), reading files
+ * from the DataTransfer rather than relying on the input receiving the drop.
+ */
+.imagyn-upload {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: var(--imagyn-space-3xs, 0.2em);
+  padding: var(--imagyn-space-px-lg, 24px) var(--imagyn-space-px-md, 16px);
+  border: 1.5px dashed var(--imagyn-color-border, rgba(0, 0, 0, 0.18));
+  border-radius: var(--imagyn-radius-md, var(--imagyn-border-radius, 8px));
+  background: var(--imagyn-color-surface, #fff);
+  text-align: center;
+  cursor: pointer;
+  transition:
+    border-color var(--imagyn-duration-fast, 120ms) var(--imagyn-easing, ease-out),
+    background-color var(--imagyn-duration-fast, 120ms) var(--imagyn-easing, ease-out);
+}
+
+.imagyn-upload:hover {
+  border-color: var(--imagyn-color-text, rgba(0, 0, 0, 0.32));
+  background: rgba(0, 0, 0, 0.015);
+}
+
+.imagyn-upload--focused {
+  outline: 2px solid var(--imagyn-color-focus, #2563eb);
+  outline-offset: 2px;
+}
+
+.imagyn-upload--dragover {
+  border-color: var(--imagyn-color-star, #f5a623);
+  border-style: solid;
+  background: color-mix(in srgb, var(--imagyn-color-star, #f5a623) 8%, transparent);
+}
+
+.imagyn-upload__input {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  margin: 0;
+  padding: 0;
+  opacity: 0;
+  cursor: pointer;
+}
+
+.imagyn-upload__icon {
+  width: 28px;
+  height: 28px;
+  color: var(--imagyn-color-text, inherit);
+  opacity: var(--imagyn-color-text-muted-opacity, 0.6);
+  pointer-events: none;
+}
+
+.imagyn-upload__primary {
+  margin: var(--imagyn-space-2xs, 0.3em) 0 0;
+  font-size: var(--imagyn-font-size-base, 15px);
+  font-weight: var(--imagyn-font-weight-medium, 500);
+  color: var(--imagyn-color-text, inherit);
+  pointer-events: none;
+}
+
+.imagyn-upload__secondary {
+  margin: 0;
+  font-size: var(--imagyn-font-size-sm, 13px);
+  color: var(--imagyn-color-text, inherit);
+  opacity: var(--imagyn-color-text-muted-opacity, 0.6);
+  pointer-events: none;
+}
+
 .imagyn-reviews__photo-hint {
   margin: 0;
-  font-size: 0.8em;
-  opacity: 0.65;
+  font-size: var(--imagyn-font-size-xs, 12px);
+  color: var(--imagyn-color-text, inherit);
+  opacity: var(--imagyn-color-text-muted-opacity, 0.6);
 }
 
 .imagyn-reviews__photo-previews {
   display: flex;
   flex-wrap: wrap;
-  gap: 0.5em;
+  gap: var(--imagyn-space-px-sm, 12px);
 }
 
 .imagyn-reviews__photo-previews:empty {
@@ -162,11 +328,29 @@
 
 .imagyn-reviews__photo-preview {
   position: relative;
-  width: 64px;
-  height: 64px;
+  width: 72px;
+  height: 72px;
   border-radius: var(--imagyn-radius-sm, 4px);
   overflow: hidden;
-  border: 1px solid rgba(0, 0, 0, 0.15);
+  border: 1px solid var(--imagyn-color-border, rgba(0, 0, 0, 0.15));
+  transition:
+    transform var(--imagyn-duration-fast, 120ms) var(--imagyn-easing, ease-out),
+    box-shadow var(--imagyn-duration-fast, 120ms) var(--imagyn-easing, ease-out);
+}
+
+.imagyn-reviews__photo-preview:hover {
+  transform: translateY(-2px);
+  box-shadow: var(--imagyn-shadow-sm, 0 1px 2px rgba(0, 0, 0, 0.05));
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .imagyn-reviews__photo-preview {
+    transition: none;
+  }
+
+  .imagyn-reviews__photo-preview:hover {
+    transform: none;
+  }
 }
 
 .imagyn-reviews__photo-preview img {
@@ -176,10 +360,21 @@
   object-fit: cover;
 }
 
+/* Reserved: a future per-file real upload-progress indicator (e.g. a semi-transparent
+   overlay + spinner) can toggle this modifier on an individual thumbnail without any
+   markup change — not wired to anything today, since photos currently upload as one
+   batch at submit time, not per-file. */
+.imagyn-reviews__photo-preview--uploading::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: rgba(255, 255, 255, 0.6);
+}
+
 .imagyn-reviews__photo-remove {
   position: absolute;
-  top: 2px;
-  right: 2px;
+  top: 3px;
+  right: 3px;
   width: 20px;
   height: 20px;
   display: inline-flex;
@@ -187,12 +382,22 @@
   justify-content: center;
   border: none;
   border-radius: 999px;
-  background: rgba(0, 0, 0, 0.6);
+  background: rgba(0, 0, 0, 0.55);
   color: #fff;
   font-size: 13px;
   line-height: 1;
   cursor: pointer;
   padding: 0;
+  transition: background-color var(--imagyn-duration-fast, 120ms) var(--imagyn-easing, ease-out);
+}
+
+.imagyn-reviews__photo-remove:hover {
+  background: rgba(0, 0, 0, 0.75);
+}
+
+.imagyn-reviews__photo-remove:focus-visible {
+  outline: 2px solid #fff;
+  outline-offset: 1px;
 }
 
 .imagyn-reviews__upload-progress {
@@ -205,7 +410,7 @@
 .imagyn-reviews__upload-progress-bar {
   height: 100%;
   width: 0%;
-  background: var(--imagyn-button-color, #111);
+  background: var(--imagyn-btn-background, var(--imagyn-button-color, #111));
   transition: width 150ms ease-out;
 }
 
@@ -237,6 +442,11 @@
   border-radius: var(--imagyn-radius-sm, 4px);
   padding: 0.3em 0.5em;
   cursor: pointer;
+  transition: border-color var(--imagyn-duration-fast, 120ms) var(--imagyn-easing, ease-out);
+}
+
+.imagyn-reviews__sort-select:hover {
+  border-color: var(--imagyn-color-text, rgba(0, 0, 0, 0.3));
 }
 
 .imagyn-reviews__sort-select:focus-visible {

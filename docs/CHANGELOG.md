@@ -8,6 +8,23 @@ Notable changes to Imagyn Reviews, newest first. Commit SHAs refer to `main`.
 
 ### Added
 
+- **Apple Polish Sprint — storefront review widget craftsmanship pass.** The native
+  `<input type="file">` "Choose Files" control (the one visibly dated element in an
+  otherwise modern widget) is replaced with a custom dropzone: a bordered, centered upload
+  area with a minimal line icon, "Drag & drop photos" / "or click to upload" copy, and
+  hover/drag-over/focus states — the real file input is still there and still what's
+  actually clicked/focused (kept accessible via opacity, not `display:none`), just visually
+  invisible, so keyboard and screen-reader behavior are unchanged. Drag-and-drop is new:
+  files dropped directly onto the box are read from the `DataTransfer` through the same
+  validation path as a click-selected file. Thumbnails gained a hover lift, and a reserved
+  (unused) `--uploading` modifier for a future per-file progress overlay. A wider polish
+  pass covered every form control in the widget: 44px touch targets, hover/focus-visible
+  states and transitions on every input/textarea/select/button that had none before,
+  tokenized colors throughout (a new `--imagyn-color-danger` token joins the existing
+  `--imagyn-color-success`), and the Load More/Sort controls got the same hover/focus
+  treatment. No layout, copy (beyond the upload area's own), or behavior changed anywhere
+  else. See [DECISIONS.md](./DECISIONS.md).
+
 - **Brand Studio wired to the live storefront.** Most of the wiring already existed (Card
   Style, Border Radius on review cards, Accent Color on stars) — this closed the remaining
   gap: the real "Submit review" button now reflects Button Style (Filled/Outline/Ghost) and

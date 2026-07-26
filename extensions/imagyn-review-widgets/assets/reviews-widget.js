@@ -952,13 +952,21 @@
       '<textarea id="imagyn-reviews-content" data-imagyn-field="content" rows="4" required></textarea>' +
       "</div>" +
       '<div class="imagyn-reviews__field">' +
-      '<label for="imagyn-reviews-photos">Add photos (optional)</label>' +
-      '<input type="file" id="imagyn-reviews-photos" data-imagyn-photo-input accept="' +
-      ALLOWED_IMAGE_TYPES.join(",") +
-      '" multiple>' +
-      '<p class="imagyn-reviews__photo-hint" data-imagyn-photo-hint>Up to ' +
+      '<label id="imagyn-reviews-photos-label">Add photos (optional)</label>' +
+      '<div class="imagyn-upload" data-imagyn-upload tabindex="-1">' +
+      '<input type="file" id="imagyn-reviews-photos" class="imagyn-upload__input" data-imagyn-photo-input ' +
+      'accept="' + ALLOWED_IMAGE_TYPES.join(",") + '" multiple ' +
+      'aria-labelledby="imagyn-reviews-photos-label" aria-describedby="imagyn-reviews-photos-hint">' +
+      '<svg class="imagyn-upload__icon" viewBox="0 0 24 24" aria-hidden="true">' +
+      '<path d="M12 16V4m0 0-4 4m4-4 4 4" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"></path>' +
+      '<path d="M4 15v3.5A1.5 1.5 0 0 0 5.5 20h13a1.5 1.5 0 0 0 1.5-1.5V15" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"></path>' +
+      "</svg>" +
+      '<p class="imagyn-upload__primary">Drag &amp; drop photos</p>' +
+      '<p class="imagyn-upload__secondary">or click to upload</p>' +
+      "</div>" +
+      '<p class="imagyn-reviews__photo-hint" id="imagyn-reviews-photos-hint" data-imagyn-photo-hint>PNG, JPG, WEBP • Up to ' +
       MAX_REVIEW_IMAGES +
-      " photos, 5MB max each.</p>" +
+      " images • 5 MB each</p>" +
       '<div class="imagyn-reviews__photo-previews" data-imagyn-photo-previews></div>' +
       "</div>" +
       '<div class="imagyn-reviews__upload-progress" data-imagyn-upload-progress hidden>' +
@@ -976,6 +984,7 @@
     var starButtons = Array.prototype.slice.call(writeEl.querySelectorAll("[data-rating-value]"));
     var selectedRating = 0;
 
+    var uploadEl = writeEl.querySelector("[data-imagyn-upload]");
     var photoInput = writeEl.querySelector("[data-imagyn-photo-input]");
     var photoPreviewsEl = writeEl.querySelector("[data-imagyn-photo-previews]");
     var progressEl = writeEl.querySelector("[data-imagyn-upload-progress]");
@@ -1044,12 +1053,11 @@
         .join("");
     }
 
-    photoInput.addEventListener("change", function () {
-      var files = Array.prototype.slice.call(photoInput.files || []);
-      // Reset immediately so the browser doesn't keep rejected/duplicate files selected,
-      // and so picking the same file again later re-fires the change event.
-      photoInput.value = "";
-
+    // Shared by both the native input's change event (click-to-upload) and the wrapper's
+    // drop event (drag-and-drop) — one validation/append path regardless of how a file
+    // arrived.
+    function addFiles(fileList) {
+      var files = Array.prototype.slice.call(fileList || []);
       var rejectionMessage = null;
 
       files.forEach(function (file) {
@@ -1071,6 +1079,52 @@
       renderPhotoPreviews();
       if (rejectionMessage) {
         showError(rejectionMessage);
+      }
+    }
+
+    photoInput.addEventListener("change", function () {
+      addFiles(photoInput.files);
+      // Reset immediately so the browser doesn't keep rejected/duplicate files selected,
+      // and so picking the same file again later re-fires the change event.
+      photoInput.value = "";
+    });
+
+    photoInput.addEventListener("focus", function () {
+      uploadEl.classList.add("imagyn-upload--focused");
+    });
+
+    photoInput.addEventListener("blur", function () {
+      uploadEl.classList.remove("imagyn-upload--focused");
+    });
+
+    // The native input already covers the whole box for click-to-upload and keyboard
+    // access; these three just add the visual drag-over state and read the dropped files
+    // directly from the DataTransfer (the input itself never receives the drop).
+    var dragDepth = 0;
+
+    uploadEl.addEventListener("dragenter", function (event) {
+      event.preventDefault();
+      dragDepth += 1;
+      uploadEl.classList.add("imagyn-upload--dragover");
+    });
+
+    uploadEl.addEventListener("dragover", function (event) {
+      event.preventDefault();
+    });
+
+    uploadEl.addEventListener("dragleave", function () {
+      dragDepth = Math.max(0, dragDepth - 1);
+      if (dragDepth === 0) {
+        uploadEl.classList.remove("imagyn-upload--dragover");
+      }
+    });
+
+    uploadEl.addEventListener("drop", function (event) {
+      event.preventDefault();
+      dragDepth = 0;
+      uploadEl.classList.remove("imagyn-upload--dragover");
+      if (event.dataTransfer && event.dataTransfer.files) {
+        addFiles(event.dataTransfer.files);
       }
     });
 

@@ -244,3 +244,40 @@
     bundle of the same categories (typography, spacing, corners, borders, buttons,
     reviewCards, cards) already resolved above, so once each category's real storefront
     consumer was fixed, presets render correctly by construction.
+
+## Apple Polish Sprint — storefront review widget (2026-07-26)
+
+-   **The native file input is hidden via opacity, not `display: none`/`visibility:
+    hidden`.** It's absolutely positioned to cover the entire custom dropzone
+    (`.imagyn-upload`) and stays the actual thing that receives click/keyboard/focus —
+    Tab reaches it, Enter/Space opens the OS file picker, screen readers announce it via
+    `aria-labelledby`/`aria-describedby` pointing at the visible label/hint text. This is
+    the standard, most robust pattern for a custom-styled file input specifically because
+    it costs nothing in accessibility versus a from-scratch ARIA widget.
+-   **Drag-and-drop reads `DataTransfer.files` directly on the wrapper's `drop` event**,
+    not by forwarding the drop onto the (invisible but present) native input — simpler, and
+    means the exact same `addFiles()` validation function (extracted from the old inline
+    `change` handler) runs regardless of whether a file arrived by click or by drop, so
+    there's exactly one place that enforces the type/size/count limits.
+-   **The drag-over accent border/tint uses `--imagyn-color-star`** (Brand Studio's Accent
+    Color), not a hardcoded blue — a merchant's configured brand color shows up the moment
+    they're about to drop a file in, a small but deliberate tie-back to the Brand Studio
+    work earlier this session. The focus ring still uses `--imagyn-color-focus` (unrelated
+    to brand color, matching every other focus ring in the system).
+-   **`color-mix()`** is used for the drag-over tint and the input focus ring's soft glow
+    (`color-mix(in srgb, var(--imagyn-color-focus) 15%, transparent)`) rather than a second
+    hardcoded rgba per color — assumed safe for a 2026 storefront-visitor browser base
+    (broadly supported in evergreen browsers); if unsupported, the property is simply
+    ignored (no tint/glow), not a crash.
+-   **New `--imagyn-color-danger` token** (`#c0392b`, imagyn-tokens.css) joins the existing
+    `--imagyn-color-success` — purely a tokenization of a color that was already hardcoded
+    in `.imagyn-reviews__form-error`, not a new merchant-facing setting.
+-   **A `--uploading` thumbnail modifier class exists in CSS but is never toggled by any
+    JS** — reserved for a future real per-file upload-progress indicator, matching this
+    codebase's established "reserved category" precedent (buttons/stars/images tokens
+    elsewhere) rather than wiring a fake progress state that doesn't reflect anything real
+    (photos currently upload as one batch at submit time, not per-file).
+-   **Scope held to the write-review form and its immediate surroundings** (Load More,
+    Sort) — the Review Card, Summary, and Badge components were already on the fully
+    tokenized, polished system from earlier Appearance System work and needed no changes
+    here.
