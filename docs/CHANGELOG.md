@@ -17,6 +17,16 @@ Notable changes to Imagyn Reviews, newest first. Commit SHAs refer to `main`.
   "Appearance" tab was changed or removed — it still works exactly as before for every
   property Brand Studio doesn't claim. See [DECISIONS.md](./DECISIONS.md).
 
+### Fixed
+
+- **Solid Button Style rendered a white-on-white "Submit review" button** on a real
+  development-store page — found during live verification of the storefront wiring above,
+  not caught by typecheck/build/lint since it was a runtime CSS `currentColor` circularity
+  (the button's background was set to `currentColor`/`--imagyn-color-text` while the same
+  element's own `color` was independently set to white, so the background resolved against
+  that same white). Fixed by giving "solid" a plain literal background instead. Outline and
+  Ghost were unaffected.
+
 - **Brand Studio UX polish pass.** The page (still at `/app/appearance`) and nav item are
   now branded "Brand Studio" throughout the UI. Every color field is a native swatch + hex
   pair — no field ever shows a merchant raw `rgba(...)` — while transparent, theme-adaptive
