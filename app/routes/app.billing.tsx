@@ -112,9 +112,13 @@ function PlanCard({
   isBusy: boolean;
 }) {
   const isCurrent = snapshot.plan === plan.id;
+  const isPopular = plan.id === "growth" && !isCurrent;
 
   return (
-    <div className={`${styles.card} ${isCurrent ? styles.cardCurrent : ""}`}>
+    <div
+      className={`${styles.card} ${isCurrent ? styles.cardCurrent : ""} ${isPopular ? styles.cardPopular : ""}`}
+    >
+      {isPopular ? <p className={styles.popularBadge}>Most Popular</p> : null}
       {isCurrent ? <p className={styles.currentBadge}>Current plan</p> : null}
       <p className={styles.planName}>{plan.name}</p>
       <p className={styles.planPrice}>{formatPrice(plan)}</p>

@@ -220,6 +220,14 @@ export async function selectStarterPlan(storeId: string) {
   });
 }
 
+// Shopify's Billing API requires returnUrl as a fully-qualified `URL!` GraphQL scalar — a
+// relative path fails with 'Variable "$returnUrl" of type URL! was provided invalid value.'
+// Same env-var precedent as review-request.server.ts's buildReviewUrl.
+function buildBillingReturnUrl(): string {
+  const appUrl = process.env.SHOPIFY_APP_URL || process.env.APP_URL || "http://127.0.0.1:3000";
+  return `${appUrl.replace(/\/$/, "")}/app/billing`;
+}
+
 // Always throws (redirects to Shopify's charge confirmation screen) — matches the SDK's own
 // billing.request() contract. isTest must be passed explicitly: the SDK defaults it to `true`,
 // which would silently create a non-billing test charge for a real merchant if left unset.
@@ -231,7 +239,7 @@ export async function requestPaidPlan(
   return billing.request({
     plan: planId === "growth" ? "Growth" : "Pro",
     isTest: isDevelopmentStore,
-    returnUrl: "/app/billing",
+    returnUrl: buildBillingReturnUrl(),
     replacementBehavior: BillingReplacementBehavior.ApplyImmediately,
   });
 }

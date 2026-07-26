@@ -43,7 +43,7 @@
 .grid {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
-  gap: var(--space-6);
+  gap: var(--space-8);
   align-items: stretch;
 }
 
@@ -51,7 +51,7 @@
   display: grid;
   align-content: start;
   gap: var(--space-3);
-  padding: var(--space-6);
+  padding: var(--space-8) var(--space-6);
   border: 1px solid var(--color-border);
   border-radius: var(--radius-lg);
   background: var(--color-surface);
@@ -61,6 +61,21 @@
 .cardCurrent {
   border-color: var(--color-accent);
   box-shadow: var(--shadow-sm);
+}
+
+.cardPopular {
+  border-color: var(--color-accent);
+  background: linear-gradient(180deg, var(--color-accent-soft) 0%, var(--color-surface) 140px);
+  box-shadow: var(--shadow-sm);
+}
+
+.popularBadge {
+  margin: 0;
+  font-size: var(--text-xs);
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--color-accent);
+  font-weight: 600;
 }
 
 .currentBadge {
