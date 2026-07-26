@@ -9,9 +9,10 @@ import { Section } from "../components/ui/Section";
 import { authenticate } from "../shopify.server";
 import { getOrCreateStore } from "../services/store.server";
 import { appearanceService } from "../services/appearance.server";
-import { appearancePresets } from "../services/appearance.presets";
+import { appearancePresets, type AppearancePresetDefinition } from "../services/appearance.presets";
 import {
   getDefaultAppearanceTokens,
+  mergeAppearanceTokens,
   type AppearancePreset,
   type AppearanceTokens,
 } from "../services/appearance.shared";
@@ -35,7 +36,7 @@ export const loader = async ({ request }: LoaderFunctionArgs): Promise<LoaderDat
 
   return {
     tokens: active?.tokens ?? getDefaultAppearanceTokens(),
-    preset: active?.preset ?? "custom",
+    preset: active?.preset ?? "editorial",
   };
 };
 
@@ -103,7 +104,19 @@ export default function AppearancePage() {
   }, [fetcher.data]);
 
   const update = <C extends keyof AppearanceTokens>(category: C, patch: Partial<AppearanceTokens[C]>) => {
+    setPreset("custom");
     setDraftTokens((current) => ({ ...current, [category]: { ...current[category], ...patch } }));
+  };
+
+  // A Widget Style preset only carries structural categories (typography scale, spacing,
+  // corners, borders, buttons, card treatment) — never `colors`, so switching styles never
+  // overwrites the merchant's own Accent Color. mergeAppearanceTokens's second argument
+  // (base) is the current draft, not the documented defaults, for exactly that reason.
+  const handlePresetSelect = (definition: AppearancePresetDefinition) => {
+    setPreset(definition.id);
+    if (definition.tokens) {
+      setDraftTokens((current) => mergeAppearanceTokens(definition.tokens, current));
+    }
   };
 
   const handleSave = () => {
@@ -116,6 +129,8 @@ export default function AppearancePage() {
   const handleDiscard = () => {
     setDraftTokens(baselineTokens);
   };
+
+  const isBoxed = draftTokens.reviewCards.separator === "boxed";
 
   return (
     <>
@@ -133,53 +148,92 @@ export default function AppearancePage() {
           </header>
 
           <div className={styles.layout}>
-            <div className={styles.previewColumn}>
-              <div className={styles.previewCard}>
-                <iframe
-                  ref={previewFrameRef}
-                  className={styles.previewFrame}
-                  src="/appearance-preview"
-                  title="Appearance live preview"
-                  onLoad={() =>
-                    previewFrameRef.current?.contentWindow?.postMessage(
-                      { source: "imagyn-appearance-draft", tokens: draftTokens },
-                      "*",
-                    )
-                  }
-                />
-              </div>
-
-              <div className={styles.presetRow}>
-                {appearancePresets.map((definition) =>
-                  definition.available ? (
-                    <button
-                      key={definition.id}
-                      type="button"
-                      className={`${styles.presetPill} ${preset === definition.id ? styles.presetPillActive : ""}`}
-                      onClick={() => setPreset(definition.id)}
-                    >
-                      {definition.label}
-                    </button>
-                  ) : (
-                    <span key={definition.id} className={`${styles.presetPill} ${styles.presetPillDisabled}`}>
-                      {definition.label}
-                      <span className={styles.comingSoonTag}>Soon</span>
-                    </span>
-                  ),
-                )}
-              </div>
-
-              <div className={styles.actionsBar}>
-                <Button variant="primary" onClick={handleSave} disabled={!hasUnsavedChanges || isSaving}>
-                  Save
-                </Button>
-                <Button variant="secondary" onClick={handleDiscard} disabled={!hasUnsavedChanges || isSaving}>
-                  Discard
-                </Button>
-              </div>
-            </div>
-
             <div className={styles.settingsColumn}>
+              <Section title="Widget Style" description="A complete look, applied instantly — fine-tune any of it below.">
+                <div className={styles.presetGrid}>
+                  {appearancePresets.map((definition) =>
+                    definition.available ? (
+                      <button
+                        key={definition.id}
+                        type="button"
+                        className={`${styles.presetCard} ${preset === definition.id ? styles.presetCardActive : ""}`}
+                        onClick={() => handlePresetSelect(definition)}
+                      >
+                        <span className={styles.presetCardLabel}>{definition.label}</span>
+                        <span className={styles.presetCardDescription}>{definition.description}</span>
+                      </button>
+                    ) : (
+                      <span key={definition.id} className={`${styles.presetCard} ${styles.presetCardDisabled}`}>
+                        <span className={styles.presetCardLabel}>{definition.label}</span>
+                        <span className={styles.comingSoonTag}>Soon</span>
+                      </span>
+                    ),
+                  )}
+                </div>
+              </Section>
+
+              <Section title="Accent Color" description="The one deliberate brand accent color in the entire system.">
+                <div className={styles.accentRow}>
+                  <input
+                    type="color"
+                    className={styles.colorSwatchInput}
+                    value={draftTokens.colors.starColor}
+                    onChange={(event) => update("colors", { starColor: event.target.value })}
+                    aria-label="Accent color picker"
+                  />
+                  <div className={styles.accentField}>
+                    <TextField
+                      label="Accent color"
+                      labelHidden
+                      value={draftTokens.colors.starColor}
+                      onChange={(value) => update("colors", { starColor: value })}
+                      autoComplete="off"
+                    />
+                  </div>
+                  <div className={styles.accentPreview} aria-hidden="true">
+                    <span className={styles.accentPreviewStars} style={{ color: draftTokens.colors.starColor }}>
+                      &#9733;&#9733;&#9733;&#9733;&#9733;
+                    </span>
+                  </div>
+                </div>
+                <div className={styles.fieldGrid}>
+                  <TextField
+                    label="Empty star"
+                    value={draftTokens.colors.starEmptyColor}
+                    onChange={(value) => update("colors", { starEmptyColor: value })}
+                    autoComplete="off"
+                  />
+                </div>
+              </Section>
+
+              <Section title="Border Radius" description="0–24px — every rounded surface scales together from this one value.">
+                <RangeSlider
+                  label="Radius"
+                  labelHidden
+                  min={0}
+                  max={24}
+                  step={1}
+                  value={draftTokens.corners.radius}
+                  onChange={(value) => update("corners", { radius: Array.isArray(value) ? value[0] : value })}
+                  output
+                  suffix={<span className={styles.sliderSuffix}>{draftTokens.corners.radius}px</span>}
+                />
+              </Section>
+
+              <Section title="Button Style" description="Applied to buttons built on the shared button primitive.">
+                <Select
+                  label="Style"
+                  labelHidden
+                  options={[
+                    { label: "Filled", value: "solid" },
+                    { label: "Outline", value: "outline" },
+                    { label: "Ghost", value: "ghost" },
+                  ]}
+                  value={draftTokens.buttons.style}
+                  onChange={(value) => update("buttons", { style: value as "solid" | "outline" | "ghost" })}
+                />
+              </Section>
+
               <Section title="Typography" description="How type establishes hierarchy across every widget.">
                 <div className={styles.fieldGrid}>
                   <RangeSlider
@@ -200,42 +254,68 @@ export default function AppearancePage() {
                     value={draftTokens.typography.letterSpacing}
                     onChange={(value) => update("typography", { letterSpacing: value as "tight" | "normal" })}
                   />
-                </div>
-              </Section>
-
-              <Section title="Colors" description="The one deliberate brand accent (star), plus the neutral surface colors around it.">
-                <div className={styles.fieldGrid}>
                   <TextField
-                    label="Star"
-                    value={draftTokens.colors.starColor}
-                    onChange={(value) => update("colors", { starColor: value })}
-                    autoComplete="off"
-                  />
-                  <TextField
-                    label="Empty star"
-                    value={draftTokens.colors.starEmptyColor}
-                    onChange={(value) => update("colors", { starEmptyColor: value })}
-                    autoComplete="off"
-                  />
-                  <TextField
-                    label="Border"
-                    value={draftTokens.colors.borderColor}
-                    onChange={(value) => update("colors", { borderColor: value })}
-                    autoComplete="off"
-                  />
-                  <TextField
-                    label="Surface"
-                    value={draftTokens.colors.surfaceColor}
-                    onChange={(value) => update("colors", { surfaceColor: value })}
-                    autoComplete="off"
-                  />
-                  <TextField
-                    label="Text (blank = inherit theme)"
+                    label="Text color (blank = inherit theme)"
                     value={draftTokens.colors.textColor ?? ""}
                     onChange={(value) => update("colors", { textColor: value || null })}
                     autoComplete="off"
                   />
                 </div>
+                <div className={styles.reservedNote}>
+                  <span>Custom fonts</span>
+                  <span className={styles.comingSoonTag}>Coming soon — Brand Studio</span>
+                </div>
+              </Section>
+
+              <Section title="Card Appearance" description="How individual reviews separate from one another.">
+                <Select
+                  label="Card style"
+                  labelHidden
+                  options={[
+                    { label: "Hairline divider", value: "border" },
+                    { label: "Whitespace only", value: "spacing" },
+                    { label: "Boxed card", value: "boxed" },
+                  ]}
+                  value={draftTokens.reviewCards.separator}
+                  onChange={(value) => update("reviewCards", { separator: value as "border" | "spacing" | "boxed" })}
+                />
+                {isBoxed ? (
+                  <div className={styles.fieldGrid}>
+                    <TextField
+                      label="Background"
+                      value={draftTokens.colors.surfaceColor}
+                      onChange={(value) => update("colors", { surfaceColor: value })}
+                      autoComplete="off"
+                    />
+                    <TextField
+                      label="Border color"
+                      value={draftTokens.colors.borderColor}
+                      onChange={(value) => update("colors", { borderColor: value })}
+                      autoComplete="off"
+                    />
+                    <RangeSlider
+                      label="Border width"
+                      min={0}
+                      max={2}
+                      step={1}
+                      value={draftTokens.borders.width}
+                      onChange={(value) => update("borders", { width: Array.isArray(value) ? value[0] : value })}
+                      output
+                    />
+                    <Select
+                      label="Shadow intensity"
+                      options={[
+                        { label: "None", value: "none" },
+                        { label: "Subtle", value: "subtle" },
+                        { label: "Medium", value: "medium" },
+                      ]}
+                      value={draftTokens.cards.shadowIntensity}
+                      onChange={(value) => update("cards", { shadowIntensity: value as "none" | "subtle" | "medium" })}
+                    />
+                  </div>
+                ) : (
+                  <p className={styles.mutedHint}>Choose &ldquo;Boxed card&rdquo; to reveal background, border, and shadow controls.</p>
+                )}
               </Section>
 
               <Section title="Spacing" description="A single density control keeps within- and between-component spacing in sync.">
@@ -244,95 +324,62 @@ export default function AppearancePage() {
                   labelHidden
                   options={[
                     { label: "Compact", value: "compact" },
-                    { label: "Comfortable", value: "comfortable" },
+                    { label: "Balanced", value: "balanced" },
                     { label: "Spacious", value: "spacious" },
                   ]}
                   value={draftTokens.spacing.density}
-                  onChange={(value) => update("spacing", { density: value as "compact" | "comfortable" | "spacious" })}
+                  onChange={(value) => update("spacing", { density: value as "compact" | "balanced" | "spacious" })}
                 />
               </Section>
 
-              <Section title="Corners" description="Proportional across every rounded surface — pills always stay fully round.">
-                <Select
-                  label="Radius"
-                  labelHidden
-                  options={[
-                    { label: "Sharp", value: "sharp" },
-                    { label: "Soft", value: "soft" },
-                    { label: "Round", value: "round" },
-                  ]}
-                  value={draftTokens.corners.radiusScale}
-                  onChange={(value) => update("corners", { radiusScale: value as "sharp" | "soft" | "round" })}
-                />
-              </Section>
-
-              <Section title="Borders" description="0 removes hairline dividers system-wide in favor of whitespace alone.">
-                <RangeSlider
-                  label="Width"
-                  labelHidden
-                  min={0}
-                  max={2}
-                  step={1}
-                  value={draftTokens.borders.width}
-                  onChange={(value) => update("borders", { width: Array.isArray(value) ? value[0] : value })}
-                  output
-                />
-              </Section>
-
-              <Section title="Buttons" description="Applied to future widgets built on the shared button primitive.">
-                <Select
-                  label="Style"
-                  labelHidden
-                  options={[
-                    { label: "Solid", value: "solid" },
-                    { label: "Outline", value: "outline" },
-                    { label: "Ghost", value: "ghost" },
-                  ]}
-                  value={draftTokens.buttons.style}
-                  onChange={(value) => update("buttons", { style: value as "solid" | "outline" | "ghost" })}
-                />
-              </Section>
-
-              <Section title="Review Cards" description="How individual reviews separate from one another in a list.">
-                <Select
-                  label="Separator"
-                  labelHidden
-                  options={[
-                    { label: "Hairline border", value: "border" },
-                    { label: "Whitespace only", value: "spacing" },
-                  ]}
-                  value={draftTokens.reviewCards.separator}
-                  onChange={(value) => update("reviewCards", { separator: value as "border" | "spacing" })}
-                />
-              </Section>
-
-              <Section title="Layout" description="Optional max-width for the Ratings & Reviews section shell.">
-                <TextField
-                  label="Max content width (px, blank = default)"
-                  type="number"
-                  value={draftTokens.layout.maxContentWidth ? String(draftTokens.layout.maxContentWidth) : ""}
-                  onChange={(value) => update("layout", { maxContentWidth: value ? Number(value) : null })}
-                  autoComplete="off"
-                />
-              </Section>
-
-              <Section title="Animation" description="Reduced motion applies system-wide, independent of a visitor's own OS setting.">
-                <Select
-                  label="Motion"
-                  labelHidden
-                  options={[
-                    { label: "Full", value: "full" },
-                    { label: "Reduced", value: "reduced" },
-                  ]}
-                  value={draftTokens.animation.motion}
-                  onChange={(value) => update("animation", { motion: value as "full" | "reduced" })}
-                />
-              </Section>
-
-              <Section title="Stars & Images" description="Reserved categories with no independent tokens yet.">
+              <Section title="Advanced" description="Occasional-use settings.">
+                <div className={styles.fieldGrid}>
+                  <TextField
+                    label="Max content width (px, blank = default)"
+                    type="number"
+                    value={draftTokens.layout.maxContentWidth ? String(draftTokens.layout.maxContentWidth) : ""}
+                    onChange={(value) => update("layout", { maxContentWidth: value ? Number(value) : null })}
+                    autoComplete="off"
+                  />
+                  <Select
+                    label="Motion"
+                    options={[
+                      { label: "Full", value: "full" },
+                      { label: "Reduced", value: "reduced" },
+                    ]}
+                    value={draftTokens.animation.motion}
+                    onChange={(value) => update("animation", { motion: value as "full" | "reduced" })}
+                  />
+                </div>
                 <ReservedNote label="Star size & shape" />
                 <ReservedNote label="Media Gallery & avatar treatments" />
               </Section>
+            </div>
+
+            <div className={styles.previewColumn}>
+              <div className={styles.previewCard}>
+                <iframe
+                  ref={previewFrameRef}
+                  className={styles.previewFrame}
+                  src="/appearance-preview"
+                  title="Appearance live preview"
+                  onLoad={() =>
+                    previewFrameRef.current?.contentWindow?.postMessage(
+                      { source: "imagyn-appearance-draft", tokens: draftTokens },
+                      "*",
+                    )
+                  }
+                />
+              </div>
+
+              <div className={styles.actionsBar}>
+                <Button variant="primary" onClick={handleSave} disabled={!hasUnsavedChanges || isSaving}>
+                  Save
+                </Button>
+                <Button variant="secondary" onClick={handleDiscard} disabled={!hasUnsavedChanges || isSaving}>
+                  Discard
+                </Button>
+              </div>
             </div>
           </div>
         </div>

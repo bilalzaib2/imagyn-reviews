@@ -114,3 +114,56 @@
 -   **Export reuses the same column schema import accepts**, so a merchant's exported CSV can
     be re-imported (into this store or another) without edits — one shared header contract for
     both directions.
+
+## Appearance System → Brand Studio foundation (2026-07-26)
+
+-   **The four "Widget Style" presets are now real**, not inert placeholders. Each is a
+    `Partial<AppearanceTokens>` covering only *structural* categories (typography scale,
+    spacing density, corners, borders, buttons, review-card treatment, card shadow) —
+    deliberately never `colors`. `mergeAppearanceTokens` gained an optional `base` parameter
+    (defaults to `getDefaultAppearanceTokens()`, but the Appearance page passes the current
+    draft) specifically so selecting a preset layers structure on top of whatever Accent
+    Color the merchant already has, rather than overwriting it. "Editorial" reproduces
+    `getDefaultAppearanceTokens()` exactly, so it's both the fifth preset and the un-styled
+    baseline. `"classic"` was renamed to `"luxury"` (a pre-launch, single-dev-store rename —
+    `appearance.server.ts`'s `normalizePreset` falls back any unrecognized stored value to
+    `"custom"`, so no migration or data loss).
+-   **Border Radius became one literal 0–24px slider**, replacing the three-way
+    `"sharp"|"soft"|"round"` categorical select. The slider's value IS
+    `--imagyn-radius-md`; `--imagyn-radius-{sm,lg}` derive proportionally (0.5x / 1.5x) in
+    `imagyn-appearance.js`. Default 8 reproduces today's static radii exactly. Any
+    previously-saved `corners.radiusScale` value is simply absent from the new shape —
+    `mergeAppearanceTokens`'s shallow merge means it's ignored, not a crash, and the store
+    silently gets the (visually identical, for the un-customized "soft" case) new default.
+-   **Review Card separator gained a third value, `"boxed"`**, alongside the existing
+    `"border"`/`"spacing"` (STOREFRONT_DESIGN_SYSTEM.md §16's "pick one, never both" pair).
+    "Boxed" is what makes the new **Card Appearance** section's Background/Border/Shadow
+    controls visible — Background and Border reuse the existing `colors.surfaceColor` /
+    `colors.borderColor` + `borders.width` tokens (already global), so the only genuinely
+    new token is `cards.shadowIntensity`. Implemented entirely through CSS custom
+    properties on the existing `.imagyn-review-card` rule (`--imagyn-review-card-{border-
+    width,padding,background,radius,shadow}`, set by `imagyn-appearance.js`'s
+    `applyReviewCards`) — no new CSS class, no `reviews-widget.js` changes. Flat mode
+    (`"border"`/`"spacing"`) resolves to the exact same static values the old hardcoded CSS
+    used, so this is additive: existing live stores render pixel-identically unless a
+    merchant actively opts into "Boxed card."
+-   **Button Style (Filled/Outline/Ghost) is now wired**, but only into the reserved
+    `.imagyn-btn` primitive (`imagyn-component-button.css`) — the same "stored, shown in the
+    admin preview, not yet wired into any currently-shipped button" status this control
+    already had, just with a real, working implementation behind it instead of nothing.
+    `reviews-widget.css`'s actual production buttons are untouched, per "don't redesign
+    existing widgets."
+-   **Typography gained a reserved `fontFamily: string | null` field**, wired end-to-end in
+    `imagyn-appearance.js` (applies `--imagyn-font-family` the moment it's non-null) but not
+    yet exposed as a picker in the admin UI — the requested "prepare architecture for future
+    custom fonts" seam, matching the existing stars/images reserved-category pattern.
+-   **Spacing's `"comfortable"` value was renamed to `"balanced"`** to match the requested
+    Compact/Balanced/Spacious naming exactly. Same zero-migration reasoning as the preset
+    rename above (JSON-string-encoded `tokens` column, shallow-merge fallback to new
+    defaults for any old stored value).
+-   **The live preview and the real storefront share one CSS/JS code path with no
+    divergence** — Card Appearance, Border Radius, and Button Style are all visible in the
+    Appearance page's iframe preview using the exact same fixture markup as before (no
+    changes to `appearance-preview.tsx` were needed), because the boxed/flat card treatment
+    and button style are both purely CSS-variable-driven on the *same* classes the fixture
+    already renders, not a class the fixture would need to add or remove.

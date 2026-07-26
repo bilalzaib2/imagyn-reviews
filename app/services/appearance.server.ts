@@ -25,7 +25,7 @@ export interface AppearanceRecord {
 }
 
 const normalizePreset = (preset: string): AppearancePreset => {
-  const candidates: AppearancePreset[] = ["minimal", "modern", "editorial", "classic", "custom"];
+  const candidates: AppearancePreset[] = ["minimal", "modern", "editorial", "luxury", "custom"];
   return (candidates as string[]).includes(preset) ? (preset as AppearancePreset) : "custom";
 };
 

@@ -20,7 +20,11 @@ App Store submission readiness (Shopify Billing shipped; hardening and polish ne
 -   Order Lifecycle Automation — foundation (schema, service layer, bounded retry,
     queue-ready dispatch seam, admin UI: statuses, lifecycle timeline, automation settings).
     Manual review requests use this fully today.
--   Appearance System (storefront design tokens)
+-   **Appearance System → Brand Studio foundation** — production customization UI (Widget
+    Style presets, Accent Color picker, Border Radius slider, Button Style, Typography,
+    Card Appearance, Spacing), backed by the same merchant-specific, persisted token system,
+    with an instant live preview rendering the real widget CSS/JS. See
+    [DECISIONS.md](./DECISIONS.md).
 -   **Shopify Billing** — Starter (free) / Growth ($9.99/mo) / Pro ($29.99/mo), 14-day trial on
     paid tiers, official Shopify Billing API, development-store bypass, centralized access
     gate (`app.tsx`) and feature gating (`services/billing/`), verified end-to-end in
@@ -52,5 +56,6 @@ App Store submission readiness (Shopify Billing shipped; hardening and polish ne
     flow for this (not yet published) app
 4.  App Store listing assets (screenshots, demo store, listing copy, privacy policy)
 5.  Resend inbound webhook (populates `delivered` / `opened` statuses)
-6.  Widget Customization
+6.  Brand Studio V2 — AI Brand Match, URL analysis, AI suggestions, widget preset
+    marketplace (explicitly deferred; V1 foundation above is data-ready for this)
 7.  Public Review Pages

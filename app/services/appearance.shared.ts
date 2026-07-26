@@ -35,7 +35,7 @@
 // rather than a parallel, disconnected mechanism — a source-of-truth redirect, not a
 // deletion, and out of scope for this pass ("do not redesign existing widgets").
 
-export type AppearancePreset = "minimal" | "modern" | "editorial" | "classic" | "custom";
+export type AppearancePreset = "minimal" | "modern" | "editorial" | "luxury" | "custom";
 
 export interface AppearanceTypographyTokens {
   /** 0.9–1.15 — multiplies every --imagyn-font-size-* at resolve time. One control, not
@@ -43,6 +43,11 @@ export interface AppearanceTypographyTokens {
   scale: number;
   /** Maps 1:1 to --imagyn-letter-spacing-{tight,normal}. */
   letterSpacing: "tight" | "normal";
+  /** null = the shipped system font stack (--imagyn-tokens.css's own --imagyn-font-family
+   *  default). Reserved for Brand Studio's future custom/uploaded font picker — already
+   *  wired end-to-end (imagyn-appearance.js applies it the moment it's non-null) so adding
+   *  that picker later is a UI-only change, not a resolver change. */
+  fontFamily: string | null;
 }
 
 export interface AppearanceColorTokens {
@@ -64,13 +69,16 @@ export interface AppearanceSpacingTokens {
    *  and px-based --imagyn-space-px-* scales together, so within-component and
    *  between-component spacing (§5's own distinction) can never desync from one
    *  another via this control. */
-  density: "compact" | "comfortable" | "spacious";
+  density: "compact" | "balanced" | "spacious";
 }
 
 export interface AppearanceCornerTokens {
-  /** Proportional scale over --imagyn-radius-{sm,md,lg}. --imagyn-radius-full (pills) is
-   *  categorical, not scalar, and stays fixed at 999px regardless of this setting. */
-  radiusScale: "sharp" | "soft" | "round";
+  /** px, 0–24 — the literal --imagyn-radius-md value a merchant sets directly on one
+   *  slider; --imagyn-radius-{sm,lg} derive proportionally (0.5x / 1.5x) so every rounded
+   *  surface stays in scale together. --imagyn-radius-full (pills) is never scaled by this
+   *  (STOREFRONT_DESIGN_SYSTEM.md §6 — pills stay 999px regardless). Default 8 reproduces
+   *  today's static --imagyn-radius-md exactly. */
+  radius: number;
 }
 
 export interface AppearanceBorderTokens {
@@ -94,10 +102,21 @@ export type AppearanceStarTokens = Record<string, never>;
 export type AppearanceImageTokens = Record<string, never>;
 
 export interface AppearanceReviewCardTokens {
-  /** STOREFRONT_DESIGN_SYSTEM.md §16: "Cards separate via a hairline border or
-   *  whitespace — pick one per implementation, never both." This is that documented
-   *  choice, made merchant-configurable rather than hardcoded. */
-  separator: "border" | "spacing";
+  /** STOREFRONT_DESIGN_SYSTEM.md §16's documented "border or whitespace, never both"
+   *  choice, made merchant-configurable — plus a third option, "boxed", for merchants who
+   *  want a fully-bounded card (background + border + radius + shadow) instead of the
+   *  editorial hairline-only default. "boxed" is the only value that makes the Card
+   *  Appearance category (below) visible. */
+  separator: "border" | "spacing" | "boxed";
+}
+
+export interface AppearanceCardTokens {
+  /** Only visible when reviewCards.separator === "boxed" — a flat card has no elevation to
+   *  scale. Reuses the same --imagyn-shadow-* calm, low-contrast values already defined in
+   *  imagyn-tokens.css for the Modal/Drawer/Lightbox, via a dedicated
+   *  --imagyn-review-card-shadow variable (not those components' own shadow variable,
+   *  same reasoning as --imagyn-review-card-border-width already being its own seam). */
+  shadowIntensity: "none" | "subtle" | "medium";
 }
 
 export interface AppearanceLayoutTokens {
@@ -122,17 +141,19 @@ export interface AppearanceTokens {
   stars: AppearanceStarTokens;
   images: AppearanceImageTokens;
   reviewCards: AppearanceReviewCardTokens;
+  cards: AppearanceCardTokens;
   layout: AppearanceLayoutTokens;
   animation: AppearanceAnimationTokens;
 }
 
 // Bit-for-bit equivalent to imagyn-tokens.css's current static defaults once resolved to
-// CSS — scale 1 = today's sizes, "comfortable" density = today's spacing, "soft" corners
-// = today's radii, "solid" buttons = today's button style, "spacing" review-card
-// separator = the review card redesign already shipped. An unconfigured store therefore
-// renders pixel-identically to today; nothing changes until a merchant edits Appearance.
+// CSS — scale 1 = today's sizes, "balanced" density = today's spacing, radius 8 = today's
+// static --imagyn-radius-md, "solid" buttons = today's button style, "border" review-card
+// separator = the review card redesign already shipped, "none" shadow = today's flat
+// cards. An unconfigured store therefore renders pixel-identically to today; nothing
+// changes until a merchant edits Appearance.
 export const getDefaultAppearanceTokens = (): AppearanceTokens => ({
-  typography: { scale: 1, letterSpacing: "tight" },
+  typography: { scale: 1, letterSpacing: "tight", fontFamily: null },
   colors: {
     textColor: null,
     starColor: "#f5a623",
@@ -140,8 +161,8 @@ export const getDefaultAppearanceTokens = (): AppearanceTokens => ({
     borderColor: "rgba(0, 0, 0, 0.08)",
     surfaceColor: "#ffffff",
   },
-  spacing: { density: "comfortable" },
-  corners: { radiusScale: "soft" },
+  spacing: { density: "balanced" },
+  corners: { radius: 8 },
   borders: { width: 1 },
   buttons: { style: "solid" },
   stars: {},
@@ -150,6 +171,7 @@ export const getDefaultAppearanceTokens = (): AppearanceTokens => ({
   // plus generous padding, not whitespace alone (STOREFRONT_DESIGN_SYSTEM.md §16's
   // "border" choice — the padding is how much room surrounds it, not a second method).
   reviewCards: { separator: "border" },
+  cards: { shadowIntensity: "none" },
   layout: { maxContentWidth: null },
   animation: { motion: "full" },
 });
@@ -160,23 +182,30 @@ export const cloneAppearanceTokens = (tokens: AppearanceTokens): AppearanceToken
 // Shallow-merges per category so a partially-saved record (e.g. only `colors` was ever
 // touched) still resolves every other category to its documented default — the same
 // defaults-as-floor guarantee widget.server.ts's parseSettings gives WidgetSettings.
-export const mergeAppearanceTokens = (partial: Partial<AppearanceTokens> | null | undefined): AppearanceTokens => {
-  const defaults = getDefaultAppearanceTokens();
+// `base` defaults to the documented defaults, but callers may pass the merchant's current
+// draft instead — that's how a Widget Style preset (only overriding structural categories
+// like corners/spacing/buttons) is applied on top of, rather than replacing, whatever
+// Accent Color the merchant already has (see app.appearance.tsx's preset click handler).
+export const mergeAppearanceTokens = (
+  partial: Partial<AppearanceTokens> | null | undefined,
+  base: AppearanceTokens = getDefaultAppearanceTokens(),
+): AppearanceTokens => {
   if (!partial) {
-    return defaults;
+    return base;
   }
 
   return {
-    typography: { ...defaults.typography, ...partial.typography },
-    colors: { ...defaults.colors, ...partial.colors },
-    spacing: { ...defaults.spacing, ...partial.spacing },
-    corners: { ...defaults.corners, ...partial.corners },
-    borders: { ...defaults.borders, ...partial.borders },
-    buttons: { ...defaults.buttons, ...partial.buttons },
-    stars: { ...defaults.stars, ...partial.stars },
-    images: { ...defaults.images, ...partial.images },
-    reviewCards: { ...defaults.reviewCards, ...partial.reviewCards },
-    layout: { ...defaults.layout, ...partial.layout },
-    animation: { ...defaults.animation, ...partial.animation },
+    typography: { ...base.typography, ...partial.typography },
+    colors: { ...base.colors, ...partial.colors },
+    spacing: { ...base.spacing, ...partial.spacing },
+    corners: { ...base.corners, ...partial.corners },
+    borders: { ...base.borders, ...partial.borders },
+    buttons: { ...base.buttons, ...partial.buttons },
+    stars: { ...base.stars, ...partial.stars },
+    images: { ...base.images, ...partial.images },
+    reviewCards: { ...base.reviewCards, ...partial.reviewCards },
+    cards: { ...base.cards, ...partial.cards },
+    layout: { ...base.layout, ...partial.layout },
+    animation: { ...base.animation, ...partial.animation },
   };
 };

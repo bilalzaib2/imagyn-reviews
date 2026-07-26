@@ -23,6 +23,7 @@
   border-radius: var(--imagyn-radius-md, 8px);
   padding: var(--imagyn-space-px-lg, 24px);
   background: var(--imagyn-color-surface, #ffffff);
+  box-shadow: var(--imagyn-review-card-shadow, none);
 }
 
 /* List — the default, editorial reading experience: no box, a single hairline rule opens
@@ -32,16 +33,20 @@
 }
 
 .imagyn-reviews--layout-list .imagyn-review-card {
-  /* --imagyn-review-card-border-width is the Appearance System's dedicated seam for the
-     Review Card separator choice (border vs. spacing-only, STOREFRONT_DESIGN_SYSTEM.md
-     §16's "pick one, never both") — deliberately its own variable, not a reuse of the
-     generic --imagyn-border-width (which also drives form fields/sort-select/filter
-     chips and shouldn't move when a merchant only means to change the card separator).
-     Falls back to --imagyn-border-width so unconfigured stores are unaffected. */
-  border-width: var(--imagyn-review-card-border-width, var(--imagyn-border-width, 1px)) 0 0 0;
-  border-radius: 0;
-  padding: var(--imagyn-space-px-xl, 40px) 0 0;
-  background: transparent;
+  /* --imagyn-review-card-* are the Appearance System's dedicated seam for the Review Card
+     separator choice (border / spacing / boxed, STOREFRONT_DESIGN_SYSTEM.md §16's "pick
+     one, never both" plus the "boxed" escape hatch for merchants who want a fully-bounded
+     card) — deliberately their own variables, not a reuse of the generic
+     --imagyn-border-width (which also drives form fields/sort-select/filter chips and
+     shouldn't move when a merchant only means to change the card separator). Each falls
+     back to today's exact static "border" values so an unconfigured store is unaffected. */
+  border-style: solid;
+  border-color: var(--imagyn-color-border, rgba(0, 0, 0, 0.08));
+  border-width: var(--imagyn-review-card-border-width, var(--imagyn-border-width, 1px) 0px 0px 0px);
+  border-radius: var(--imagyn-review-card-radius, 0px);
+  padding: var(--imagyn-review-card-padding, var(--imagyn-space-px-xl, 40px) 0 0);
+  background: var(--imagyn-review-card-background, transparent);
+  box-shadow: var(--imagyn-review-card-shadow, none);
 }
 
 .imagyn-reviews--layout-carousel .imagyn-review-card {

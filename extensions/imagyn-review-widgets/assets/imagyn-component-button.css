@@ -29,8 +29,12 @@
 }
 
 .imagyn-btn--primary {
-  background: var(--imagyn-color-text, #111111);
-  color: var(--imagyn-color-surface, #ffffff);
+  /* Driven by the Appearance System's Button Style control (imagyn-appearance.js's
+     applyButtons) — solid/outline/ghost all resolve through these three variables so no
+     extra class is needed per style. Falls back to today's exact static "solid" look. */
+  background: var(--imagyn-btn-background, var(--imagyn-color-text, #111111));
+  color: var(--imagyn-btn-color, var(--imagyn-color-surface, #ffffff));
+  border-color: var(--imagyn-btn-border-color, transparent);
 }
 
 .imagyn-btn--primary:hover {

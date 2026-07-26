@@ -28,10 +28,30 @@
   var BASE_FONT_SIZE = { xs: 12, sm: 13, base: 15, md: 17, lg: 20, xl: 26, "2xl": 34 };
   var BASE_SPACE_EM = { "3xs": 0.2, "2xs": 0.3, xs: 0.4, sm: 0.6, md: 1, lg: 1.5, xl: 2.5 };
   var BASE_SPACE_PX = { xs: 8, sm: 12, md: 16, lg: 24, xl: 40 };
-  var BASE_RADIUS = { sm: 4, md: 8, lg: 12 };
 
-  var DENSITY_MULTIPLIER = { compact: 0.75, comfortable: 1, spacious: 1.35 };
-  var RADIUS_MULTIPLIER = { sharp: 0.5, soft: 1, round: 1.6 };
+  var DENSITY_MULTIPLIER = { compact: 0.75, balanced: 1, spacious: 1.35 };
+  var CARD_SHADOW = {
+    none: "none",
+    subtle: "0 1px 2px rgba(0, 0, 0, 0.05)",
+    medium: "0 2px 8px rgba(0, 0, 0, 0.06)",
+  };
+  var BUTTON_STYLE = {
+    solid: {
+      background: "var(--imagyn-color-text, #111111)",
+      color: "var(--imagyn-color-surface, #ffffff)",
+      borderColor: "transparent",
+    },
+    outline: {
+      background: "transparent",
+      color: "var(--imagyn-color-text, #111111)",
+      borderColor: "var(--imagyn-color-text, #111111)",
+    },
+    ghost: {
+      background: "transparent",
+      color: "var(--imagyn-color-text, #111111)",
+      borderColor: "transparent",
+    },
+  };
 
   function setVar(style, name, value) {
     if (value === null || value === undefined) return;
@@ -48,6 +68,11 @@
     }
     if (typography.letterSpacing) {
       setVar(style, "--imagyn-letter-spacing-tight", typography.letterSpacing === "normal" ? "0.02em" : "0.01em");
+    }
+    // Reserved seam for Brand Studio's future custom-font picker (appearance.shared.ts) —
+    // unset/null leaves imagyn-tokens.css's own system-font stack untouched.
+    if (typography.fontFamily) {
+      setVar(style, "--imagyn-font-family", typography.fontFamily);
     }
   }
 
@@ -76,15 +101,14 @@
   }
 
   function applyCorners(style, corners) {
-    if (!corners) return;
-    var multiplier = RADIUS_MULTIPLIER[corners.radiusScale] || 1;
-    for (var key in BASE_RADIUS) {
-      if (Object.prototype.hasOwnProperty.call(BASE_RADIUS, key)) {
-        setVar(style, "--imagyn-radius-" + key, Math.round(BASE_RADIUS[key] * multiplier) + "px");
-      }
-    }
-    // --imagyn-radius-full is deliberately never scaled (STOREFRONT_DESIGN_SYSTEM.md §6 —
-    // pills stay 999px regardless of this control).
+    if (!corners || typeof corners.radius !== "number") return;
+    // One slider drives all three: `radius` IS --imagyn-radius-md; sm/lg derive
+    // proportionally (0.5x / 1.5x, the same ratio BASE_RADIUS used statically) so every
+    // rounded surface stays in scale together. --imagyn-radius-full (pills) is deliberately
+    // never scaled (STOREFRONT_DESIGN_SYSTEM.md §6 — pills stay 999px regardless).
+    setVar(style, "--imagyn-radius-sm", Math.round(corners.radius * 0.5) + "px");
+    setVar(style, "--imagyn-radius-md", Math.round(corners.radius) + "px");
+    setVar(style, "--imagyn-radius-lg", Math.round(corners.radius * 1.5) + "px");
   }
 
   function applyBorders(style, borders) {
@@ -92,18 +116,50 @@
     setVar(style, "--imagyn-border-width", borders.width + "px");
   }
 
-  function applyReviewCards(style, reviewCards) {
+  function applyReviewCards(style, reviewCards, cards, borders) {
     if (!reviewCards) return;
-    // "spacing" = whitespace-only (STOREFRONT_DESIGN_SYSTEM.md §16's other documented
-    // choice) — forces the review card's own dedicated border-width seam to 0 without
-    // touching the generic --imagyn-border-width other elements (form fields, sort
-    // select) also depend on. "border" leaves it unset so the card's own fallback chain
-    // (its own var → --imagyn-border-width) resolves normally.
-    if (reviewCards.separator === "spacing") {
-      setVar(style, "--imagyn-review-card-border-width", "0px");
-    } else {
-      style.removeProperty("--imagyn-review-card-border-width");
+    var borderWidth = borders && typeof borders.width === "number" ? borders.width : 1;
+    var boxed = reviewCards.separator === "boxed";
+
+    if (boxed) {
+      // A fully-bounded card: border on all four sides, generous padding on every side,
+      // real background/radius, and whatever shadow Card Appearance specifies.
+      setVar(style, "--imagyn-review-card-border-width", borderWidth + "px");
+      setVar(style, "--imagyn-review-card-padding", "var(--imagyn-space-px-lg, 24px)");
+      setVar(style, "--imagyn-review-card-background", "var(--imagyn-color-surface, #ffffff)");
+      setVar(style, "--imagyn-review-card-radius", "var(--imagyn-radius-md, 8px)");
+      setVar(
+        style,
+        "--imagyn-review-card-shadow",
+        CARD_SHADOW[(cards && cards.shadowIntensity) || "none"] || CARD_SHADOW.none,
+      );
+      return;
     }
+
+    // Flat (the editorial default): a hairline top rule ("border") or no rule at all
+    // ("spacing") — STOREFRONT_DESIGN_SYSTEM.md §16's "pick one, never both" choice — no
+    // background, no radius, no shadow, matching the shipped Review Card redesign exactly.
+    setVar(
+      style,
+      "--imagyn-review-card-border-width",
+      (reviewCards.separator === "spacing" ? "0" : borderWidth) + "px 0px 0px 0px",
+    );
+    setVar(style, "--imagyn-review-card-padding", "var(--imagyn-space-px-xl, 40px) 0 0");
+    setVar(style, "--imagyn-review-card-background", "transparent");
+    setVar(style, "--imagyn-review-card-radius", "0px");
+    setVar(style, "--imagyn-review-card-shadow", "none");
+  }
+
+  function applyButtons(style, buttons) {
+    if (!buttons) return;
+    // Applies to the reserved .imagyn-btn primitive only (imagyn-component-button.css) —
+    // not yet wired into any currently-shipped reviews-widget.css button, same as before
+    // this control existed. Real, live in the admin preview; zero effect on production
+    // storefronts today.
+    var preset = BUTTON_STYLE[buttons.style] || BUTTON_STYLE.solid;
+    setVar(style, "--imagyn-btn-background", preset.background);
+    setVar(style, "--imagyn-btn-color", preset.color);
+    setVar(style, "--imagyn-btn-border-color", preset.borderColor);
   }
 
   function applyLayout(style, layout) {
@@ -141,13 +197,11 @@
       applySpacing(style, tokens.spacing);
       applyCorners(style, tokens.corners);
       applyBorders(style, tokens.borders);
-      applyReviewCards(style, tokens.reviewCards);
+      applyReviewCards(style, tokens.reviewCards, tokens.cards, tokens.borders);
+      applyButtons(style, tokens.buttons);
       applyLayout(style, tokens.layout);
       applyAnimation(style, tokens.animation);
-      // tokens.buttons / tokens.stars / tokens.images: stored and shown in the admin
-      // preview against the reserved .imagyn-btn component (imagyn-component-button.css)
-      // for forward-looking widgets, but not wired into any currently-shipped button —
-      // reviews-widget.css's existing buttons aren't being redesigned in this pass.
+      // tokens.stars / tokens.images: reserved categories, no independent tokens yet.
     },
   };
 })();

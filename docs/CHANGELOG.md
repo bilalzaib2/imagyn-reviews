@@ -8,6 +8,18 @@ Notable changes to Imagyn Reviews, newest first. Commit SHAs refer to `main`.
 
 ### Added
 
+- **Appearance page rebuilt into the Brand Studio foundation.** The four Widget Style
+  presets (Minimal, Modern, Editorial, Luxury) went from inert "Coming soon" placeholders
+  to real, selectable token bundles; Border Radius became a single 0–24px slider (was a
+  3-way sharp/soft/round select); Accent Color got a native color-picker swatch plus a live
+  star-color preview; Button Style (Filled/Outline/Ghost) and Typography's font-family seam
+  are now wired into the resolver; a new Card Appearance section (Background, Border, Shadow
+  intensity) is exposed once a merchant chooses "Boxed card" for Review Cards. Everything
+  saves through the existing per-store `Appearance` table (no migration — tokens are stored
+  as JSON) and renders in the same instant, real-CSS/JS live preview the page already had.
+  See [DECISIONS.md](./DECISIONS.md) for the full list of token/naming changes and why each
+  one is non-breaking for existing stores.
+
 - **Import/Export Reviews (V1)** — merchant migration support, added to the Reviews page
   header. CSV import goes through a new `Importer` provider abstraction
   (`app/services/importers/`, mirroring the AI/Storage/Notification/Billing pattern) so
