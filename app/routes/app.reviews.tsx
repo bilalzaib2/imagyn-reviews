@@ -978,7 +978,7 @@ export default function ReviewsPage() {
                     <div className={styles.detailSection}>
                       <p className={styles.detailLabel}>AI Summary</p>
                       <p className={styles.detailText}>
-                        AI summaries are generated per product, from all of that product's approved reviews —{" "}
+                        AI summaries are generated per product, from all of that product&apos;s approved reviews —{" "}
                         <RemixLink to={`/app/products/${selectedReview.productId}`}>
                           view it on the product page
                         </RemixLink>

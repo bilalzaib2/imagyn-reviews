@@ -13,8 +13,11 @@
   hidden
 ></div>
 
-{{ 'imagyn-appearance.js' | asset_url | script_tag }}
-{{ 'rating-badge.js' | asset_url | script_tag }}
+{# `defer` (not the blocking script_tag filter) — theme-check flags parser-blocking
+   scripts; both stay in document order so imagyn-appearance.js still finishes applying
+   tokens before rating-badge.js reads them (deferred scripts run in source order). #}
+<script src="{{ 'imagyn-appearance.js' | asset_url }}" defer></script>
+<script src="{{ 'rating-badge.js' | asset_url }}" defer></script>
 
 {% schema %}
 {

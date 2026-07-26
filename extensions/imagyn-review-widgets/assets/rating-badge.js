@@ -10,14 +10,9 @@
   //     on that, so this block's button can keep its own aria-expanded in sync.
   var PROXY_PATH = "/apps/reviews";
 
-  function renderStars(rating) {
-    var full = Math.round(rating);
-    var stars = "";
-    for (var i = 0; i < 5; i++) {
-      stars += i < full ? "★" : "☆";
-    }
-    return stars;
-  }
+  // Shared with reviews-widget.js / collection-rating-badges.js via imagyn-appearance.js,
+  // which every block already loads before its own script.
+  var renderStars = window.ImagynShared.renderStars;
 
   function scrollToReviews() {
     var target = document.querySelector("[data-imagyn-reviews]");

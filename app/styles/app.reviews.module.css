@@ -194,20 +194,16 @@
 }
 
 .skeletonRow {
+  composes: skeletonShimmer from "./shared.module.css";
   height: 7.5rem;
   border-radius: var(--radius-md);
-  background: linear-gradient(90deg, rgba(17, 17, 17, 0.06) 0%, rgba(17, 17, 17, 0.03) 50%, rgba(17, 17, 17, 0.06) 100%);
-  background-size: 200% 100%;
-  animation: shimmer 1.2s linear infinite;
 }
 
 .skeletonTitle,
 .skeletonParagraph,
 .skeletonBlock {
+  composes: skeletonShimmer from "./shared.module.css";
   border-radius: var(--radius-sm);
-  background: linear-gradient(90deg, rgba(17, 17, 17, 0.06) 0%, rgba(17, 17, 17, 0.03) 50%, rgba(17, 17, 17, 0.06) 100%);
-  background-size: 200% 100%;
-  animation: shimmer 1.2s linear infinite;
 }
 
 .skeletonTitle {
@@ -315,7 +311,8 @@
   display: inline-flex;
   align-items: center;
   width: fit-content;
-  border-radius: 999px;
+  white-space: nowrap;
+  border-radius: var(--radius-full);
   padding: 0.25rem 0.6rem;
   font-size: var(--text-xs);
   font-weight: 600;
@@ -329,13 +326,14 @@
   display: inline-flex;
   align-items: center;
   width: fit-content;
-  border-radius: 999px;
+  white-space: nowrap;
+  border-radius: var(--radius-full);
   padding: 0.25rem 0.6rem;
   font-size: var(--text-xs);
   font-weight: 600;
   letter-spacing: 0.04em;
   text-transform: uppercase;
-  background: rgba(44, 94, 69, 0.12);
+  background: color-mix(in srgb, var(--color-success) 12%, transparent);
   color: var(--color-success);
 }
 
@@ -370,62 +368,39 @@
   display: inline-flex;
   align-items: center;
   width: fit-content;
-  border-radius: 999px;
+  white-space: nowrap;
+  border-radius: var(--radius-full);
   padding: 0.25rem 0.6rem;
   font-size: var(--text-xs);
   font-weight: 600;
   letter-spacing: 0.04em;
   text-transform: uppercase;
-  background: rgba(44, 120, 115, 0.12);
+  background: color-mix(in srgb, var(--color-info) 12%, transparent);
   color: var(--color-accent);
 }
 
 .emptyState {
-  display: grid;
-  gap: var(--space-3);
-  align-content: center;
-  justify-items: start;
-  min-height: 18rem;
-  padding: var(--space-10);
-  border: 1px dashed var(--color-border);
-  border-radius: var(--radius-lg);
-  background: var(--color-surface-muted);
+  composes: emptyState from "./shared.module.css";
 }
 
 .emptyStateTitle {
-  margin: 0;
-  font-size: var(--text-lg);
-  font-weight: 600;
-  letter-spacing: -0.01em;
+  composes: emptyStateTitle from "./shared.module.css";
 }
 
 .emptyStateText {
-  margin: 0 0 var(--space-2);
-  color: var(--color-text-muted);
-  line-height: 1.6;
-  max-width: 26rem;
+  composes: emptyStateText from "./shared.module.css";
 }
 
 .errorState {
-  display: grid;
-  gap: var(--space-2);
-  align-content: start;
-  padding: var(--space-8);
-  border: 1px solid rgba(143, 60, 47, 0.3);
-  border-radius: var(--radius-lg);
-  background: rgba(143, 60, 47, 0.05);
+  composes: errorState from "./shared.module.css";
 }
 
 .errorStateTitle {
-  margin: 0;
-  font-size: var(--text-lg);
-  font-weight: 600;
+  composes: errorStateTitle from "./shared.module.css";
 }
 
 .errorStateText {
-  margin: 0;
-  color: var(--color-text-muted);
-  line-height: 1.6;
+  composes: errorStateText from "./shared.module.css";
 }
 
 .pagination {
@@ -574,7 +549,7 @@
   align-items: center;
   width: fit-content;
   border: 1px dashed var(--color-border-strong);
-  border-radius: 999px;
+  border-radius: var(--radius-full);
   padding: 0.25rem 0.6rem;
   font-size: var(--text-xs);
   color: var(--color-text-muted);
@@ -664,7 +639,7 @@
   align-items: center;
   justify-content: center;
   border: none;
-  border-radius: 999px;
+  border-radius: var(--radius-full);
   background: rgba(0, 0, 0, 0.55);
   color: #fff;
   font-size: 14px;
@@ -699,16 +674,6 @@
   .detailPanel {
     margin-top: var(--space-2);
     position: static;
-  }
-}
-
-@keyframes shimmer {
-  from {
-    background-position: 100% 0;
-  }
-
-  to {
-    background-position: -100% 0;
   }
 }
 

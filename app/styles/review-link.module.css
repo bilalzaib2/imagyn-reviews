@@ -129,7 +129,7 @@
   width: 20px;
   height: 20px;
   border: none;
-  border-radius: 999px;
+  border-radius: var(--radius-full);
   background: rgba(17, 17, 17, 0.72);
   color: #ffffff;
   font-size: var(--text-sm);
@@ -152,7 +152,7 @@
   margin: 0 auto var(--space-6);
   width: 3rem;
   height: 3rem;
-  border-radius: 999px;
+  border-radius: var(--radius-full);
   background: var(--color-accent-soft);
   display: flex;
   align-items: center;

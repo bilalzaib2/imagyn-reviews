@@ -263,6 +263,12 @@ export async function cancelPaidPlan(billing: Billing, subscriptionId: string, i
   await billing.cancel({ subscriptionId, prorate: true, isTest: isDevelopmentStore });
 }
 
+// Pro is deliberately excluded from the merchant-facing plan list: it has no
+// functionality today that Growth doesn't already have (see DECISIONS.md's "V1 launch
+// truthfulness pass"), so the pricing page can't honestly show it as a third tier yet.
+// The plan definition, PlanId, Shopify billing config (shopify.server.ts), and
+// upgrade/webhook handling are all untouched — a merchant already on Pro (or a future
+// real Pro tier) continues to work; this only hides it from new selection.
 export function getAllPlans(): Plan[] {
-  return [getPlan("starter"), getPlan("growth"), getPlan("pro")];
+  return [getPlan("starter"), getPlan("growth")];
 }

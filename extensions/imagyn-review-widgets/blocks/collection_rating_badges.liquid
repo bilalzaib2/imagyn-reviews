@@ -2,7 +2,11 @@
 {{ 'imagyn-typography.css' | asset_url | stylesheet_tag }}
 {{ 'imagyn-component-badge.css' | asset_url | stylesheet_tag }}
 {{ 'collection-rating-badges.css' | asset_url | stylesheet_tag }}
-{{ 'imagyn-appearance.js' | asset_url | script_tag }}
+{# `defer` (not the blocking script_tag filter) — theme-check flags parser-blocking
+   scripts; both stay in document order so imagyn-appearance.js still finishes applying
+   tokens before collection-rating-badges.js reads them (deferred scripts run in source
+   order). #}
+<script src="{{ 'imagyn-appearance.js' | asset_url }}" defer></script>
 <script
   src="{{ 'collection-rating-badges.js' | asset_url }}"
   data-imagyn-collection-badges

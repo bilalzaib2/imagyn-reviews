@@ -12,6 +12,7 @@
   --color-accent-soft: #f2f2f2;
   --color-success: #2c5e45;
   --color-danger: #8f3c2f;
+  --color-info: #2c7873;
 
   --font-sans: -apple-system, BlinkMacSystemFont, "SF Pro Display", "Helvetica Neue", Helvetica, Arial, sans-serif;
   --font-display: -apple-system, BlinkMacSystemFont, "SF Pro Display", "Helvetica Neue", Helvetica, Arial, sans-serif;
@@ -39,6 +40,7 @@
   --radius-md: 0.75rem;
   --radius-lg: 1rem;
   --radius-xl: 1.25rem;
+  --radius-full: 999px;
 
   --shadow-sm: 0 1px 2px rgba(17, 17, 17, 0.04);
   --shadow-md: 0 4px 16px rgba(17, 17, 17, 0.05);

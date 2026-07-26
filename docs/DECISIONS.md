@@ -281,3 +281,49 @@
     Sort) — the Review Card, Summary, and Badge components were already on the fully
     tokenized, polished system from earlier Appearance System work and needed no changes
     here.
+
+## V1 launch truthfulness pass (2026-07-27)
+
+-   **Pro tier removed from the merchant-facing pricing page.** Audited every advertised
+    Growth/Pro feature against the actual code (`grep` for each `PlanLimits` flag's
+    consumers, not assumption): `videoReviews`, `multipleEmailTemplates`,
+    `advancedBranding`, `prioritySupport` are checked nowhere outside `plans.ts` itself —
+    zero enforcement, zero UI, in some cases (video, support) zero underlying mechanism of
+    any kind. Once every unusable claim is removed, Pro has no differentiator left over
+    Growth ("Everything in Growth" and nothing else true) — not a defensible paid tier.
+    `getAllPlans()` (`billing.server.ts`) now returns only Starter/Growth; `PlanId`, the
+    `pro` entry in `PLANS`, and `shopify.server.ts`'s Shopify billing config are
+    **unchanged** — a real Pro tier can return later by adding real functionality and
+    un-hiding it from `getAllPlans()`, no re-architecture needed.
+-   **Growth's own feature list had two more of the same problem, fixed rather than just
+    Pro's:** "Advanced widget customization" was removed outright — Brand Studio is
+    available to every plan including free Starter, so it was never actually a Growth
+    differentiator. "Email customization" was renamed to "Branded review request emails" —
+    there is no customization UI of any kind (one fixed template, for every merchant), but
+    the underlying claim of a real, working, store-branded automated email is true and
+    worth stating accurately instead of removing entirely.
+-   **"Automatic review requests" stays on Growth's list, with an honest qualifier
+    ("activating after Shopify's pending approval")** rather than being removed — this is
+    the one claim that's real, fully built, and tested, just blocked by Shopify's own
+    external Protected Customer Data approval (`ORDER_AUTOMATION_ENABLED = false`), not by
+    incompleteness on this app's side. Settings already discloses this same status; the
+    pricing page now matches instead of overclaiming.
+-   **Engineering cleanup done alongside the truthfulness pass** (per the same sprint):
+    consolidated three copy-pasted skeleton-shimmer blocks and three copy-pasted
+    empty/error-state panels (Reviews/Requests/Widgets admin pages) into
+    `app/styles/shared.module.css` via CSS Modules `composes`; replaced hardcoded
+    rgba duplicates of `--color-danger`/`--color-success` with `color-mix()` against the
+    real tokens; added `--color-info` (a color two files already shared with no token) and
+    `--radius-full` (used ~15 times as a literal `999px`) to `design-system.css`; removed a
+    duplicate `.installBadge` rule; deduplicated `renderStars()` across
+    `reviews-widget.js`/`rating-badge.js`/`collection-rating-badges.js` into
+    `window.ImagynShared` on `imagyn-appearance.js` (already loaded on all three blocks,
+    so no new script tag); converted all three blocks' parser-blocking `script_tag` script
+    includes to `defer` (theme-check had flagged this repeatedly) — relative order between
+    `imagyn-appearance.js` and each widget's own script is preserved because deferred
+    scripts execute in source order.
+-   **Investigated but did not change:** the "8 admin stylesheets have no `@media` query"
+    finding from the prior QA report. On inspection, the two layouts that actually
+    mattered (Dashboard's stat grid, Billing's plan grid) both already use
+    `repeat(auto-fit, minmax(...))`, which reflows without needing an explicit breakpoint —
+    adding one would have been unnecessary defensive CSS for a problem that doesn't exist.

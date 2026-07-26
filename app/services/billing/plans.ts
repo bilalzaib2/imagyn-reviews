@@ -11,12 +11,14 @@ export interface PlanLimits {
   automaticReviewRequests: boolean;
   aiSummaries: boolean;
   photoReviews: boolean;
-  // The remaining flags describe entitlements that are part of the commercial plan
-  // definition but have no enforcement point in the app yet (no email-customization UI,
-  // no video upload, no multi-template system, no branding controls beyond the existing
-  // Appearance system, no support-priority mechanism, no public API). They're listed here so
-  // the pricing page is accurate and so enforcement can be added later without renegotiating
-  // what each plan is supposed to include.
+  // V1 launch truthfulness pass: none of these six have an enforcement point in the app
+  // (no email-customization UI, Brand Studio is available to every plan including Starter
+  // so it isn't a Growth/Pro differentiator, no video upload, no multi-template system, no
+  // support-priority mechanism, no public API) — none of them are shown on the pricing
+  // page anymore. Left here, unenforced, as reserved future entitlements rather than
+  // deleted, so a real feature built later can flip the matching flag without renegotiating
+  // what each plan is supposed to include. Do not add any of these back to a plan's
+  // `features` array until it is actually true.
   emailCustomization: boolean;
   advancedWidgetCustomization: boolean;
   videoReviews: boolean;
@@ -73,11 +75,10 @@ export const PLANS: Record<PlanId, Plan> = {
     tagline: "For stores actively growing customer trust.",
     features: [
       "Unlimited reviews",
-      "Automatic review requests",
+      "Automatic review requests (activating after Shopify's pending approval)",
       "AI review summaries",
       "Photo reviews",
-      "Email customization",
-      "Advanced widget customization",
+      "Branded review request emails",
     ],
     limits: {
       maxPublishedReviews: null,

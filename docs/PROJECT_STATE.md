@@ -25,11 +25,13 @@ App Store submission readiness (Shopify Billing shipped; hardening and polish ne
     Card Appearance, Spacing), backed by the same merchant-specific, persisted token system,
     with an instant live preview rendering the real widget CSS/JS. See
     [DECISIONS.md](./DECISIONS.md).
--   **Shopify Billing** — Starter (free) / Growth ($9.99/mo) / Pro ($29.99/mo), 14-day trial on
-    paid tiers, official Shopify Billing API, development-store bypass, centralized access
-    gate (`app.tsx`) and feature gating (`services/billing/`), verified end-to-end in
-    production (subscription creation, trial, upgrade/downgrade, cancellation, webhook sync).
-    See [DECISIONS.md](./DECISIONS.md).
+-   **Shopify Billing** — Starter (free) / Growth ($9.99/mo), 14-day trial on the paid tier,
+    official Shopify Billing API, development-store bypass, centralized access gate
+    (`app.tsx`) and feature gating (`services/billing/`), verified end-to-end in production
+    (subscription creation, trial, upgrade/downgrade, cancellation, webhook sync). Pro was
+    removed from the merchant-facing pricing page during the V1 launch-readiness pass — its
+    plan definition/Shopify billing config are untouched so it can return once it has real
+    exclusive functionality. See [DECISIONS.md](./DECISIONS.md).
 -   **Mandatory GDPR compliance webhooks** (`customers/data_request`, `customers/redact`,
     `shop/redact`) — required for App Store approval independent of billing.
 -   **Import/Export Reviews (V1)** — CSV import with an extensible importer-provider
@@ -50,12 +52,12 @@ App Store submission readiness (Shopify Billing shipped; hardening and polish ne
 ## Next
 
 1.  Shopify Protected Customer Data approval → unblock order-triggered auto-creation
-2.  Resolve Pro-tier entitlements with no code behind them yet (video reviews, multiple email
-    templates, advanced branding controls, priority support, API access) before submission
-3.  Confirm manual/legacy Billing API is still selectable in the Partner Dashboard submission
+2.  Confirm manual/legacy Billing API is still selectable in the Partner Dashboard submission
     flow for this (not yet published) app
-4.  App Store listing assets (screenshots, demo store, listing copy, privacy policy)
-5.  Resend inbound webhook (populates `delivered` / `opened` statuses)
-6.  Brand Studio V2 — AI Brand Match, URL analysis, AI suggestions, widget preset
+3.  App Store listing assets (screenshots, demo store, listing copy, privacy policy)
+4.  Resend inbound webhook (populates `delivered` / `opened` statuses)
+5.  Brand Studio V2 — AI Brand Match, URL analysis, AI suggestions, widget preset
     marketplace (explicitly deferred; V1 foundation above is data-ready for this)
-7.  Public Review Pages
+6.  Public Review Pages
+7.  Reintroduce a Pro tier once it has real, exclusive functionality (see DECISIONS.md's
+    "V1 launch truthfulness pass")

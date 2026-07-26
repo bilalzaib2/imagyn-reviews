@@ -96,6 +96,11 @@
   cursor: pointer;
 }
 
+.presetCard:focus-visible {
+  outline: 2px solid var(--color-accent);
+  outline-offset: 2px;
+}
+
 .presetCardActive {
   border-color: var(--color-accent);
   box-shadow: 0 0 0 1px var(--color-accent);
@@ -157,6 +162,11 @@
   background: none;
   cursor: pointer;
   flex: none;
+}
+
+.colorSwatchInput:focus-visible {
+  outline: 2px solid var(--color-accent);
+  outline-offset: 2px;
 }
 
 .colorFieldControl > div {

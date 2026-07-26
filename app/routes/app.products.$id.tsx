@@ -382,8 +382,8 @@ export default function ProductDetailPage() {
                   </div>
                 ) : (
                   <p className={styles.aiSummaryEmpty}>
-                    No AI summary has been generated yet. Click "Regenerate AI Summary" once this product has
-                    approved reviews.
+                    No AI summary has been generated yet. Click &ldquo;Regenerate AI Summary&rdquo; once this product
+                    has approved reviews.
                   </p>
                 )}
               </BlockStack>

@@ -8,14 +8,9 @@
   var MAX_IMAGE_SIZE_BYTES = 5 * 1024 * 1024;
   var ALLOWED_IMAGE_TYPES = ["image/jpeg", "image/png", "image/webp", "image/gif"];
 
-  function renderStars(rating) {
-    var full = Math.round(rating);
-    var stars = "";
-    for (var i = 0; i < 5; i++) {
-      stars += i < full ? "★" : "☆";
-    }
-    return stars;
-  }
+  // Shared with rating-badge.js / collection-rating-badges.js via imagyn-appearance.js,
+  // which every block already loads before its own script.
+  var renderStars = window.ImagynShared.renderStars;
 
   function formatDate(value) {
     try {
@@ -189,7 +184,7 @@
   // Bars render at 0% and are animated to their target width right after insertion (see
   // animateHistogramFills) — this is the "skeleton-to-content" motion exception
   // STOREFRONT_DESIGN_SYSTEM.md §10 sanctions, not an on-load animation of its own.
-  function renderHistogram(ratingCounts, totalReviews) {
+  function renderHistogram(ratingCounts) {
     var maxCount = 0;
     for (var star = 1; star <= 5; star++) {
       if (ratingCounts[star] > maxCount) maxCount = ratingCounts[star];
@@ -336,7 +331,7 @@
       }
       html += "</div>"; // headline
 
-      html += renderHistogram(ratingCounts, totalReviews);
+      html += renderHistogram(ratingCounts);
       html += "</div>"; // hero
     }
 

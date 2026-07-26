@@ -211,4 +211,19 @@
       // tokens.stars / tokens.images: reserved categories, no independent tokens yet.
     },
   };
+
+  // Small render helpers shared across reviews-widget.js / rating-badge.js /
+  // collection-rating-badges.js — all three already load this file before their own
+  // script (see the blocks/*.liquid files), so this rides along on that existing load
+  // rather than needing a fourth shared script file.
+  window.ImagynShared = {
+    renderStars: function (rating) {
+      var full = Math.round(rating);
+      var stars = "";
+      for (var i = 0; i < 5; i++) {
+        stars += i < full ? "★" : "☆";
+      }
+      return stars;
+    },
+  };
 })();

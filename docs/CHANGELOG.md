@@ -4,6 +4,36 @@ Notable changes to Imagyn Reviews, newest first. Commit SHAs refer to `main`.
 
 ---
 
+## 2026-07-27
+
+### Changed
+
+- **Pricing page is now 100% truthful.** Removed the Pro tier from the merchant-facing
+  pricing page — every one of its advertised features (video reviews, multiple email
+  templates, advanced branding controls, priority support, "Future API/integration
+  features") had zero code enforcing it, and once those are stripped there was nothing
+  left to justify a third tier. Growth's own list was also corrected: "Advanced widget
+  customization" removed (Brand Studio is free for every plan, not a Growth perk),
+  "Email customization" renamed to "Branded review request emails" (accurate — there's no
+  customization UI, but the email really is store-branded), "Automatic review requests"
+  now says "(activating after Shopify's pending approval)" since that's real, built, and
+  tested, just blocked by Shopify's own external approval. The Pro plan ID, its Shopify
+  billing config, and every webhook/upgrade code path are untouched, so nothing here is a
+  removal in the way that would need re-architecting to undo. See
+  [DECISIONS.md](./DECISIONS.md).
+
+### Fixed
+
+- **Engineering cleanup pass** — consolidated three duplicated skeleton-loading and
+  empty/error-state CSS blocks (Reviews/Requests/Widgets) into a shared CSS Module;
+  deduplicated `renderStars()` across all three storefront widget scripts; converted every
+  parser-blocking theme-extension `<script>` tag to `defer`; fixed a visual bug where
+  status badges wrapped mid-pill on narrow rows; added missing keyboard focus rings to six
+  interactive elements (Brand Studio preset cards/color swatches, the Widgets theme-editor
+  link, the storefront rating badge, the reserved button primitive); replaced hardcoded
+  colors that duplicated design tokens with `color-mix()` against the real token; removed
+  a duplicate CSS rule and two dead-code lint errors. See [DECISIONS.md](./DECISIONS.md).
+
 ## 2026-07-26
 
 ### Added

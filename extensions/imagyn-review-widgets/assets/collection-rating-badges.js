@@ -20,14 +20,9 @@
   var starColor = scriptEl ? scriptEl.getAttribute("data-star-color") : "";
   var textColor = scriptEl ? scriptEl.getAttribute("data-text-color") : "";
 
-  function renderStars(rating) {
-    var full = Math.round(rating);
-    var stars = "";
-    for (var i = 0; i < 5; i++) {
-      stars += i < full ? "★" : "☆";
-    }
-    return stars;
-  }
+  // Shared with reviews-widget.js / rating-badge.js via imagyn-appearance.js, which every
+  // block already loads before its own script.
+  var renderStars = window.ImagynShared.renderStars;
 
   function extractHandleFromHref(href) {
     if (!href) return null;

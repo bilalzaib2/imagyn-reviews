@@ -80,7 +80,7 @@
   display: inline-flex;
   align-items: center;
   width: fit-content;
-  border-radius: 999px;
+  border-radius: var(--radius-full);
   padding: 0.25rem 0.6rem;
   font-size: var(--text-xs);
   font-weight: 600;
