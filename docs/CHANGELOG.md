@@ -9,17 +9,22 @@ Notable changes to Imagyn Reviews, newest first. Commit SHAs refer to `main`.
 ### Added
 
 - **Mandatory GDPR compliance webhooks** (`customers/data_request`, `customers/redact`,
-  `shop/redact`) — required for every public Shopify app, independent of billing.
-  `customers/data_request` logs a full audit record (matching `Review`/`ReviewRequest` rows)
-  for the merchant to fulfill Shopify's 30-day disclosure window manually; no automated export
-  pipeline was built (out of scope for a minimal implementation). `customers/redact` nulls the
-  customer's identifying fields (`reviewerEmail`/`reviewerName`, `ReviewRequest.email`/`name`)
-  while keeping the review content itself, which belongs to the merchant's storefront, not the
-  customer. `shop/redact` reuses the existing `deleteStore()` — every model already cascades
-  from `Store`, so one delete is a complete, correct erasure. All three follow the existing
-  webhook handler convention (`authenticate.webhook`, `console.log`, try/catch, bare
-  `Response`) — same HMAC verification every other webhook already gets from the SDK, no
-  separate security work needed. No schema changes.
+  `shop/redact`) — required for every public Shopify app, independent of billing. Implemented
+  as a single `app/routes/webhooks.compliance.tsx`, not three separate routes: Shopify requires
+  all three `compliance_topics` on one subscription block sharing one `uri` (confirmed by a
+  real deployment rejection — "The following topic is invalid" — when first registered as
+  ordinary per-topic `[[webhooks.subscriptions]]` blocks with individual URIs); the handler
+  dispatches on the `topic` string the SDK already extracts (`CUSTOMERS_DATA_REQUEST`,
+  `CUSTOMERS_REDACT`, `SHOP_REDACT`). `customers/data_request` logs a full audit record
+  (matching `Review`/`ReviewRequest` rows) for the merchant to fulfill Shopify's 30-day
+  disclosure window manually; no automated export pipeline was built (out of scope for a
+  minimal implementation). `customers/redact` nulls the customer's identifying fields
+  (`reviewerEmail`/`reviewerName`, `ReviewRequest.email`/`name`) while keeping the review
+  content itself, which belongs to the merchant's storefront, not the customer. `shop/redact`
+  reuses the existing `deleteStore()` — every model already cascades from `Store`, so one
+  delete is a complete, correct erasure. Same HMAC verification every other webhook already
+  gets from the SDK via `authenticate.webhook`, no separate security work needed. No schema
+  changes.
 
 - **Shopify Billing** — three-tier subscription (Starter free, Growth $9.99/mo, Pro
   $29.99/mo, both paid tiers with a 14-day free trial), built on Shopify's official Billing
