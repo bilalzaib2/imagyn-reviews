@@ -1,4 +1,4 @@
-import { type KeyboardEvent, useEffect, useMemo, useState } from "react";
+import { type ChangeEvent, type KeyboardEvent, useEffect, useMemo, useRef, useState } from "react";
 import {
   Link as RemixLink,
   useFetcher,
@@ -11,7 +11,18 @@ import {
 } from "react-router";
 import type { ActionFunctionArgs, HeadersFunction, LoaderFunctionArgs } from "react-router";
 import { boundary } from "@shopify/shopify-app-react-router/server";
-import { ActionList, Button as PolarisButton, ButtonGroup, Frame, Popover, TextField, Toast } from "@shopify/polaris";
+import Papa from "papaparse";
+import {
+  ActionList,
+  Banner,
+  Button as PolarisButton,
+  ButtonGroup,
+  Frame,
+  Modal,
+  Popover,
+  TextField,
+  Toast,
+} from "@shopify/polaris";
 
 import { Button } from "../components/ui/Button";
 import { Container } from "../components/ui/Container";
@@ -34,6 +45,8 @@ import {
 import { deleteReviewMedia } from "../services/reviewMedia.server";
 import { syncProductStructuredData } from "../services/structuredData/sync.server";
 import { ReviewStatus } from "../services/review.shared";
+import { IMPORT_SOURCES } from "../services/importers/types";
+import { importReviews, type ImportResult } from "../services/reviewImportExport.server";
 import { getOrCreateStore } from "../services/store.server";
 import { authenticate } from "../shopify.server";
 import styles from "../styles/app.reviews.module.css";
@@ -44,6 +57,7 @@ type ActionData = {
   intent?: string;
   error?: string;
   message?: string;
+  importResult?: ImportResult;
 };
 
 const STATUS_VALUES: string[] = Object.values(ReviewStatus);
@@ -118,12 +132,40 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
 };
 
 export const action = async ({ request }: ActionFunctionArgs): Promise<ActionData> => {
-  const { admin } = await authenticate.admin(request);
+  const { admin, session } = await authenticate.admin(request);
 
   const formData = await request.formData();
   const intent = String(formData.get("_intent") || "");
 
   try {
+    if (intent === "import-csv") {
+      const fileContent = String(formData.get("fileContent") || "");
+
+      if (!fileContent.trim()) {
+        return { ok: false, intent, error: "The file is empty." };
+      }
+
+      const store = await getOrCreateStore(session.shop);
+      const result = await importReviews(store.id, "csv", fileContent);
+      const nothingImported = result.imported === 0 && result.duplicates === 0;
+
+      if (nothingImported && result.errors.length > 0) {
+        return {
+          ok: false,
+          intent,
+          error: "No rows could be imported. See the details below.",
+          importResult: result,
+        };
+      }
+
+      return {
+        ok: true,
+        intent,
+        message: `Imported ${result.imported} review${result.imported === 1 ? "" : "s"}.`,
+        importResult: result,
+      };
+    }
+
     if (intent === "approve" || intent === "reject") {
       const reviewId = String(formData.get("reviewId") || "");
 
@@ -257,6 +299,7 @@ export default function ReviewsPage() {
   } = useLoaderData<typeof loader>();
 
   const mutationFetcher = useFetcher<ActionData>();
+  const importFetcher = useFetcher<ActionData>();
   const navigation = useNavigation();
   const revalidator = useRevalidator();
   const location = useLocation();
@@ -272,6 +315,13 @@ export default function ReviewsPage() {
   const [toastState, setToastState] = useState<{ content: string; error?: boolean } | null>(null);
   const [isReplyEditing, setIsReplyEditing] = useState(false);
   const [actionsMenuOpen, setActionsMenuOpen] = useState(false);
+
+  const [isImportModalOpen, setIsImportModalOpen] = useState(false);
+  const [importFileName, setImportFileName] = useState<string | null>(null);
+  const [importFileContent, setImportFileContent] = useState<string | null>(null);
+  const [importPreviewRows, setImportPreviewRows] = useState<Record<string, string>[]>([]);
+  const [importFileError, setImportFileError] = useState<string | null>(null);
+  const importFileInputRef = useRef<HTMLInputElement>(null);
 
   const [optimisticStatus, setOptimisticStatus] = useState<Record<string, ReviewStatus>>({});
   const [optimisticDeleted, setOptimisticDeleted] = useState<Record<string, true>>({});
@@ -312,6 +362,17 @@ export default function ReviewsPage() {
     }
     revalidator.revalidate();
   }, [mutationFetcher.data, revalidator]);
+
+  useEffect(() => {
+    if (!importFetcher.data) {
+      return;
+    }
+
+    if (importFetcher.data.ok) {
+      setToastState({ content: importFetcher.data.message || "Import complete." });
+      revalidator.revalidate();
+    }
+  }, [importFetcher.data, revalidator]);
 
   useEffect(() => {
     const timeoutId = window.setTimeout(() => {
@@ -394,6 +455,8 @@ export default function ReviewsPage() {
 
   const activeIntent = mutationFetcher.formData?.get("_intent")?.toString() ?? "";
   const isReplySaving = mutationFetcher.state !== "idle" && activeIntent.startsWith("reply");
+  const isImporting = importFetcher.state !== "idle";
+  const previewHeaders = importPreviewRows.length > 0 ? Object.keys(importPreviewRows[0]) : [];
 
   const submitMutation = (payload: Record<string, string | string[]>) => {
     const formData = new FormData();
@@ -442,6 +505,59 @@ export default function ReviewsPage() {
     setMutationError(null);
     setOptimisticDeletedMediaIds((prev) => ({ ...prev, [mediaId]: true }));
     submitMutation({ _intent: "deleteMedia", mediaId });
+  };
+
+  const resetImportState = () => {
+    setImportFileName(null);
+    setImportFileContent(null);
+    setImportPreviewRows([]);
+    setImportFileError(null);
+    if (importFileInputRef.current) {
+      importFileInputRef.current.value = "";
+    }
+  };
+
+  const closeImportModal = () => {
+    setIsImportModalOpen(false);
+    resetImportState();
+  };
+
+  const handleImportFileChange = (event: ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    resetImportState();
+
+    if (!file) {
+      return;
+    }
+
+    setImportFileName(file.name);
+
+    const reader = new FileReader();
+    reader.onload = () => {
+      const text = typeof reader.result === "string" ? reader.result : "";
+      const preview = Papa.parse<Record<string, string>>(text, { header: true, skipEmptyLines: true });
+
+      if (!preview.data.length) {
+        setImportFileError("The file has no data rows.");
+        return;
+      }
+
+      setImportFileContent(text);
+      setImportPreviewRows(preview.data.slice(0, 5));
+    };
+    reader.onerror = () => setImportFileError("Unable to read the file.");
+    reader.readAsText(file);
+  };
+
+  const submitImportFile = () => {
+    if (!importFileContent) {
+      return;
+    }
+
+    const formData = new FormData();
+    formData.append("_intent", "import-csv");
+    formData.append("fileContent", importFileContent);
+    importFetcher.submit(formData, { method: "post" });
   };
 
   const applyBulkAction = (intent: "bulkApprove" | "bulkReject" | "bulkDelete") => {
@@ -535,9 +651,15 @@ export default function ReviewsPage() {
               Moderate feedback with live workflow actions and bulk operations.
             </p>
           </div>
-          <LinkButton to={`/app/reviews/new${location.search}`} variant="primary">
-            New Review
-          </LinkButton>
+          <div className={styles.headerActions}>
+            <Button type="button" variant="secondary" onClick={() => setIsImportModalOpen(true)}>
+              Import
+            </Button>
+            <PolarisButton url="/app/reviews/export">Export</PolarisButton>
+            <LinkButton to={`/app/reviews/new${location.search}`} variant="primary">
+              New Review
+            </LinkButton>
+          </div>
         </header>
 
         <div className={styles.toolbar}>
@@ -1109,6 +1231,96 @@ export default function ReviewsPage() {
         </Section>
       </div>
       </Container>
+
+      <Modal
+        open={isImportModalOpen}
+        onClose={closeImportModal}
+        title="Import reviews"
+        primaryAction={{
+          content: isImporting ? "Importing…" : "Import",
+          onAction: submitImportFile,
+          disabled: !importFileContent || isImporting,
+          loading: isImporting,
+        }}
+        secondaryActions={[{ content: "Close", onAction: closeImportModal }]}
+      >
+        <Modal.Section>
+          <div className={styles.importSourceRow}>
+            <span className={styles.filterLabel}>Import from</span>
+            <select className={styles.filterSelect} value="csv" disabled>
+              {IMPORT_SOURCES.map((source) => (
+                <option key={source.value} value={source.value} disabled={!source.available}>
+                  {source.label}
+                  {source.available ? "" : " (coming soon)"}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          <div className={styles.importFileRow}>
+            <input
+              ref={importFileInputRef}
+              type="file"
+              accept=".csv,text/csv"
+              onChange={handleImportFileChange}
+              disabled={isImporting}
+            />
+            {importFileName ? <span className={styles.filterLabel}>{importFileName}</span> : null}
+          </div>
+
+          {importFileError ? <Banner tone="critical">{importFileError}</Banner> : null}
+
+          {importPreviewRows.length > 0 ? (
+            <div className={styles.importPreview}>
+              <p className={styles.detailLabel}>Preview — first {importPreviewRows.length} rows</p>
+              <div className={styles.importPreviewTableWrap}>
+                <table className={styles.importPreviewTable}>
+                  <thead>
+                    <tr>
+                      {previewHeaders.map((header) => (
+                        <th key={header}>{header}</th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {importPreviewRows.map((row, index) => (
+                      <tr key={index}>
+                        {previewHeaders.map((header) => (
+                          <td key={header}>{row[header]}</td>
+                        ))}
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          ) : null}
+
+          {importFetcher.data?.importResult ? (
+            <div className={styles.importResult}>
+              <Banner tone={importFetcher.data.ok ? "success" : "critical"}>
+                {importFetcher.data.ok ? importFetcher.data.message : importFetcher.data.error}
+              </Banner>
+              <p className={styles.detailSubvalue}>
+                {importFetcher.data.importResult.imported} imported ·{" "}
+                {importFetcher.data.importResult.duplicates} duplicate{importFetcher.data.importResult.duplicates === 1 ? "" : "s"} skipped ·{" "}
+                {importFetcher.data.importResult.heldForModeration} held for moderation
+              </p>
+              {importFetcher.data.importResult.errors.length > 0 ? (
+                <ul className={styles.importErrorList}>
+                  {importFetcher.data.importResult.errors.map((rowError, index) => (
+                    <li key={index}>
+                      {rowError.row > 0 ? `Row ${rowError.row}: ` : ""}
+                      {rowError.reason}
+                    </li>
+                  ))}
+                </ul>
+              ) : null}
+            </div>
+          ) : null}
+        </Modal.Section>
+      </Modal>
+
       <Frame>
         {toastState ? (
           <Toast content={toastState.content} error={toastState.error} onDismiss={() => setToastState(null)} />

@@ -8,6 +8,22 @@ Notable changes to Imagyn Reviews, newest first. Commit SHAs refer to `main`.
 
 ### Added
 
+- **Import/Export Reviews (V1)** — merchant migration support, added to the Reviews page
+  header. CSV import goes through a new `Importer` provider abstraction
+  (`app/services/importers/`, mirroring the AI/Storage/Notification/Billing pattern) so
+  Judge.me/Loox/Stamped/Ryviu can be added later as a new file plus one factory case, with no
+  UI redesign. The merchant sees an instant client-side preview of the first rows before
+  committing; the single "Import" click both validates and creates rows in one round trip
+  (`app/services/reviewImportExport.server.ts`) — no temp storage, no two-phase commit.
+  Per-row failures (unknown product, out-of-range rating, missing content) are reported with
+  their original CSV row number rather than aborting the whole file; exact-match duplicates
+  (`storeId` + `productId` + `reviewerName` + `content`) are skipped, not re-imported. Imported
+  rows auto-publish by default (already vetted on their source platform) unless a `status`
+  column says otherwise, still bounded by the Starter plan's published-review cap — a row that
+  would exceed it is created `pending` instead of being dropped. Export streams every review to
+  CSV using the same column schema import accepts, so a merchant's own export can be
+  re-imported unchanged. No schema changes.
+
 - **Mandatory GDPR compliance webhooks** (`customers/data_request`, `customers/redact`,
   `shop/redact`) — required for every public Shopify app, independent of billing. Implemented
   as a single `app/routes/webhooks.compliance.tsx`, not three separate routes: Shopify requires

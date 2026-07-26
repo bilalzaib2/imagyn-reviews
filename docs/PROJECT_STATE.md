@@ -28,6 +28,11 @@ App Store submission readiness (Shopify Billing shipped; hardening and polish ne
     See [DECISIONS.md](./DECISIONS.md).
 -   **Mandatory GDPR compliance webhooks** (`customers/data_request`, `customers/redact`,
     `shop/redact`) — required for App Store approval independent of billing.
+-   **Import/Export Reviews (V1)** — CSV import with an extensible importer-provider
+    abstraction (Judge.me/Loox/Stamped/Ryviu placeholders ready for later), client-side
+    preview of the first rows, per-row validation with row-numbered error messages, duplicate
+    detection, and plan-limit-aware auto-approval. CSV export of all reviews using the same
+    column schema, for round-trip re-import. See [DECISIONS.md](./DECISIONS.md).
 
 ## Blocked
 

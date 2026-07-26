@@ -81,3 +81,36 @@
     but nothing in the app currently gates on them. What *is* actually enforced: the Starter
     published-review cap, AI summaries, photo reviews, and automatic review requests — all
     features that already existed before billing was added.
+
+## Import/Export Reviews V1 (2026-07-26)
+
+-   **Importer provider abstraction, same pattern as AI/Storage/Notifications/Billing.**
+    `app/services/importers/types.ts` defines the `Importer` interface (`parse(fileContent)`);
+    `provider.server.ts`'s `getImporter(source)` is the one factory switch. CSV is the only
+    real implementation; Judge.me/Loox/Stamped/Ryviu are listed in `IMPORT_SOURCES` as
+    `available: false` placeholders so the picker UI never needs to change shape when they're
+    wired up — only a new `createXImporter()` file and one new `case`.
+-   **`IMPORT_SOURCES` lives in `types.ts`, not `provider.server.ts`**, despite being importer
+    metadata — the Reviews page's "Import from" selector needs it client-side, and any
+    `*.server.ts` module is excluded from the client bundle by convention. Splitting pure data
+    (safe on both sides) from the factory function (server-only, imports `csv.server.ts`)
+    keeps the existing `.server.ts` boundary convention intact.
+-   **CSV import is a single round-trip, not a stateful two-phase preview/commit.** The first
+    few rows are parsed and previewed entirely client-side (the same `papaparse` library,
+    already a dependency for the server-side parser) before the merchant clicks Import; the
+    one server round-trip both validates and commits. Avoids needing temporary file storage or
+    a session-scoped "pending import" record for a V1 feature.
+-   **A CSV row's `status` column controls auto-approval, defaulting to approved.** Reviews
+    arriving via import were already vetted on whatever platform exported them, so — unlike a
+    customer's own submission, which always starts `pending` — an import row publishes
+    immediately unless its `status` column explicitly says `pending`/`rejected`. Auto-approval
+    still respects the Starter plan's published-review cap (`createReview`'s new
+    `autoApprove` flag checks the same `getPlanLimits`/`getStorePlanId` helpers
+    `setReviewStatus` already used); a row that would exceed the cap is created as `pending`
+    instead of being rejected outright, so an import never silently drops data.
+-   **Duplicate detection is exact-match on `(storeId, productId, reviewerName, content)`**,
+    not fuzzy matching — simple, predictable, and sufficient for the stated goal ("prevent
+    duplicate imports where possible") without a scoring/threshold system to tune or explain.
+-   **Export reuses the same column schema import accepts**, so a merchant's exported CSV can
+    be re-imported (into this store or another) without edits — one shared header contract for
+    both directions.

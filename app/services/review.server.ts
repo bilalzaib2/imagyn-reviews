@@ -54,6 +54,12 @@ export interface CreateReviewInput {
   verifiedPurchase?: boolean;
   featured?: boolean;
   photoUrls?: string | null;
+  // Both are for reviewImportExport.server.ts's CSV import: preserving a review's original
+  // date (rather than backdating everything to "now") and auto-approving migrated reviews
+  // (already vetted on the platform they're coming from) instead of forcing them through
+  // moderation again. Neither is settable by a customer-facing submission path.
+  createdAt?: Date;
+  autoApprove?: boolean;
 }
 
 export interface UpdateReviewInput {
@@ -329,6 +335,20 @@ export async function createReview(data: CreateReviewInput) {
 
   validateReviewInput(data);
 
+  // Same published-review cap setReviewStatus enforces on approval — a CSV import
+  // requesting auto-approve is just another way a review reaches published state, so it
+  // can't bypass the Starter plan's limit. Falls back to PENDING rather than rejecting the
+  // row outright, so an import never loses data, only defers moderation.
+  let approveNow = false;
+  if (data.autoApprove) {
+    const plan = await getStorePlanId(product.storeId);
+    const limit = getPlanLimits(plan).maxPublishedReviews;
+    approveNow =
+      limit === null ||
+      (await prisma.review.count({ where: { storeId: product.storeId, deletedAt: null, isPublished: true } })) <
+        limit;
+  }
+
   const review = await prisma.review.create({
     data: {
       storeId: product.storeId,
@@ -343,6 +363,8 @@ export async function createReview(data: CreateReviewInput) {
       verifiedPurchase: data.verifiedPurchase ?? false,
       featured: data.featured ?? false,
       photoUrls: data.photoUrls || null,
+      ...(data.createdAt ? { createdAt: data.createdAt } : {}),
+      ...(approveNow ? { status: ReviewStatus.APPROVED, isPublished: true } : {}),
     },
     include: reviewInclude,
   });
