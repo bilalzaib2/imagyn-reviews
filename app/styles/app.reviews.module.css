@@ -16,13 +16,11 @@
   flex-wrap: wrap;
 }
 
+/* Deliberately unboxed — the search input and selects inside already have their own
+   borders, so an outer container border would just be a box around boxes. */
 .toolbar {
   display: grid;
   gap: var(--space-4);
-  padding: var(--space-4);
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-lg);
-  background: var(--color-surface-muted);
 }
 
 .bulkActions {
@@ -149,7 +147,7 @@
 
 .list {
   display: grid;
-  gap: var(--space-2);
+  gap: var(--space-3);
 }
 
 .skeletonList {
@@ -185,13 +183,14 @@
   width: 100%;
 }
 
+/* No border-bottom between rows — separation comes from .list's own gap plus the
+   hover/selected treatment below, per the "whitespace instead of containers" direction. */
 .reviewRow {
   display: flex;
   align-items: flex-start;
   justify-content: space-between;
   gap: var(--space-6);
-  padding: var(--space-5) var(--space-4);
-  border-bottom: 1px solid var(--color-border);
+  padding: var(--space-4);
   border-left: 3px solid transparent;
   border-radius: var(--radius-md);
   transition: background-color var(--transition-base), border-color var(--transition-base), transform var(--transition-base);
@@ -205,13 +204,8 @@
 
 .reviewRowSelected {
   background-color: color-mix(in srgb, var(--color-text) 4%, transparent);
-  border-bottom-color: var(--color-border-strong);
   border-left-color: var(--color-accent);
   box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--color-text) 4%, transparent);
-}
-
-.reviewRow:last-child {
-  border-bottom: none;
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -258,48 +252,19 @@
   letter-spacing: -0.01em;
 }
 
+/* One colored element per row (the status Badge) — everything else (verified, auto-
+   approved, photo count, replied) is a single flowing muted text line beside it, not a
+   competing pill, so the eye only has one color to parse per row. */
 .reviewBadgeRow {
   display: flex;
   align-items: center;
   gap: var(--space-2);
   flex-wrap: wrap;
-  margin-bottom: var(--space-2);
+  margin-bottom: var(--space-1);
 }
 
-.metaBadge {
-  display: inline-flex;
-  align-items: center;
-  width: fit-content;
-  white-space: nowrap;
-  border-radius: var(--radius-full);
-  padding: 0.25rem 0.6rem;
-  font-size: var(--text-xs);
-  font-weight: 600;
-  letter-spacing: 0.04em;
-  text-transform: uppercase;
-  background: var(--color-surface-strong);
+.reviewMetaText {
   color: var(--color-text-muted);
-}
-
-.replyBadgeActive {
-  display: inline-flex;
-  align-items: center;
-  width: fit-content;
-  white-space: nowrap;
-  border-radius: var(--radius-full);
-  padding: 0.25rem 0.6rem;
-  font-size: var(--text-xs);
-  font-weight: 600;
-  letter-spacing: 0.04em;
-  text-transform: uppercase;
-  background: color-mix(in srgb, var(--color-success) 12%, transparent);
-  color: var(--color-success);
-}
-
-.reviewMeta {
-  margin: 0;
-  color: var(--color-text-muted);
-  opacity: 0.92;
   font-size: var(--text-sm);
 }
 
@@ -323,20 +288,6 @@
   padding-right: var(--space-3);
 }
 
-.verifiedBadge {
-  display: inline-flex;
-  align-items: center;
-  width: fit-content;
-  white-space: nowrap;
-  border-radius: var(--radius-full);
-  padding: 0.25rem 0.6rem;
-  font-size: var(--text-xs);
-  font-weight: 600;
-  letter-spacing: 0.04em;
-  text-transform: uppercase;
-  background: color-mix(in srgb, var(--color-info) 12%, transparent);
-  color: var(--color-accent);
-}
 
 .autoApprovedBadge {
   display: inline-flex;
@@ -437,10 +388,78 @@
   flex-wrap: wrap;
 }
 
+.moderationButtons {
+  display: flex;
+  gap: var(--space-2);
+}
+
 .actionsMenuButton {
   gap: 0.4rem;
   font-size: var(--text-sm);
   padding-inline: var(--space-3);
+}
+
+/* Everything between the hero and the sticky actions row lives in one calm, generously
+   spaced column — no dividers between these sections, just gap. Only two dividers remain
+   on the whole panel: after the hero, and before the actions row. */
+.detailBody {
+  display: grid;
+  gap: var(--space-6);
+}
+
+/* The one prominent, unmissable AI surface in the panel — a quiet tint, not a hard box,
+   rendered only when this product actually has a generated summary (never fabricated). */
+.aiSummaryCallout {
+  display: grid;
+  gap: var(--space-2);
+  padding: var(--space-4);
+  border-radius: var(--radius-lg);
+  background: color-mix(in srgb, var(--color-accent) 4%, var(--color-surface));
+}
+
+.aiSummaryLabel {
+  margin: 0;
+  font-size: var(--text-xs);
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--color-text-muted);
+}
+
+.aiSummaryText {
+  margin: 0;
+  color: var(--color-text);
+  line-height: 1.6;
+}
+
+.aiSummaryRecommendation {
+  margin: 0;
+  color: var(--color-text-muted);
+  font-size: var(--text-sm);
+  font-style: italic;
+  line-height: 1.5;
+}
+
+.aiSummaryLink {
+  width: fit-content;
+  color: var(--color-text);
+  font-size: var(--text-sm);
+  font-weight: 600;
+  text-decoration: none;
+  border-bottom: 1px solid var(--color-border-strong);
+}
+
+.aiSummaryLink:hover {
+  border-bottom-color: var(--color-text);
+}
+
+/* The review's own words — the primary reading task in this panel, so it's promoted to
+   full contrast and a larger size than the surrounding metadata. */
+.reviewContentText {
+  margin: 0;
+  font-size: var(--text-base);
+  color: var(--color-text);
+  line-height: 1.65;
 }
 
 .ratingLarge {
@@ -476,37 +495,24 @@
   line-height: 1.6;
 }
 
-/* Compact customer/product/date/moderation block — deliberately quieter than the review
-   content below it (smaller text, muted labels, tight rows) so the panel reads as
-   "here's the review, here's context about it" instead of nine same-weight sections. */
 .detailMeta {
-  display: grid;
-  gap: var(--space-2);
+  composes: detailMeta from "./shared.module.css";
 }
 
 .detailMetaRow {
-  display: flex;
-  align-items: baseline;
-  gap: var(--space-3);
-  font-size: var(--text-sm);
+  composes: detailMetaRow from "./shared.module.css";
 }
 
 .detailMetaLabel {
-  flex: none;
-  width: 5.5rem;
-  color: var(--color-text-muted);
-  font-size: var(--text-xs);
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
+  composes: detailMetaLabel from "./shared.module.css";
 }
 
 .detailMetaValue {
-  color: var(--color-text);
-  overflow-wrap: anywhere;
+  composes: detailMetaValue from "./shared.module.css";
 }
 
-/* Helpful-vote counts + the AI-summary pointer, demoted to one quiet closing line instead
-   of their own bordered sections — neither is something a merchant edits or acts on here. */
+/* Helpful-vote counts — demoted to one quiet closing line, since it's a stat a merchant
+   reads, not something they edit or act on here. */
 .detailFooterRow {
   display: flex;
   align-items: center;
@@ -520,13 +526,6 @@
   font-variant-numeric: tabular-nums;
 }
 
-.detailFooterLink {
-  margin-left: auto;
-  color: var(--color-text-muted);
-  text-decoration: underline;
-  text-underline-offset: 2px;
-}
-
 .replyLabel {
   display: grid;
 }
@@ -535,11 +534,13 @@
   display: grid;
 }
 
+/* A quoted reply, not a form box — left accent bar + tint instead of a full border, so it
+   reads as "here's what you said" rather than another bordered container. */
 .replyDisplay {
-  padding: var(--space-4);
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-md);
-  background: var(--color-surface);
+  padding: var(--space-3) var(--space-4);
+  border-left: 3px solid var(--color-accent);
+  border-radius: 0 var(--radius-md) var(--radius-md) 0;
+  background: color-mix(in srgb, var(--color-text) 3%, transparent);
   color: var(--color-text);
   line-height: 1.7;
   white-space: pre-wrap;
@@ -582,10 +583,10 @@
 
 .photoItem {
   position: relative;
-  border: 1px solid var(--color-border);
   border-radius: var(--radius-sm);
   overflow: hidden;
   background: var(--color-surface-muted);
+  box-shadow: var(--shadow-sm);
 }
 
 .photoImage {

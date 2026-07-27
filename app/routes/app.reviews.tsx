@@ -15,8 +15,6 @@ import Papa from "papaparse";
 import {
   ActionList,
   Banner,
-  Button as PolarisButton,
-  ButtonGroup,
   Frame,
   Modal,
   Popover,
@@ -43,6 +41,7 @@ import {
   type ReviewWithProduct,
 } from "../services/review.server";
 import { deleteReviewMedia } from "../services/reviewMedia.server";
+import { getAiSummariesForProducts, type ProductAiSummaryRecord } from "../services/aiSummary.server";
 import { syncProductStructuredData } from "../services/structuredData/sync.server";
 import { ReviewStatus } from "../services/review.shared";
 import { IMPORT_SOURCES } from "../services/importers/types";
@@ -95,11 +94,17 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
       sort: sortParam,
     });
 
+    // Batched, not per-review — bounded by this page's own 20-review limit, and a pure
+    // cache read (see getAiSummariesForProducts), so this never triggers AI generation.
+    const productIds = Array.from(new Set(result.reviews.map((review) => review.productId)));
+    const aiSummaries = await getAiSummariesForProducts(productIds);
+
     return {
       reviews: result.reviews,
       nextCursor: result.nextCursor,
       hasMore: result.hasMore,
       totalCount: result.totalCount,
+      aiSummaries,
       error: null as string | null,
       search: search ?? "",
       status: statusParam ?? "",
@@ -117,6 +122,7 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
       nextCursor: null,
       hasMore: false,
       totalCount: 0,
+      aiSummaries: {} as Record<string, ProductAiSummaryRecord>,
       error: error instanceof Error ? error.message : "Unable to load reviews.",
       search: search ?? "",
       status: statusParam ?? "",
@@ -286,6 +292,7 @@ export default function ReviewsPage() {
     nextCursor,
     hasMore,
     totalCount,
+    aiSummaries,
     error,
     search: initialSearch,
     status: initialStatus,
@@ -994,24 +1001,14 @@ export default function ReviewsPage() {
                                 <h2 className={styles.reviewTitle}>{reviewTitle}</h2>
                                 <div className={styles.reviewBadgeRow}>
                                   <ReviewStatusBadge status={review.status} />
-                                  {review.moderationStatus === "auto_approved" ? (
-                                    <span className={styles.autoApprovedBadge}>Auto Approved</span>
-                                  ) : null}
-                                  {review.verifiedPurchase ? (
-                                    <span className={styles.verifiedBadge}>Verified buyer</span>
-                                  ) : null}
-                                  {photoCount > 0 ? (
-                                    <span className={styles.metaBadge}>
-                                      {photoCount} photo{photoCount === 1 ? "" : "s"}
-                                    </span>
-                                  ) : null}
-                                  <span className={review.reply ? styles.replyBadgeActive : styles.metaBadge}>
-                                    {review.reply ? "Replied" : "No reply"}
+                                  <span className={styles.reviewMetaText}>
+                                    {customerName} · {productName}
+                                    {review.verifiedPurchase ? " · Verified" : ""}
+                                    {review.moderationStatus === "auto_approved" ? " · Auto-approved" : ""}
+                                    {photoCount > 0 ? ` · ${photoCount} photo${photoCount === 1 ? "" : "s"}` : ""}
+                                    {review.reply ? " · Replied" : ""}
                                   </span>
                                 </div>
-                                <p className={styles.reviewMeta}>
-                                  {customerName} • {productName}
-                                </p>
                                 <p className={styles.reviewPreview}>{previewText}</p>
                               </div>
                             </div>
@@ -1041,192 +1038,200 @@ export default function ReviewsPage() {
 
                     <div className={styles.detailDivider} />
 
-                    <div className={styles.detailMeta}>
-                      <div className={styles.detailMetaRow}>
-                        <span className={styles.detailMetaLabel}>Customer</span>
-                        <span className={styles.detailMetaValue}>
-                          {selectedReview.reviewerName}
-                          {selectedReview.verifiedPurchase ? " · Verified buyer" : ""}
-                        </span>
-                      </div>
-                      {selectedReview.reviewerEmail ? (
-                        <div className={styles.detailMetaRow}>
-                          <span className={styles.detailMetaLabel}>Email</span>
-                          <span className={styles.detailMetaValue}>{selectedReview.reviewerEmail}</span>
+                    <div className={styles.detailBody}>
+                      {aiSummaries[selectedReview.productId] ? (
+                        <div className={styles.aiSummaryCallout}>
+                          <p className={styles.aiSummaryLabel}>✨ AI Summary</p>
+                          <p className={styles.aiSummaryText}>{aiSummaries[selectedReview.productId].summary}</p>
+                          {aiSummaries[selectedReview.productId].recommendation ? (
+                            <p className={styles.aiSummaryRecommendation}>
+                              {aiSummaries[selectedReview.productId].recommendation}
+                            </p>
+                          ) : null}
+                          <RemixLink
+                            to={`/app/products/${selectedReview.productId}`}
+                            className={styles.aiSummaryLink}
+                          >
+                            View full analysis &rarr;
+                          </RemixLink>
                         </div>
                       ) : null}
-                      {selectedReview.reviewerLocation ? (
-                        <div className={styles.detailMetaRow}>
-                          <span className={styles.detailMetaLabel}>Location</span>
-                          <span className={styles.detailMetaValue}>{selectedReview.reviewerLocation}</span>
-                        </div>
-                      ) : null}
-                      <div className={styles.detailMetaRow}>
-                        <span className={styles.detailMetaLabel}>Product</span>
-                        <span className={styles.detailMetaValue}>
-                          {selectedReview.productTitle ?? selectedReview.product?.name ?? "Unassigned product"}
-                        </span>
+
+                      <div className={styles.detailSection}>
+                        <p className={styles.detailLabel}>Review</p>
+                        <p className={styles.reviewContentText}>{selectedReview.content}</p>
                       </div>
-                      <div className={styles.detailMetaRow}>
-                        <span className={styles.detailMetaLabel}>Created</span>
-                        <span className={styles.detailMetaValue}>{formatLongDate(selectedReview.createdAt)}</span>
-                      </div>
-                      {selectedReview.moderationReason ? (
+
+                      <div className={styles.detailMeta}>
                         <div className={styles.detailMetaRow}>
-                          <span className={styles.detailMetaLabel}>Moderation</span>
-                          <span className={styles.detailMetaValue}>{selectedReview.moderationReason}</span>
+                          <span className={styles.detailMetaLabel}>Customer</span>
+                          <span className={styles.detailMetaValue}>
+                            {selectedReview.reviewerName}
+                            {selectedReview.verifiedPurchase ? " · Verified buyer" : ""}
+                          </span>
                         </div>
-                      ) : null}
-                    </div>
-
-                    <div className={styles.detailDivider} />
-
-                    <div className={styles.detailSection}>
-                      <p className={styles.detailLabel}>Review</p>
-                      <p className={styles.detailValue}>{selectedReview.content}</p>
-                    </div>
-
-                    <div className={styles.detailDivider} />
-
-                    <div className={styles.detailSection}>
-                      <p className={styles.detailLabel}>Photos</p>
-                      {(() => {
-                        const visibleMedia = selectedReview.media.filter(
-                          (item) => !optimisticDeletedMediaIds[item.id],
-                        );
-
-                        if (visibleMedia.length === 0) {
-                          return <p className={styles.detailPlaceholder}>No photos have been uploaded for this review.</p>;
-                        }
-
-                        return (
-                          <div className={styles.photoGrid}>
-                            {visibleMedia.map((item) => (
-                              <div key={item.id} className={styles.photoItem}>
-                                <a href={item.url} target="_blank" rel="noreferrer" aria-label="View full size">
-                                  <img
-                                    className={styles.photoImage}
-                                    src={item.thumbnailUrl ?? item.url}
-                                    alt="Review attachment"
-                                    loading="lazy"
-                                  />
-                                </a>
-                                <button
-                                  type="button"
-                                  className={styles.photoDeleteButton}
-                                  onClick={() => deleteMedia(item.id)}
-                                  disabled={isMutating}
-                                  aria-label="Delete photo"
-                                >
-                                  ×
-                                </button>
-                              </div>
-                            ))}
+                        {selectedReview.reviewerEmail ? (
+                          <div className={styles.detailMetaRow}>
+                            <span className={styles.detailMetaLabel}>Email</span>
+                            <span className={styles.detailMetaValue}>{selectedReview.reviewerEmail}</span>
                           </div>
-                        );
-                      })()}
-                    </div>
+                        ) : null}
+                        {selectedReview.reviewerLocation ? (
+                          <div className={styles.detailMetaRow}>
+                            <span className={styles.detailMetaLabel}>Location</span>
+                            <span className={styles.detailMetaValue}>{selectedReview.reviewerLocation}</span>
+                          </div>
+                        ) : null}
+                        <div className={styles.detailMetaRow}>
+                          <span className={styles.detailMetaLabel}>Product</span>
+                          <span className={styles.detailMetaValue}>
+                            {selectedReview.productTitle ?? selectedReview.product?.name ?? "Unassigned product"}
+                          </span>
+                        </div>
+                        <div className={styles.detailMetaRow}>
+                          <span className={styles.detailMetaLabel}>Created</span>
+                          <span className={styles.detailMetaValue}>{formatLongDate(selectedReview.createdAt)}</span>
+                        </div>
+                        {selectedReview.moderationReason ? (
+                          <div className={styles.detailMetaRow}>
+                            <span className={styles.detailMetaLabel}>Moderation</span>
+                            <span className={styles.detailMetaValue}>{selectedReview.moderationReason}</span>
+                          </div>
+                        ) : null}
+                      </div>
 
-                    <div className={styles.detailDivider} />
+                      <div className={styles.detailSection}>
+                        <p className={styles.detailLabel}>Photos</p>
+                        {(() => {
+                          const visibleMedia = selectedReview.media.filter(
+                            (item) => !optimisticDeletedMediaIds[item.id],
+                          );
 
-                    <div className={styles.detailSection}>
-                      <p className={styles.detailLabel}>Merchant Reply</p>
-                      {selectedReview.reply && !isReplyEditing ? (
-                        <>
-                          <div className={styles.replyDisplay}>{selectedReview.reply}</div>
-                          <div className={styles.replyMetaRow}>
-                            <span className={styles.replyMetaText}>
-                              {selectedReview.repliedAt
-                                ? `Last updated ${formatLongDate(selectedReview.repliedAt)}`
-                                : "Published reply"}
-                            </span>
-                          </div>
-                          <div className={styles.replyActions}>
-                            <Button type="button" onClick={() => setIsReplyEditing(true)} disabled={isReplySaving}>
-                              Edit
-                            </Button>
-                            <Button type="button" onClick={() => deleteReplyDraft(selectedReview.id)} disabled={isReplySaving}>
-                              Delete
-                            </Button>
-                          </div>
-                        </>
-                      ) : (
-                        <>
-                          <div className={styles.replyField}>
-                            <TextField
-                              label="Merchant reply"
-                              labelHidden
-                              value={replyDraft}
-                              onChange={setReplyDraft}
-                              autoComplete="off"
-                              multiline={4}
-                              placeholder="Write a public reply to this review"
-                              disabled={isReplySaving}
-                            />
-                          </div>
-                          <div className={styles.replyActions}>
-                            <Button
-                              type="button"
-                              onClick={() => applyReply(selectedReview.id, replyDraft)}
-                              disabled={isReplySaving || replyDraft.trim().length === 0}
-                            >
-                              Save
-                            </Button>
-                            <Button
-                              type="button"
-                              onClick={() => {
-                                setReplyDraft(selectedReview.reply ?? "");
-                                setIsReplyEditing(false);
-                              }}
-                              disabled={isReplySaving}
-                            >
-                              Cancel
-                            </Button>
-                            {selectedReview.reply ? (
-                              <Button
-                                type="button"
-                                onClick={() => deleteReplyDraft(selectedReview.id)}
-                                disabled={isReplySaving}
-                              >
+                          if (visibleMedia.length === 0) {
+                            return <p className={styles.detailPlaceholder}>No photos have been uploaded for this review.</p>;
+                          }
+
+                          return (
+                            <div className={styles.photoGrid}>
+                              {visibleMedia.map((item) => (
+                                <div key={item.id} className={styles.photoItem}>
+                                  <a href={item.url} target="_blank" rel="noreferrer" aria-label="View full size">
+                                    <img
+                                      className={styles.photoImage}
+                                      src={item.thumbnailUrl ?? item.url}
+                                      alt="Review attachment"
+                                      loading="lazy"
+                                    />
+                                  </a>
+                                  <button
+                                    type="button"
+                                    className={styles.photoDeleteButton}
+                                    onClick={() => deleteMedia(item.id)}
+                                    disabled={isMutating}
+                                    aria-label="Delete photo"
+                                  >
+                                    ×
+                                  </button>
+                                </div>
+                              ))}
+                            </div>
+                          );
+                        })()}
+                      </div>
+
+                      <div className={styles.detailSection}>
+                        <p className={styles.detailLabel}>Merchant Reply</p>
+                        {selectedReview.reply && !isReplyEditing ? (
+                          <>
+                            <div className={styles.replyDisplay}>{selectedReview.reply}</div>
+                            <div className={styles.replyMetaRow}>
+                              <span className={styles.replyMetaText}>
+                                {selectedReview.repliedAt
+                                  ? `Last updated ${formatLongDate(selectedReview.repliedAt)}`
+                                  : "Published reply"}
+                              </span>
+                            </div>
+                            <div className={styles.replyActions}>
+                              <Button type="button" onClick={() => setIsReplyEditing(true)} disabled={isReplySaving}>
+                                Edit
+                              </Button>
+                              <Button type="button" onClick={() => deleteReplyDraft(selectedReview.id)} disabled={isReplySaving}>
                                 Delete
                               </Button>
-                            ) : null}
-                          </div>
-                        </>
-                      )}
-                    </div>
+                            </div>
+                          </>
+                        ) : (
+                          <>
+                            <div className={styles.replyField}>
+                              <TextField
+                                label="Merchant reply"
+                                labelHidden
+                                value={replyDraft}
+                                onChange={setReplyDraft}
+                                autoComplete="off"
+                                multiline={4}
+                                placeholder="Write a public reply to this review"
+                                disabled={isReplySaving}
+                              />
+                            </div>
+                            <div className={styles.replyActions}>
+                              <Button
+                                type="button"
+                                onClick={() => applyReply(selectedReview.id, replyDraft)}
+                                disabled={isReplySaving || replyDraft.trim().length === 0}
+                              >
+                                Save
+                              </Button>
+                              <Button
+                                type="button"
+                                onClick={() => {
+                                  setReplyDraft(selectedReview.reply ?? "");
+                                  setIsReplyEditing(false);
+                                }}
+                                disabled={isReplySaving}
+                              >
+                                Cancel
+                              </Button>
+                              {selectedReview.reply ? (
+                                <Button
+                                  type="button"
+                                  onClick={() => deleteReplyDraft(selectedReview.id)}
+                                  disabled={isReplySaving}
+                                >
+                                  Delete
+                                </Button>
+                              ) : null}
+                            </div>
+                          </>
+                        )}
+                      </div>
 
-                    <div className={styles.detailDivider} />
-
-                    <div className={styles.detailFooterRow}>
-                      <span className={styles.detailFooterStat}>{selectedReview.helpfulCount} helpful</span>
-                      <span className={styles.detailFooterStat}>{selectedReview.notHelpfulCount} not helpful</span>
-                      <RemixLink
-                        to={`/app/products/${selectedReview.productId}`}
-                        className={styles.detailFooterLink}
-                      >
-                        View AI summary
-                      </RemixLink>
+                      <div className={styles.detailFooterRow}>
+                        <span className={styles.detailFooterStat}>{selectedReview.helpfulCount} helpful</span>
+                        <span className={styles.detailFooterStat}>{selectedReview.notHelpfulCount} not helpful</span>
+                      </div>
                     </div>
 
                     <div className={styles.detailDivider} />
 
                     <div className={styles.detailActions}>
-                      <ButtonGroup>
-                        <PolarisButton
+                      <div className={styles.moderationButtons}>
+                        <Button
+                          type="button"
                           variant="primary"
                           onClick={() => applySingleStatus(selectedReview.id, ReviewStatus.APPROVED)}
                           disabled={isMutating}
                         >
                           Approve
-                        </PolarisButton>
-                        <PolarisButton
+                        </Button>
+                        <Button
+                          type="button"
                           onClick={() => applySingleStatus(selectedReview.id, ReviewStatus.REJECTED)}
                           disabled={isMutating}
                         >
                           Reject
-                        </PolarisButton>
-                      </ButtonGroup>
+                        </Button>
+                      </div>
                       <Popover
                         active={actionsMenuOpen}
                         onClose={() => setActionsMenuOpen(false)}

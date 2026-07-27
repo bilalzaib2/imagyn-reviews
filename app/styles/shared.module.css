@@ -83,3 +83,33 @@
   line-height: 1.6;
   max-width: 26rem;
 }
+
+/* Compact label:value metadata block for a split-view detail panel (Reviews, Requests) —
+   deliberately quieter than the panel's primary content (smaller text, muted labels, tight
+   rows, no dividers between rows) so a panel reads as "here's the thing, here's context
+   about it" instead of a stack of same-weight sections. */
+.detailMeta {
+  display: grid;
+  gap: var(--space-2);
+}
+
+.detailMetaRow {
+  display: flex;
+  align-items: baseline;
+  gap: var(--space-3);
+  font-size: var(--text-sm);
+}
+
+.detailMetaLabel {
+  flex: none;
+  width: 5.5rem;
+  color: var(--color-text-muted);
+  font-size: var(--text-xs);
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.detailMetaValue {
+  color: var(--color-text);
+  overflow-wrap: anywhere;
+}

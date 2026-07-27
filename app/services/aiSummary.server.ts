@@ -97,6 +97,27 @@ export async function getLatestAiSummaryForStore(
   return { ...toRecord(row), productName: row.product.name };
 }
 
+// Batched counterpart of getAiSummary — same pure-cache-read guarantee, one query instead
+// of N, for surfacing each visible review's product summary inline (see app.reviews.tsx's
+// detail panel). Mirrors getPublicReviewSummaryBatch's batching shape in review.server.ts.
+export async function getAiSummariesForProducts(
+  productIds: string[],
+): Promise<Record<string, ProductAiSummaryRecord>> {
+  if (productIds.length === 0) {
+    return {};
+  }
+
+  const rows = await prisma.productAiSummary.findMany({
+    where: { productId: { in: productIds } },
+  });
+
+  const result: Record<string, ProductAiSummaryRecord> = {};
+  for (const row of rows) {
+    result[row.productId] = toRecord(row);
+  }
+  return result;
+}
+
 async function getApprovedReviewCount(productId: string): Promise<number> {
   return prisma.review.count({ where: { productId, deletedAt: null, status: ReviewStatus.APPROVED } });
 }
