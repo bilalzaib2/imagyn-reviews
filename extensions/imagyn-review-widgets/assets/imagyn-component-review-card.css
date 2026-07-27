@@ -77,10 +77,11 @@
   line-height: var(--imagyn-line-height-tight, 1);
 }
 
-/* Small check icon + quiet label beside the reviewer's name — a trust signal, not a
-   badge, so it never competes with the star rating or the amber accent above it (§ header
-   comment). Deliberately monochrome (text color, not the success green) so it reads as a
-   minimal checkmark rather than a colored status pill; the label stays muted like the date. */
+/* A small filled-circle checkmark badge + quiet label beside the reviewer's name — a
+   trust signal, not a status pill, so it never competes with the star rating or the
+   amber accent above it (§ header comment). Deliberately monochrome (text color, not
+   the success green): a solid currentColor circle with a surface-colored check cut out
+   of it, so it reads correctly against both light and dark themes. */
 .imagyn-review-card__verified {
   display: inline-flex;
   align-items: center;
@@ -90,8 +91,8 @@
 }
 
 .imagyn-review-card__verified-icon {
-  width: 0.9em;
-  height: 0.9em;
+  width: 1.1em;
+  height: 1.1em;
   flex: none;
   color: var(--imagyn-color-text, currentColor);
 }

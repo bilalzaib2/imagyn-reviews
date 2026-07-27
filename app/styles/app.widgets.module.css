@@ -514,9 +514,9 @@
   gap: 0.12rem;
 }
 
-/* Mirrors the storefront's .imagyn-review-card__verified treatment: a small, monochrome
-   check icon paired with a quiet label, never a colored pill — so the preview matches
-   what merchants actually see on their storefront. */
+/* Mirrors the storefront's .imagyn-review-card__verified treatment: a small filled-circle
+   checkmark badge paired with a quiet label — so the preview matches what merchants
+   actually see on their storefront. */
 .previewVerified {
   display: inline-flex;
   align-items: center;
@@ -525,8 +525,8 @@
 }
 
 .previewVerifiedIcon {
-  width: 0.9em;
-  height: 0.9em;
+  width: 1.1em;
+  height: 1.1em;
   flex-shrink: 0;
   color: currentColor;
 }

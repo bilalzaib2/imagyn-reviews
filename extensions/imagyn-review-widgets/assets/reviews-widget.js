@@ -43,8 +43,9 @@
 
     return (
       '<span class="imagyn-review-card__verified">' +
-      '<svg class="imagyn-review-card__verified-icon" viewBox="0 0 16 16" aria-hidden="true" focusable="false">' +
-      '<path d="M6.4 10.8 3.9 8.3l-1.1 1.1 3.6 3.6 7-7-1.1-1.1z" fill="currentColor"></path>' +
+      '<svg class="imagyn-review-card__verified-icon" viewBox="0 0 20 20" aria-hidden="true" focusable="false">' +
+      '<circle cx="10" cy="10" r="10" fill="currentColor"></circle>' +
+      '<path d="M6 10.4 8.7 13 14 7.5" stroke="var(--imagyn-color-surface, #fff)" stroke-width="1.7" fill="none" stroke-linecap="round" stroke-linejoin="round"></path>' +
       "</svg>" +
       '<span class="imagyn-review-card__verified-label">Verified Buyer</span>' +
       "</span>"

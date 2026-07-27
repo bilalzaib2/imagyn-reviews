@@ -287,8 +287,9 @@ function ReviewPreviewCard({ settings, review }: { settings: WidgetSettings; rev
             {settings.showReviewerName ? <span>{review.name}</span> : null}
             {settings.showVerifiedBadge && review.verified ? (
               <span className={styles.previewVerified}>
-                <svg className={styles.previewVerifiedIcon} viewBox="0 0 16 16" aria-hidden="true" focusable="false">
-                  <path d="M6.4 10.8 3.9 8.3l-1.1 1.1 3.6 3.6 7-7-1.1-1.1z" fill="currentColor" />
+                <svg className={styles.previewVerifiedIcon} viewBox="0 0 20 20" aria-hidden="true" focusable="false">
+                  <circle cx="10" cy="10" r="10" fill="currentColor" />
+                  <path d="M6 10.4 8.7 13 14 7.5" stroke={settings.backgroundColor} strokeWidth="1.7" fill="none" strokeLinecap="round" strokeLinejoin="round" />
                 </svg>
                 <span className={styles.previewVerifiedLabel}>Verified Buyer</span>
               </span>
