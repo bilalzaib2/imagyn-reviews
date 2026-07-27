@@ -3,7 +3,6 @@ import type { LoaderFunctionArgs } from "react-router";
 import { Link, useLoaderData } from "react-router";
 
 import { Container } from "../components/ui/Container";
-import { Card } from "../components/ui/Card";
 import { Section } from "../components/ui/Section";
 import { StarRating } from "../components/reviews/StarRating";
 import { getStoreReviewStats } from "../services/review.server";
@@ -74,7 +73,7 @@ export default function Index() {
 
   return (
     <Container as="main">
-      <div className={shellStyles.page}>
+      <div className={`${shellStyles.page} ${styles.page}`}>
         <header className={styles.header}>
           <p className={shellStyles.eyebrow}>Imagyn Reviews</p>
           <h1 className={shellStyles.title}>
@@ -206,36 +205,32 @@ export default function Index() {
 
         <Section title="Recent Activity" description="The latest review and request events for your store.">
           {stats.recentReviews.length === 0 ? (
-            <Card tone="subtle">
-              <div className={styles.emptyState}>
-                <div className={styles.emptyStateContent}>
-                  <h2 className={styles.emptyStateTitle}>No activity yet</h2>
-                  <p className={styles.emptyStateText}>
-                    Review submissions, approvals, and requests will appear here as customers share their experience.
-                  </p>
-                </div>
+            <div className={styles.emptyState}>
+              <div className={styles.emptyStateContent}>
+                <h2 className={styles.emptyStateTitle}>No activity yet</h2>
+                <p className={styles.emptyStateText}>
+                  Review submissions, approvals, and requests will appear here as customers share their experience.
+                </p>
               </div>
-            </Card>
+            </div>
           ) : (
-            <Card tone="subtle">
-              <ul className={styles.activityList}>
-                {stats.recentReviews.map((review) => (
-                  <li key={review.id} className={styles.activityItem}>
-                    <div className={styles.activityRating}>
-                      <StarRating value={review.rating} size={14} />
-                    </div>
-                    <div className={styles.activityContent}>
-                      <p className={styles.activityTitle}>
-                        {review.reviewerName} &middot; {review.productTitle ?? review.product?.name ?? "Unassigned product"}
-                      </p>
-                      <p className={styles.activityMeta}>
-                        {review.status.charAt(0) + review.status.slice(1).toLowerCase()} &middot; {formatDate(review.createdAt)}
-                      </p>
-                    </div>
-                  </li>
-                ))}
-              </ul>
-            </Card>
+            <ul className={styles.activityList}>
+              {stats.recentReviews.map((review) => (
+                <li key={review.id} className={styles.activityItem}>
+                  <div className={styles.activityRating}>
+                    <StarRating value={review.rating} size={14} />
+                  </div>
+                  <div className={styles.activityContent}>
+                    <p className={styles.activityTitle}>
+                      {review.reviewerName} &middot; {review.productTitle ?? review.product?.name ?? "Unassigned product"}
+                    </p>
+                    <p className={styles.activityMeta}>
+                      {review.status.charAt(0) + review.status.slice(1).toLowerCase()} &middot; {formatDate(review.createdAt)}
+                    </p>
+                  </div>
+                </li>
+              ))}
+            </ul>
           )}
         </Section>
       </div>
