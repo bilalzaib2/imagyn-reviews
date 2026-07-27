@@ -32,7 +32,7 @@ railway logs -s imagyn-reviews --lines 100 | grep -i "pending\|P3005\|migration"
 psql "$DATABASE_URL" -c "SELECT migration_name, finished_at, rolled_back_at FROM _prisma_migrations ORDER BY started_at;"
 
 # 4. Does the app respond at all?
-curl -s -o /dev/null -w "%{http_code}\n" https://imagyn-reviews-production.up.railway.app/
+curl -s -o /dev/null -w "%{http_code}\n" https://app.imagyn.co/
 
 # 5. Is the EMBEDDED app actually pointed at Railway? (see SHOPIFY_DEV_WORKFLOW.md)
 # Check the iframe src directly in the browser — this is the check that would

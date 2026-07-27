@@ -99,15 +99,16 @@ export const PLANS: Record<PlanId, Plan> = {
     price: 29.99,
     currencyCode: "USD",
     trialDays: 14,
-    tagline: "Full control for high-volume stores.",
-    features: [
-      "Everything in Growth",
-      "Video reviews",
-      "Multiple email templates",
-      "Advanced branding controls",
-      "Priority support",
-      "Future API/integration features",
-    ],
+    tagline: "Priority support for high-volume stores.",
+    // Every claim here must have a real enforcement point or be a genuinely deliverable
+    // operational commitment — see the "V1 launch truthfulness pass" audit in
+    // docs/DECISIONS.md. "Video reviews", "Multiple email templates", "Advanced branding
+    // controls" and "Future API/integration features" were removed: none of them exist
+    // anywhere in the app, so listing them would be a false claim on a paid tier — the
+    // kind of mismatch that can get an app rejected (or worse, refunded after the fact)
+    // during Shopify App Store review. "Priority support" stays: it's a real, deliverable
+    // support-response commitment that doesn't require any app functionality to honor.
+    features: ["Everything in Growth", "Priority support", "Early access to new features"],
     limits: {
       maxPublishedReviews: null,
       automaticReviewRequests: true,
@@ -115,9 +116,9 @@ export const PLANS: Record<PlanId, Plan> = {
       photoReviews: true,
       emailCustomization: true,
       advancedWidgetCustomization: true,
-      videoReviews: true,
-      multipleEmailTemplates: true,
-      advancedBranding: true,
+      videoReviews: false,
+      multipleEmailTemplates: false,
+      advancedBranding: false,
       prioritySupport: true,
     },
   },

@@ -77,7 +77,7 @@ Don't assume — check directly. From inside the embedded admin (top-level brows
 document.querySelector('iframe[name="app-iframe"]').src
 ```
 
-The origin should be `https://imagyn-reviews-production.up.railway.app`. If it's a `trycloudflare.com` URL instead, a dev-preview override is active — run `shopify app dev clean`.
+The origin should be `https://app.imagyn.co`. If it's a `trycloudflare.com` URL instead, a dev-preview override is active — run `shopify app dev clean`.
 
 ## What the Admin API and Dev Dashboard do *not* expose
 

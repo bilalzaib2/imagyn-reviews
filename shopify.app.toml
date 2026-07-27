@@ -2,19 +2,25 @@
 
 client_id = "8f84af74377630a28899e60d2a32b753"
 name = "imagyn-reviews"
-application_url = "https://imagyn-reviews-production.up.railway.app"
+application_url = "https://app.imagyn.co"
 embedded = true
 
 [build]
 automatically_update_urls_on_dev = true
 
 [app_proxy]
-url = "https://imagyn-reviews-production.up.railway.app/api/reviews"
+url = "https://app.imagyn.co/api/reviews"
 subpath = "reviews"
 prefix = "apps"
 
 [webhooks]
-api_version = "2026-10"
+# Matches ApiVersion.July26 in app/shopify.server.ts — the newest version the installed
+# @shopify/shopify-api SDK actually supports today. This was previously set to "2026-10",
+# a version Shopify's platform already accepts but that doesn't exist in this SDK's
+# ApiVersion enum yet, meaning webhook payloads could be shaped differently than what the
+# app's own GraphQL client (and any code that parses a webhook body) expects. Bump both
+# together once the SDK is upgraded to a version that includes October26.
+api_version = "2026-07"
 
   [[webhooks.subscriptions]]
   uri = "/webhooks/app/scopes_update"
@@ -62,9 +68,9 @@ scopes = "write_products,write_metaobjects,write_metaobject_definitions,write_fi
 
 [auth]
 redirect_urls = [
-  "https://imagyn-reviews-production.up.railway.app/auth/callback",
-  "https://imagyn-reviews-production.up.railway.app/auth/shopify/callback",
-  "https://imagyn-reviews-production.up.railway.app/api/auth/callback"
+  "https://app.imagyn.co/auth/callback",
+  "https://app.imagyn.co/auth/shopify/callback",
+  "https://app.imagyn.co/api/auth/callback"
 ]
 
 [product.metafields.app.demo_info]

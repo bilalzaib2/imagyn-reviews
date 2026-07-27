@@ -30,15 +30,32 @@
   align-items: stretch;
 }
 
+/* Flex column, not grid: a grid packs every row to the top by default (align-content:
+   start), which is exactly what left the CTA button sitting at a different height on
+   every card depending on how many feature bullets it had. Flex lets .featureList grow
+   to absorb the leftover space so the button naturally lands in the same place on every
+   card — see .featureList and .cardAction below. */
 .card {
-  display: grid;
-  align-content: start;
+  display: flex;
+  flex-direction: column;
   gap: var(--space-3);
   padding: var(--space-8) var(--space-6);
   border: 1px solid var(--color-border);
   border-radius: var(--radius-lg);
   background: var(--color-surface);
   position: relative;
+  transition: box-shadow 200ms ease-out, border-color 200ms ease-out;
+}
+
+.card:hover {
+  box-shadow: var(--shadow-md);
+}
+
+/* Always present, even when empty — reserves the same vertical space on every card so a
+   "Most Popular"/"Current plan" badge on one card can't push its name/price/tagline down
+   relative to a card that has no badge at all. */
+.badgeSlot {
+  min-height: 1.5rem;
 }
 
 .cardCurrent {
@@ -110,11 +127,62 @@
 }
 
 .featureList {
+  flex: 1;
   margin: var(--space-2) 0;
   padding: 0;
   list-style: none;
   display: grid;
   gap: var(--space-2);
+  align-content: start;
+}
+
+/* Apple's current button system, scoped to this page only (not the shared
+   components/ui/Button, which stays the app's monochrome default everywhere else) —
+   #0071E3 is a deliberate one-off for the pricing page's CTAs, not a new global accent.
+   margin-top: auto (paired with .featureList's flex: 1 above) guarantees the button sits
+   at the same baseline across every card regardless of what varies above it — a badge
+   present or not, a trial note present or not, a shorter feature list, etc. */
+.cardAction {
+  margin-top: auto;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  height: 52px;
+  padding: 0 34px;
+  border-radius: 9999px;
+  font-size: var(--text-base);
+  font-weight: 500;
+  cursor: pointer;
+  border: 2px solid transparent;
+  transition: background-color 200ms ease-out, color 200ms ease-out, border-color 200ms ease-out;
+}
+
+.cardAction:disabled {
+  cursor: not-allowed;
+  opacity: 0.5;
+}
+
+.ctaPrimary {
+  background: #0071e3;
+  border-color: #0071e3;
+  color: #ffffff;
+}
+
+.ctaPrimary:hover:not(:disabled) {
+  background: #0066cc;
+  border-color: #0066cc;
+}
+
+.ctaSecondary {
+  background: transparent;
+  border-color: #0071e3;
+  color: #0071e3;
+}
+
+.ctaSecondary:hover:not(:disabled) {
+  background: #0071e3;
+  color: #ffffff;
 }
 
 .featureList li {

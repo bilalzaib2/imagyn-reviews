@@ -3,7 +3,7 @@ import { BillingReplacementBehavior } from "@shopify/shopify-app-react-router/se
 import prisma from "../../db.server";
 import { authenticate } from "../../shopify.server";
 import { setDevelopmentStoreFlag, updateBillingState } from "../store.server";
-import { getPlan, type Plan, type PlanId, type PlanLimits } from "./plans";
+import { getPlan, PLAN_ORDER, type Plan, type PlanId, type PlanLimits } from "./plans";
 
 // Matches whatever authenticate.admin(request) actually returns, so this stays correct if the
 // SDK's billing types ever change shape — no hand-rolled generic billing config type to keep
@@ -263,12 +263,12 @@ export async function cancelPaidPlan(billing: Billing, subscriptionId: string, i
   await billing.cancel({ subscriptionId, prorate: true, isTest: isDevelopmentStore });
 }
 
-// Pro is deliberately excluded from the merchant-facing plan list: it has no
-// functionality today that Growth doesn't already have (see DECISIONS.md's "V1 launch
-// truthfulness pass"), so the pricing page can't honestly show it as a third tier yet.
-// The plan definition, PlanId, Shopify billing config (shopify.server.ts), and
-// upgrade/webhook handling are all untouched — a merchant already on Pro (or a future
-// real Pro tier) continues to work; this only hides it from new selection.
+// Derived from PLAN_ORDER — the single source of truth for both "which plans exist" and
+// "what order they render in" — rather than a separately hand-maintained array. Pro was
+// previously hardcoded out of this list because its feature copy made false claims (see
+// DECISIONS.md's "V1 launch truthfulness pass"); now that plans.ts's Pro entry only lists
+// real, deliverable capabilities, there's no reason to hide it, and no separate array to
+// drift from PLAN_ORDER the next time a plan is added or removed.
 export function getAllPlans(): Plan[] {
-  return [getPlan("starter"), getPlan("growth")];
+  return PLAN_ORDER.map(getPlan);
 }

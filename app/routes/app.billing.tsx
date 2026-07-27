@@ -3,7 +3,6 @@ import { useFetcher, useLoaderData, useRouteError } from "react-router";
 import type { ActionFunctionArgs, HeadersFunction, LoaderFunctionArgs } from "react-router";
 import { boundary } from "@shopify/shopify-app-react-router/server";
 import { Frame, Toast } from "@shopify/polaris";
-import { Button } from "../components/ui/Button";
 import { Container } from "../components/ui/Container";
 import { authenticate } from "../shopify.server";
 import { getOrCreateStore } from "../services/store.server";
@@ -124,8 +123,10 @@ function PlanCard({
     <div
       className={`${styles.card} ${isCurrent ? styles.cardCurrent : ""} ${isPopular ? styles.cardPopular : ""}`}
     >
-      {isPopular ? <p className={styles.popularBadge}>Most Popular</p> : null}
-      {isCurrent ? <p className={styles.currentBadge}>Current plan</p> : null}
+      <div className={styles.badgeSlot}>
+        {isPopular ? <p className={styles.popularBadge}>Most Popular</p> : null}
+        {isCurrent ? <p className={styles.currentBadge}>Current plan</p> : null}
+      </div>
       <p className={styles.planName}>{plan.name}</p>
       <p className={styles.planPrice}>{formatPrice(plan)}</p>
       <p className={styles.planTagline}>{plan.tagline}</p>
@@ -141,18 +142,28 @@ function PlanCard({
 
       {isCurrent ? (
         plan.id === "starter" ? (
-          <Button type="button" variant="secondary" fullWidth disabled>
+          <button type="button" disabled className={`${styles.cardAction} ${styles.ctaSecondary}`}>
             Current plan
-          </Button>
+          </button>
         ) : (
-          <Button type="button" variant="secondary" fullWidth onClick={onCancel} disabled={isBusy}>
+          <button
+            type="button"
+            onClick={onCancel}
+            disabled={isBusy}
+            className={`${styles.cardAction} ${styles.ctaSecondary}`}
+          >
             Downgrade to Starter
-          </Button>
+          </button>
         )
       ) : (
-        <Button type="button" variant="primary" fullWidth onClick={() => onSelect(plan.id)} disabled={isBusy}>
+        <button
+          type="button"
+          onClick={() => onSelect(plan.id)}
+          disabled={isBusy}
+          className={`${styles.cardAction} ${styles.ctaPrimary}`}
+        >
           {plan.id === "starter" ? "Select Starter" : `Upgrade to ${plan.name}`}
-        </Button>
+        </button>
       )}
     </div>
   );
