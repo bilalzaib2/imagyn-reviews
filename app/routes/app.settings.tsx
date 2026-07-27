@@ -258,6 +258,82 @@ export default function SettingsPage() {
           {isLoading ? <p className={styles.mutedText}>Refreshing settings…</p> : null}
 
           <Section
+            title="Moderation Rules"
+            description="Automatically publish trustworthy reviews and hold the rest for your review — reducing manual moderation without a complex rules builder."
+          >
+            <Checkbox
+              label="Enable Moderation Rules"
+              checked={moderationEnabled}
+              onChange={setModerationEnabled}
+            />
+
+            <p className={styles.settingsGroupLabel}>Auto-publish</p>
+            <Select
+              label="Auto-publish reviews rated"
+              options={MIN_RATING_OPTIONS}
+              value={minRating}
+              disabled={!moderationEnabled}
+              onChange={setMinRating}
+            />
+            <Checkbox
+              label="Only auto-publish verified buyers"
+              checked={requireVerified}
+              disabled={!moderationEnabled}
+              onChange={setRequireVerified}
+            />
+
+            <p className={styles.settingsGroupLabel}>Always hold when a review</p>
+            <Checkbox
+              label="Contains a link"
+              checked={holdLinks}
+              disabled={!moderationEnabled}
+              onChange={setHoldLinks}
+            />
+            <Checkbox
+              label="Contains profanity"
+              checked={holdProfanity}
+              disabled={!moderationEnabled}
+              onChange={setHoldProfanity}
+            />
+            <TextField
+              label="Contains a banned word or phrase"
+              value={bannedWords}
+              disabled={!moderationEnabled}
+              onChange={setBannedWords}
+              multiline={3}
+              autoComplete="off"
+              placeholder={"One word or phrase per line"}
+              helpText="A review containing any of these is always held, regardless of rating."
+            />
+
+            <p className={styles.settingsGroupLabel}>Notify me</p>
+            <Checkbox
+              label="Email me when a review is held"
+              checked={notifyOnHold}
+              disabled={!moderationEnabled}
+              onChange={setNotifyOnHold}
+            />
+            <TextField
+              label="Notification email"
+              type="email"
+              autoComplete="off"
+              placeholder="you@example.com"
+              value={notifyEmail}
+              disabled={!moderationEnabled || !notifyOnHold}
+              onChange={setNotifyEmail}
+            />
+
+            <Button
+              type="button"
+              variant="primary"
+              onClick={handleSaveModeration}
+              disabled={isSavingModeration}
+            >
+              {isSavingModeration ? "Saving…" : "Save"}
+            </Button>
+          </Section>
+
+          <Section
             title="Automatic review requests"
             description="Automatically create a Review Request for every fulfilled order line item, instead of creating them by hand."
           >
@@ -303,103 +379,29 @@ export default function SettingsPage() {
             </Button>
           </Section>
 
-          <Section
-            title="Moderation Rules"
-            description="Automatically publish trustworthy reviews and hold the rest for your review — reducing manual moderation without a complex rules builder."
-          >
-            <Checkbox
-              label="Enable Moderation Rules"
-              checked={moderationEnabled}
-              onChange={setModerationEnabled}
-            />
-            <Select
-              label="Auto-publish reviews rated"
-              options={MIN_RATING_OPTIONS}
-              value={minRating}
-              disabled={!moderationEnabled}
-              onChange={setMinRating}
-            />
-            <Checkbox
-              label="Only auto-publish verified buyers"
-              checked={requireVerified}
-              disabled={!moderationEnabled}
-              onChange={setRequireVerified}
-            />
-            <Checkbox
-              label="Hold reviews containing links"
-              checked={holdLinks}
-              disabled={!moderationEnabled}
-              onChange={setHoldLinks}
-            />
-            <Checkbox
-              label="Hold reviews containing profanity"
-              checked={holdProfanity}
-              disabled={!moderationEnabled}
-              onChange={setHoldProfanity}
-            />
-            <TextField
-              label="Banned words"
-              value={bannedWords}
-              disabled={!moderationEnabled}
-              onChange={setBannedWords}
-              multiline={3}
-              autoComplete="off"
-              placeholder={"One word or phrase per line"}
-              helpText="A review containing any of these words or phrases is always held, regardless of rating."
-            />
-            <Checkbox
-              label="Email me when a review is held"
-              checked={notifyOnHold}
-              disabled={!moderationEnabled}
-              onChange={setNotifyOnHold}
-            />
-            <TextField
-              label="Notification email"
-              type="email"
-              autoComplete="off"
-              placeholder="you@example.com"
-              value={notifyEmail}
-              disabled={!moderationEnabled || !notifyOnHold}
-              onChange={setNotifyEmail}
-            />
-            <Button
-              type="button"
-              variant="primary"
-              onClick={handleSaveModeration}
-              disabled={isSavingModeration}
+          <div className={styles.diagnosticsBlock}>
+            <Section
+              title="Diagnostics"
+              description="Send a real test email using the same template and provider real review requests use — useful when troubleshooting delivery, not something you need to touch day-to-day."
             >
-              {isSavingModeration ? "Saving…" : "Save"}
-            </Button>
-          </Section>
-
-          <Section
-            title="Email delivery"
-            description="Send a real test email using the same template and provider real review requests use, to verify Resend is configured correctly."
-          >
-            <TextField
-              label="Send test email to"
-              type="email"
-              autoComplete="off"
-              placeholder="you@example.com"
-              value={testEmail}
-              onChange={setTestEmail}
-            />
-            <Button
-              type="button"
-              variant="secondary"
-              onClick={handleSendTestEmail}
-              disabled={isSendingTestEmail || !testEmail}
-            >
-              {isSendingTestEmail ? "Sending…" : "Send Test Email"}
-            </Button>
-          </Section>
-
-          <Section title="Configuration" description="Additional settings will be available in an upcoming phase.">
-            <div className={styles.emptyState}>
-              <h2 className={styles.emptyTitle}>More settings coming soon</h2>
-              <p className={styles.emptyText}>This page is prepared for further account, preference, and policy controls.</p>
-            </div>
-          </Section>
+              <TextField
+                label="Send test email to"
+                type="email"
+                autoComplete="off"
+                placeholder="you@example.com"
+                value={testEmail}
+                onChange={setTestEmail}
+              />
+              <Button
+                type="button"
+                variant="secondary"
+                onClick={handleSendTestEmail}
+                disabled={isSendingTestEmail || !testEmail}
+              >
+                {isSendingTestEmail ? "Sending…" : "Send Test Email"}
+              </Button>
+            </Section>
+          </div>
         </div>
       </Container>
 
