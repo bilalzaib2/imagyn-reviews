@@ -128,10 +128,14 @@
 }
 
 /* The list is the scanning surface (Gmail/Linear-style), so it gets the majority of the
-   width — the detail panel only needs enough room for its own label:value rows. */
+   width via the fr ratio — but neither column carries a large hard px floor, since two
+   floors that sum past the container's actual width force the whole grid to overflow
+   instead of shrinking (exactly what happened with 360px+300px on a narrower admin
+   viewport). minmax(0, …) lets a column compress arbitrarily far first; the row/panel
+   content underneath already truncates via its own overflow rules. */
 .splitLayout {
   display: grid;
-  grid-template-columns: minmax(360px, 0.62fr) minmax(300px, 0.38fr);
+  grid-template-columns: minmax(0, 0.62fr) minmax(240px, 0.38fr);
   gap: var(--space-6);
   align-items: start;
 }
