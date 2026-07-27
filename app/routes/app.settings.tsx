@@ -265,63 +265,59 @@ export default function SettingsPage() {
               label="Enable Moderation Rules"
               checked={moderationEnabled}
               onChange={setModerationEnabled}
+              helpText={
+                moderationEnabled
+                  ? undefined
+                  : "Turn this on to configure auto-publish, hold rules, and notifications."
+              }
             />
 
-            <p className={styles.settingsGroupLabel}>Auto-publish</p>
-            <Select
-              label="Auto-publish reviews rated"
-              options={MIN_RATING_OPTIONS}
-              value={minRating}
-              disabled={!moderationEnabled}
-              onChange={setMinRating}
-            />
-            <Checkbox
-              label="Only auto-publish verified buyers"
-              checked={requireVerified}
-              disabled={!moderationEnabled}
-              onChange={setRequireVerified}
-            />
+            {moderationEnabled ? (
+              <>
+                <p className={styles.settingsGroupLabel}>Auto-publish</p>
+                <Select
+                  label="Auto-publish reviews rated"
+                  options={MIN_RATING_OPTIONS}
+                  value={minRating}
+                  onChange={setMinRating}
+                />
+                <Checkbox
+                  label="Only auto-publish verified buyers"
+                  checked={requireVerified}
+                  onChange={setRequireVerified}
+                />
 
-            <p className={styles.settingsGroupLabel}>Always hold when a review</p>
-            <Checkbox
-              label="Contains a link"
-              checked={holdLinks}
-              disabled={!moderationEnabled}
-              onChange={setHoldLinks}
-            />
-            <Checkbox
-              label="Contains profanity"
-              checked={holdProfanity}
-              disabled={!moderationEnabled}
-              onChange={setHoldProfanity}
-            />
-            <TextField
-              label="Contains a banned word or phrase"
-              value={bannedWords}
-              disabled={!moderationEnabled}
-              onChange={setBannedWords}
-              multiline={3}
-              autoComplete="off"
-              placeholder={"One word or phrase per line"}
-              helpText="A review containing any of these is always held, regardless of rating."
-            />
+                <p className={styles.settingsGroupLabel}>Always hold when a review</p>
+                <Checkbox label="Contains a link" checked={holdLinks} onChange={setHoldLinks} />
+                <Checkbox label="Contains profanity" checked={holdProfanity} onChange={setHoldProfanity} />
+                <TextField
+                  label="Contains a banned word or phrase"
+                  value={bannedWords}
+                  onChange={setBannedWords}
+                  multiline={3}
+                  autoComplete="off"
+                  placeholder={"One word or phrase per line"}
+                  helpText="A review containing any of these is always held, regardless of rating."
+                />
 
-            <p className={styles.settingsGroupLabel}>Notify me</p>
-            <Checkbox
-              label="Email me when a review is held"
-              checked={notifyOnHold}
-              disabled={!moderationEnabled}
-              onChange={setNotifyOnHold}
-            />
-            <TextField
-              label="Notification email"
-              type="email"
-              autoComplete="off"
-              placeholder="you@example.com"
-              value={notifyEmail}
-              disabled={!moderationEnabled || !notifyOnHold}
-              onChange={setNotifyEmail}
-            />
+                <p className={styles.settingsGroupLabel}>Notify me</p>
+                <Checkbox
+                  label="Email me when a review is held"
+                  checked={notifyOnHold}
+                  onChange={setNotifyOnHold}
+                />
+                {notifyOnHold ? (
+                  <TextField
+                    label="Notification email"
+                    type="email"
+                    autoComplete="off"
+                    placeholder="you@example.com"
+                    value={notifyEmail}
+                    onChange={setNotifyEmail}
+                  />
+                ) : null}
+              </>
+            ) : null}
 
             <Button
               type="button"
@@ -356,24 +352,27 @@ export default function SettingsPage() {
               disabled={!isAutomationAvailable}
               onChange={setEnabled}
             />
-            <Select
-              label="Trigger"
-              options={TRIGGER_OPTIONS}
-              value="fulfillment"
-              disabled
-              helpText="More trigger types (e.g. after delivery) are planned."
-              onChange={() => {}}
-            />
-            <TextField
-              label="Send delay (days)"
-              type="number"
-              min={0}
-              autoComplete="off"
-              value={delayDays}
-              disabled={!isAutomationAvailable}
-              onChange={setDelayDays}
-              helpText="How long to wait after fulfillment before sending the review request email."
-            />
+            {isAutomationAvailable && enabled ? (
+              <>
+                <Select
+                  label="Trigger"
+                  options={TRIGGER_OPTIONS}
+                  value="fulfillment"
+                  disabled
+                  helpText="More trigger types (e.g. after delivery) are planned."
+                  onChange={() => {}}
+                />
+                <TextField
+                  label="Send delay (days)"
+                  type="number"
+                  min={0}
+                  autoComplete="off"
+                  value={delayDays}
+                  onChange={setDelayDays}
+                  helpText="How long to wait after fulfillment before sending the review request email."
+                />
+              </>
+            ) : null}
             <Button type="button" variant="primary" onClick={handleSave} disabled={isSaving || !isAutomationAvailable}>
               {isSaving ? "Saving…" : "Save"}
             </Button>
