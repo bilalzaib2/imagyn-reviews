@@ -1,26 +1,30 @@
 .page {
   display: flex;
-  align-items: center;
-  justify-content: center;
+  flex-direction: column;
   min-height: 100%;
   width: 100%;
-  padding: var(--space-8);
   background: var(--color-background);
 }
 
-.grid {
+/* Asymmetric split (~40/60): content column stays a fixed, readable width while the
+   preview column absorbs the rest — that ratio (not a 50/50 split) is what makes the
+   screenshot read as the visual hero instead of a same-weight sidebar image. */
+.hero {
   display: grid;
-  grid-template-columns: minmax(0, 0.9fr) minmax(0, 1.1fr);
+  grid-template-columns: minmax(0, 2fr) minmax(0, 3fr);
   align-items: center;
-  gap: var(--space-16);
-  max-width: 72rem;
+  gap: var(--space-10);
+  min-height: 92vh;
+  max-width: 84rem;
   width: 100%;
+  margin-inline: auto;
+  padding: var(--space-10) var(--space-8);
 }
 
 .left {
   display: grid;
-  gap: var(--space-8);
-  max-width: 28rem;
+  gap: var(--space-6);
+  max-width: 26rem;
 }
 
 .logo {
@@ -54,6 +58,15 @@
   font-size: var(--text-base);
   line-height: 1.6;
   color: var(--color-text-muted);
+}
+
+/* A quiet floating card, not a bordered box — shadow alone reads as "elevated" without
+   the heavier, more documentation-like look a 1px border gives. */
+.loginCard {
+  padding: var(--space-6);
+  background: var(--color-surface);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-md);
 }
 
 .form {
@@ -91,35 +104,81 @@
   border-color: var(--color-border-strong);
 }
 
-.list {
-  list-style: none;
-  padding: 0;
-  margin: 0;
-  display: grid;
-  gap: var(--space-5);
+.right {
+  display: flex;
+}
+
+/* The floating device presentation: no border (a hard edge reads as "screenshot pasted
+   in"), a large radius, and a soft *layered* shadow — a tight, low-opacity layer close to
+   the card plus a larger, more diffuse layer further out — which is what actually reads as
+   depth rather than a single flat drop shadow. Both layers reuse the same neutral
+   (17, 17, 17) already used by --shadow-* in design-system.css, just composed differently,
+   so this introduces no new color. 30px sits in the middle of the requested 28-32px range;
+   the design system's own --radius-xl (1.25rem / 20px) tops out below what was asked for
+   here, so this is a deliberate, one-off literal value rather than a stretched token.
+*/
+.previewFrame {
+  width: 100%;
+  border-radius: 30px;
+  overflow: hidden;
+  box-shadow:
+    0 2px 6px rgba(17, 17, 17, 0.05),
+    0 16px 40px rgba(17, 17, 17, 0.08),
+    0 40px 80px rgba(17, 17, 17, 0.07);
+}
+
+.previewImage {
+  display: block;
+  width: 100%;
+  height: auto;
+  image-rendering: -webkit-optimize-contrast;
+}
+
+.features {
+  padding: var(--space-16) var(--space-8);
   border-top: 1px solid var(--color-border);
-  padding-top: var(--space-6);
 }
 
-.listItem {
+.featureGrid {
   display: grid;
-  gap: var(--space-1);
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: var(--space-6);
+  max-width: 72rem;
+  margin-inline: auto;
 }
 
-.listItemTitle {
+.featureCard {
+  display: grid;
+  gap: var(--space-2);
+  padding: var(--space-6);
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  transition: transform var(--transition-base), box-shadow var(--transition-base);
+}
+
+.featureCard:hover {
+  transform: translateY(-2px);
+  box-shadow: var(--shadow-md);
+}
+
+.featureTitle {
+  margin: 0;
   font-size: var(--text-base);
   font-weight: 600;
   color: var(--color-text);
 }
 
-.listItemText {
+.featureText {
+  margin: 0;
   font-size: var(--text-sm);
   line-height: 1.5;
   color: var(--color-text-muted);
 }
 
 .footer {
-  margin: 0;
+  padding: var(--space-8);
+  text-align: center;
   font-size: var(--text-xs);
   font-weight: 600;
   letter-spacing: 0.08em;
@@ -127,29 +186,18 @@
   color: var(--color-text-muted);
 }
 
-.right {
-  display: flex;
-}
-
-.previewFrame {
-  width: 100%;
-  border-radius: var(--radius-xl);
-  border: 1px solid var(--color-border);
-  box-shadow: var(--shadow-lg);
-  overflow: hidden;
-  background: var(--color-surface);
-}
-
-.previewImage {
-  display: block;
-  width: 100%;
-  height: auto;
+@media (prefers-reduced-motion: reduce) {
+  .featureCard {
+    transition: none;
+  }
 }
 
 @media only screen and (max-width: 64rem) {
-  .grid {
+  .hero {
     grid-template-columns: minmax(0, 1fr);
-    gap: var(--space-10);
+    min-height: 0;
+    gap: var(--space-8);
+    padding-top: var(--space-12);
   }
 
   .left {
@@ -159,10 +207,22 @@
   .right {
     order: -1;
   }
+
+  .featureGrid {
+    grid-template-columns: minmax(0, 1fr);
+  }
 }
 
 @media only screen and (max-width: 30rem) {
-  .page {
+  .hero {
+    padding: var(--space-8) var(--space-4);
+  }
+
+  .features {
+    padding: var(--space-10) var(--space-4);
+  }
+
+  .loginCard {
     padding: var(--space-4);
   }
 }

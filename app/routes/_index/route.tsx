@@ -36,7 +36,7 @@ export default function App() {
 
   return (
     <div className={styles.page}>
-      <div className={styles.grid}>
+      <section className={styles.hero}>
         <div className={styles.left}>
           <img className={styles.logo} src="/assets/imagyn-app-logo.svg" alt="Imagyn Reviews" />
 
@@ -50,27 +50,18 @@ export default function App() {
           </div>
 
           {showForm && (
-            <Form className={styles.form} method="post" action="/auth/login">
-              <label className={styles.label}>
-                <span className={styles.labelText}>Shop domain</span>
-                <input className={styles.input} type="text" name="shop" placeholder="my-shop-domain.myshopify.com" />
-              </label>
-              <Button type="submit" variant="primary" fullWidth>
-                Log in
-              </Button>
-            </Form>
+            <div className={styles.loginCard}>
+              <Form className={styles.form} method="post" action="/auth/login">
+                <label className={styles.label}>
+                  <span className={styles.labelText}>Shop domain</span>
+                  <input className={styles.input} type="text" name="shop" placeholder="my-shop-domain.myshopify.com" />
+                </label>
+                <Button type="submit" variant="primary" fullWidth>
+                  Log in
+                </Button>
+              </Form>
+            </div>
           )}
-
-          <ul className={styles.list}>
-            {FEATURES.map((feature) => (
-              <li key={feature.title} className={styles.listItem}>
-                <strong className={styles.listItemTitle}>{feature.title}</strong>
-                <span className={styles.listItemText}>{feature.description}</span>
-              </li>
-            ))}
-          </ul>
-
-          <p className={styles.footer}>Built for modern Shopify brands.</p>
         </div>
 
         <div className={styles.right}>
@@ -82,7 +73,20 @@ export default function App() {
             />
           </div>
         </div>
-      </div>
+      </section>
+
+      <section className={styles.features}>
+        <div className={styles.featureGrid}>
+          {FEATURES.map((feature) => (
+            <div key={feature.title} className={styles.featureCard}>
+              <h3 className={styles.featureTitle}>{feature.title}</h3>
+              <p className={styles.featureText}>{feature.description}</p>
+            </div>
+          ))}
+        </div>
+      </section>
+
+      <footer className={styles.footer}>Built for modern Shopify brands.</footer>
     </div>
   );
 }
