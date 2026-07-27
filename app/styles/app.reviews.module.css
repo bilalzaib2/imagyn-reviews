@@ -127,9 +127,11 @@
   overflow: auto;
 }
 
+/* The list is the scanning surface (Gmail/Linear-style), so it gets the majority of the
+   width — the detail panel only needs enough room for its own label:value rows. */
 .splitLayout {
   display: grid;
-  grid-template-columns: minmax(280px, 0.35fr) minmax(0, 0.65fr);
+  grid-template-columns: minmax(360px, 0.62fr) minmax(300px, 0.38fr);
   gap: var(--space-6);
   align-items: start;
 }
@@ -245,27 +247,59 @@
   min-width: 0;
 }
 
+/* Clamped to 2 lines and given a matching min-height, so a one-word title and a
+   full-sentence title occupy exactly the same vertical space — row height stays
+   predictable no matter what a merchant or customer typed. */
 .reviewTitle {
   margin: 0 0 var(--space-2);
   font-size: var(--text-lg);
   font-weight: 600;
   letter-spacing: -0.01em;
+  line-height: 1.35;
+  min-height: calc(1.35em * 2);
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
 }
 
-/* One colored element per row (the status Badge) — everything else (verified, auto-
-   approved, photo count, replied) is a single flowing muted text line beside it, not a
-   competing pill, so the eye only has one color to parse per row. */
-.reviewBadgeRow {
+/* One colored element per row (the status Badge); customer and product each get their own
+   single-line, ellipsis-truncated slot instead of one long flowing string — that's what let
+   a long product name silently wrap the whole row onto extra lines before. Optimized for
+   scanning 50+ rows at a glance, not for showing every character of every field. */
+.reviewMetaRow {
   display: flex;
   align-items: center;
   gap: var(--space-2);
-  flex-wrap: wrap;
   margin-bottom: var(--space-1);
+  min-width: 0;
 }
 
-.reviewMetaText {
+.metaCustomer {
+  flex: 0 1 auto;
+  min-width: 0;
+  max-width: 40%;
   color: var(--color-text-muted);
   font-size: var(--text-sm);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.metaSeparator {
+  flex: none;
+  color: var(--color-text-muted);
+  font-size: var(--text-sm);
+}
+
+.metaProduct {
+  flex: 1 1 auto;
+  min-width: 0;
+  color: var(--color-text-muted);
+  font-size: var(--text-sm);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .reviewPreview {

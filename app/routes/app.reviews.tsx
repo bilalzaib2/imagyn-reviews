@@ -967,7 +967,6 @@ export default function ReviewsPage() {
                         const productName = review.productTitle ?? review.product?.name ?? "Unassigned product";
                         const previewText = review.content.trim() || "No review text captured yet.";
                         const checked = selectedIds.includes(review.id);
-                        const photoCount = review.media.length;
 
                         return (
                           <div
@@ -999,15 +998,11 @@ export default function ReviewsPage() {
                               </div>
                               <div className={styles.reviewContent}>
                                 <h2 className={styles.reviewTitle}>{reviewTitle}</h2>
-                                <div className={styles.reviewBadgeRow}>
+                                <div className={styles.reviewMetaRow}>
                                   <ReviewStatusBadge status={review.status} />
-                                  <span className={styles.reviewMetaText}>
-                                    {customerName} · {productName}
-                                    {review.verifiedPurchase ? " · Verified" : ""}
-                                    {review.moderationStatus === "auto_approved" ? " · Auto-approved" : ""}
-                                    {photoCount > 0 ? ` · ${photoCount} photo${photoCount === 1 ? "" : "s"}` : ""}
-                                    {review.reply ? " · Replied" : ""}
-                                  </span>
+                                  <span className={styles.metaCustomer}>{customerName}</span>
+                                  <span className={styles.metaSeparator} aria-hidden="true">·</span>
+                                  <span className={styles.metaProduct}>{productName}</span>
                                 </div>
                                 <p className={styles.reviewPreview}>{previewText}</p>
                               </div>
