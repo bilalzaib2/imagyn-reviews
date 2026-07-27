@@ -6,7 +6,6 @@ import {
   ActionList,
   Badge,
   BlockStack,
-  Button as PolarisButton,
   Checkbox,
   Frame,
   Popover,
@@ -18,6 +17,7 @@ import {
 } from "@shopify/polaris";
 
 import { Button } from "../components/ui/Button";
+import { ColorField } from "../components/ui/ColorField";
 import { Container } from "../components/ui/Container";
 import { authenticate } from "../shopify.server";
 import { widgetService } from "../services/widget.server";
@@ -604,9 +604,10 @@ export default function WidgetsPage() {
                       >
                         <div className={styles.quickEditPopover}>
                           <Checkbox label="Enable widget" checked={draftSettings.enabled} onChange={(value) => updateSetting("enabled", value)} />
-                          <TextField label="Primary color" value={draftSettings.primaryColor} onChange={(value) => updateSetting("primaryColor", value)} autoComplete="off" />
-                          <TextField label="Star color" value={draftSettings.starColor} onChange={(value) => updateSetting("starColor", value)} autoComplete="off" />
-                          <PolarisButton
+                          <ColorField label="Primary color" value={draftSettings.primaryColor} onChange={(value) => updateSetting("primaryColor", value)} />
+                          <ColorField label="Star color" value={draftSettings.starColor} onChange={(value) => updateSetting("starColor", value)} />
+                          <Button
+                            type="button"
                             variant="primary"
                             onClick={() => {
                               handleSave();
@@ -615,7 +616,7 @@ export default function WidgetsPage() {
                             disabled={!hasUnsavedChanges || isMutating}
                           >
                             Save
-                          </PolarisButton>
+                          </Button>
                         </div>
                       </Popover>
                       <Button type="button" variant="primary" onClick={() => setView("customize")}>
@@ -706,13 +707,13 @@ export default function WidgetsPage() {
                 <InspectorSection title="Appearance">
                   <p className={styles.inspectorGroupLabel}>Colors</p>
                   <div className={styles.settingsGrid}>
-                    <TextField label="Primary" value={draftSettings.primaryColor} onChange={(value) => updateSetting("primaryColor", value)} autoComplete="off" />
-                    <TextField label="Accent" value={draftSettings.accentColor} onChange={(value) => updateSetting("accentColor", value)} autoComplete="off" />
-                    <TextField label="Background" value={draftSettings.backgroundColor} onChange={(value) => updateSetting("backgroundColor", value)} autoComplete="off" />
-                    <TextField label="Text" value={draftSettings.textColor} onChange={(value) => updateSetting("textColor", value)} autoComplete="off" />
-                    <TextField label="Border" value={draftSettings.borderColor} onChange={(value) => updateSetting("borderColor", value)} autoComplete="off" />
-                    <TextField label="Star" value={draftSettings.starColor} onChange={(value) => updateSetting("starColor", value)} autoComplete="off" />
-                    <TextField label="Button" value={draftSettings.buttonColor} onChange={(value) => updateSetting("buttonColor", value)} autoComplete="off" />
+                    <ColorField label="Primary" value={draftSettings.primaryColor} onChange={(value) => updateSetting("primaryColor", value)} />
+                    <ColorField label="Accent" value={draftSettings.accentColor} onChange={(value) => updateSetting("accentColor", value)} />
+                    <ColorField label="Background" value={draftSettings.backgroundColor} onChange={(value) => updateSetting("backgroundColor", value)} />
+                    <ColorField label="Text" value={draftSettings.textColor} onChange={(value) => updateSetting("textColor", value)} />
+                    <ColorField label="Border" value={draftSettings.borderColor} onChange={(value) => updateSetting("borderColor", value)} />
+                    <ColorField label="Star" value={draftSettings.starColor} onChange={(value) => updateSetting("starColor", value)} />
+                    <ColorField label="Button" value={draftSettings.buttonColor} onChange={(value) => updateSetting("buttonColor", value)} />
                   </div>
 
                   <p className={styles.inspectorGroupLabel}>Typography</p>

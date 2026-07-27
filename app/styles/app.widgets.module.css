@@ -372,19 +372,24 @@
   gap: var(--space-3);
 }
 
+/* Deliberately lower-contrast than a live control (reduced opacity, not-allowed cursor,
+   tighter padding) so a merchant scanning the section can tell at a glance which rows are
+   real without reading every "Coming soon" pill individually. */
 .reservedRow {
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: var(--space-2);
-  padding: var(--space-2) var(--space-3);
+  padding: var(--space-1) var(--space-3);
   border: 1px dashed var(--color-border);
   border-radius: var(--radius-md);
   background: var(--color-surface-muted);
+  opacity: 0.6;
+  cursor: not-allowed;
 }
 
 .reservedRowLabel {
-  font-size: var(--text-sm);
+  font-size: var(--text-xs);
   color: var(--color-text-muted);
 }
 
