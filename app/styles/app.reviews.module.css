@@ -275,10 +275,13 @@
   min-width: 0;
 }
 
+/* flex: none — the customer name is never the thing that should shrink; it's short and a
+   merchant needs the whole name. A generous ch-based cap is a safety net for a pathological
+   input only, not something normal names ever hit. .metaProduct absorbs 100% of whatever
+   space is left and does the actual truncating (product names are the long, variable one). */
 .metaCustomer {
-  flex: 0 1 auto;
-  min-width: 0;
-  max-width: 40%;
+  flex: none;
+  max-width: 12rem;
   color: var(--color-text-muted);
   font-size: var(--text-sm);
   white-space: nowrap;
@@ -293,7 +296,7 @@
 }
 
 .metaProduct {
-  flex: 1 1 auto;
+  flex: 1 1 0%;
   min-width: 0;
   color: var(--color-text-muted);
   font-size: var(--text-sm);
