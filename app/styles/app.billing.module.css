@@ -19,7 +19,7 @@
 }
 
 .frozenBanner {
-  background: #fbf1ef;
+  background: color-mix(in srgb, var(--color-danger) 10%, transparent);
   color: var(--color-danger);
 }
 
@@ -52,6 +52,10 @@
   box-shadow: var(--shadow-sm);
 }
 
+/* "Most Popular" is a plain, quiet label — a hint, not a fact about the merchant's
+   account. "Current plan" (below) is deliberately the more assertive of the two, since it's
+   the one that's actually true right now; previously both used byte-identical styling and
+   could look interchangeable at a glance. */
 .popularBadge {
   margin: 0;
   font-size: var(--text-xs);
@@ -62,12 +66,18 @@
 }
 
 .currentBadge {
+  display: inline-flex;
+  align-items: center;
+  width: fit-content;
   margin: 0;
+  padding: 0.25rem 0.6rem;
+  border-radius: var(--radius-full);
   font-size: var(--text-xs);
-  letter-spacing: 0.1em;
+  letter-spacing: 0.06em;
   text-transform: uppercase;
-  color: var(--color-accent);
   font-weight: 600;
+  background: var(--color-accent);
+  color: var(--color-surface);
 }
 
 .planName {
@@ -119,5 +129,6 @@
   content: "✓";
   position: absolute;
   left: 0;
-  color: var(--color-text-muted);
+  color: var(--color-success);
+  font-weight: 600;
 }
