@@ -144,6 +144,9 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
     reviews: orderedReviews.map((review) => ({
       id: review.id,
       reviewerName: review.reviewerName,
+      // Public trust signal only — never expose reviewerEmail/reviewerLocation here (see
+      // this loader's own header comment on why only display-safe fields are included).
+      verifiedPurchase: review.verifiedPurchase,
       rating: review.rating,
       title: review.title,
       content: review.content,

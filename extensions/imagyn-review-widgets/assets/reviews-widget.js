@@ -30,6 +30,27 @@
     return div.innerHTML;
   }
 
+  // A small check icon + quiet text beside the reviewer's name — deliberately not a
+  // colored pill/badge (see imagyn-component-review-card.css: only the icon itself is
+  // full-saturation --imagyn-color-success, the label text is the same muted treatment
+  // already used for the date next to it). Gated on the merchant's own "Show verified
+  // buyer badge" widget setting (s.showVerifiedBadge) as well as the review actually
+  // being a verified purchase — never shown otherwise.
+  function renderVerifiedBadge(review, s) {
+    if (s.showVerifiedBadge === false || !review.verifiedPurchase) {
+      return "";
+    }
+
+    return (
+      '<span class="imagyn-review-card__verified">' +
+      '<svg class="imagyn-review-card__verified-icon" viewBox="0 0 16 16" aria-hidden="true" focusable="false">' +
+      '<path d="M6.4 10.8 3.9 8.3l-1.1 1.1 3.6 3.6 7-7-1.1-1.1z" fill="currentColor"></path>' +
+      "</svg>" +
+      '<span class="imagyn-review-card__verified-label">Verified Buyer</span>' +
+      "</span>"
+    );
+  }
+
   // A persistent anonymous identifier for "Was this helpful?" voting — this is what the
   // (reviewId, visitorId) uniqueness constraint on the backend actually keys off of, not
   // a Shopify customer id (the widget has no customer auth). Falls back to a session-only
@@ -628,7 +649,10 @@
             return (
               '<li class="imagyn-review-card" data-review-id="' + escapeHtml(review.id) + '">' +
               '<div class="imagyn-review-card__header">' +
+              '<span class="imagyn-review-card__identity">' +
               '<span class="imagyn-review-card__name">' + escapeHtml(review.reviewerName) + "</span>" +
+              renderVerifiedBadge(review, s) +
+              "</span>" +
               '<span class="imagyn-review-card__date">' + formatDate(review.createdAt) + "</span>" +
               "</div>" +
               '<span class="imagyn-review-card__stars" aria-hidden="true">' + renderStars(review.rating) + "</span>" +

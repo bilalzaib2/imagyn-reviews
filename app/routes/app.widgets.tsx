@@ -4,7 +4,6 @@ import type { ActionFunctionArgs, HeadersFunction, LoaderFunctionArgs } from "re
 import { boundary } from "@shopify/shopify-app-react-router/server";
 import {
   ActionList,
-  Badge,
   BlockStack,
   Checkbox,
   Frame,
@@ -286,7 +285,14 @@ function ReviewPreviewCard({ settings, review }: { settings: WidgetSettings; rev
           <div className={styles.previewStars}>{renderStars(review.rating, settings.starSize, settings.starColor, settings.starFilled, settings.starOutline)}</div>
           <div className={styles.previewIdentity}>
             {settings.showReviewerName ? <span>{review.name}</span> : null}
-            {settings.showVerifiedBadge && review.verified ? <Badge tone="success">Verified</Badge> : null}
+            {settings.showVerifiedBadge && review.verified ? (
+              <span className={styles.previewVerified}>
+                <svg className={styles.previewVerifiedIcon} viewBox="0 0 16 16" aria-hidden="true" focusable="false">
+                  <path d="M6.4 10.8 3.9 8.3l-1.1 1.1 3.6 3.6 7-7-1.1-1.1z" fill="currentColor" />
+                </svg>
+                <span className={styles.previewVerifiedLabel}>Verified Buyer</span>
+              </span>
+            ) : null}
             {settings.showCountry ? <span>{review.country}</span> : null}
             {settings.showDate ? <span>{review.date}</span> : null}
           </div>

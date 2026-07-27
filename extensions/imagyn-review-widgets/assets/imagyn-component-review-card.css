@@ -63,10 +63,43 @@
   margin-bottom: var(--imagyn-space-px-sm, 12px);
 }
 
+.imagyn-review-card__identity {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--imagyn-space-xs, 0.4em);
+  flex-wrap: wrap;
+  min-width: 0;
+}
+
 .imagyn-review-card__name {
   font-size: var(--imagyn-font-size-md, 17px);
   font-weight: var(--imagyn-font-weight-semibold, 600);
   line-height: var(--imagyn-line-height-tight, 1);
+}
+
+/* Small check icon + quiet label beside the reviewer's name — a trust signal, not a
+   badge, so it never competes with the star rating or the amber accent above it (§ header
+   comment). Only the icon stays full-saturation success green; the label matches the same
+   muted treatment already used for the date. */
+.imagyn-review-card__verified {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--imagyn-space-3xs, 0.2em);
+  font-size: var(--imagyn-font-size-xs, 12px);
+  white-space: nowrap;
+}
+
+.imagyn-review-card__verified-icon {
+  width: 0.9em;
+  height: 0.9em;
+  flex: none;
+  color: var(--imagyn-color-success, #1a7f4b);
+}
+
+.imagyn-review-card__verified-label {
+  font-weight: var(--imagyn-font-weight-medium, 500);
+  color: var(--imagyn-color-text, inherit);
+  opacity: var(--imagyn-color-text-muted-opacity, 0.6);
 }
 
 .imagyn-review-card__date {
