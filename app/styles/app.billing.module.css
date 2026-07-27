@@ -69,32 +69,22 @@
   box-shadow: var(--shadow-sm);
 }
 
-/* "Most Popular" is a plain, quiet label — a hint, not a fact about the merchant's
-   account. "Current plan" (below) is deliberately the more assertive of the two, since it's
-   the one that's actually true right now; previously both used byte-identical styling and
-   could look interchangeable at a glance. */
-.popularBadge {
-  margin: 0;
-  font-size: var(--text-xs);
-  letter-spacing: 0.1em;
-  text-transform: uppercase;
-  color: var(--color-accent);
-  font-weight: 600;
-}
-
+/* Small, refined pills with subtle (not solid) color — sentence case, no letter-spacing
+   theatrics. "Most popular" and "Current plan" never appear on the same card (a card is
+   either the merchant's current plan or the popular recommendation, never both), so both
+   share the same quiet treatment; only the copy tells them apart. */
+.popularBadge,
 .currentBadge {
   display: inline-flex;
   align-items: center;
   width: fit-content;
   margin: 0;
-  padding: 0.25rem 0.6rem;
+  padding: 0.25rem 0.65rem;
   border-radius: var(--radius-full);
   font-size: var(--text-xs);
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
   font-weight: 600;
-  background: var(--color-accent);
-  color: var(--color-surface);
+  background: var(--color-accent-soft);
+  color: var(--color-accent);
 }
 
 .planName {
@@ -136,12 +126,13 @@
   align-content: start;
 }
 
-/* Apple's current button system, scoped to this page only (not the shared
-   components/ui/Button, which stays the app's monochrome default everywhere else) —
-   #0071E3 is a deliberate one-off for the pricing page's CTAs, not a new global accent.
-   margin-top: auto (paired with .featureList's flex: 1 above) guarantees the button sits
-   at the same baseline across every card regardless of what varies above it — a badge
-   present or not, a trial note present or not, a shorter feature list, etc. */
+/* Apple-style minimal button, scoped to this page only (not the shared
+   components/ui/Button) — but built entirely from the app's own monochrome tokens
+   (--color-accent is already #111111) rather than a one-off brand color, so the billing
+   page reads as part of Shopify Admin instead of a marketing landing page. margin-top:
+   auto (paired with .featureList's flex: 1 above) guarantees the button sits at the same
+   baseline across every card regardless of what varies above it — a badge present or not,
+   a trial note present or not, a shorter feature list, etc. */
 .cardAction {
   margin-top: auto;
   display: inline-flex;
@@ -154,8 +145,8 @@
   font-size: var(--text-base);
   font-weight: 500;
   cursor: pointer;
-  border: 2px solid transparent;
-  transition: background-color 200ms ease-out, color 200ms ease-out, border-color 200ms ease-out;
+  border: 1px solid transparent;
+  transition: background-color 200ms ease-out, color 200ms ease-out, border-color 200ms ease-out, opacity 200ms ease-out;
 }
 
 .cardAction:disabled {
@@ -164,25 +155,28 @@
 }
 
 .ctaPrimary {
-  background: #0071e3;
-  border-color: #0071e3;
-  color: #ffffff;
+  background: var(--color-accent);
+  border-color: var(--color-accent);
+  color: var(--color-surface);
 }
 
 .ctaPrimary:hover:not(:disabled) {
-  background: #0066cc;
-  border-color: #0066cc;
+  background: color-mix(in srgb, var(--color-accent) 85%, white);
+  border-color: color-mix(in srgb, var(--color-accent) 85%, white);
 }
 
+/* Soft border, subtle appearance — deliberately quiet rather than a second bold color,
+   since this is either "Current plan" (already true, nothing to persuade toward) or
+   "Downgrade to Starter" (not an action to visually push). */
 .ctaSecondary {
   background: transparent;
-  border-color: #0071e3;
-  color: #0071e3;
+  border-color: var(--color-border);
+  color: var(--color-text);
 }
 
 .ctaSecondary:hover:not(:disabled) {
-  background: #0071e3;
-  color: #ffffff;
+  background: var(--color-surface-muted);
+  border-color: var(--color-border-strong);
 }
 
 .featureList li {

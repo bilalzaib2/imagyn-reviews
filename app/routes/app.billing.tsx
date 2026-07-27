@@ -124,7 +124,7 @@ function PlanCard({
       className={`${styles.card} ${isCurrent ? styles.cardCurrent : ""} ${isPopular ? styles.cardPopular : ""}`}
     >
       <div className={styles.badgeSlot}>
-        {isPopular ? <p className={styles.popularBadge}>Most Popular</p> : null}
+        {isPopular ? <p className={styles.popularBadge}>Most popular</p> : null}
         {isCurrent ? <p className={styles.currentBadge}>Current plan</p> : null}
       </div>
       <p className={styles.planName}>{plan.name}</p>
