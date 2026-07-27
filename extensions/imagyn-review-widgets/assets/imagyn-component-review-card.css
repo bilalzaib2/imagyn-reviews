@@ -79,8 +79,8 @@
 
 /* Small check icon + quiet label beside the reviewer's name — a trust signal, not a
    badge, so it never competes with the star rating or the amber accent above it (§ header
-   comment). Only the icon stays full-saturation success green; the label matches the same
-   muted treatment already used for the date. */
+   comment). Deliberately monochrome (text color, not the success green) so it reads as a
+   minimal checkmark rather than a colored status pill; the label stays muted like the date. */
 .imagyn-review-card__verified {
   display: inline-flex;
   align-items: center;
@@ -93,7 +93,7 @@
   width: 0.9em;
   height: 0.9em;
   flex: none;
-  color: var(--imagyn-color-success, #1a7f4b);
+  color: var(--imagyn-color-text, currentColor);
 }
 
 .imagyn-review-card__verified-label {
