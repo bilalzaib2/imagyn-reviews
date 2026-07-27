@@ -11,10 +11,8 @@ import type { ActionFunctionArgs, HeadersFunction, LoaderFunctionArgs } from "re
 import { boundary } from "@shopify/shopify-app-react-router/server";
 import {
   Badge,
-  Banner,
   BlockStack,
   Card,
-  EmptyState,
   Frame,
   SkeletonBodyText,
   SkeletonDisplayText,
@@ -255,15 +253,12 @@ export default function ProductDetailPage() {
           </Card>
         ) : error || !product ? (
           <Card>
-            <div className={styles.errorState}>
-              <Banner tone="critical">{error ?? "Product not found."}</Banner>
-              <EmptyState
-                heading="This product isn't available"
-                action={{ content: "Back to Products", url: backHref }}
-                image="https://cdn.shopify.com/s/files/1/0262/4071/2726/files/emptystate-files.png"
-              >
-                <p>It may have been removed, or you may not have access to it.</p>
-              </EmptyState>
+            <div className={styles.errorState} role="alert">
+              <h2 className={styles.errorStateTitle}>This product isn&apos;t available</h2>
+              <p className={styles.errorStateText}>
+                {error ?? "It may have been removed, or you may not have access to it."}
+              </p>
+              <LinkButton to={backHref}>Back to Products</LinkButton>
             </div>
           </Card>
         ) : (
@@ -404,12 +399,12 @@ export default function ProductDetailPage() {
                 </div>
 
                 {reviews.length === 0 ? (
-                  <EmptyState
-                    heading="Your first review will appear here."
-                    image="https://cdn.shopify.com/s/files/1/0262/4071/2726/files/emptystate-files.png"
-                  >
-                    <p>Once a customer leaves feedback on this product, it shows up in this space.</p>
-                  </EmptyState>
+                  <div className={styles.emptyState}>
+                    <h2 className={styles.emptyStateTitle}>Your first review will appear here</h2>
+                    <p className={styles.emptyStateText}>
+                      Once a customer leaves feedback on this product, it shows up in this space.
+                    </p>
+                  </div>
                 ) : (
                   <div className={styles.reviewList}>
                     {reviewsTotalCount > reviews.length ? (

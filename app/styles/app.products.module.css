@@ -74,3 +74,27 @@
   gap: var(--space-4);
   min-height: 18rem;
 }
+
+.emptyState {
+  composes: emptyState from "./shared.module.css";
+}
+
+.emptyStateTitle {
+  composes: emptyStateTitle from "./shared.module.css";
+}
+
+.emptyStateText {
+  composes: emptyStateText from "./shared.module.css";
+}
+
+.errorState {
+  composes: errorState from "./shared.module.css";
+}
+
+.errorStateTitle {
+  composes: errorStateTitle from "./shared.module.css";
+}
+
+.errorStateText {
+  composes: errorStateText from "./shared.module.css";
+}

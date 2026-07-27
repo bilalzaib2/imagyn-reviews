@@ -1279,9 +1279,9 @@ export default function ReviewsPage() {
           </div>
 
           <div className={styles.pagination}>
-            <button
-              className={styles.paginationButton}
+            <Button
               type="button"
+              variant="secondary"
               onClick={() => {
                 const next = new URLSearchParams(searchParams);
                 if (initialPrevCursor) {
@@ -1295,10 +1295,10 @@ export default function ReviewsPage() {
               disabled={!initialPrevCursor || isLoading || isMutating}
             >
               Previous
-            </button>
-            <button
-              className={styles.paginationButton}
+            </Button>
+            <Button
               type="button"
+              variant="secondary"
               onClick={() => {
                 const next = new URLSearchParams(searchParams);
                 if (nextCursor) {
@@ -1310,7 +1310,7 @@ export default function ReviewsPage() {
               disabled={!hasMore || !nextCursor || isLoading || isMutating}
             >
               Next
-            </button>
+            </Button>
           </div>
         </Section>
       </div>

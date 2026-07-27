@@ -701,6 +701,7 @@ export default function RequestsPage() {
                     </p>
                     <Button
                       type="button"
+                      variant="primary"
                       onClick={openCreateModal}
                       disabled={productOptions.length === 0}
                     >
@@ -760,9 +761,9 @@ export default function RequestsPage() {
                     </div>
 
                     <div className={styles.pagination}>
-                      <button
-                        className={styles.paginationButton}
+                      <Button
                         type="button"
+                        variant="secondary"
                         onClick={() => {
                           const next = new URLSearchParams(searchParams);
                           next.set("page", String(page - 1));
@@ -771,13 +772,13 @@ export default function RequestsPage() {
                         disabled={page <= 1 || isLoading || isMutating}
                       >
                         Previous
-                      </button>
+                      </Button>
                       <span className={styles.paginationLabel}>
                         Page {page} of {totalPages}
                       </span>
-                      <button
-                        className={styles.paginationButton}
+                      <Button
                         type="button"
+                        variant="secondary"
                         onClick={() => {
                           const next = new URLSearchParams(searchParams);
                           next.set("page", String(page + 1));
@@ -786,7 +787,7 @@ export default function RequestsPage() {
                         disabled={page >= totalPages || isLoading || isMutating}
                       >
                         Next
-                      </button>
+                      </Button>
                     </div>
                   </div>
 

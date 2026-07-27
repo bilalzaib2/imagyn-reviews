@@ -21,8 +21,27 @@
 }
 
 .errorState {
-  display: grid;
-  gap: var(--space-4);
+  composes: errorState from "./shared.module.css";
+}
+
+.errorStateTitle {
+  composes: errorStateTitle from "./shared.module.css";
+}
+
+.errorStateText {
+  composes: errorStateText from "./shared.module.css";
+}
+
+.emptyState {
+  composes: emptyState from "./shared.module.css";
+}
+
+.emptyStateTitle {
+  composes: emptyStateTitle from "./shared.module.css";
+}
+
+.emptyStateText {
+  composes: emptyStateText from "./shared.module.css";
 }
 
 .productLayout {

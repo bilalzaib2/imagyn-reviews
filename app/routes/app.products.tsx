@@ -4,18 +4,16 @@ import type { ActionFunctionArgs, HeadersFunction, LoaderFunctionArgs } from "re
 import { boundary } from "@shopify/shopify-app-react-router/server";
 import {
   Badge,
-  Banner,
   BlockStack,
-  Button,
   Card,
   DataTable,
-  EmptyState,
   Frame,
   SkeletonBodyText,
   SkeletonDisplayText,
   Toast,
 } from "@shopify/polaris";
 
+import { Button } from "../components/ui/Button";
 import { Container } from "../components/ui/Container";
 import { authenticate } from "../shopify.server";
 import { getOrCreateStore } from "../services/store.server";
@@ -185,13 +183,18 @@ export default function ProductsPage() {
               </p>
             </div>
             <div className={styles.headerActions}>
-              <Button onClick={handleSync} loading={isSyncing} disabled={isSyncing}>
+              <Button type="button" onClick={handleSync} disabled={isSyncing}>
                 {isSyncing ? "Syncing…" : "Sync Products"}
               </Button>
             </div>
           </header>
 
-          {error ? <Banner tone="critical">{error}</Banner> : null}
+          {error ? (
+            <div className={styles.errorState} role="alert">
+              <h2 className={styles.errorStateTitle}>Unable to load products</h2>
+              <p className={styles.errorStateText}>{error}</p>
+            </div>
+          ) : null}
 
           <div className={styles.tableCard}>
             <Card>
@@ -201,13 +204,13 @@ export default function ProductsPage() {
                   <SkeletonBodyText lines={8} />
                 </div>
               ) : products.length === 0 ? (
-                <EmptyState
-                  heading="No products synced yet"
-                  action={{ content: "Sync Products", onAction: handleSync, loading: isSyncing }}
-                  image="https://cdn.shopify.com/s/files/1/0262/4071/2726/files/emptystate-files.png"
-                >
-                  <p>Sync your Shopify catalog to bring products into Imagyn Reviews.</p>
-                </EmptyState>
+                <div className={styles.emptyState}>
+                  <h2 className={styles.emptyStateTitle}>No products synced yet</h2>
+                  <p className={styles.emptyStateText}>Sync your Shopify catalog to bring products into Imagyn Reviews.</p>
+                  <Button type="button" onClick={handleSync} disabled={isSyncing}>
+                    {isSyncing ? "Syncing…" : "Sync Products"}
+                  </Button>
+                </div>
               ) : (
                 <BlockStack gap="400">
                   <DataTable
