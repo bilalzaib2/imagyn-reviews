@@ -298,6 +298,30 @@ export const reviewRequestService = {
     return request ? mapRequestRecord(request) : null;
   },
 
+  // Dashboard "Review Request performance" — how many requests actually went out, and how
+  // many of those converted into a submitted review. "Sent" counts every status a request
+  // reaches only after a successful send (sent/delivered/opened/clicked/completed);
+  // pending/scheduled haven't gone out yet, and failed never went out at all.
+  async getRequestStats(storeId: string): Promise<{ totalCount: number; sent: number; completed: number; completionRate: number }> {
+    const groups = await prisma.reviewRequest.groupBy({
+      by: ["status"],
+      where: { storeId },
+      _count: { status: true },
+    });
+
+    const countByStatus = new Map(groups.map((group) => [group.status, group._count.status]));
+    const sentStatuses: ReviewRequestStatus[] = ["sent", "delivered", "opened", "clicked", "completed"];
+    const sent = sentStatuses.reduce((sum, status) => sum + (countByStatus.get(status) ?? 0), 0);
+    const completed = countByStatus.get("completed") ?? 0;
+
+    return {
+      totalCount: groups.reduce((sum, group) => sum + group._count.status, 0),
+      sent,
+      completed,
+      completionRate: sent > 0 ? completed / sent : 0,
+    };
+  },
+
   async listProducts() {
     return prisma.product.findMany({
       select: { id: true, name: true, storeId: true },

@@ -210,6 +210,11 @@ export interface StoreReviewStats {
   // Moderation Rules automation metrics (see app/services/moderationRules.server.ts).
   autoPublishedToday: number;
   heldByRules: number;
+  // Dashboard "Trust Overview"/"Rating distribution" — scoped to APPROVED, non-deleted
+  // reviews (same scope as averageRating/getPublicReviewSummary), since these describe what
+  // shoppers actually see, not the merchant's full internal moderation queue.
+  verifiedReviews: number;
+  ratingCounts: { 5: number; 4: number; 3: number; 2: number; 1: number };
 }
 
 // Store-wide dashboard stats, queried directly off the Review table with the same
@@ -226,47 +231,73 @@ export async function getStoreReviewStats(storeId: string, options: { recentLimi
   const startOfToday = new Date();
   startOfToday.setHours(0, 0, 0, 0);
 
-  const [totalReviews, statusGroups, approvedAggregate, recentReviews, autoPublishedToday, heldByRules] =
-    await Promise.all([
-      prisma.review.count({ where: { storeId, deletedAt: null } }),
-      prisma.review.groupBy({
-        by: ["status"],
-        where: { storeId, deletedAt: null },
-        _count: { status: true },
-      }),
-      prisma.review.aggregate({
-        where: { storeId, deletedAt: null, status: ReviewStatus.APPROVED },
-        _avg: { rating: true },
-      }),
-      prisma.review.findMany({
-        where: { storeId, deletedAt: null },
-        include: reviewInclude,
-        orderBy: [{ createdAt: "desc" }, { id: "desc" }],
-        take: recentLimit,
-      }),
-      // "Today" set once, at creation, by moderationRules.server.ts's evaluateReview — a
-      // review can only ever be auto-published at the moment it's submitted.
-      prisma.review.count({
-        where: { storeId, deletedAt: null, moderationStatus: "auto_approved", createdAt: { gte: startOfToday } },
-      }),
-      // Still-pending reviews a Moderation Rule held — distinct from pendingReviews below,
-      // which also includes ordinary manually-created/imported reviews Moderation Rules
-      // never touched.
-      prisma.review.count({
-        where: { storeId, deletedAt: null, moderationStatus: "held", status: ReviewStatus.PENDING },
-      }),
-    ]);
+  const [
+    totalReviews,
+    statusGroups,
+    approvedAggregate,
+    recentReviews,
+    autoPublishedToday,
+    heldByRules,
+    verifiedReviews,
+    ratingGroups,
+  ] = await Promise.all([
+    prisma.review.count({ where: { storeId, deletedAt: null } }),
+    prisma.review.groupBy({
+      by: ["status"],
+      where: { storeId, deletedAt: null },
+      _count: { status: true },
+    }),
+    prisma.review.aggregate({
+      where: { storeId, deletedAt: null, status: ReviewStatus.APPROVED },
+      _avg: { rating: true },
+    }),
+    prisma.review.findMany({
+      where: { storeId, deletedAt: null },
+      include: reviewInclude,
+      orderBy: [{ createdAt: "desc" }, { id: "desc" }],
+      take: recentLimit,
+    }),
+    // "Today" set once, at creation, by moderationRules.server.ts's evaluateReview — a
+    // review can only ever be auto-published at the moment it's submitted.
+    prisma.review.count({
+      where: { storeId, deletedAt: null, moderationStatus: "auto_approved", createdAt: { gte: startOfToday } },
+    }),
+    // Still-pending reviews a Moderation Rule held — distinct from pendingReviews below,
+    // which also includes ordinary manually-created/imported reviews Moderation Rules
+    // never touched.
+    prisma.review.count({
+      where: { storeId, deletedAt: null, moderationStatus: "held", status: ReviewStatus.PENDING },
+    }),
+    prisma.review.count({
+      where: { storeId, deletedAt: null, status: ReviewStatus.APPROVED, verifiedPurchase: true },
+    }),
+    prisma.review.groupBy({
+      by: ["rating"],
+      where: { storeId, deletedAt: null, status: ReviewStatus.APPROVED },
+      _count: { rating: true },
+    }),
+  ]);
 
   const countByStatus = new Map(statusGroups.map((group) => [group.status, group._count.status]));
+  const countByRating = new Map(ratingGroups.map((group) => [group.rating, group._count.rating]));
+  const publishedReviews = countByStatus.get(ReviewStatus.APPROVED) ?? 0;
 
   return {
     totalReviews,
-    publishedReviews: countByStatus.get(ReviewStatus.APPROVED) ?? 0,
+    publishedReviews,
     pendingReviews: countByStatus.get(ReviewStatus.PENDING) ?? 0,
     averageRating: Number((approvedAggregate._avg.rating ?? 0).toFixed(1)),
     recentReviews,
     autoPublishedToday,
     heldByRules,
+    verifiedReviews,
+    ratingCounts: {
+      5: countByRating.get(5) ?? 0,
+      4: countByRating.get(4) ?? 0,
+      3: countByRating.get(3) ?? 0,
+      2: countByRating.get(2) ?? 0,
+      1: countByRating.get(1) ?? 0,
+    },
   };
 }
 

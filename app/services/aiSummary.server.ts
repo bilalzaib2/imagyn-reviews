@@ -78,6 +78,25 @@ export async function getAiSummary(productId: string): Promise<ProductAiSummaryR
   return row ? toRecord(row) : null;
 }
 
+// Dashboard "AI Spotlight" — the single most recently generated summary for this store,
+// across whichever product last earned one. Pure cache read (same guarantee as
+// getAiSummary above): never triggers generation, never touches the AI provider.
+export async function getLatestAiSummaryForStore(
+  storeId: string,
+): Promise<(ProductAiSummaryRecord & { productName: string }) | null> {
+  const row = await prisma.productAiSummary.findFirst({
+    where: { product: { storeId } },
+    orderBy: { generatedAt: "desc" },
+    include: { product: { select: { name: true } } },
+  });
+
+  if (!row) {
+    return null;
+  }
+
+  return { ...toRecord(row), productName: row.product.name };
+}
+
 async function getApprovedReviewCount(productId: string): Promise<number> {
   return prisma.review.count({ where: { productId, deletedAt: null, status: ReviewStatus.APPROVED } });
 }

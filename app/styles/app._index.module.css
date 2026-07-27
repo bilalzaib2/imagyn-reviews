@@ -93,35 +93,142 @@
   font-size: var(--text-xl);
 }
 
-.statsGrid {
-  display: grid;
-  gap: var(--space-3);
-  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-}
-
 .errorText {
   margin: 0;
   color: var(--color-danger);
   font-size: var(--text-sm);
 }
 
-.statContent {
+/* "What should I do next" — a quiet row of navigational shortcuts, deliberately plain text
+   links rather than buttons, sitting right under the greeting where Notion/Linear put
+   theirs. Not a Section (no title needed; the greeting above already sets context). */
+.quickActions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2) var(--space-6);
+}
+
+.quickActionLink {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+  color: var(--color-text);
+  font-size: var(--text-sm);
+  font-weight: 600;
+  text-decoration: none;
+  border-bottom: 1px solid transparent;
+  transition: border-color var(--transition-base);
+}
+
+.quickActionLink:hover {
+  border-bottom-color: var(--color-text);
+}
+
+.quickActionLink span {
+  color: var(--color-text-muted);
+}
+
+/* Trust Overview / Review Requests — large numbers directly on the page background, no
+   card boxing, since these are read-only figures a merchant scans, not actionable surfaces
+   (those are .attentionCard above). Typography does the work instead of containers. */
+.trustRow {
+  display: grid;
+  gap: var(--space-6);
+  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+}
+
+.trustStat {
   display: grid;
   gap: var(--space-1);
 }
 
-.statLabel {
+.trustValue {
   margin: 0;
-  color: var(--color-text-muted);
-  font-size: var(--text-xs);
-}
-
-.statValue {
-  margin: 0;
-  font-size: var(--text-xl);
+  font-size: clamp(1.75rem, 2.5vw, 2.25rem);
   font-weight: 600;
   letter-spacing: -0.02em;
+  font-variant-numeric: tabular-nums;
+}
+
+.trustLabel {
+  margin: 0;
   color: var(--color-text-muted);
+  font-size: var(--text-sm);
+}
+
+.insightsGrid {
+  display: grid;
+  gap: var(--space-8);
+  grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+}
+
+.ratingBars {
+  display: grid;
+  gap: var(--space-2);
+}
+
+.ratingBarRow {
+  display: grid;
+  grid-template-columns: 2.25rem 1fr 2rem;
+  align-items: center;
+  gap: var(--space-3);
+}
+
+.ratingBarLabel {
+  color: var(--color-text-muted);
+  font-size: var(--text-sm);
+}
+
+.ratingBarTrack {
+  height: 0.5rem;
+  border-radius: var(--radius-full);
+  background: var(--color-surface-strong);
+  overflow: hidden;
+}
+
+.ratingBarFill {
+  display: block;
+  height: 100%;
+  border-radius: var(--radius-full);
+  background: var(--color-accent);
+}
+
+.ratingBarCount {
+  text-align: right;
+  color: var(--color-text-muted);
+  font-size: var(--text-sm);
+  font-variant-numeric: tabular-nums;
+}
+
+.aiSpotlight {
+  display: grid;
+  gap: var(--space-2);
+  align-content: start;
+}
+
+.aiSpotlightProduct {
+  margin: 0;
+  font-size: var(--text-sm);
+  font-weight: 600;
+}
+
+.aiSpotlightText {
+  margin: 0;
+  color: var(--color-text-muted);
+  line-height: 1.6;
+}
+
+.spotlightLink {
+  color: var(--color-text);
+  font-size: var(--text-sm);
+  font-weight: 600;
+  text-decoration: none;
+  width: fit-content;
+  border-bottom: 1px solid var(--color-border-strong);
+}
+
+.spotlightLink:hover {
+  border-bottom-color: var(--color-text);
 }
 
 .emptyState {
@@ -149,21 +256,6 @@
   margin: 0;
   color: var(--color-text-muted);
   line-height: 1.7;
-}
-
-.emptyStateLink {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: fit-content;
-  margin: 0 auto;
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-md);
-  background: var(--color-surface);
-  color: var(--color-text);
-  text-decoration: none;
-  font-weight: 600;
-  padding: 0.65rem 0.9rem;
 }
 
 .activityList {
