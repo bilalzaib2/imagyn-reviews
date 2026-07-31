@@ -586,8 +586,6 @@ export default function WidgetsPage() {
                         <a
                           className={styles.themeEditorLink}
                           href={addToThemeHref(card.blockHandle!)}
-                          target="_top"
-                          rel="noreferrer"
                         >
                           Add to Theme
                         </a>
@@ -647,8 +645,6 @@ export default function WidgetsPage() {
                       <a
                         className={styles.themeEditorLink}
                         href={addToThemeHref(card.blockHandle!)}
-                        target="_top"
-                        rel="noreferrer"
                       >
                         Add to Theme
                       </a>
