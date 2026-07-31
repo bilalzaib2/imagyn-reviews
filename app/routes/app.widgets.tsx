@@ -1,5 +1,5 @@
 import { type ReactNode, useEffect, useMemo, useState } from "react";
-import { useFetcher, useLoaderData, useNavigation, useRevalidator, useRouteError } from "react-router";
+import { useFetcher, useLoaderData, useLocation, useNavigation, useRevalidator, useRouteError } from "react-router";
 import type { ActionFunctionArgs, HeadersFunction, LoaderFunctionArgs } from "react-router";
 import { boundary } from "@shopify/shopify-app-react-router/server";
 import {
@@ -35,7 +35,6 @@ type ActionData = {
 type LoaderData = {
   widgets: WidgetRecord[];
   shop: string;
-  apiKey: string;
   error: string | null;
 };
 
@@ -57,12 +56,11 @@ interface WidgetCardDef {
   description: string;
   status: WidgetCardStatus;
   blockName?: string;
-  // The block's Liquid filename (extensions/imagyn-review-widgets/blocks/{handle}.liquid) and
-  // the JSON template it belongs on — together these build the theme-editor deep link so a
-  // merchant can add the block with one click instead of finding it manually. See
-  // buildAppBlockDeepLink below.
+  // The block's Liquid filename (extensions/imagyn-review-widgets/blocks/{handle}.liquid) —
+  // passed to app.widgets.add-to-theme.tsx, which resolves it against its own allow-list to
+  // build the theme-editor deep link, so a merchant can add the block with one click instead
+  // of finding it manually.
   blockHandle?: string;
-  deepLinkTemplate?: "product" | "collection";
 }
 
 const widgetCards: WidgetCardDef[] = [
@@ -73,7 +71,6 @@ const widgetCards: WidgetCardDef[] = [
     status: "editable",
     blockName: "Imagyn Reviews",
     blockHandle: "star_rating",
-    deepLinkTemplate: "product",
   },
   {
     key: "product-rating-badge",
@@ -82,7 +79,6 @@ const widgetCards: WidgetCardDef[] = [
     status: "theme-editor",
     blockName: "Product Rating Badge",
     blockHandle: "rating_badge",
-    deepLinkTemplate: "product",
   },
   {
     key: "collection-rating-badge",
@@ -91,7 +87,6 @@ const widgetCards: WidgetCardDef[] = [
     status: "theme-editor",
     blockName: "Collection Ratings",
     blockHandle: "collection_rating_badges",
-    deepLinkTemplate: "collection",
   },
   {
     key: "featured-collection-badge",
@@ -147,34 +142,18 @@ const REVIEWS_WIDGET_TYPE: WidgetType = "review-list";
 
 export const loader = async ({ request }: LoaderFunctionArgs): Promise<LoaderData> => {
   const { session } = await authenticate.admin(request);
-  const apiKey = process.env.SHOPIFY_API_KEY || "";
 
   try {
     const widgets = await widgetService.listWidgets();
-    return { widgets, shop: session.shop, apiKey, error: null };
+    return { widgets, shop: session.shop, error: null };
   } catch (error) {
     return {
       widgets: [],
       shop: session.shop,
-      apiKey,
       error: error instanceof Error ? error.message : "Unable to load widgets.",
     };
   }
 };
-
-// Shopify's documented theme app extension deep-link format — takes the merchant straight to
-// a preview of this exact block already added to the right template, instead of leaving them
-// to find it themselves in the theme editor's block picker. `{uuid}` is documented as
-// deprecated in favor of `{api_key}` (the app's client_id), and `newAppsSection` is the
-// generic, theme-agnostic target since a merchant's actual section IDs aren't knowable ahead
-// of time. See https://shopify.dev/docs/apps/build/online-store/theme-app-extensions/configuration#deep-linking
-function buildAppBlockDeepLink(shop: string, apiKey: string, template: string, blockHandle: string) {
-  const url = new URL(`https://${shop}/admin/themes/current/editor`);
-  url.searchParams.set("template", template);
-  url.searchParams.set("addAppBlockId", `${apiKey}/${blockHandle}`);
-  url.searchParams.set("target", "newAppsSection");
-  return url.toString();
-}
 
 export const action = async ({ request }: ActionFunctionArgs): Promise<ActionData> => {
   await authenticate.admin(request);
@@ -404,7 +383,16 @@ function WidgetPreview({ settings }: { settings: WidgetSettings }) {
 }
 
 export default function WidgetsPage() {
-  const { widgets, shop, apiKey, error } = useLoaderData<typeof loader>();
+  const { widgets, error } = useLoaderData<typeof loader>();
+  const location = useLocation();
+  // Carries embedded/host/shop context the same way app.billing.tsx's manageUrl does — this is
+  // a real top-level navigation (required to break out of the iframe), not a fetcher, so it
+  // needs that context in its own URL.
+  const addToThemeHref = (blockHandle: string) => {
+    const params = new URLSearchParams(location.search);
+    params.set("handle", blockHandle);
+    return `/app/widgets/add-to-theme?${params.toString()}`;
+  };
   const fetcher = useFetcher<ActionData>();
   const navigation = useNavigation();
   const revalidator = useRevalidator();
@@ -597,7 +585,7 @@ export default function WidgetsPage() {
                       <div className={styles.widgetCardActions}>
                         <a
                           className={styles.themeEditorLink}
-                          href={buildAppBlockDeepLink(shop, apiKey, card.deepLinkTemplate!, card.blockHandle!)}
+                          href={addToThemeHref(card.blockHandle!)}
                           target="_top"
                           rel="noreferrer"
                         >
@@ -658,7 +646,7 @@ export default function WidgetsPage() {
                       </Button>
                       <a
                         className={styles.themeEditorLink}
-                        href={buildAppBlockDeepLink(shop, apiKey, card.deepLinkTemplate!, card.blockHandle!)}
+                        href={addToThemeHref(card.blockHandle!)}
                         target="_top"
                         rel="noreferrer"
                       >
