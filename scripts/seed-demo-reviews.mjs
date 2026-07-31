@@ -326,8 +326,20 @@ const AI_SUMMARIES = {
 };
 
 async function main() {
-  const store = await prisma.store.findFirst();
-  if (!store) throw new Error("No store found — aborting.");
+  // Was `prisma.store.findFirst()` — silently whichever store happened to sort first. Harmless
+  // when this DB only held the one dev store this script was written for, but this Postgres
+  // instance now also holds real merchant/reviewer-installed stores (same DATABASE_URL as
+  // production — see CLAUDE.md's Database Safety policy), so an un-targeted run could inject
+  // fabricated reviews into a real store's data instead of the intended test store.
+  const targetShop = process.env.SEED_TARGET_SHOP;
+  if (!targetShop) {
+    throw new Error(
+      "SEED_TARGET_SHOP is not set. Re-run as SEED_TARGET_SHOP=your-dev-store.myshopify.com node scripts/seed-demo-reviews.mjs — this script no longer guesses which store to seed.",
+    );
+  }
+
+  const store = await prisma.store.findUnique({ where: { domain: targetShop } });
+  if (!store) throw new Error(`No store found with domain "${targetShop}" — aborting.`);
 
   const products = await prisma.product.findMany({ where: { storeId: store.id } });
   if (products.length === 0) throw new Error("No products found — aborting.");

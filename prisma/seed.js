@@ -84,6 +84,20 @@ function buildCustomer(index) {
 }
 
 async function main() {
+  // Unconditionally wipes Review/ReviewRequest/Widget/Product/Store — every real merchant's
+  // data along with the fixture rows this script creates. Harmless against an isolated local
+  // database, catastrophic against this project's actual setup: local .env and Railway
+  // production currently resolve to the same Postgres instance (see CLAUDE.md's Database
+  // Safety policy — this exact class of mistake has already wiped production data once here).
+  // `npm run db:seed` isn't wired into any deploy path, so this only runs if someone invokes it
+  // by hand — this guard is what stops that from being silently destructive.
+  if (process.env.CONFIRM_SEED_RESET !== "yes") {
+    throw new Error(
+      "This deletes every Review/ReviewRequest/Widget/Product/Store row on whatever DATABASE_URL is currently active before reseeding fixtures. " +
+        "Re-run as CONFIRM_SEED_RESET=yes npm run db:seed only after confirming DATABASE_URL points at a disposable/local database, not production.",
+    );
+  }
+
   await prisma.review.deleteMany({});
   await prisma.reviewRequest.deleteMany({});
   await prisma.widget.deleteMany({});

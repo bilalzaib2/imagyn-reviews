@@ -35,6 +35,7 @@ type ActionData = {
 type LoaderData = {
   widgets: WidgetRecord[];
   shop: string;
+  apiKey: string;
   error: string | null;
 };
 
@@ -56,6 +57,12 @@ interface WidgetCardDef {
   description: string;
   status: WidgetCardStatus;
   blockName?: string;
+  // The block's Liquid filename (extensions/imagyn-review-widgets/blocks/{handle}.liquid) and
+  // the JSON template it belongs on — together these build the theme-editor deep link so a
+  // merchant can add the block with one click instead of finding it manually. See
+  // buildAppBlockDeepLink below.
+  blockHandle?: string;
+  deepLinkTemplate?: "product" | "collection";
 }
 
 const widgetCards: WidgetCardDef[] = [
@@ -65,6 +72,8 @@ const widgetCards: WidgetCardDef[] = [
     description: "The full review experience on product pages — summary, histogram, review list, and write-a-review form.",
     status: "editable",
     blockName: "Imagyn Reviews",
+    blockHandle: "star_rating",
+    deepLinkTemplate: "product",
   },
   {
     key: "product-rating-badge",
@@ -72,6 +81,8 @@ const widgetCards: WidgetCardDef[] = [
     description: "A compact star-and-count trust signal placed near the buy box.",
     status: "theme-editor",
     blockName: "Product Rating Badge",
+    blockHandle: "rating_badge",
+    deepLinkTemplate: "product",
   },
   {
     key: "collection-rating-badge",
@@ -79,6 +90,8 @@ const widgetCards: WidgetCardDef[] = [
     description: "Star ratings on product cards across collection and search grids.",
     status: "theme-editor",
     blockName: "Collection Ratings",
+    blockHandle: "collection_rating_badges",
+    deepLinkTemplate: "collection",
   },
   {
     key: "featured-collection-badge",
@@ -134,18 +147,34 @@ const REVIEWS_WIDGET_TYPE: WidgetType = "review-list";
 
 export const loader = async ({ request }: LoaderFunctionArgs): Promise<LoaderData> => {
   const { session } = await authenticate.admin(request);
+  const apiKey = process.env.SHOPIFY_API_KEY || "";
 
   try {
     const widgets = await widgetService.listWidgets();
-    return { widgets, shop: session.shop, error: null };
+    return { widgets, shop: session.shop, apiKey, error: null };
   } catch (error) {
     return {
       widgets: [],
       shop: session.shop,
+      apiKey,
       error: error instanceof Error ? error.message : "Unable to load widgets.",
     };
   }
 };
+
+// Shopify's documented theme app extension deep-link format — takes the merchant straight to
+// a preview of this exact block already added to the right template, instead of leaving them
+// to find it themselves in the theme editor's block picker. `{uuid}` is documented as
+// deprecated in favor of `{api_key}` (the app's client_id), and `newAppsSection` is the
+// generic, theme-agnostic target since a merchant's actual section IDs aren't knowable ahead
+// of time. See https://shopify.dev/docs/apps/build/online-store/theme-app-extensions/configuration#deep-linking
+function buildAppBlockDeepLink(shop: string, apiKey: string, template: string, blockHandle: string) {
+  const url = new URL(`https://${shop}/admin/themes/current/editor`);
+  url.searchParams.set("template", template);
+  url.searchParams.set("addAppBlockId", `${apiKey}/${blockHandle}`);
+  url.searchParams.set("target", "newAppsSection");
+  return url.toString();
+}
 
 export const action = async ({ request }: ActionFunctionArgs): Promise<ActionData> => {
   await authenticate.admin(request);
@@ -375,7 +404,7 @@ function WidgetPreview({ settings }: { settings: WidgetSettings }) {
 }
 
 export default function WidgetsPage() {
-  const { widgets, shop, error } = useLoaderData<typeof loader>();
+  const { widgets, shop, apiKey, error } = useLoaderData<typeof loader>();
   const fetcher = useFetcher<ActionData>();
   const navigation = useNavigation();
   const revalidator = useRevalidator();
@@ -501,8 +530,6 @@ export default function WidgetsPage() {
     }
   };
 
-  const themeEditorUrl = `https://${shop}/admin/themes/current/editor`;
-
   return (
     <>
       <Container as="main">
@@ -570,11 +597,11 @@ export default function WidgetsPage() {
                       <div className={styles.widgetCardActions}>
                         <a
                           className={styles.themeEditorLink}
-                          href={themeEditorUrl}
+                          href={buildAppBlockDeepLink(shop, apiKey, card.deepLinkTemplate!, card.blockHandle!)}
                           target="_top"
                           rel="noreferrer"
                         >
-                          Open in Theme Editor
+                          Add to Theme
                         </a>
                       </div>
                     </div>
@@ -629,6 +656,14 @@ export default function WidgetsPage() {
                       <Button type="button" variant="primary" onClick={() => setView("customize")}>
                         Customize
                       </Button>
+                      <a
+                        className={styles.themeEditorLink}
+                        href={buildAppBlockDeepLink(shop, apiKey, card.deepLinkTemplate!, card.blockHandle!)}
+                        target="_top"
+                        rel="noreferrer"
+                      >
+                        Add to Theme
+                      </a>
                     </div>
                   </div>
                 );
