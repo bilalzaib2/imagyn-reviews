@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { useFetcher, useLoaderData, useRouteError } from "react-router";
+import { useFetcher, useLoaderData, useLocation, useRouteError } from "react-router";
 import type { ActionFunctionArgs, HeadersFunction, LoaderFunctionArgs } from "react-router";
 import { boundary } from "@shopify/shopify-app-react-router/server";
 import { Frame, Toast } from "@shopify/polaris";
@@ -7,17 +7,14 @@ import { Container } from "../components/ui/Container";
 import { authenticate } from "../shopify.server";
 import { getOrCreateStore } from "../services/store.server";
 import {
-  buildBillingReturnUrl,
-  cancelPaidPlan,
   ensureDevelopmentStoreFlag,
   getAllPlans,
   getBillingSnapshot,
-  requestPaidPlan,
   selectStarterPlan,
   syncBillingFromShopify,
   type BillingSnapshot,
 } from "../services/billing/billing.server";
-import type { Plan, PlanId } from "../services/billing/plans";
+import type { Plan } from "../services/billing/plans";
 import shellStyles from "../styles/app.shell.module.css";
 import styles from "../styles/app.billing.module.css";
 
@@ -50,53 +47,23 @@ export const loader = async ({ request }: LoaderFunctionArgs): Promise<LoaderDat
   };
 };
 
+// Paid plans (Growth, Pro) are never created or cancelled from here — Shopify Managed Pricing
+// owns that entire flow on its own hosted page (see app.billing.manage.tsx). The only action
+// this route still performs itself is Starter, because it's a local, no-Shopify-charge choice
+// (see selectStarterPlan) rather than a Billing API operation.
 export const action = async ({ request }: ActionFunctionArgs): Promise<ActionData> => {
-  const { session, admin, billing } = await authenticate.admin(request);
+  const { session } = await authenticate.admin(request);
   const store = await getOrCreateStore(session.shop);
-  const isDevelopmentStore = await ensureDevelopmentStoreFlag(admin, store);
 
   const formData = await request.formData();
   const intent = String(formData.get("_intent") || "");
 
-  try {
-    if (intent === "select-starter") {
-      await selectStarterPlan(store.id);
-      return { ok: true };
-    }
-
-    if (intent === "upgrade") {
-      const planId = String(formData.get("planId") || "");
-      if (planId !== "growth" && planId !== "pro") {
-        return { ok: false, error: "Choose a valid plan." };
-      }
-      // shop/host must be embedded in returnUrl itself — Shopify's redirect back only
-      // appends charge_id, it doesn't restore them (see buildBillingReturnUrl).
-      const host = new URL(request.url).searchParams.get("host");
-      const returnUrl = buildBillingReturnUrl(session.shop, host);
-
-      // Always throws — redirects to Shopify's charge confirmation screen.
-      await requestPaidPlan(billing, planId, isDevelopmentStore, returnUrl);
-    }
-
-    if (intent === "cancel") {
-      const refreshed = await getOrCreateStore(session.shop);
-      if (!refreshed.shopifySubscriptionId) {
-        return { ok: false, error: "No active subscription to cancel." };
-      }
-      await cancelPaidPlan(billing, refreshed.shopifySubscriptionId, isDevelopmentStore);
-      await selectStarterPlan(store.id);
-      return { ok: true };
-    }
-
-    return { ok: false, error: "Unsupported action." };
-  } catch (error) {
-    // billing.request() throws a redirect Response by design — let it propagate, don't treat
-    // it as an application error.
-    if (error instanceof Response) {
-      throw error;
-    }
-    return { ok: false, error: error instanceof Error ? error.message : "Unable to update billing." };
+  if (intent === "select-starter") {
+    await selectStarterPlan(store.id);
+    return { ok: true };
   }
+
+  return { ok: false, error: "Unsupported action." };
 };
 
 function formatPrice(plan: Plan) {
@@ -106,17 +73,21 @@ function formatPrice(plan: Plan) {
 function PlanCard({
   plan,
   snapshot,
-  onSelect,
-  onCancel,
+  manageUrl,
+  onSelectStarter,
   isBusy,
 }: {
   plan: Plan;
   snapshot: BillingSnapshot;
-  onSelect: (planId: PlanId) => void;
-  onCancel: () => void;
+  manageUrl: string;
+  onSelectStarter: () => void;
   isBusy: boolean;
 }) {
-  const isCurrent = snapshot.plan === plan.id;
+  // hasAccess is required here, not just a plan-id match: a brand-new store defaults to
+  // plan: "starter" before the merchant has ever made a choice (planStatus stays "pending"
+  // until they do), so plan alone would mark Starter "current" and disable its own button —
+  // permanently locking a fresh install out of the one plan that doesn't need Shopify billing.
+  const isCurrent = snapshot.hasAccess && snapshot.plan === plan.id;
   const isPopular = plan.id === "growth" && !isCurrent;
 
   return (
@@ -140,30 +111,27 @@ function PlanCard({
         ))}
       </ul>
 
-      {isCurrent ? (
-        plan.id === "starter" ? (
-          <button type="button" disabled className={`${styles.cardAction} ${styles.ctaSecondary}`}>
-            Current plan
-          </button>
-        ) : (
-          <button
-            type="button"
-            onClick={onCancel}
-            disabled={isBusy}
-            className={`${styles.cardAction} ${styles.ctaSecondary}`}
-          >
-            Downgrade to Starter
-          </button>
-        )
-      ) : (
+      {plan.id === "starter" ? (
         <button
           type="button"
-          onClick={() => onSelect(plan.id)}
-          disabled={isBusy}
-          className={`${styles.cardAction} ${styles.ctaPrimary}`}
+          onClick={onSelectStarter}
+          disabled={isBusy || isCurrent}
+          className={`${styles.cardAction} ${isCurrent ? styles.ctaSecondary : styles.ctaPrimary}`}
         >
-          {plan.id === "starter" ? "Select Starter" : `Upgrade to ${plan.name}`}
+          {isCurrent ? "Current plan" : "Select Starter"}
         </button>
+      ) : isCurrent ? (
+        // Downgrading is also Shopify's to manage under Managed Pricing — same hosted page,
+        // where picking a lower (or no) plan is just another selection.
+        <a href={manageUrl} className={`${styles.cardAction} ${styles.ctaSecondary}`}>
+          Downgrade to Starter
+        </a>
+      ) : (
+        // Paid plans are never requested from app code — Shopify Managed Pricing hosts the
+        // actual purchase/confirmation screen; this only navigates the merchant there.
+        <a href={manageUrl} className={`${styles.cardAction} ${styles.ctaPrimary}`}>
+          Upgrade to {plan.name}
+        </a>
       )}
     </div>
   );
@@ -171,9 +139,15 @@ function PlanCard({
 
 export default function BillingPage() {
   const { plans, snapshot } = useLoaderData<typeof loader>();
+  const location = useLocation();
   const fetcher = useFetcher<ActionData>();
   const isBusy = fetcher.state !== "idle";
   const [toast, setToast] = useState<{ content: string; error?: boolean } | null>(null);
+
+  // Carries embedded/host/shop context to the manage route the same way app.tsx's own nav
+  // links do — it's a plain top-level navigation (required to break out of the iframe), not a
+  // fetcher, so it needs that context in its own URL rather than inheriting it from a POST.
+  const manageUrl = `/app/billing/manage${location.search}`;
 
   useEffect(() => {
     if (!fetcher.data) return;
@@ -183,20 +157,9 @@ export default function BillingPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [fetcher.data]);
 
-  const handleSelect = (planId: PlanId) => {
+  const handleSelectStarter = () => {
     const formData = new FormData();
-    if (planId === "starter") {
-      formData.set("_intent", "select-starter");
-    } else {
-      formData.set("_intent", "upgrade");
-      formData.set("planId", planId);
-    }
-    fetcher.submit(formData, { method: "post" });
-  };
-
-  const handleCancel = () => {
-    const formData = new FormData();
-    formData.set("_intent", "cancel");
+    formData.set("_intent", "select-starter");
     fetcher.submit(formData, { method: "post" });
   };
 
@@ -231,8 +194,8 @@ export default function BillingPage() {
                 key={plan.id}
                 plan={plan}
                 snapshot={snapshot}
-                onSelect={handleSelect}
-                onCancel={handleCancel}
+                manageUrl={manageUrl}
+                onSelectStarter={handleSelectStarter}
                 isBusy={isBusy}
               />
             ))}

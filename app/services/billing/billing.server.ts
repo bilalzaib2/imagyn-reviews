@@ -1,14 +1,7 @@
 import type { AdminApiContext } from "@shopify/shopify-app-react-router/server";
-import { BillingReplacementBehavior } from "@shopify/shopify-app-react-router/server";
 import prisma from "../../db.server";
-import { authenticate } from "../../shopify.server";
-import { setDevelopmentStoreFlag, updateBillingState } from "../store.server";
+import { getSlug, setDevelopmentStoreFlag, updateBillingState } from "../store.server";
 import { getPlan, PLAN_ORDER, type Plan, type PlanId, type PlanLimits } from "./plans";
-
-// Matches whatever authenticate.admin(request) actually returns, so this stays correct if the
-// SDK's billing types ever change shape — no hand-rolled generic billing config type to keep
-// in sync separately.
-type Billing = Awaited<ReturnType<typeof authenticate.admin>>["billing"];
 
 export interface BillingSnapshot {
   storeId: string;
@@ -220,47 +213,35 @@ export async function selectStarterPlan(storeId: string) {
   });
 }
 
-// Shopify's Billing API requires returnUrl as a fully-qualified `URL!` GraphQL scalar — a
-// relative path fails with 'Variable "$returnUrl" of type URL! was provided invalid value.'
-// Same env-var precedent as review-request.server.ts's buildReviewUrl.
-//
-// Just as important: Shopify's redirect back from the charge confirmation screen only ever
-// APPENDS `charge_id` to whatever returnUrl you gave it — it does not restore `shop`/`host`.
-// Without those two params already present, authenticate.admin() has no way to recognize the
-// landing request as belonging to an embedded session, and falls back to rendering a bare,
-// blank App Bridge bootstrap page (HTTP 200, no visible content — this is
-// @shopify/shopify-app-react-router's own documented fallback for a document request missing
-// shop/host, not a bug in that fallback itself). Embedding shop+host in returnUrl up front is
-// what makes the landing request self-sufficient.
-export function buildBillingReturnUrl(shop: string, host: string | null): string {
-  const appUrl = process.env.SHOPIFY_APP_URL || process.env.APP_URL || "http://127.0.0.1:3000";
-  const url = new URL(`${appUrl.replace(/\/$/, "")}/app/billing`);
-  url.searchParams.set("shop", shop);
-  if (host) {
-    url.searchParams.set("host", host);
+interface AppHandleResponse {
+  data?: { currentAppInstallation?: { app?: { handle?: string | null } | null } | null };
+}
+
+// Shopify Managed Pricing apps can't create or cancel charges via the Billing API — Shopify
+// rejects appSubscriptionCreate/appPurchaseOneTimeCreate outright ("Managed Pricing Apps
+// cannot use the Billing API (to create charges)."). Every plan change instead happens on
+// Shopify's own hosted page, and the app's only job is sending the merchant there. The app
+// handle isn't stored anywhere in this repo (not in shopify.app.toml, not cached locally), so
+// it's fetched live rather than hardcoded — this is the one Admin GraphQL field that exposes
+// it (App.handle).
+export async function getPricingPlansUrl(admin: AdminApiContext, shop: string): Promise<string> {
+  const response = await admin.graphql(`#graphql
+    query AppHandle {
+      currentAppInstallation {
+        app {
+          handle
+        }
+      }
+    }
+  `);
+  const json = (await response.json()) as AppHandleResponse;
+  const appHandle = json.data?.currentAppInstallation?.app?.handle;
+
+  if (!appHandle) {
+    throw new Error("Could not resolve the app handle from Shopify — cannot build the pricing plans URL.");
   }
-  return url.toString();
-}
 
-// Always throws (redirects to Shopify's charge confirmation screen) — matches the SDK's own
-// billing.request() contract. isTest must be passed explicitly: the SDK defaults it to `true`,
-// which would silently create a non-billing test charge for a real merchant if left unset.
-export async function requestPaidPlan(
-  billing: Billing,
-  planId: "growth" | "pro",
-  isDevelopmentStore: boolean,
-  returnUrl: string,
-): Promise<never> {
-  return billing.request({
-    plan: planId === "growth" ? "Growth" : "Pro",
-    isTest: isDevelopmentStore,
-    returnUrl,
-    replacementBehavior: BillingReplacementBehavior.ApplyImmediately,
-  });
-}
-
-export async function cancelPaidPlan(billing: Billing, subscriptionId: string, isDevelopmentStore: boolean) {
-  await billing.cancel({ subscriptionId, prorate: true, isTest: isDevelopmentStore });
+  return `https://admin.shopify.com/store/${getSlug(shop)}/charges/${appHandle}/pricing_plans`;
 }
 
 // Derived from PLAN_ORDER — the single source of truth for both "which plans exist" and

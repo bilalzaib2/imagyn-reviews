@@ -2,12 +2,10 @@ import "@shopify/shopify-app-react-router/adapters/node";
 import {
   ApiVersion,
   AppDistribution,
-  BillingInterval,
   shopifyApp,
 } from "@shopify/shopify-app-react-router/server";
 import { PrismaSessionStorage } from "@shopify/shopify-app-session-storage-prisma";
 import prisma from "./db.server";
-import { PLANS } from "./services/billing/plans";
 
 const appUrl = process.env.SHOPIFY_APP_URL || process.env.APP_URL || "http://127.0.0.1:3000";
 const apiKey = process.env.SHOPIFY_API_KEY || "development-api-key";
@@ -25,23 +23,12 @@ const shopify = shopifyApp({
   future: {
     expiringOfflineAccessTokens: true,
   },
-  // Plan names/prices/trial length are defined once in services/billing/plans.ts — this just
-  // maps those onto Shopify's recurring-charge config shape. Starter is free and has no
-  // Shopify subscription at all, so it isn't represented here.
-  billing: {
-    Growth: {
-      trialDays: PLANS.growth.trialDays,
-      lineItems: [
-        { amount: PLANS.growth.price, currencyCode: PLANS.growth.currencyCode, interval: BillingInterval.Every30Days },
-      ],
-    },
-    Pro: {
-      trialDays: PLANS.pro.trialDays,
-      lineItems: [
-        { amount: PLANS.pro.price, currencyCode: PLANS.pro.currencyCode, interval: BillingInterval.Every30Days },
-      ],
-    },
-  },
+  // No `billing` config: this app is on Shopify Managed Pricing, where Shopify hosts plan
+  // selection and owns charge creation entirely (see services/billing/billing.server.ts's
+  // getPricingPlansUrl). The Billing API's create/cancel mutations are rejected outright for
+  // Managed Pricing apps, so there's nothing here for the SDK's billing config to describe —
+  // plan names/prices/trial length still live once in services/billing/plans.ts, just for this
+  // app's own display copy and feature-gating, not for driving a Shopify billing config.
   ...(process.env.SHOP_CUSTOM_DOMAIN
     ? { customShopDomains: [process.env.SHOP_CUSTOM_DOMAIN] }
     : {}),
