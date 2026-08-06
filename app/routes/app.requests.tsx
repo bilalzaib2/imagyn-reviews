@@ -129,6 +129,8 @@ export const loader = async ({ request }: LoaderFunctionArgs): Promise<LoaderDat
   const pageValue = Number(url.searchParams.get("page") || "1");
   const page = Number.isFinite(pageValue) && pageValue > 0 ? pageValue : 1;
 
+  console.log("[PAGDEBUG] loader called", JSON.stringify({ url: request.url, rawPageParam: url.searchParams.get("page"), parsedPage: page }));
+
   try {
     const [result, customers, products] = await Promise.all([
       reviewRequestService.listRequests({
@@ -306,6 +308,31 @@ export default function RequestsPage() {
   const isLoading = navigation.state !== "idle";
   const isMutating = fetcher.state !== "idle";
   const activeIntent = fetcher.formData?.get("_intent")?.toString() ?? "";
+
+  const debugLog = (label: string, data: Record<string, unknown>) => {
+    try {
+      fetch("/api/debug-log", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ label, ...data, ts: Date.now() }),
+      }).catch(() => {});
+    } catch {
+      // no-op
+    }
+  };
+
+  useEffect(() => {
+    debugLog("render", {
+      page,
+      totalCount,
+      pageSize,
+      navigationState: navigation.state,
+      fetcherState: fetcher.state,
+      locationSearch: typeof window !== "undefined" ? window.location.search : "",
+      searchParamsString: searchParams.toString(),
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [page, navigation.state, fetcher.state]);
 
   const [searchValue, setSearchValue] = useState(search);
   const [selectedRequestId, setSelectedRequestId] = useState<string | null>(requests[0]?.id ?? null);
@@ -774,8 +801,16 @@ export default function RequestsPage() {
                         type="button"
                         variant="secondary"
                         onClick={() => {
+                          debugLog("previous-click-start", {
+                            page,
+                            totalPages,
+                            isLoading,
+                            isMutating,
+                            searchParamsBefore: searchParams.toString(),
+                          });
                           const next = new URLSearchParams(searchParams);
                           next.set("page", String(page - 1));
+                          debugLog("previous-click-setSearchParams", { nextParams: next.toString() });
                           setSearchParams(next);
                         }}
                         disabled={page <= 1 || isLoading || isMutating}
@@ -789,8 +824,16 @@ export default function RequestsPage() {
                         type="button"
                         variant="secondary"
                         onClick={() => {
+                          debugLog("next-click-start", {
+                            page,
+                            totalPages,
+                            isLoading,
+                            isMutating,
+                            searchParamsBefore: searchParams.toString(),
+                          });
                           const next = new URLSearchParams(searchParams);
                           next.set("page", String(page + 1));
+                          debugLog("next-click-setSearchParams", { nextParams: next.toString() });
                           setSearchParams(next);
                         }}
                         disabled={page >= totalPages || isLoading || isMutating}
