@@ -36,7 +36,12 @@ export default function App() {
     <div className={styles.page}>
       <section className={styles.hero}>
         <div className={styles.left}>
-          <img className={styles.logo} src="/assets/imagyn-app-logo.svg" alt="Imagyn Reviews" />
+          {/* ?v=2 cache-busts this specific path — public/assets/ is served with a
+              year-long immutable Cache-Control (correct for content-hashed build output,
+              wrong for a static filename whose content can change), so a same-path asset
+              swap alone won't reach a browser that already cached the old file. Bump the
+              version on any future content change to this file. */}
+          <img className={styles.logo} src="/assets/imagyn-app-logo.svg?v=2" alt="Imagyn Reviews" />
 
           <div className={styles.copy}>
             <h1 className={styles.heading}>Sign in to Imagyn Reviews</h1>
