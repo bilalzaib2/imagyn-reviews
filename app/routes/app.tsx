@@ -1,5 +1,4 @@
 import type { MouseEvent } from "react";
-import { useEffect } from "react";
 import type { HeadersFunction, LoaderFunctionArgs } from "react-router";
 import { Outlet, redirect, useLoaderData, useLocation, useNavigate, useNavigation, useRouteError } from "react-router";
 import { boundary } from "@shopify/shopify-app-react-router/server";
@@ -43,25 +42,6 @@ export default function App() {
   const navigation = useNavigation();
   const isNavigating = navigation.state !== "idle";
   const appContextQuery = location.search;
-
-  useEffect(() => {
-    try {
-      fetch("/api/debug-log", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          label: "app-layout-render",
-          pathname: location.pathname,
-          search: location.search,
-          navigationState: navigation.state,
-          ts: Date.now(),
-        }),
-      }).catch(() => {});
-    } catch {
-      // no-op
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [location.pathname, location.search, navigation.state]);
   const navItems = [
     { label: "Dashboard", path: "/app" },
     { label: "Reviews", path: "/app/reviews" },

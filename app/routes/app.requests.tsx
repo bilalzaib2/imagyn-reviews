@@ -5,7 +5,6 @@ import {
   useNavigation,
   useRevalidator,
   useRouteError,
-  useSearchParams,
 } from "react-router";
 import type { ActionFunctionArgs, HeadersFunction, LoaderFunctionArgs } from "react-router";
 import { boundary } from "@shopify/shopify-app-react-router/server";
@@ -128,8 +127,6 @@ export const loader = async ({ request }: LoaderFunctionArgs): Promise<LoaderDat
     : "all";
   const pageValue = Number(url.searchParams.get("page") || "1");
   const page = Number.isFinite(pageValue) && pageValue > 0 ? pageValue : 1;
-
-  console.log("[PAGDEBUG] loader called", JSON.stringify({ url: request.url, rawPageParam: url.searchParams.get("page"), parsedPage: page }));
 
   try {
     const [result, customers, products] = await Promise.all([
@@ -298,41 +295,45 @@ const formatDateTime = (value: Date | null) => {
 const buildCustomerValue = (name: string | null, email: string | null) => `${name ?? ""}||${email ?? ""}`;
 
 export default function RequestsPage() {
-  const { requests, customers, products, totalCount, page, pageSize, search, status, dateFilter, error } =
-    useLoaderData<typeof loader>();
+  const initialData = useLoaderData<typeof loader>();
   const navigation = useNavigation();
   const revalidator = useRevalidator();
   const fetcher = useFetcher<ActionData>();
-  const [searchParams, setSearchParams] = useSearchParams();
 
-  const isLoading = navigation.state !== "idle";
+  // Pagination and filtering are driven through this fetcher instead of `useSearchParams`.
+  // Shopify Admin's embedded-app shell owns the outer iframe URL via the NavMenu registration
+  // and will silently revert raw History API changes (what useSearchParams uses under the
+  // hood) back to its own last-known URL a few hundred ms after they land — reproduced and
+  // confirmed via production logging. A fetcher re-runs the same loader over a plain request
+  // without touching window.history, so there's nothing for the admin shell to fight with.
+  const dataFetcher = useFetcher<typeof loader>();
+  const data = dataFetcher.data ?? initialData;
+  const { requests, customers, products, totalCount, page, pageSize, search, status, dateFilter, error } = data;
+
+  const isLoading = navigation.state !== "idle" || dataFetcher.state !== "idle";
   const isMutating = fetcher.state !== "idle";
   const activeIntent = fetcher.formData?.get("_intent")?.toString() ?? "";
 
-  const debugLog = (label: string, data: Record<string, unknown>) => {
-    try {
-      fetch("/api/debug-log", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ label, ...data, ts: Date.now() }),
-      }).catch(() => {});
-    } catch {
-      // no-op
-    }
-  };
+  const buildRequestsUrl = (overrides: {
+    search?: string;
+    status?: string;
+    dateFilter?: ReviewRequestDateFilter;
+    page?: number;
+  }) => {
+    const nextSearch = overrides.search !== undefined ? overrides.search : search;
+    const nextStatus = overrides.status !== undefined ? overrides.status : status;
+    const nextDateFilter = overrides.dateFilter !== undefined ? overrides.dateFilter : dateFilter;
+    const nextPage = overrides.page !== undefined ? overrides.page : page;
 
-  useEffect(() => {
-    debugLog("render", {
-      page,
-      totalCount,
-      pageSize,
-      navigationState: navigation.state,
-      fetcherState: fetcher.state,
-      locationSearch: typeof window !== "undefined" ? window.location.search : "",
-      searchParamsString: searchParams.toString(),
-    });
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [page, navigation.state, fetcher.state]);
+    const params = new URLSearchParams();
+    if (nextSearch) params.set("search", nextSearch);
+    if (nextStatus) params.set("status", nextStatus);
+    if (nextDateFilter && nextDateFilter !== "all") params.set("dateFilter", nextDateFilter);
+    if (nextPage > 1) params.set("page", String(nextPage));
+
+    const queryString = params.toString();
+    return queryString ? `/app/requests?${queryString}` : "/app/requests";
+  };
 
   const [searchValue, setSearchValue] = useState(search);
   const [selectedRequestId, setSelectedRequestId] = useState<string | null>(requests[0]?.id ?? null);
@@ -360,23 +361,12 @@ export default function RequestsPage() {
     }
 
     const timeoutId = window.setTimeout(() => {
-      setSearchParams((prev) => {
-        const next = new URLSearchParams(prev);
-        const trimmed = searchValue.trim();
-
-        if (trimmed) {
-          next.set("search", trimmed);
-        } else {
-          next.delete("search");
-        }
-
-        next.delete("page");
-        return next;
-      });
+      dataFetcher.load(buildRequestsUrl({ search: searchValue.trim(), page: 1 }));
     }, 250);
 
     return () => window.clearTimeout(timeoutId);
-  }, [searchValue, setSearchParams]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [searchValue]);
 
   useEffect(() => {
     setActionsMenuOpen(false);
@@ -403,6 +393,8 @@ export default function RequestsPage() {
     setConfirmationState(null);
     setFormState(emptyFormState);
     revalidator.revalidate();
+    dataFetcher.load(buildRequestsUrl({}));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [fetcher.data, revalidator]);
 
   const effectiveRequests = useMemo(() => {
@@ -650,15 +642,7 @@ export default function RequestsPage() {
                   className={styles.filterSelect}
                   value={status}
                   onChange={(event) => {
-                    const value = event.target.value;
-                    const next = new URLSearchParams(searchParams);
-                    if (value) {
-                      next.set("status", value);
-                    } else {
-                      next.delete("status");
-                    }
-                    next.delete("page");
-                    setSearchParams(next);
+                    dataFetcher.load(buildRequestsUrl({ status: event.target.value, page: 1 }));
                   }}
                 >
                   {STATUS_FILTER_OPTIONS.map((option) => (
@@ -675,15 +659,9 @@ export default function RequestsPage() {
                   className={styles.filterSelect}
                   value={dateFilter}
                   onChange={(event) => {
-                    const value = event.target.value;
-                    const next = new URLSearchParams(searchParams);
-                    if (value === "all") {
-                      next.delete("dateFilter");
-                    } else {
-                      next.set("dateFilter", value);
-                    }
-                    next.delete("page");
-                    setSearchParams(next);
+                    dataFetcher.load(
+                      buildRequestsUrl({ dateFilter: event.target.value as ReviewRequestDateFilter, page: 1 }),
+                    );
                   }}
                 >
                   {DATE_FILTER_OPTIONS.map((option) => (
@@ -801,17 +779,7 @@ export default function RequestsPage() {
                         type="button"
                         variant="secondary"
                         onClick={() => {
-                          debugLog("previous-click-start", {
-                            page,
-                            totalPages,
-                            isLoading,
-                            isMutating,
-                            searchParamsBefore: searchParams.toString(),
-                          });
-                          const next = new URLSearchParams(searchParams);
-                          next.set("page", String(page - 1));
-                          debugLog("previous-click-setSearchParams", { nextParams: next.toString() });
-                          setSearchParams(next);
+                          dataFetcher.load(buildRequestsUrl({ page: page - 1 }));
                         }}
                         disabled={page <= 1 || isLoading || isMutating}
                       >
@@ -824,17 +792,7 @@ export default function RequestsPage() {
                         type="button"
                         variant="secondary"
                         onClick={() => {
-                          debugLog("next-click-start", {
-                            page,
-                            totalPages,
-                            isLoading,
-                            isMutating,
-                            searchParamsBefore: searchParams.toString(),
-                          });
-                          const next = new URLSearchParams(searchParams);
-                          next.set("page", String(page + 1));
-                          debugLog("next-click-setSearchParams", { nextParams: next.toString() });
-                          setSearchParams(next);
+                          dataFetcher.load(buildRequestsUrl({ page: page + 1 }));
                         }}
                         disabled={page >= totalPages || isLoading || isMutating}
                       >
