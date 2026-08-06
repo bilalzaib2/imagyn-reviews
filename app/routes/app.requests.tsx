@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
   useFetcher,
   useLoaderData,
@@ -324,23 +324,32 @@ export default function RequestsPage() {
     setSearchValue(search);
   }, [search]);
 
+  const isFirstSearchEffect = useRef(true);
+
   useEffect(() => {
+    if (isFirstSearchEffect.current) {
+      isFirstSearchEffect.current = false;
+      return;
+    }
+
     const timeoutId = window.setTimeout(() => {
-      const next = new URLSearchParams(searchParams);
-      const trimmed = searchValue.trim();
+      setSearchParams((prev) => {
+        const next = new URLSearchParams(prev);
+        const trimmed = searchValue.trim();
 
-      if (trimmed) {
-        next.set("search", trimmed);
-      } else {
-        next.delete("search");
-      }
+        if (trimmed) {
+          next.set("search", trimmed);
+        } else {
+          next.delete("search");
+        }
 
-      next.delete("page");
-      setSearchParams(next);
+        next.delete("page");
+        return next;
+      });
     }, 250);
 
     return () => window.clearTimeout(timeoutId);
-  }, [searchParams, searchValue, setSearchParams]);
+  }, [searchValue, setSearchParams]);
 
   useEffect(() => {
     setActionsMenuOpen(false);
