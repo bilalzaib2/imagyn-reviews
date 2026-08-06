@@ -1,10 +1,10 @@
 import type { LoaderFunctionArgs } from "react-router";
 import { exportReviewsToCsv } from "../services/reviewImportExport.server";
 import { getOrCreateStore } from "../services/store.server";
-import { authenticate } from "../shopify.server";
+import { authenticateAdminDeduped } from "../services/auth-dedupe.server";
 
 export const loader = async ({ request }: LoaderFunctionArgs) => {
-  const { session } = await authenticate.admin(request);
+  const { session } = await authenticateAdminDeduped(request);
   const store = await getOrCreateStore(session.shop);
   const csv = await exportReviewsToCsv(store.id);
 

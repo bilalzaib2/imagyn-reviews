@@ -6,7 +6,7 @@ import { Banner, Checkbox, Frame, Select, TextField, Toast } from "@shopify/pola
 import { Button } from "../components/ui/Button";
 import { Container } from "../components/ui/Container";
 import { Section } from "../components/ui/Section";
-import { authenticate } from "../shopify.server";
+import { authenticateAdminDeduped } from "../services/auth-dedupe.server";
 import { getOrCreateStore, updateAutoRequestSettings, updateModerationSettings } from "../services/store.server";
 import { getModerationSettings } from "../services/moderationRules.server";
 import { sendTestReviewRequestEmail } from "../services/notifications/testEmail.server";
@@ -39,7 +39,7 @@ type ActionData = {
 };
 
 export const loader = async ({ request }: LoaderFunctionArgs): Promise<LoaderData> => {
-  const { session } = await authenticate.admin(request);
+  const { session } = await authenticateAdminDeduped(request);
   const store = await getOrCreateStore(session.shop);
   const plan = await getStorePlanId(store.id);
   const moderation = await getModerationSettings(store.id);
@@ -65,7 +65,7 @@ export const loader = async ({ request }: LoaderFunctionArgs): Promise<LoaderDat
 const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 export const action = async ({ request }: ActionFunctionArgs): Promise<ActionData> => {
-  const { session } = await authenticate.admin(request);
+  const { session } = await authenticateAdminDeduped(request);
   const store = await getOrCreateStore(session.shop);
 
   const formData = await request.formData();

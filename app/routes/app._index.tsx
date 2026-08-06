@@ -9,12 +9,12 @@ import { getStoreReviewStats } from "../services/review.server";
 import { reviewRequestService } from "../services/review-request.server";
 import { getLatestAiSummaryForStore } from "../services/aiSummary.server";
 import { getOrCreateStore } from "../services/store.server";
-import { authenticate } from "../shopify.server";
+import { authenticateAdminDeduped } from "../services/auth-dedupe.server";
 import shellStyles from "../styles/app.shell.module.css";
 import styles from "../styles/app._index.module.css";
 
 export const loader = async ({ request }: LoaderFunctionArgs) => {
-  const { session } = await authenticate.admin(request);
+  const { session } = await authenticateAdminDeduped(request);
   const store = await getOrCreateStore(session.shop);
 
   const [stats, requestStats, aiSpotlight] = await Promise.all([

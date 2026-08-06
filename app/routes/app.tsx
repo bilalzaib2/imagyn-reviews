@@ -7,7 +7,7 @@ import { AppProvider as PolarisAppProvider } from "@shopify/polaris";
 import { NavMenu } from "@shopify/app-bridge-react";
 import enTranslations from "@shopify/polaris/locales/en.json";
 
-import { authenticate } from "../shopify.server";
+import { authenticateAdminDeduped } from "../services/auth-dedupe.server";
 import { getOrCreateStore } from "../services/store.server";
 import { ensureDevelopmentStoreFlag, getBillingSnapshot } from "../services/billing/billing.server";
 import styles from "../styles/app.shell.module.css";
@@ -18,7 +18,7 @@ import styles from "../styles/app.shell.module.css";
 const BILLING_PATH = "/app/billing";
 
 export const loader = async ({ request }: LoaderFunctionArgs) => {
-  const { session, admin } = await authenticate.admin(request);
+  const { session, admin } = await authenticateAdminDeduped(request);
 
   const url = new URL(request.url);
   if (url.pathname !== BILLING_PATH) {

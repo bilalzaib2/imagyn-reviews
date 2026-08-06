@@ -7,7 +7,7 @@ import { Button } from "../components/ui/Button";
 import { ColorField, toDisplayHex } from "../components/ui/ColorField";
 import { Container } from "../components/ui/Container";
 import { Section } from "../components/ui/Section";
-import { authenticate } from "../shopify.server";
+import { authenticateAdminDeduped } from "../services/auth-dedupe.server";
 import { getOrCreateStore } from "../services/store.server";
 import { appearanceService } from "../services/appearance.server";
 import { appearancePresets, type AppearancePresetDefinition } from "../services/appearance.presets";
@@ -31,7 +31,7 @@ type ActionData = {
 };
 
 export const loader = async ({ request }: LoaderFunctionArgs): Promise<LoaderData> => {
-  const { session } = await authenticate.admin(request);
+  const { session } = await authenticateAdminDeduped(request);
   const store = await getOrCreateStore(session.shop);
   const active = await appearanceService.getActive(store.id);
 
@@ -42,7 +42,7 @@ export const loader = async ({ request }: LoaderFunctionArgs): Promise<LoaderDat
 };
 
 export const action = async ({ request }: ActionFunctionArgs): Promise<ActionData> => {
-  const { session } = await authenticate.admin(request);
+  const { session } = await authenticateAdminDeduped(request);
   const store = await getOrCreateStore(session.shop);
 
   const formData = await request.formData();

@@ -18,7 +18,7 @@ import {
 import { Button } from "../components/ui/Button";
 import { ColorField } from "../components/ui/ColorField";
 import { Container } from "../components/ui/Container";
-import { authenticate } from "../shopify.server";
+import { authenticateAdminDeduped } from "../services/auth-dedupe.server";
 import { widgetService } from "../services/widget.server";
 import { getDefaultWidgetSettings, type WidgetSettings, type WidgetType } from "../services/widget.shared";
 import type { WidgetRecord } from "../services/widget.server";
@@ -141,7 +141,7 @@ const toNumberValue = (value: number | [number, number]) => (typeof value === "n
 const REVIEWS_WIDGET_TYPE: WidgetType = "review-list";
 
 export const loader = async ({ request }: LoaderFunctionArgs): Promise<LoaderData> => {
-  const { session } = await authenticate.admin(request);
+  const { session } = await authenticateAdminDeduped(request);
 
   try {
     const widgets = await widgetService.listWidgets();
@@ -156,7 +156,7 @@ export const loader = async ({ request }: LoaderFunctionArgs): Promise<LoaderDat
 };
 
 export const action = async ({ request }: ActionFunctionArgs): Promise<ActionData> => {
-  await authenticate.admin(request);
+  await authenticateAdminDeduped(request);
 
   const formData = await request.formData();
   const intent = String(formData.get("_intent") || "");

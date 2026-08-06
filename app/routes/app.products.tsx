@@ -15,7 +15,7 @@ import {
 
 import { Button } from "../components/ui/Button";
 import { Container } from "../components/ui/Container";
-import { authenticate } from "../shopify.server";
+import { authenticateAdminDeduped } from "../services/auth-dedupe.server";
 import { getOrCreateStore } from "../services/store.server";
 import { getProducts, syncProducts } from "../services/product.server";
 import shellStyles from "../styles/app.shell.module.css";
@@ -31,7 +31,7 @@ type ActionData = {
 };
 
 export const loader = async ({ request }: LoaderFunctionArgs) => {
-  const { session } = await authenticate.admin(request);
+  const { session } = await authenticateAdminDeduped(request);
 
   try {
     const store = await getOrCreateStore(session.shop);
@@ -50,7 +50,7 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
 };
 
 export const action = async ({ request }: ActionFunctionArgs): Promise<ActionData> => {
-  const { admin, session } = await authenticate.admin(request);
+  const { admin, session } = await authenticateAdminDeduped(request);
 
   try {
     const result = await syncProducts(admin, session.shop);

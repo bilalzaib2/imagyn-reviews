@@ -8,7 +8,7 @@ import { Button } from "../components/ui/Button";
 import { Container } from "../components/ui/Container";
 import { LinkButton } from "../components/ui/LinkButton";
 import { ReviewForm, type ReviewFormValues } from "../components/reviews/ReviewForm";
-import { authenticate } from "../shopify.server";
+import { authenticateAdminDeduped } from "../services/auth-dedupe.server";
 import { getOrCreateStore } from "../services/store.server";
 import { getProducts } from "../services/product.server";
 import { getReview, updateReview } from "../services/review.server";
@@ -23,7 +23,7 @@ type ActionData = {
 };
 
 export const loader = async ({ request, params }: LoaderFunctionArgs) => {
-  const { session } = await authenticate.admin(request);
+  const { session } = await authenticateAdminDeduped(request);
   const store = await getOrCreateStore(session.shop);
   const reviewId = params.id ?? "";
 
@@ -52,7 +52,7 @@ const parseValues = (formData: FormData): ReviewFormValues => ({
 });
 
 export const action = async ({ request, params }: ActionFunctionArgs) => {
-  const { admin } = await authenticate.admin(request);
+  const { admin } = await authenticateAdminDeduped(request);
   const reviewId = params.id ?? "";
 
   if (!reviewId) {

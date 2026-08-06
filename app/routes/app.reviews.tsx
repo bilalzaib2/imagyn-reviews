@@ -47,7 +47,7 @@ import { ReviewStatus } from "../services/review.shared";
 import { IMPORT_SOURCES } from "../services/importers/types";
 import { importReviews, type ImportResult } from "../services/reviewImportExport.server";
 import { getOrCreateStore } from "../services/store.server";
-import { authenticate } from "../shopify.server";
+import { authenticateAdminDeduped } from "../services/auth-dedupe.server";
 import styles from "../styles/app.reviews.module.css";
 import shellStyles from "../styles/app.shell.module.css";
 
@@ -62,7 +62,7 @@ type ActionData = {
 const STATUS_VALUES: string[] = Object.values(ReviewStatus);
 
 export const loader = async ({ request }: LoaderFunctionArgs) => {
-  const { session } = await authenticate.admin(request);
+  const { session } = await authenticateAdminDeduped(request);
   const store = await getOrCreateStore(session.shop);
 
   const url = new URL(request.url);
@@ -138,7 +138,7 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
 };
 
 export const action = async ({ request }: ActionFunctionArgs): Promise<ActionData> => {
-  const { admin, session } = await authenticate.admin(request);
+  const { admin, session } = await authenticateAdminDeduped(request);
 
   const formData = await request.formData();
   const intent = String(formData.get("_intent") || "");

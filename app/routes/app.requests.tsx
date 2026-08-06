@@ -26,7 +26,7 @@ import { Container } from "../components/ui/Container";
 import { Section } from "../components/ui/Section";
 import { RequestStatusBadge } from "../components/requests/RequestStatusBadge";
 import { RequestLifecycleTimeline } from "../components/requests/RequestLifecycleTimeline";
-import { authenticate } from "../shopify.server";
+import { authenticateAdminDeduped } from "../services/auth-dedupe.server";
 import {
   reviewRequestService,
   type ReviewRequestDateFilter,
@@ -116,7 +116,7 @@ const emptyFormState: RequestFormState = {
 };
 
 export const loader = async ({ request }: LoaderFunctionArgs): Promise<LoaderData> => {
-  await authenticate.admin(request);
+  await authenticateAdminDeduped(request);
 
   const url = new URL(request.url);
   const search = url.searchParams.get("search")?.trim() || "";
@@ -173,7 +173,7 @@ export const loader = async ({ request }: LoaderFunctionArgs): Promise<LoaderDat
 };
 
 export const action = async ({ request }: ActionFunctionArgs): Promise<ActionData> => {
-  await authenticate.admin(request);
+  await authenticateAdminDeduped(request);
 
   const formData = await request.formData();
   const intent = String(formData.get("_intent") || "");

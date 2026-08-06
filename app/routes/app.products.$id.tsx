@@ -25,7 +25,7 @@ import { Container } from "../components/ui/Container";
 import { LinkButton } from "../components/ui/LinkButton";
 import { ReviewStatusBadge } from "../components/reviews/ReviewStatusBadge";
 import { StarRating } from "../components/reviews/StarRating";
-import { authenticate } from "../shopify.server";
+import { authenticateAdminDeduped } from "../services/auth-dedupe.server";
 import { getOrCreateStore } from "../services/store.server";
 import { getProductForStore } from "../services/product.server";
 import { getProductReviews, type ReviewWithProduct } from "../services/review.server";
@@ -42,7 +42,7 @@ type ActionData = {
 };
 
 export const loader = async ({ request, params }: LoaderFunctionArgs) => {
-  const { session } = await authenticate.admin(request);
+  const { session } = await authenticateAdminDeduped(request);
   const productId = params.id ?? "";
 
   try {
@@ -83,7 +83,7 @@ export const loader = async ({ request, params }: LoaderFunctionArgs) => {
 };
 
 export const action = async ({ request, params }: ActionFunctionArgs): Promise<ActionData> => {
-  await authenticate.admin(request);
+  await authenticateAdminDeduped(request);
 
   const productId = params.id ?? "";
   const formData = await request.formData();

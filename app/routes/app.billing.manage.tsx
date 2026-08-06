@@ -1,5 +1,5 @@
 import type { LoaderFunctionArgs } from "react-router";
-import { authenticate } from "../shopify.server";
+import { authenticateAdminDeduped } from "../services/auth-dedupe.server";
 import { getPricingPlansUrl } from "../services/billing/billing.server";
 
 // The only entry point for every paid-plan action (upgrade, downgrade, cancel) — Shopify
@@ -10,7 +10,7 @@ import { getPricingPlansUrl } from "../services/billing/billing.server";
 // Bridge-mediated mechanism @shopify/shopify-app-react-router uses for every other
 // out-of-app redirect.
 export const loader = async ({ request }: LoaderFunctionArgs) => {
-  const { session, admin, redirect } = await authenticate.admin(request);
+  const { session, admin, redirect } = await authenticateAdminDeduped(request);
   const pricingPlansUrl = await getPricingPlansUrl(admin, session.shop);
 
   return redirect(pricingPlansUrl, { target: "_top" });
