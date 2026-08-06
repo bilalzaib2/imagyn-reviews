@@ -25,7 +25,7 @@
 
 .imagyn-input:focus {
   outline: none;
-  border-color: var(--imagyn-color-focus, #2563eb);
+  border-color: var(--imagyn-color-focus, #0a0a0a);
 }
 
 .imagyn-input::placeholder {

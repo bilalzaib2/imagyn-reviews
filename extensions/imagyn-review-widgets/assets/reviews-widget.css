@@ -65,7 +65,7 @@
 }
 
 .imagyn-reviews__load-more:focus-visible {
-  outline: 2px solid var(--imagyn-color-focus, #2563eb);
+  outline: 2px solid var(--imagyn-color-focus, #0a0a0a);
   outline-offset: 2px;
 }
 
@@ -131,8 +131,8 @@
 .imagyn-reviews__field input:focus,
 .imagyn-reviews__field textarea:focus {
   outline: none;
-  border-color: var(--imagyn-color-focus, #2563eb);
-  box-shadow: 0 0 0 3px color-mix(in srgb, var(--imagyn-color-focus, #2563eb) 15%, transparent);
+  border-color: var(--imagyn-color-focus, #0a0a0a);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--imagyn-color-focus, #0a0a0a) 15%, transparent);
 }
 
 .imagyn-reviews__rating-picker {
@@ -159,7 +159,7 @@
 }
 
 .imagyn-reviews__star-btn:focus-visible {
-  outline: 2px solid var(--imagyn-color-focus, #2563eb);
+  outline: 2px solid var(--imagyn-color-focus, #0a0a0a);
   outline-offset: 2px;
 }
 
@@ -213,7 +213,7 @@
 }
 
 .imagyn-reviews__submit:focus-visible {
-  outline: 2px solid var(--imagyn-color-focus, #2563eb);
+  outline: 2px solid var(--imagyn-color-focus, #0a0a0a);
   outline-offset: 2px;
 }
 
@@ -264,7 +264,7 @@
 }
 
 .imagyn-upload--focused {
-  outline: 2px solid var(--imagyn-color-focus, #2563eb);
+  outline: 2px solid var(--imagyn-color-focus, #0a0a0a);
   outline-offset: 2px;
 }
 
@@ -450,7 +450,7 @@
 }
 
 .imagyn-reviews__sort-select:focus-visible {
-  outline: 2px solid var(--imagyn-color-focus, #2563eb);
+  outline: 2px solid var(--imagyn-color-focus, #0a0a0a);
   outline-offset: 2px;
 }
 

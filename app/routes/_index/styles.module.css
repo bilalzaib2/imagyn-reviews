@@ -8,13 +8,15 @@
 
 /* Asymmetric split (~40/60): content column stays a fixed, readable width while the
    preview column absorbs the rest — that ratio (not a 50/50 split) is what makes the
-   screenshot read as the visual hero instead of a same-weight sidebar image. */
+   screenshot read as the visual hero instead of a same-weight sidebar image. The whole
+   page is this one hero now — no marketing sections below it to scroll to, so it fills
+   the viewport rather than yielding to content underneath. */
 .hero {
   display: grid;
   grid-template-columns: minmax(0, 2fr) minmax(0, 3fr);
   align-items: center;
   gap: var(--space-10);
-  min-height: 92vh;
+  min-height: 100vh;
   max-width: 84rem;
   width: 100%;
   margin-inline: auto;
@@ -24,11 +26,11 @@
 .left {
   display: grid;
   gap: var(--space-6);
-  max-width: 26rem;
+  max-width: 24rem;
 }
 
 .logo {
-  height: 22px;
+  height: 20px;
   width: auto;
 }
 
@@ -37,19 +39,14 @@
   gap: var(--space-3);
 }
 
+/* Deliberately restrained — a login screen states its purpose, it doesn't sell. Sized
+   for quiet confidence, not a marketing hero statement. */
 .heading {
   margin: 0;
-  font-size: clamp(2rem, 3.4vw, 2.75rem);
+  font-size: clamp(1.5rem, 1.6vw + 1rem, 2rem);
   font-weight: 600;
-  letter-spacing: -0.03em;
-  line-height: 1.1;
-  color: var(--color-text);
-}
-
-.subheading {
-  margin: 0;
-  font-size: var(--text-lg);
-  font-weight: 500;
+  letter-spacing: -0.02em;
+  line-height: 1.25;
   color: var(--color-text);
 }
 
@@ -134,64 +131,6 @@
   image-rendering: -webkit-optimize-contrast;
 }
 
-.features {
-  padding: var(--space-16) var(--space-8);
-  border-top: 1px solid var(--color-border);
-}
-
-.featureGrid {
-  display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: var(--space-6);
-  max-width: 72rem;
-  margin-inline: auto;
-}
-
-.featureCard {
-  display: grid;
-  gap: var(--space-2);
-  padding: var(--space-6);
-  background: var(--color-surface);
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-lg);
-  transition: transform var(--transition-base), box-shadow var(--transition-base);
-}
-
-.featureCard:hover {
-  transform: translateY(-2px);
-  box-shadow: var(--shadow-md);
-}
-
-.featureTitle {
-  margin: 0;
-  font-size: var(--text-base);
-  font-weight: 600;
-  color: var(--color-text);
-}
-
-.featureText {
-  margin: 0;
-  font-size: var(--text-sm);
-  line-height: 1.5;
-  color: var(--color-text-muted);
-}
-
-.footer {
-  padding: var(--space-8);
-  text-align: center;
-  font-size: var(--text-xs);
-  font-weight: 600;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-  color: var(--color-text-muted);
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .featureCard {
-    transition: none;
-  }
-}
-
 @media only screen and (max-width: 64rem) {
   .hero {
     grid-template-columns: minmax(0, 1fr);
@@ -207,19 +146,11 @@
   .right {
     order: -1;
   }
-
-  .featureGrid {
-    grid-template-columns: minmax(0, 1fr);
-  }
 }
 
 @media only screen and (max-width: 30rem) {
   .hero {
     padding: var(--space-8) var(--space-4);
-  }
-
-  .features {
-    padding: var(--space-10) var(--space-4);
   }
 
   .loginCard {

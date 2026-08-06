@@ -34,25 +34,24 @@ Text should never look like it's fighting the merchant's own theme typography fo
 
 ---
 
-## 3. Typeface: System Font Stack
+## 3. Typeface: Helvetica
 
 **Primary font, all Imagyn Reviews storefront components (and, identically, the Imagyn admin dashboard — see `11_DESIGN_SYSTEM.md`):**
 
 ```
 font-family:
-  -apple-system,
-  BlinkMacSystemFont,
-  "SF Pro Display",
-  "Helvetica Neue",
   Helvetica,
   Arial,
+  -apple-system,
+  BlinkMacSystemFont,
+  "Segoe UI",
   sans-serif;
 ```
 
-This is a permanent, deliberate decision, not a placeholder: Imagyn Reviews does not load any external font (no Adobe Fonts/Typekit, no Google Fonts, no self-hosted `@font-face`) on either surface. Two reasons converge on the same answer:
+Helvetica is the official, locked product typeface (see brand decisions) across every surface — app, storefront widgets, marketing site, emails, and App Store assets. This is a permanent, deliberate decision, not a placeholder: Imagyn Reviews does not load any external font (no Adobe Fonts/Typekit, no Google Fonts, no self-hosted `@font-face`) on either surface. Two reasons converge on the same answer:
 
 - **Storefront licensing:** a paid font kit (e.g. Adobe Fonts) is licensed to specific registered domains. Imagyn Reviews installs onto thousands of arbitrary, merchant-owned storefront domains we don't control — there is no domain to register the kit against. A system font stack has no licensing surface at all.
-- **Design intent:** `-apple-system`/`BlinkMacSystemFont`/`SF Pro Display` render as San Francisco on Apple devices — the same typographic voice as Apple, Linear, and Notion (§1) — while `Helvetica Neue → Helvetica → Arial → sans-serif` degrade gracefully everywhere else. No network request, no flash of unstyled/invisible text, zero render-blocking risk.
+- **Design intent:** Helvetica is available natively on macOS/iOS and degrades to the metric-compatible Arial everywhere else (Windows, Android, Linux don't ship Helvetica itself). The remaining system-font fallbacks only matter on the rare platform missing both. No network request, no flash of unstyled/invisible text, zero render-blocking risk.
 
 Rules:
 

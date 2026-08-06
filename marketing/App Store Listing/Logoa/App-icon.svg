@@ -1,16 +1,14 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<svg id="Layer_1" data-name="Layer 1" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 1200">
-  <defs>
-    <style>
-      .cls-1 {
-        fill: #fff;
-      }
-    </style>
-  </defs>
-  <rect width="1200" height="1200" rx="263.46" ry="263.46"/>
-  <g>
-    <rect class="cls-1" x="341.94" y="341.94" width="102.74" height="516.13"/>
-    <polygon class="cls-1" points="444.68 858.06 858.06 858.06 858.06 737.18 444.68 858.06"/>
-    <polygon class="cls-1" points="858.06 341.94 444.68 341.94 858.06 471.66 858.06 341.94"/>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 1200">
+  <rect width="1200" height="1200" rx="263.46" ry="263.46" fill="#0a0a0a"/>
+  <g transform="translate(331.2,332.55) scale(9.8)" fill="#ffffff">
+    <circle cx="27.46" cy="7.01" r="7.01"/>
+    <circle cx="27.4" cy="47.57" r="7.01"/>
+    <circle cx="47.85" cy="7.01" r="4.67"/>
+    <circle cx="47.85" cy="47.57" r="4.67"/>
+    <circle cx="47.85" cy="27.32" r="7.01"/>
+    <circle cx="7.01" cy="7.01" r="4.67"/>
+    <circle cx="7.01" cy="47.57" r="4.67"/>
+    <circle cx="7.01" cy="27.26" r="7.01"/>
   </g>
 </svg>

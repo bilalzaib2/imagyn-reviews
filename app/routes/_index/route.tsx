@@ -29,21 +29,6 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
   return { showForm: Boolean(login) };
 };
 
-const FEATURES = [
-  {
-    title: "Collect Authentic Reviews",
-    description: "Automatically request reviews from verified customers.",
-  },
-  {
-    title: "Moderate with Confidence",
-    description: "Review, approve and respond from one clean dashboard.",
-  },
-  {
-    title: "Beautiful Widgets",
-    description: "Match every pixel of your storefront with customizable widgets.",
-  },
-];
-
 export default function App() {
   const { showForm } = useLoaderData<typeof loader>();
 
@@ -54,11 +39,9 @@ export default function App() {
           <img className={styles.logo} src="/assets/imagyn-app-logo.svg" alt="Imagyn Reviews" />
 
           <div className={styles.copy}>
-            <h1 className={styles.heading}>Welcome to Imagyn Reviews</h1>
-            <p className={styles.subheading}>Build trust with every customer review.</p>
+            <h1 className={styles.heading}>Sign in to Imagyn Reviews</h1>
             <p className={styles.description}>
-              Collect, manage and showcase authentic customer reviews with beautifully crafted
-              widgets, AI-powered insights and a premium moderation experience.
+              The premium review platform for Shopify brands who care about trust.
             </p>
           </div>
 
@@ -87,19 +70,6 @@ export default function App() {
           </div>
         </div>
       </section>
-
-      <section className={styles.features}>
-        <div className={styles.featureGrid}>
-          {FEATURES.map((feature) => (
-            <div key={feature.title} className={styles.featureCard}>
-              <h3 className={styles.featureTitle}>{feature.title}</h3>
-              <p className={styles.featureText}>{feature.description}</p>
-            </div>
-          ))}
-        </div>
-      </section>
-
-      <footer className={styles.footer}>Built for modern Shopify brands.</footer>
     </div>
   );
 }

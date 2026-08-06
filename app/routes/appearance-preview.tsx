@@ -97,7 +97,7 @@ export const loader = ({ request }: LoaderFunctionArgs) => {
   .imagyn-reviews--layout-list .imagyn-reviews__list { display: block; }
   .imagyn-reviews__list { margin: 0; padding: 0; }
   .imagyn-reviews__list li { list-style: none; }
-  .imagyn-preview-label { font-family: -apple-system, sans-serif; font-size: 11px; letter-spacing: 0.08em; text-transform: uppercase; color: rgba(0,0,0,0.4); margin: 0 0 8px; }
+  .imagyn-preview-label { font-family: Helvetica, Arial, sans-serif; font-size: 11px; letter-spacing: 0.08em; text-transform: uppercase; color: rgba(0,0,0,0.4); margin: 0 0 8px; }
 </style>
 </head>
 <body>

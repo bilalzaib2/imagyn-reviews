@@ -16,12 +16,6 @@ export default function App() {
         <link rel="alternate icon" href="/favicon.ico?v=2" />
         <link rel="apple-touch-icon" href="/apple-touch-icon.png?v=2" />
         <link rel="preconnect" href="https://cdn.shopify.com/" />
-        <link rel="preconnect" href="https://fonts.googleapis.com" />
-        <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="anonymous" />
-        <link
-          href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap"
-          rel="stylesheet"
-        />
         <Meta />
         <Links />
       </head>

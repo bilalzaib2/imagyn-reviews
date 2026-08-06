@@ -1,4 +1,4 @@
-import { Body, Button, Container, Head, Hr, Html, Preview, Section, Text } from "@react-email/components";
+import { Body, Button, Container, Head, Hr, Html, Img, Preview, Section, Text } from "@react-email/components";
 
 export interface ReviewHeldEmailProps {
   storeName: string;
@@ -9,7 +9,7 @@ export interface ReviewHeldEmailProps {
   reviewsUrl: string;
 }
 
-const FONT_FAMILY = "-apple-system, BlinkMacSystemFont, 'Inter', 'Segoe UI', Helvetica, Arial, sans-serif";
+const FONT_FAMILY = "Helvetica, Arial, sans-serif";
 
 // Sent by moderationRules.server.ts's sendHeldReviewNotification whenever a new review is
 // held by an automatic Moderation Rule — mirrors ReviewRequestEmail.tsx's monochrome,
@@ -21,6 +21,16 @@ export function ReviewHeldEmail({ storeName, reviewerName, productName, rating, 
       <Preview>A new review needs your attention</Preview>
       <Body style={{ margin: 0, padding: 0, backgroundColor: "#ffffff", fontFamily: FONT_FAMILY }}>
         <Container style={{ maxWidth: "480px", padding: "56px 24px" }}>
+          <Section style={{ paddingBottom: "24px" }}>
+            <Img
+              src="https://app.imagyn.co/apple-touch-icon.png"
+              width="28"
+              height="28"
+              alt="Imagyn Reviews"
+              style={{ borderRadius: "6px" }}
+            />
+          </Section>
+
           <Section style={{ paddingBottom: "32px" }}>
             <Text
               style={{

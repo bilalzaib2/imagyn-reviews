@@ -1,4 +1,4 @@
-import { Body, Button, Container, Head, Hr, Html, Preview, Section, Text } from "@react-email/components";
+import { Body, Button, Container, Head, Hr, Html, Img, Preview, Section, Text } from "@react-email/components";
 
 export interface ReviewRequestEmailProps {
   customerName: string;
@@ -8,7 +8,7 @@ export interface ReviewRequestEmailProps {
   customMessage: string | null;
 }
 
-const FONT_FAMILY = "-apple-system, BlinkMacSystemFont, 'Inter', 'Segoe UI', Helvetica, Arial, sans-serif";
+const FONT_FAMILY = "Helvetica, Arial, sans-serif";
 
 // Matches the app's own typography-first, monochrome design language (docs/DESIGN_SYSTEM.md)
 // using only React Email's cross-client-safe primitives — no external CSS/fonts, since email
@@ -29,6 +29,16 @@ export function ReviewRequestEmail({
       <Preview>How was your {productName}?</Preview>
       <Body style={{ margin: 0, padding: 0, backgroundColor: "#ffffff", fontFamily: FONT_FAMILY }}>
         <Container style={{ maxWidth: "480px", padding: "56px 24px" }}>
+          <Section style={{ paddingBottom: "24px" }}>
+            <Img
+              src="https://app.imagyn.co/apple-touch-icon.png"
+              width="28"
+              height="28"
+              alt="Imagyn Reviews"
+              style={{ borderRadius: "6px" }}
+            />
+          </Section>
+
           <Section style={{ paddingBottom: "32px" }}>
             <Text
               style={{

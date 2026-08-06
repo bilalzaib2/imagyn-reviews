@@ -33,7 +33,7 @@
 }
 
 .imagyn-rating-badge__link:focus-visible {
-  outline: 2px solid var(--imagyn-color-focus, #2563eb);
+  outline: 2px solid var(--imagyn-color-focus, #0a0a0a);
   outline-offset: 2px;
 }
 

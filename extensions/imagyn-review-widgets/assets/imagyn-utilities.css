@@ -61,7 +61,7 @@
 /* Focus ring — every interactive element in this system uses this exact treatment
    (see STOREFRONT_DESIGN_SYSTEM.md §13). Never `outline: none` without this. */
 .imagyn-focus-ring:focus-visible {
-  outline: 2px solid var(--imagyn-color-focus, #2563eb);
+  outline: 2px solid var(--imagyn-color-focus, #0a0a0a);
   outline-offset: 2px;
 }
 
