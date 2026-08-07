@@ -2,7 +2,7 @@ import type { Prisma } from "@prisma/client";
 import prisma from "../db.server";
 import { maybeAutoRegenerateAiSummary } from "./aiSummary.server";
 import { HelpfulVoteValue, ReviewStatus } from "./review.shared";
-import { getPlanLimits, getStorePlanId, PlanLimitError } from "./billing/billing.server";
+import { getStorePermissions, PermissionError } from "./permissions";
 
 export { HelpfulVoteValue, ReviewStatus };
 
@@ -397,8 +397,8 @@ export async function createReview(data: CreateReviewInput) {
   // row outright, so an import never loses data, only defers moderation.
   let approveNow = false;
   if (data.autoApprove) {
-    const plan = await getStorePlanId(product.storeId);
-    const limit = getPlanLimits(plan).maxPublishedReviews;
+    const permissions = await getStorePermissions(product.storeId);
+    const limit = permissions.maxPublishedReviews;
     approveNow =
       limit === null ||
       (await prisma.review.count({ where: { storeId: product.storeId, deletedAt: null, isPublished: true } })) <
@@ -510,8 +510,8 @@ async function setReviewStatus(id: string, status: typeof ReviewStatus.APPROVED 
   // Only a transition INTO published state can push a store over its plan's published-review
   // cap — re-approving an already-published review, or rejecting one, never needs this check.
   if (status === ReviewStatus.APPROVED && !existing.isPublished) {
-    const plan = await getStorePlanId(existing.storeId);
-    const limit = getPlanLimits(plan).maxPublishedReviews;
+    const permissions = await getStorePermissions(existing.storeId);
+    const limit = permissions.maxPublishedReviews;
 
     if (limit !== null) {
       const publishedCount = await prisma.review.count({
@@ -519,7 +519,7 @@ async function setReviewStatus(id: string, status: typeof ReviewStatus.APPROVED 
       });
 
       if (publishedCount >= limit) {
-        throw new PlanLimitError(
+        throw new PermissionError(
           `The Starter plan is limited to ${limit} published reviews. Upgrade to Growth for unlimited reviews.`,
           "growth",
         );
@@ -609,8 +609,8 @@ export async function bulkModerateReviews(
     const storeIds = new Set(targets.map((target) => target.storeId));
 
     for (const storeId of storeIds) {
-      const plan = await getStorePlanId(storeId);
-      const limit = getPlanLimits(plan).maxPublishedReviews;
+      const permissions = await getStorePermissions(storeId);
+      const limit = permissions.maxPublishedReviews;
 
       if (limit === null) {
         continue;
@@ -622,7 +622,7 @@ export async function bulkModerateReviews(
       const aboutToApprove = targets.filter((target) => target.storeId === storeId).length;
 
       if (alreadyPublished + aboutToApprove > limit) {
-        throw new PlanLimitError(
+        throw new PermissionError(
           `The Starter plan is limited to ${limit} published reviews. Upgrade to Growth for unlimited reviews.`,
           "growth",
         );

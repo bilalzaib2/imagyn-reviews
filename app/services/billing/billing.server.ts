@@ -1,7 +1,7 @@
 import type { AdminApiContext } from "@shopify/shopify-app-react-router/server";
 import prisma from "../../db.server";
 import { getSlug, setDevelopmentStoreFlag, updateBillingState } from "../store.server";
-import { getPlan, PLAN_ORDER, type Plan, type PlanId, type PlanLimits } from "./plans";
+import { getAllPlans as getAllPlansFromPlans, type PlanId } from "./plans";
 
 export interface BillingSnapshot {
   storeId: string;
@@ -16,12 +16,17 @@ export interface BillingSnapshot {
 const ACCESS_GRANTED_STATUSES = new Set(["active", "trialing"]);
 
 function toPlanId(value: string): PlanId {
-  return value === "growth" || value === "pro" ? value : "starter";
+  if (value === "growth" || value === "scale" || value === "owner") {
+    return value;
+  }
+  return "starter";
 }
 
 // The single access-control decision the rest of the app relies on (app.tsx's gate reads
 // this, nothing else re-derives it). Development stores always have access regardless of
-// plan/status — see ensureDevelopmentStoreFlag below for how that flag gets set.
+// plan/status — see ensureDevelopmentStoreFlag below for how that flag gets set. Owner stores
+// (see permissions.ts) always have access too: they carry no Shopify subscription, so
+// planStatus will never naturally land in ACCESS_GRANTED_STATUSES for them.
 export function getBillingSnapshot(store: {
   id: string;
   plan: string;
@@ -30,47 +35,25 @@ export function getBillingSnapshot(store: {
   trialEndsAt: Date | null;
 }): BillingSnapshot {
   const isDevelopmentStore = store.isDevelopmentStore ?? false;
+  const plan = toPlanId(store.plan);
 
   return {
     storeId: store.id,
-    plan: toPlanId(store.plan),
+    plan,
     planStatus: store.planStatus,
     isDevelopmentStore,
     isTrialing: store.planStatus === "trialing",
     trialEndsAt: store.trialEndsAt,
-    hasAccess: isDevelopmentStore || ACCESS_GRANTED_STATUSES.has(store.planStatus),
+    hasAccess: isDevelopmentStore || plan === "owner" || ACCESS_GRANTED_STATUSES.has(store.planStatus),
   };
 }
 
-export function getPlanLimits(plan: PlanId): PlanLimits {
-  return getPlan(plan).limits;
-}
-
 // Convenience for services (aiSummary.server.ts, reviewMedia.server.ts, review.server.ts,
-// review-request.server.ts) that only have a storeId/productId on hand and need a plan-gating
-// decision, without needing the full billing snapshot the admin UI uses.
+// review-request.server.ts, permissions.ts) that only have a storeId/productId on hand and
+// need a plan lookup without the full billing snapshot the admin UI uses.
 export async function getStorePlanId(storeId: string): Promise<PlanId> {
   const store = await prisma.store.findUnique({ where: { id: storeId }, select: { plan: true } });
   return toPlanId(store?.plan ?? "starter");
-}
-
-// Throws a clear, upgrade-prompting error — the standard shape every feature gate
-// (review.server.ts, aiSummary.server.ts, reviewMedia.server.ts) throws when a store's plan
-// doesn't include a given capability, so callers only need one catch pattern.
-export class PlanLimitError extends Error {
-  constructor(
-    message: string,
-    public readonly requiredPlan: PlanId,
-  ) {
-    super(message);
-    this.name = "PlanLimitError";
-  }
-}
-
-export function assertPlanFeature(plan: PlanId, feature: keyof PlanLimits, message: string, requiredPlan: PlanId) {
-  if (!getPlanLimits(plan)[feature]) {
-    throw new PlanLimitError(message, requiredPlan);
-  }
 }
 
 async function detectDevelopmentStore(admin: AdminApiContext): Promise<boolean> {
@@ -122,8 +105,16 @@ interface ShopifySubscription {
 // just need an AdminApiContext — no need for two separate reconciliation implementations.
 export async function syncBillingFromShopify(
   admin: AdminApiContext,
-  store: { id: string; planStatus: string },
+  store: { id: string; plan: string; planStatus: string },
 ): Promise<void> {
+  // Owner stores (see permissions.ts) never have a Shopify subscription and must never be
+  // reconciled back onto the normal ladder — without this, the very first billing-page visit
+  // (or the afterAuth hook, or an app_subscriptions/update webhook) would find "no active
+  // subscription" and silently downgrade them to Starter.
+  if (store.plan === "owner") {
+    return;
+  }
+
   const response = await admin.graphql(`#graphql
     query CurrentSubscriptions {
       currentAppInstallation {
@@ -160,7 +151,7 @@ export async function syncBillingFromShopify(
     return;
   }
 
-  const planId: PlanId = subscription.name.toLowerCase() === "pro" ? "pro" : "growth";
+  const planId: PlanId = subscription.name.toLowerCase() === "scale" ? "scale" : "growth";
   const trialEndsAt =
     subscription.trialDays > 0
       ? new Date(new Date(subscription.createdAt).getTime() + subscription.trialDays * 24 * 60 * 60 * 1000)
@@ -244,12 +235,7 @@ export async function getPricingPlansUrl(admin: AdminApiContext, shop: string): 
   return `https://admin.shopify.com/store/${getSlug(shop)}/charges/${appHandle}/pricing_plans`;
 }
 
-// Derived from PLAN_ORDER — the single source of truth for both "which plans exist" and
-// "what order they render in" — rather than a separately hand-maintained array. Pro was
-// previously hardcoded out of this list because its feature copy made false claims (see
-// DECISIONS.md's "V1 launch truthfulness pass"); now that plans.ts's Pro entry only lists
-// real, deliverable capabilities, there's no reason to hide it, and no separate array to
-// drift from PLAN_ORDER the next time a plan is added or removed.
-export function getAllPlans(): Plan[] {
-  return PLAN_ORDER.map(getPlan);
-}
+// Thin re-export so existing callers (app.billing.tsx) don't need a second import path —
+// plans.ts owns PLAN_ORDER/getPlan now that plan metadata and gating logic (permissions.ts)
+// are fully split apart.
+export const getAllPlans = getAllPlansFromPlans;

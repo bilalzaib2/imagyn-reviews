@@ -59,12 +59,15 @@ model Store {
   // billing.check() wrapper — see that function's own comment for why) — so the
   // access-control gate in app.tsx doesn't need a live Admin API round-trip on every page
   // load. Shopify's Admin API remains the source of truth; this table can always be rebuilt.
-  // plan: "starter" | "growth" | "pro". planStatus values actually stored: "pending" (never
-  // explicitly chosen a plan yet, including Starter — free but still an explicit choice on
-  // the billing page), "active", "trialing", "frozen". Shopify subscription states of
-  // CANCELLED/DECLINED/EXPIRED are not stored verbatim — syncBillingFromShopify collapses
+  // plan: "starter" | "growth" | "scale" | "owner" (see app/services/permissions.ts —
+  // "owner" is a hidden, non-billable plan for internally-owned stores, granted every
+  // permission with no Shopify subscription). planStatus values actually stored: "pending"
+  // (never explicitly chosen a plan yet, including Starter — free but still an explicit
+  // choice on the billing page), "active", "trialing", "frozen". Shopify subscription states
+  // of CANCELLED/DECLINED/EXPIRED are not stored verbatim — syncBillingFromShopify collapses
   // all of them to plan: "starter", planStatus: "active" rather than a dead-end status, so
-  // access-control (app.tsx's gate) only ever needs to check for "active"/"trialing".
+  // access-control (app.tsx's gate) only ever needs to check for "active"/"trialing" (plus
+  // the isDevelopmentStore/plan==="owner" bypasses — see getBillingSnapshot).
   plan                 String    @default("starter")
   planStatus           String    @default("pending")
   shopifySubscriptionId String?

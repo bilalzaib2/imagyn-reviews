@@ -10,7 +10,7 @@ import { authenticateAdminDeduped } from "../services/auth-dedupe.server";
 import { getOrCreateStore, updateAutoRequestSettings, updateModerationSettings } from "../services/store.server";
 import { getModerationSettings } from "../services/moderationRules.server";
 import { sendTestReviewRequestEmail } from "../services/notifications/testEmail.server";
-import { getPlanLimits, getStorePlanId } from "../services/billing/billing.server";
+import { getStorePermissions } from "../services/permissions";
 import { ORDER_AUTOMATION_ENABLED } from "../config/features";
 import shellStyles from "../styles/app.shell.module.css";
 import styles from "../styles/app.management.module.css";
@@ -41,14 +41,14 @@ type ActionData = {
 export const loader = async ({ request }: LoaderFunctionArgs): Promise<LoaderData> => {
   const { session } = await authenticateAdminDeduped(request);
   const store = await getOrCreateStore(session.shop);
-  const plan = await getStorePlanId(store.id);
+  const permissions = await getStorePermissions(store.id);
   const moderation = await getModerationSettings(store.id);
 
   return {
     autoRequestEnabled: store.autoRequestEnabled,
     autoRequestDelayDays: store.autoRequestDelayDays,
     autoRequestTrigger: store.autoRequestTrigger,
-    planIncludesAutomaticRequests: getPlanLimits(plan).automaticReviewRequests,
+    planIncludesAutomaticRequests: permissions.canUseAutomaticReviewRequests,
     moderation: {
       enabled: moderation.enabled,
       minRating: moderation.minRating,
@@ -121,8 +121,8 @@ export const action = async ({ request }: ActionFunctionArgs): Promise<ActionDat
     return { ok: false, error: "Automatic review requests are not available yet." };
   }
 
-  const plan = await getStorePlanId(store.id);
-  if (!getPlanLimits(plan).automaticReviewRequests) {
+  const permissions = await getStorePermissions(store.id);
+  if (!permissions.canUseAutomaticReviewRequests) {
     return { ok: false, error: "Automatic review requests require the Growth plan or higher." };
   }
 

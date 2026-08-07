@@ -107,7 +107,10 @@ function PlanCard({
 
       <ul className={styles.featureList}>
         {plan.features.map((feature) => (
-          <li key={feature}>{feature}</li>
+          <li key={feature.label} className={feature.comingSoon ? styles.featureComingSoon : undefined}>
+            {feature.label}
+            {feature.comingSoon ? <span className={styles.comingSoonTag}>Coming soon</span> : null}
+          </li>
         ))}
       </ul>
 

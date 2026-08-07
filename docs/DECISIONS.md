@@ -327,3 +327,75 @@
     mattered (Dashboard's stat grid, Billing's plan grid) both already use
     `repeat(auto-fit, minmax(...))`, which reflows without needing an explicit breakpoint —
     adding one would have been unnecessary defensive CSS for a problem that doesn't exist.
+
+## Permissions architecture, Scale tier, Owner plan, and the Judge.me importer rewrite (2026-08-07)
+
+-   **`app/services/permissions.ts` replaces `PlanLimits`/`assertPlanFeature`/`PlanLimitError`
+    in `billing/billing.server.ts` as the one place gating decisions are made.** Every call
+    site that used to read `getPlanLimits(plan).someFlag` now reads
+    `(await getStorePermissions(storeId)).someFlag` — `plans.ts` is display metadata only
+    now (price, trial length, marketing copy), permissions.ts is the only file that maps a
+    `PlanId` to what a store can actually do. No call site outside permissions.ts branches
+    on a plan name string. Rewired: `app.settings.tsx`, `webhooks.fulfillments.create.tsx`,
+    `aiSummary.server.ts`, `reviewMedia.server.ts`, `review.server.ts` (published-review
+    cap), and newly, `app.appearance.tsx` (Brand Studio, previously ungated on every plan).
+-   **`PlanId` gained `"scale"` (renamed from `"pro"`) and `"owner"`.** Owner is a real,
+    storable `Store.plan` value — not a `shop` allowlist, not a separate boolean flag next
+    to `isDevelopmentStore` — so it works through the exact same `getPermissions()` lookup
+    every other plan does (`OWNER` entry: every flag `true`, `maxPublishedReviews: null`).
+    `plans.ts`'s `PLAN_ORDER` (and therefore `getAllPlans()`) deliberately excludes
+    `"owner"` — it can never render on the pricing page, and `syncBillingFromShopify` now
+    short-circuits immediately for a store already on `"owner"`, so a billing-page visit or
+    an `app_subscriptions/update` webhook can never reconcile it back down to Starter (it
+    has no Shopify subscription to find, and would otherwise fall into the same "no active
+    subscription → Starter" branch every real cancelled store does).
+    `getBillingSnapshot().hasAccess` also treats `plan === "owner"` as automatic access, the
+    same way `isDevelopmentStore` already did. **Turning a specific Store row into Owner is
+    a manual, one-time DB write (`UPDATE "Store" SET plan = 'owner' WHERE ...`) that still
+    goes through this repo's normal database-safety checklist — it was intentionally not
+    executed as part of this change.**
+-   **Truthfulness pass extended, not reversed, when Scale (formerly Pro) was asked to list
+    Video Reviews / White Label / Custom Email Domain / SMTP / API Access / Webhooks /
+    Unlimited Team Members** — none of these exist in the codebase, same category of gap the
+    2026-07-27 pass above removed from Pro's list entirely. This time the resolution is
+    per-feature "Coming soon" tagging (`PlanFeature.comingSoon` in `plans.ts`, mirrored in
+    the website's `pricing/page.tsx`) rather than deletion: the entitlement is real in
+    `permissions.ts` (a Scale store already has `canUseVideoReviews`, etc. `true`, so the
+    feature activates for every existing Scale subscriber the moment it ships, no plan-data
+    migration), but nothing claims the feature is usable *today*. Also re-flagged two
+    Growth claims that don't hold up under the same audit: "Automatic review requests" and
+    "Automatic email reminders" are both still blocked by `ORDER_AUTOMATION_ENABLED = false`
+    (Shopify Protected Customer Data approval, unchanged since the July pass) — both now
+    carry `comingSoon: true` everywhere they're listed. "Advanced analytics" is also tagged
+    `comingSoon` — the dashboard's Trust Overview/Rating Distribution exist for every plan
+    already and aren't a Growth-exclusive "advanced" feature.
+-   **Judge.me CSV import root cause:** `reviewImportExport.server.ts`'s old
+    `resolveProductId()` only ever matched a single loosely-typed `product` string against
+    `Product.handle` or `Product.name` by exact string equality — it never read
+    `Product.shopifyProductId` (stored in GID form) at all. Judge.me's export puts Shopify's
+    bare numeric product id in a `product_id` column; that value never had anywhere to go,
+    so every row fell through to "Product not found" regardless of how clean the export
+    was. Fixed by `app/services/importers/productMatcher.server.ts` (`ProductMatcher`),
+    which loads a store's product catalog once per import and matches each row through the
+    requested priority chain: Shopify Product ID → Variant ID (live Admin API lookup,
+    cached per import run — no local variant table exists) → Handle → URL (handle
+    extracted from a `/products/<handle>` path) → Slug → SKU (live Admin API lookup, same
+    caching) → exact title → normalized title (accent/punctuation-insensitive) → fuzzy
+    title (token-overlap, 0.75 similarity floor, last resort). `ParsedReviewRow` gained the
+    structured identifier fields (`productId`, `variantId`, `productHandle`, `productUrl`,
+    `productSlug`, `sku`) needed to feed it; `csv.server.ts`'s alias table and the new
+    `judgeme.server.ts` both populate them, sharing one parsing core
+    (`delimitedParser.server.ts`) rather than duplicating header-matching logic. A fuzzy
+    match is reported back as a `warnings` entry (not silently accepted) so a merchant can
+    spot-check it. `importReviews()` now takes an optional `AdminApiContext` — required
+    only for the two live-lookup tiers — and never aborts a batch on one row's failure,
+    matching the existing `importReviews` convention. `ImportResult` gained
+    `missingProducts`/`warnings` as buckets distinct from `errors` (hard validation
+    failures), each with a per-row, specific reason rather than a generic message.
+-   **Not done, and deliberately out of scope for this pass:** photo-URL import from
+    Judge.me's `pictures` column (would need a re-hosting decision through the storage
+    provider, not just a new parsed field — see `reviewMedia.server.ts`), and a
+    Loox/Stamped/Ryviu/Ali Reviews parser (Loox's export is JSON, not CSV, so it can't reuse
+    `delimitedParser.server.ts` the way Judge.me does — it needs its own `Importer`
+    implementation). Both are additive: neither requires touching `ProductMatcher`,
+    `provider.server.ts`'s factory shape, or anything already shipped here.

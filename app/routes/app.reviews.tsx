@@ -44,7 +44,7 @@ import { deleteReviewMedia } from "../services/reviewMedia.server";
 import { getAiSummariesForProducts, type ProductAiSummaryRecord } from "../services/aiSummary.server";
 import { syncProductStructuredData } from "../services/structuredData/sync.server";
 import { ReviewStatus } from "../services/review.shared";
-import { IMPORT_SOURCES } from "../services/importers/types";
+import { IMPORT_SOURCES, type ImportSource } from "../services/importers/types";
 import { importReviews, type ImportResult } from "../services/reviewImportExport.server";
 import { getOrCreateStore } from "../services/store.server";
 import { authenticateAdminDeduped } from "../services/auth-dedupe.server";
@@ -146,16 +146,18 @@ export const action = async ({ request }: ActionFunctionArgs): Promise<ActionDat
   try {
     if (intent === "import-csv") {
       const fileContent = String(formData.get("fileContent") || "");
+      const source = (String(formData.get("source") || "csv")) as ImportSource;
 
       if (!fileContent.trim()) {
         return { ok: false, intent, error: "The file is empty." };
       }
 
       const store = await getOrCreateStore(session.shop);
-      const result = await importReviews(store.id, "csv", fileContent);
+      const result = await importReviews(store.id, source, fileContent, admin);
       const nothingImported = result.imported === 0 && result.duplicates === 0;
+      const hasIssues = result.errors.length > 0 || result.missingProducts.length > 0;
 
-      if (nothingImported && result.errors.length > 0) {
+      if (nothingImported && hasIssues) {
         return {
           ok: false,
           intent,
@@ -337,6 +339,7 @@ export default function ReviewsPage() {
   );
 
   const [isImportModalOpen, setIsImportModalOpen] = useState(false);
+  const [importSource, setImportSource] = useState<ImportSource>("csv");
   const [importFileName, setImportFileName] = useState<string | null>(null);
   const [importFileContent, setImportFileContent] = useState<string | null>(null);
   const [importPreviewRows, setImportPreviewRows] = useState<Record<string, string>[]>([]);
@@ -576,6 +579,7 @@ export default function ReviewsPage() {
 
     const formData = new FormData();
     formData.append("_intent", "import-csv");
+    formData.append("source", importSource);
     formData.append("fileContent", importFileContent);
     importFetcher.submit(formData, { method: "post" });
   };
@@ -1331,7 +1335,12 @@ export default function ReviewsPage() {
         <Modal.Section>
           <div className={styles.importSourceRow}>
             <span className={styles.filterLabel}>Import from</span>
-            <select className={styles.filterSelect} value="csv" disabled>
+            <select
+              className={styles.filterSelect}
+              value={importSource}
+              onChange={(event) => setImportSource(event.target.value as ImportSource)}
+              disabled={isImporting}
+            >
               {IMPORT_SOURCES.map((source) => (
                 <option key={source.value} value={source.value} disabled={!source.available}>
                   {source.label}
@@ -1388,17 +1397,50 @@ export default function ReviewsPage() {
               <p className={styles.detailSubvalue}>
                 {importFetcher.data.importResult.imported} imported ·{" "}
                 {importFetcher.data.importResult.duplicates} duplicate{importFetcher.data.importResult.duplicates === 1 ? "" : "s"} skipped ·{" "}
-                {importFetcher.data.importResult.heldForModeration} held for moderation
+                {importFetcher.data.importResult.heldForModeration} held for moderation ·{" "}
+                {importFetcher.data.importResult.missingProducts.length} missing product
+                {importFetcher.data.importResult.missingProducts.length === 1 ? "" : "s"} ·{" "}
+                {importFetcher.data.importResult.errors.length} error{importFetcher.data.importResult.errors.length === 1 ? "" : "s"}
               </p>
+
+              {importFetcher.data.importResult.missingProducts.length > 0 ? (
+                <>
+                  <p className={styles.detailLabel}>Missing products</p>
+                  <ul className={styles.importErrorList}>
+                    {importFetcher.data.importResult.missingProducts.map((issue, index) => (
+                      <li key={index}>
+                        Row {issue.row}: {issue.reason}
+                      </li>
+                    ))}
+                  </ul>
+                </>
+              ) : null}
+
               {importFetcher.data.importResult.errors.length > 0 ? (
-                <ul className={styles.importErrorList}>
-                  {importFetcher.data.importResult.errors.map((rowError, index) => (
-                    <li key={index}>
-                      {rowError.row > 0 ? `Row ${rowError.row}: ` : ""}
-                      {rowError.reason}
-                    </li>
-                  ))}
-                </ul>
+                <>
+                  <p className={styles.detailLabel}>Errors</p>
+                  <ul className={styles.importErrorList}>
+                    {importFetcher.data.importResult.errors.map((rowError, index) => (
+                      <li key={index}>
+                        {rowError.row > 0 ? `Row ${rowError.row}: ` : ""}
+                        {rowError.reason}
+                      </li>
+                    ))}
+                  </ul>
+                </>
+              ) : null}
+
+              {importFetcher.data.importResult.warnings.length > 0 ? (
+                <>
+                  <p className={styles.detailLabel}>Warnings</p>
+                  <ul className={styles.importErrorList}>
+                    {importFetcher.data.importResult.warnings.map((warning, index) => (
+                      <li key={index}>
+                        Row {warning.row}: {warning.reason}
+                      </li>
+                    ))}
+                  </ul>
+                </>
               ) : null}
             </div>
           ) : null}

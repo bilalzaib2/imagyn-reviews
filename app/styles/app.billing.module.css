@@ -194,3 +194,23 @@
   color: var(--color-success);
   font-weight: 600;
 }
+
+/* Same checkmark bullet, deliberately — a coming-soon feature is still a real commitment on
+   the roadmap, not a lesser claim, so only the trailing tag (not the bullet) signals it isn't
+   live yet. Muted text keeps the emphasis on features that are usable today. */
+.featureComingSoon {
+  color: var(--color-text-muted);
+}
+
+.comingSoonTag {
+  display: inline-flex;
+  align-items: center;
+  margin-left: var(--space-2);
+  padding: 0.1rem 0.5rem;
+  border-radius: var(--radius-full);
+  font-size: var(--text-xs);
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  background: var(--color-surface-muted);
+  color: var(--color-text-muted);
+}

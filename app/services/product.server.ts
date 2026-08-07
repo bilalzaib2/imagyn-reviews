@@ -150,10 +150,13 @@ export async function getProductForStore(id: string, storeId: string) {
 }
 
 // `shopifyProductId` is stored in GraphQL GID form (set from the Admin GraphQL API in
-// syncProducts above), but callers on the storefront side only ever have Shopify's bare
-// numeric id (e.g. Liquid's `product.id`), so it's normalized to GID form before lookup.
-function toProductGid(shopifyProductId: string): string {
-  return shopifyProductId.startsWith("gid://") ? shopifyProductId : `gid://shopify/Product/${shopifyProductId}`;
+// syncProducts above), but callers on the storefront side — and review-import sources like
+// Judge.me, which export the bare numeric id — only ever have Shopify's bare numeric id (e.g.
+// Liquid's `product.id`), so it's normalized to GID form before lookup. Exported for reuse by
+// importers/productMatcher.server.ts rather than re-implementing GID normalization there.
+export function toProductGid(shopifyProductId: string): string {
+  const trimmed = shopifyProductId.trim();
+  return trimmed.startsWith("gid://") ? trimmed : `gid://shopify/Product/${trimmed}`;
 }
 
 // For callers that only have Shopify's own product identifier (e.g. Liquid's `product.id`)

@@ -1,7 +1,7 @@
 import prisma from "../db.server";
 import { getAiProvider } from "./ai/provider.server";
 import { ReviewStatus } from "./review.shared";
-import { assertPlanFeature, getStorePlanId, PlanLimitError } from "./billing/billing.server";
+import { assertPermission, getStorePermissions, PermissionError } from "./permissions";
 
 export interface ProductAiSummaryRecord {
   id: string;
@@ -136,8 +136,8 @@ export async function regenerateAiSummary(productId: string): Promise<ProductAiS
     throw new Error("Product not found.");
   }
 
-  const plan = await getStorePlanId(product.storeId);
-  assertPlanFeature(plan, "aiSummaries", "AI review summaries require the Growth plan or higher.", "growth");
+  const permissions = await getStorePermissions(product.storeId);
+  assertPermission(permissions, "canUseAI", "AI review summaries require the Growth plan or higher.", "growth");
 
   const reviews = await prisma.review.findMany({
     where: { productId, deletedAt: null, status: ReviewStatus.APPROVED },
@@ -207,7 +207,7 @@ export async function maybeAutoRegenerateAiSummary(productId: string): Promise<v
   } catch (error) {
     // A Starter-plan store hitting the AI-summaries plan gate is expected, not a failure —
     // nothing to log. Any other error (AI provider issue, etc.) still gets logged.
-    if (error instanceof PlanLimitError) {
+    if (error instanceof PermissionError) {
       return;
     }
 

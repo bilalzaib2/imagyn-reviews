@@ -1,30 +1,26 @@
-// Single source of truth for every plan's price, trial length, and entitlements — the pricing
-// page (app.billing.tsx) and every feature gate in the app (review.server.ts,
-// aiSummary.server.ts, reviewMedia.server.ts, review-request.server.ts) read from this file
-// instead of hardcoding plan comparisons, so "what does Growth include" only ever has one
-// answer. Shopify's billing config in shopify.server.ts also derives its prices from here.
-export type PlanId = "starter" | "growth" | "pro";
+// Plan metadata — price, trial length, and the copy shown on the pricing page. This is
+// display data only: what a plan is *allowed to do* lives in permissions.ts, keyed off the
+// same PlanId, and every gate in the app reads permissions, never this file, directly (see
+// permissions.ts's header comment for why). app.billing.tsx and every marketing/App-Store
+// surface read `features` from here so "what does Growth include" only ever has one answer
+// inside this repo.
+//
+// "owner" is a real PlanId (see permissions.ts) but is deliberately excluded from PLAN_ORDER /
+// getAllPlans() below — it must never render on the pricing page, in Shopify's billing config,
+// on the website, or in the App Store listing. It exists purely so a Store row can carry
+// `plan: "owner"` and have permissions.ts grant it everything, with no billing subscription and
+// no plan-name checks anywhere else in the app (see billing.server.ts's getBillingSnapshot).
+export type PlanId = "starter" | "growth" | "scale" | "owner";
 
-export interface PlanLimits {
-  // null = unlimited.
-  maxPublishedReviews: number | null;
-  automaticReviewRequests: boolean;
-  aiSummaries: boolean;
-  photoReviews: boolean;
-  // V1 launch truthfulness pass: none of these six have an enforcement point in the app
-  // (no email-customization UI, Brand Studio is available to every plan including Starter
-  // so it isn't a Growth/Pro differentiator, no video upload, no multi-template system, no
-  // support-priority mechanism, no public API) — none of them are shown on the pricing
-  // page anymore. Left here, unenforced, as reserved future entitlements rather than
-  // deleted, so a real feature built later can flip the matching flag without renegotiating
-  // what each plan is supposed to include. Do not add any of these back to a plan's
-  // `features` array until it is actually true.
-  emailCustomization: boolean;
-  advancedWidgetCustomization: boolean;
-  videoReviews: boolean;
-  multipleEmailTemplates: boolean;
-  advancedBranding: boolean;
-  prioritySupport: boolean;
+export interface PlanFeature {
+  label: string;
+  // True only for features with zero enforcement point in the codebase today. Per the
+  // 2026 pre-launch truthfulness pass: a feature is only ever shown as included (no tag) if
+  // it is genuinely built and usable right now — never on the strength of "the plan is
+  // supposed to include this eventually." Check permissions.ts's per-flag comments before
+  // flipping this; it must be updated everywhere this feature is listed (app billing page,
+  // website pricing page, App Store listing) the moment real code lands.
+  comingSoon?: boolean;
 }
 
 export interface Plan {
@@ -34,8 +30,7 @@ export interface Plan {
   currencyCode: string;
   trialDays: number;
   tagline: string;
-  features: string[];
-  limits: PlanLimits;
+  features: PlanFeature[];
 }
 
 export const PLANS: Record<PlanId, Plan> = {
@@ -47,24 +42,15 @@ export const PLANS: Record<PlanId, Plan> = {
     trialDays: 0,
     tagline: "Everything you need to start collecting reviews.",
     features: [
-      "Up to 50 published reviews",
-      "Manual review requests",
-      "Basic review widget",
-      "Standard email template",
-      "Basic moderation",
+      { label: "Up to 50 reviews" },
+      { label: "Manual review requests" },
+      { label: "Basic review widgets" },
+      { label: "Basic moderation" },
+      { label: "Email notifications" },
+      { label: "Verified buyer badge" },
+      { label: "CSV import (limited)" },
+      { label: "Community support" },
     ],
-    limits: {
-      maxPublishedReviews: 50,
-      automaticReviewRequests: false,
-      aiSummaries: false,
-      photoReviews: false,
-      emailCustomization: false,
-      advancedWidgetCustomization: false,
-      videoReviews: false,
-      multipleEmailTemplates: false,
-      advancedBranding: false,
-      prioritySupport: false,
-    },
   },
   growth: {
     id: "growth",
@@ -74,66 +60,63 @@ export const PLANS: Record<PlanId, Plan> = {
     trialDays: 14,
     tagline: "For stores actively growing customer trust.",
     features: [
-      "Unlimited reviews",
-      "Automatic review requests (activating after Shopify's pending approval)",
-      "AI review summaries",
-      "Photo reviews",
-      "Branded review request emails",
+      { label: "Everything in Starter" },
+      { label: "Unlimited reviews" },
+      { label: "Unlimited CSV imports" },
+      // Both gated off by ORDER_AUTOMATION_ENABLED (config/features.ts) pending Shopify's
+      // Protected Customer Data approval — the entitlement exists (permissions.ts) but the
+      // trigger itself isn't live for any store yet, so this can't be shown as included.
+      { label: "Automatic review requests", comingSoon: true },
+      { label: "Automatic email reminders", comingSoon: true },
+      { label: "AI review summaries" },
+      { label: "Photo reviews" },
+      // No differentiated analytics beyond the dashboard every plan already sees.
+      { label: "Advanced analytics", comingSoon: true },
+      { label: "Custom branding" },
+      { label: "Multiple widget themes" },
+      { label: "Brand Studio" },
+      { label: "Priority support" },
     ],
-    limits: {
-      maxPublishedReviews: null,
-      automaticReviewRequests: true,
-      aiSummaries: true,
-      photoReviews: true,
-      emailCustomization: true,
-      advancedWidgetCustomization: true,
-      videoReviews: false,
-      multipleEmailTemplates: false,
-      advancedBranding: false,
-      prioritySupport: false,
-    },
   },
-  pro: {
-    id: "pro",
-    name: "Pro",
+  scale: {
+    id: "scale",
+    name: "Scale",
     price: 29.99,
     currencyCode: "USD",
     trialDays: 14,
-    tagline: "Priority support for high-volume stores.",
-    // Every claim here must have a real enforcement point or be a genuinely deliverable
-    // operational commitment — see the "V1 launch truthfulness pass" audit in
-    // docs/DECISIONS.md. "Video reviews", "Multiple email templates", "Advanced branding
-    // controls" and "Future API/integration features" were removed: none of them exist
-    // anywhere in the app, so listing them would be a false claim on a paid tier — the
-    // kind of mismatch that can get an app rejected (or worse, refunded after the fact)
-    // during Shopify App Store review. "Priority support" stays: it's a real, deliverable
-    // support-response commitment that doesn't require any app functionality to honor.
-    features: ["Everything in Growth", "Priority support", "Early access to new features"],
-    limits: {
-      maxPublishedReviews: null,
-      automaticReviewRequests: true,
-      aiSummaries: true,
-      photoReviews: true,
-      emailCustomization: true,
-      advancedWidgetCustomization: true,
-      videoReviews: false,
-      multipleEmailTemplates: false,
-      advancedBranding: false,
-      prioritySupport: true,
-    },
+    tagline: "For high-volume stores that need white-label control.",
+    features: [
+      { label: "Everything in Growth" },
+      { label: "Video reviews", comingSoon: true },
+      { label: "White label", comingSoon: true },
+      { label: "Custom email domain (SMTP, Resend, Postmark)", comingSoon: true },
+      { label: "API access", comingSoon: true },
+      { label: "Webhooks", comingSoon: true },
+      { label: "Unlimited team members", comingSoon: true },
+      { label: "Premium support" },
+    ],
+  },
+  // Not a billable plan — see the file header. Metadata below exists only so getPlan("owner")
+  // doesn't need a special case; nothing reads these fields for an owner-plan store.
+  owner: {
+    id: "owner",
+    name: "Owner",
+    price: 0,
+    currencyCode: "USD",
+    trialDays: 0,
+    tagline: "Internal — every permission enabled, no billing.",
+    features: [],
   },
 };
 
-export const PLAN_ORDER: PlanId[] = ["starter", "growth", "pro"];
+// The only plans that may ever appear on the pricing page, in Shopify's billing config, on
+// the website, or in the App Store listing. Deliberately omits "owner".
+export const PLAN_ORDER: PlanId[] = ["starter", "growth", "scale"];
 
 export function getPlan(id: PlanId): Plan {
   return PLANS[id];
 }
 
-export function planRank(id: PlanId): number {
-  return PLAN_ORDER.indexOf(id);
-}
-
-export function meetsMinimumPlan(current: PlanId, minimum: PlanId): boolean {
-  return planRank(current) >= planRank(minimum);
+export function getAllPlans(): Plan[] {
+  return PLAN_ORDER.map(getPlan);
 }

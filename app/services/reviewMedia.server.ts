@@ -4,7 +4,7 @@ import prisma from "../db.server";
 import { ReviewStatus } from "./review.shared";
 import { getStorageProvider } from "./storage/provider.server";
 import type { StorageContext } from "./storage/types";
-import { getPlanLimits, getStorePlanId } from "./billing/billing.server";
+import { getStorePermissions } from "./permissions";
 
 export const MAX_IMAGES_PER_REVIEW = 10;
 export const MAX_IMAGE_SIZE_BYTES = 5 * 1024 * 1024;
@@ -99,9 +99,9 @@ export async function uploadReviewImages(
   // not the merchant, would otherwise see a plan-upgrade message that means nothing to them.
   // The review itself is unaffected either way; only the photos are declined.
   const review = await prisma.review.findUnique({ where: { id: reviewId }, select: { storeId: true } });
-  const plan = review ? await getStorePlanId(review.storeId) : null;
+  const permissions = review ? await getStorePermissions(review.storeId) : null;
 
-  if (!plan || !getPlanLimits(plan).photoReviews) {
+  if (!permissions || !permissions.canUsePhotoReviews) {
     return {
       uploaded: [],
       failed: files.map((file) => ({ filename: file.filename, error: "Photo reviews are not available on this store's plan." })),

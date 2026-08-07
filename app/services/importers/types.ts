@@ -10,7 +10,17 @@ export interface ParsedReviewRow {
   // 1-based row number as it appeared in the source file, for error messages a merchant can
   // actually act on ("Row 14: ...") rather than an opaque array index.
   row: number;
+  // Free-text product name/title as the source labeled it — always populated when the source
+  // has *some* product column, used as the exact/normalized/fuzzy title-match fallback and for
+  // "Product not found" error messages. The structured identifiers below (when the source
+  // provides them) are tried first, in priority order, by productMatcher.server.ts.
   product: string;
+  productId?: string;
+  variantId?: string;
+  productHandle?: string;
+  productUrl?: string;
+  productSlug?: string;
+  sku?: string;
   rating: string;
   title: string;
   content: string;
@@ -48,8 +58,8 @@ export class ImportSourceNotSupportedError extends Error {
 // only provider.server.ts's factory. Lives here (not provider.server.ts) so route components
 // can import it without pulling in a .server-only module.
 export const IMPORT_SOURCES: Array<{ value: ImportSource; label: string; available: boolean }> = [
-  { value: "csv", label: "CSV file", available: true },
-  { value: "judgeme", label: "Judge.me", available: false },
+  { value: "csv", label: "Generic CSV", available: true },
+  { value: "judgeme", label: "Judge.me", available: true },
   { value: "loox", label: "Loox", available: false },
   { value: "stamped", label: "Stamped", available: false },
   { value: "ryviu", label: "Ryviu", available: false },

@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { useFetcher, useLoaderData } from "react-router";
+import { useFetcher, useLoaderData, useLocation } from "react-router";
 import type { ActionFunctionArgs, LoaderFunctionArgs } from "react-router";
 import { RangeSlider, Select, TextField, Frame, Toast } from "@shopify/polaris";
 
@@ -7,10 +7,12 @@ import { Button } from "../components/ui/Button";
 import { ColorField, toDisplayHex } from "../components/ui/ColorField";
 import { Container } from "../components/ui/Container";
 import { Section } from "../components/ui/Section";
+import { UpgradePrompt } from "../components/ui/UpgradePrompt";
 import { authenticateAdminDeduped } from "../services/auth-dedupe.server";
 import { getOrCreateStore } from "../services/store.server";
 import { appearanceService } from "../services/appearance.server";
 import { appearancePresets, type AppearancePresetDefinition } from "../services/appearance.presets";
+import { assertPermission, getStorePermissions } from "../services/permissions";
 import {
   getDefaultAppearanceTokens,
   mergeAppearanceTokens,
@@ -23,6 +25,7 @@ import styles from "../styles/app.appearance.module.css";
 type LoaderData = {
   tokens: AppearanceTokens;
   preset: AppearancePreset;
+  canUseBrandStudio: boolean;
 };
 
 type ActionData = {
@@ -33,11 +36,13 @@ type ActionData = {
 export const loader = async ({ request }: LoaderFunctionArgs): Promise<LoaderData> => {
   const { session } = await authenticateAdminDeduped(request);
   const store = await getOrCreateStore(session.shop);
+  const permissions = await getStorePermissions(store.id);
   const active = await appearanceService.getActive(store.id);
 
   return {
     tokens: active?.tokens ?? getDefaultAppearanceTokens(),
     preset: active?.preset ?? "editorial",
+    canUseBrandStudio: permissions.canUseBrandStudio,
   };
 };
 
@@ -48,6 +53,9 @@ export const action = async ({ request }: ActionFunctionArgs): Promise<ActionDat
   const formData = await request.formData();
 
   try {
+    const permissions = await getStorePermissions(store.id);
+    assertPermission(permissions, "canUseBrandStudio", "Brand Studio requires the Growth plan or higher.", "growth");
+
     const tokens = JSON.parse(String(formData.get("tokens") || "{}")) as AppearanceTokens;
     const preset = String(formData.get("preset") || "custom") as AppearancePreset;
     await appearanceService.upsertActive(store.id, { tokens, preset });
@@ -107,7 +115,8 @@ function ReservedNote({ label }: { label: string }) {
 }
 
 export default function AppearancePage() {
-  const { tokens: initialTokens, preset: initialPreset } = useLoaderData<typeof loader>();
+  const { tokens: initialTokens, preset: initialPreset, canUseBrandStudio } = useLoaderData<typeof loader>();
+  const location = useLocation();
   const fetcher = useFetcher<ActionData>();
   const isSaving = fetcher.state !== "idle";
 
@@ -172,6 +181,31 @@ export default function AppearancePage() {
   };
 
   const isBoxed = draftTokens.reviewCards.separator === "boxed";
+
+  if (!canUseBrandStudio) {
+    return (
+      <Container as="main">
+        <div className={`${shellStyles.page} ${styles.page}`}>
+          <header className={shellStyles.header}>
+            <div className={shellStyles.headerContent}>
+              <p className={shellStyles.eyebrow}>Imagyn Reviews</p>
+              <h1 className={shellStyles.title}>Brand Studio</h1>
+              <p className={shellStyles.subtitle}>
+                Design how reviews look on your storefront — no code, no theme editing.
+              </p>
+            </div>
+          </header>
+          <UpgradePrompt
+            feature="Brand Studio"
+            description="Customize colors, typography, spacing, and widget style so reviews match your brand instead of a default look."
+            benefit="Growth and above include full storefront customization, plus unlimited reviews, photo reviews, and AI review summaries."
+            requiredPlanName="Growth"
+            billingHref={`/app/billing${location.search}`}
+          />
+        </div>
+      </Container>
+    );
+  }
 
   return (
     <>
