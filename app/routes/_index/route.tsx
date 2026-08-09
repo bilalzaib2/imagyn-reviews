@@ -11,17 +11,23 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
 
   // Shopify Admin's embedded navigation doesn't always include `shop` — a plain `host`
   // (or `embedded=1`, on internal Admin-to-Admin transitions) is just as reliable a signal
-  // that this request originated inside Shopify Admin. These are the same three params the
-  // SDK itself treats as authoritative for embedded context (see
+  // that this request originated inside Shopify Admin. These, plus `id_token`, are the
+  // params the SDK itself treats as authoritative for embedded context (see
   // ensureAppIsEmbeddedIfRequired / validateShopAndHostParams in
-  // @shopify/shopify-app-react-router). Checking only `shop` here let some embedded,
+  // @shopify/shopify-app-react-router — our distribution is AppStore, so both of those run
+  // on every /app/* authenticate.admin() call). Checking only `shop` here let some embedded,
   // already-authenticated loads fall through to the standalone login form instead of
   // handing off to `/app`, which is the SDK's own — and far more robust — session
-  // resolution (it can recover a missing `shop` via the App Bridge bounce page).
+  // resolution (it can recover a missing `shop`/`host` via the App Bridge bounce page).
+  // `id_token` is included for the same reason: a reload that carries a fresh session token
+  // but, for whatever reason, not `shop`/`host`/`embedded` in that exact request is still
+  // unambiguously an embedded-context request, not an organic standalone visit — and without
+  // this, that combination fell through to this route's own login form instead of `/app`.
   if (
     url.searchParams.get("shop") ||
     url.searchParams.get("host") ||
-    url.searchParams.get("embedded") === "1"
+    url.searchParams.get("embedded") === "1" ||
+    url.searchParams.get("id_token")
   ) {
     throw redirect(`/app?${url.searchParams.toString()}`);
   }
