@@ -1,6 +1,7 @@
 import prisma from "../db.server";
 import { getEmailProvider } from "./notifications/provider.server";
 import { buildReviewRequestEmail } from "./notifications/templates.server";
+import { emailTemplateService } from "./emailTemplate.server";
 
 // Full lifecycle: pending -> scheduled -> sending -> sent -> delivered -> opened -> clicked
 // -> completed, with failed/cancelled as terminal branches off any pre-completed state.
@@ -199,12 +200,17 @@ export const dispatchRequestEmail = async (request: ReviewRequestRecord): Promis
     return request;
   }
 
+  // Falls back to today's hardcoded defaults (getDefaultEmailTemplateContent) when the store
+  // hasn't customized anything in Email Studio — see templates.server.tsx's `template` param.
+  const template = await emailTemplateService.getActiveContent(request.store.id);
+
   const { subject, html, text } = await buildReviewRequestEmail({
     customerName: request.name || "there",
     productName: request.product?.name || "your recent purchase",
     storeName: request.store.name,
     reviewUrl: buildReviewUrl(request.requestToken),
     customMessage: request.customMessage,
+    template,
   });
 
   let lastError: unknown;

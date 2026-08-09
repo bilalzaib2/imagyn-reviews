@@ -1,21 +1,64 @@
 import { render } from "@react-email/render";
-import { ReviewRequestEmail, type ReviewRequestEmailProps } from "./emails/ReviewRequestEmail";
+import { ReviewRequestEmail } from "./emails/ReviewRequestEmail";
 import { ReviewHeldEmail, type ReviewHeldEmailProps } from "./emails/ReviewHeldEmail";
+import {
+  firstNameOf,
+  getDefaultEmailTemplateContent,
+  renderTemplateVariables,
+  type EmailTemplateContent,
+} from "../email.shared";
 
-export type ReviewRequestEmailData = ReviewRequestEmailProps;
+export interface ReviewRequestEmailData {
+  customerName: string;
+  productName: string;
+  storeName: string;
+  reviewUrl: string;
+  // Per-request override (set on an individual review request, not the template) — takes
+  // priority over the template's own default body text, same precedence this had before Email
+  // Studio existed.
+  customMessage: string | null;
+  // The store's saved Email Studio content — omitted (or not yet configured) falls back to
+  // getDefaultEmailTemplateContent(), which reproduces this template's original hardcoded
+  // copy/colors exactly, so an unconfigured store's emails are unaffected by this feature.
+  template?: EmailTemplateContent;
+}
+
 export type ReviewHeldEmailData = ReviewHeldEmailProps;
 
 // Renders the React Email template (emails/ReviewRequestEmail.tsx) to the plain
 // {subject, html, text} shape EmailProvider.sendEmail expects — callers (review-request.server.ts,
 // testEmail.server.ts) never import React Email or the component directly, so swapping the
-// template's implementation never touches them.
+// template's implementation never touches them. This is also the one place that resolves a
+// merchant's EmailTemplateContent + this send's customer/store/product data into final,
+// variable-substituted strings — the component itself only renders.
 export async function buildReviewRequestEmail(data: ReviewRequestEmailData): Promise<{
   subject: string;
   html: string;
   text: string;
 }> {
-  const subject = `How was your ${data.productName}?`;
-  const element = <ReviewRequestEmail {...data} />;
+  const content = data.template ?? getDefaultEmailTemplateContent();
+  const variables = {
+    customerName: firstNameOf(data.customerName),
+    storeName: data.storeName,
+    productName: data.productName,
+  };
+
+  const subject = renderTemplateVariables(content.subject, variables);
+  const heading = renderTemplateVariables(content.heading, variables);
+  const bodyText = data.customMessage || renderTemplateVariables(content.bodyText, variables);
+
+  const element = (
+    <ReviewRequestEmail
+      previewText={subject}
+      heading={heading}
+      bodyText={bodyText}
+      buttonText={content.buttonText}
+      accentColor={content.accentColor}
+      logoUrl={content.logoUrl}
+      storeName={data.storeName}
+      reviewUrl={data.reviewUrl}
+    />
+  );
 
   const [html, text] = await Promise.all([
     render(element),

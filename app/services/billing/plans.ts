@@ -48,6 +48,7 @@ export const PLANS: Record<PlanId, Plan> = {
       // "scheduled" (today: manually created with a delay). Order-triggered *creation* of that
       // scheduled request is a separate, external gate — see permissions.ts's STARTER comment.
       { label: "Automated initial review-request emails" },
+      { label: "Email Studio — customize your review-request email" },
       { label: "Photo reviews" },
       { label: "Video reviews", comingSoon: true },
       { label: "Review widgets & rating badges" },
@@ -71,6 +72,8 @@ export const PLANS: Record<PlanId, Plan> = {
       { label: "Everything in Starter" },
       { label: "AI review summaries" },
       { label: "Automatic email reminders", comingSoon: true },
+      { label: "Multiple email templates & reminder emails", comingSoon: true },
+      { label: "Advanced email styling", comingSoon: true },
       // No differentiated analytics beyond the dashboard every plan already sees.
       { label: "Advanced analytics", comingSoon: true },
       { label: "Custom branding" },

@@ -79,7 +79,7 @@ export const action = async ({ request }: ActionFunctionArgs): Promise<ActionDat
     }
 
     try {
-      await sendTestReviewRequestEmail(testEmail, store.name);
+      await sendTestReviewRequestEmail(testEmail, store.id, store.name);
       return { ok: true, message: `Test email sent to ${testEmail}.` };
     } catch (error) {
       return { ok: false, error: error instanceof Error ? error.message : "Unable to send test email." };

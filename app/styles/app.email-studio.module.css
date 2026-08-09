@@ -1,0 +1,204 @@
+.layout {
+  display: grid;
+  grid-template-columns: 1fr minmax(340px, 420px);
+  gap: var(--space-10);
+  align-items: start;
+}
+
+@media (max-width: 900px) {
+  .layout {
+    grid-template-columns: 1fr;
+  }
+}
+
+.editorColumn {
+  display: grid;
+  gap: var(--space-8);
+}
+
+.fieldGroup {
+  display: grid;
+  gap: var(--space-2);
+  margin-bottom: var(--space-5);
+}
+
+.fieldGroup:last-child {
+  margin-bottom: 0;
+}
+
+.fieldLabel {
+  font-size: var(--text-xs);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--color-text-muted);
+}
+
+.textInput,
+.textArea {
+  width: 100%;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  background: var(--color-surface);
+  color: var(--color-text);
+  padding: 0.75rem 0.9rem;
+  font: inherit;
+}
+
+.textArea {
+  resize: vertical;
+  line-height: 1.6;
+}
+
+.fieldHint {
+  margin: 0;
+  font-size: var(--text-xs);
+  color: var(--color-text-muted);
+  line-height: 1.5;
+}
+
+.variableRow {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+}
+
+.variableChip {
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-full);
+  background: var(--color-surface-muted);
+  color: var(--color-text-muted);
+  font-size: var(--text-xs);
+  padding: 0.3rem 0.7rem;
+  cursor: pointer;
+  transition: background-color var(--transition-base), color var(--transition-base);
+}
+
+.variableChip:hover {
+  background: var(--color-surface-strong);
+  color: var(--color-text);
+}
+
+.variableChip:disabled {
+  cursor: not-allowed;
+  opacity: 0.6;
+}
+
+.actionsBar {
+  display: flex;
+  justify-content: flex-end;
+  gap: var(--space-3);
+}
+
+.proCard {
+  padding: var(--space-5);
+}
+
+.proEyebrow {
+  margin: 0 0 var(--space-2);
+  font-size: var(--text-xs);
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--color-text-muted);
+}
+
+.proList {
+  margin: 0;
+  padding-left: var(--space-5);
+  display: grid;
+  gap: var(--space-1);
+  font-size: var(--text-sm);
+  color: var(--color-text);
+}
+
+.previewColumn {
+  position: sticky;
+  top: var(--space-6);
+  max-height: calc(100vh - var(--space-12));
+  overflow-y: auto;
+  display: grid;
+  gap: var(--space-3);
+}
+
+.previewHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.previewLabel {
+  margin: 0;
+  font-size: var(--text-xs);
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--color-text-muted);
+}
+
+.previewToggle {
+  display: inline-flex;
+  gap: 2px;
+  padding: 2px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  background: var(--color-surface-muted);
+}
+
+.previewToggleButton {
+  border: none;
+  background: transparent;
+  padding: 0.35rem 0.7rem;
+  border-radius: calc(var(--radius-md) - 2px);
+  font-size: var(--text-xs);
+  color: var(--color-text-muted);
+  cursor: pointer;
+}
+
+.previewToggleActive {
+  background: var(--color-surface);
+  color: var(--color-text);
+  font-weight: 600;
+  box-shadow: var(--shadow-sm);
+}
+
+/* Centers a fixed-width "device" frame inside the column rather than stretching the email to
+   the full column width — the point of a desktop/mobile toggle is to see the two widths a
+   real inbox actually renders, not a column-width-dependent size. */
+.previewFrame {
+  display: flex;
+  justify-content: center;
+  padding: var(--space-4);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  background: var(--color-surface-muted);
+}
+
+.previewFrame[data-mode="desktop"] .previewIframe {
+  width: 100%;
+  max-width: 560px;
+}
+
+.previewFrame[data-mode="mobile"] .previewIframe {
+  width: 100%;
+  max-width: 360px;
+}
+
+.previewIframe {
+  height: 620px;
+  border: none;
+  border-radius: var(--radius-md);
+  background: #ffffff;
+  box-shadow: var(--shadow-sm);
+}
+
+.previewSkeleton {
+  composes: skeletonShimmer from "./shared.module.css";
+  width: 100%;
+  max-width: 560px;
+  height: 620px;
+  border-radius: var(--radius-md);
+}
+
+.previewNote {
+  margin: 0;
+  font-size: var(--text-xs);
+  color: var(--color-text-muted);
+}

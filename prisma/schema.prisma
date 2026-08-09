@@ -45,6 +45,7 @@ model Store {
   reviewRequests ReviewRequest[]
   widgets      Widget[]
   appearances  Appearance[]
+  emailTemplates EmailTemplate[]
 
   // Order-lifecycle automation settings (see review-request.server.ts's createFromOrder and
   // webhooks.fulfillments.create.tsx). autoRequestTrigger is a plain string, not an enum, so
@@ -387,4 +388,34 @@ model Appearance {
   updatedAt    DateTime        @updatedAt
 
   @@index([storeId, isActive])
+}
+
+// Email Studio — merchant-editable content for outbound review-request emails. Same shape as
+// Appearance above: one active row per (store, type), JSON-encoded content so the contract
+// (email.shared.ts's EmailTemplateContent) can grow without a migration per field. Reading
+// this is fully optional for every sender — review-request.server.ts falls back to today's
+// hardcoded defaults when no active row exists, so an un-configured store's emails are
+// byte-for-byte what they were before this model existed.
+model EmailTemplate {
+  id           String          @id @default(cuid())
+  storeId      String
+  store        Store           @relation(fields: [storeId], references: [id], onDelete: Cascade)
+
+  name         String          @default("Default")
+  // "review_request" is the only type built/sent today. "reminder" is reserved for the
+  // Pro-only follow-up-email feature (not yet built) — same model, no migration needed when
+  // it ships, same "additive rows" pattern Appearance already established above.
+  type         String          @default("review_request")
+  // Exactly one true per (store, type); enforced in emailTemplate.server.ts, not a DB
+  // constraint — same application-level-enforcement convention as Appearance/Widget.
+  isActive     Boolean         @default(true)
+
+  // JSON-encoded EmailTemplateContent (email.shared.ts) — subject/heading/body/button text,
+  // accent color, logo URL.
+  content      String
+
+  createdAt    DateTime        @default(now())
+  updatedAt    DateTime        @updatedAt
+
+  @@index([storeId, type, isActive])
 }

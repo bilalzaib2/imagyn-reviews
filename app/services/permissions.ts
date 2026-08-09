@@ -25,6 +25,14 @@ export interface Permissions {
   canUseAutomaticReviewRequests: boolean;
   canUseEmailReminders: boolean;
 
+  // Email Studio's single review-request template editor (subject/content/variables/CTA/
+  // logo/preview/reset) has no gate at all — every plan gets it, see app.email-studio.tsx.
+  // This flag is specifically the Pro-only extension: multiple templates/themes, a
+  // reminder-email template, and deeper layout/styling control — none of which is built yet,
+  // same "entitlement true, comingSoon on every pricing surface" convention as
+  // canUseVideoReviews below.
+  canUseAdvancedEmailStudio: boolean;
+
   canUsePhotoReviews: boolean;
   canUseVideoReviews: boolean;
 
@@ -78,6 +86,7 @@ const STARTER: Permissions = {
   // Follow-up reminder emails (a distinct, not-yet-built feature) stay a PRO differentiator —
   // see plans.ts's Growth features.
   canUseEmailReminders: false,
+  canUseAdvancedEmailStudio: false,
   canUsePhotoReviews: true,
   // Entitlement true; video review upload itself isn't built yet (no enforcement point exists
   // anywhere in the codebase) — plans.ts still marks this comingSoon on every tier until it is.
@@ -102,6 +111,7 @@ const STARTER: Permissions = {
 const GROWTH: Permissions = {
   ...STARTER,
   canUseEmailReminders: true,
+  canUseAdvancedEmailStudio: true,
   canUseAI: true,
   canUseCustomBranding: true,
   canUseBrandStudio: true,
@@ -131,6 +141,7 @@ const OWNER: Permissions = {
   canUseManualReviewRequests: true,
   canUseAutomaticReviewRequests: true,
   canUseEmailReminders: true,
+  canUseAdvancedEmailStudio: true,
   canUsePhotoReviews: true,
   canUseVideoReviews: true,
   canUseAI: true,
