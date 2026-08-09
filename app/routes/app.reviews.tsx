@@ -54,7 +54,6 @@ import {
   pageNumberFor,
   parseCursorHistory,
   rangeFor,
-  serializeCursorHistory,
   totalPagesFor,
 } from "../services/cursorPagination.shared";
 import styles from "../styles/app.reviews.module.css";
@@ -315,13 +314,8 @@ const formatLongDate = (value: Date) =>
 const formatCount = (value: number) => new Intl.NumberFormat("en").format(value);
 
 export default function ReviewsPage() {
+  const loaderData = useLoaderData<typeof loader>();
   const {
-    reviews,
-    nextCursor,
-    hasMore,
-    totalCount,
-    aiSummaries,
-    error,
     search: initialSearch,
     status: initialStatus,
     rating: initialRating,
@@ -330,30 +324,100 @@ export default function ReviewsPage() {
     dateTo: initialDateTo,
     verifiedPurchase: initialVerifiedPurchase,
     sort: initialSort,
-  } = useLoaderData<typeof loader>();
+  } = loaderData;
 
   const mutationFetcher = useFetcher<ActionData>();
   const importFetcher = useFetcher<ActionData>();
   const navigation = useNavigation();
   const revalidator = useRevalidator();
   const location = useLocation();
-  const isLoading = navigation.state !== "idle";
-  const isMutating = mutationFetcher.state !== "idle";
 
   const [searchParams, setSearchParams] = useSearchParams();
 
-  // Cursor-based pagination stays cursor-based all the way through — no offset/skip query,
-  // even for page 400 of a 100k-review store — but a merchant still needs a page number and a
-  // Previous button that reliably works more than one hop back, neither of which a bare
-  // "cursor" scalar can support alone. `history` is the fix: a URL-persisted stack of every
-  // cursor visited to reach the current page. Page number is just its length + 1; Previous
-  // pops the stack (restoring the exact cursor used to reach the prior page, not a guess);
-  // Next pushes the current page's own nextCursor. Direct navigation/reload/bookmarking works
-  // for free, since this is plain URL state, not client-only memory.
-  const cursorHistory = useMemo(() => parseCursorHistory(searchParams.get("history")), [searchParams]);
+  // Pagination is driven through this fetcher rather than `useSearchParams`. Reproduced live:
+  // clicking Next changed the URL (cursor/history), the loader correctly returned page 2, and
+  // the page briefly re-rendered with it — but Shopify Admin's embedded-app shell owns the
+  // outer iframe URL via its NavMenu registration, doesn't recognize a plain History API
+  // mutation (what useSearchParams does under the hood) as legitimate app-initiated navigation,
+  // and silently reconciles the iframe back to its own last-known URL shortly after — landing
+  // back on page 1 every time. This is the same root cause already diagnosed and fixed for the
+  // Requests page (see that page's git history) — a fetcher re-runs the same loader over a
+  // plain request without touching window.history, so there's nothing for the admin shell to
+  // revert. Filters/search intentionally aren't touched by this fix — they still navigate via
+  // setSearchParams, unchanged from before.
+  const pageFetcher = useFetcher<typeof loader>();
+
+  // Identifies the current filter/search/sort combination, so a page fetched under a
+  // since-changed combination is never shown after the merchant changes a filter (a real
+  // navigation that reruns the loader with fresh initialSearch/initialStatus/etc.).
+  const filterKey = JSON.stringify([
+    initialSearch,
+    initialStatus,
+    initialRating,
+    initialProduct,
+    initialDateFrom,
+    initialDateTo,
+    initialVerifiedPurchase,
+    initialSort,
+  ]);
+
+  // `history` is a stack of every cursor visited to reach the current page — the client-side
+  // page number a bare "cursor" scalar can't express on its own. Page number is its length + 1;
+  // Previous pops the stack (restoring the exact cursor used to reach the prior page, not a
+  // guess); Next pushes the current page's own nextCursor. Seeded once from the URL so an
+  // existing bookmark/deep link into a specific page still lands there, but never written back
+  // to the URL afterward (see pageFetcher above).
+  const [cursorHistory, setCursorHistory] = useState<string[]>(() => parseCursorHistory(searchParams.get("history")));
+
+  // Resets pagination to page 1 when the filter/search/sort combination changes — adjusting
+  // state during render in response to a changed value, rather than in an effect that would
+  // otherwise run one render late and flash the old page's data under the new filters.
+  const [lastFilterKey, setLastFilterKey] = useState(filterKey);
+  if (filterKey !== lastFilterKey) {
+    setLastFilterKey(filterKey);
+    setCursorHistory([]);
+  }
+
+  // The filterKey that the data currently sitting in pageFetcher.data was fetched under — only
+  // trusted while it still matches the current filters, so a stale fetched page can never be
+  // shown after a filter change lands (a real navigation) but before the reset above commits.
+  const pageFetcherEpochRef = useRef<string | null>(null);
+  const activeData =
+    pageFetcher.data && pageFetcherEpochRef.current === filterKey ? pageFetcher.data : loaderData;
+  const { reviews, nextCursor, hasMore, totalCount, aiSummaries, error } = activeData;
+
+  const isLoading = navigation.state !== "idle" || pageFetcher.state !== "idle";
+  const isMutating = mutationFetcher.state !== "idle";
+
   const currentPage = pageNumberFor(cursorHistory);
   const totalPages = totalPagesFor(totalCount, REVIEWS_PAGE_SIZE);
   const { start: rangeStart, end: rangeEnd } = rangeFor(currentPage, REVIEWS_PAGE_SIZE, totalCount, reviews.length);
+
+  const buildPageFetchUrl = (cursor?: string) => {
+    const params = new URLSearchParams(searchParams);
+    params.delete("cursor");
+    params.delete("history");
+    if (cursor) {
+      params.set("cursor", cursor);
+    }
+    const queryString = params.toString();
+    return queryString ? `/app/reviews?${queryString}` : "/app/reviews";
+  };
+
+  const goToPreviousPage = () => {
+    if (cursorHistory.length === 0) return;
+    const newHistory = historyForPreviousPage(cursorHistory);
+    setCursorHistory(newHistory);
+    pageFetcherEpochRef.current = filterKey;
+    pageFetcher.load(buildPageFetchUrl(newHistory.length > 0 ? newHistory[newHistory.length - 1] : undefined));
+  };
+
+  const goToNextPage = () => {
+    if (!nextCursor) return;
+    setCursorHistory(historyForNextPage(cursorHistory, nextCursor));
+    pageFetcherEpochRef.current = filterKey;
+    pageFetcher.load(buildPageFetchUrl(nextCursor));
+  };
 
   const [searchInput, setSearchInput] = useState(initialSearch);
   const [selectedReviewId, setSelectedReviewId] = useState<string | null>(null);
@@ -1341,19 +1405,7 @@ export default function ReviewsPage() {
             <Button
               type="button"
               variant="secondary"
-              onClick={() => {
-                if (cursorHistory.length === 0) return;
-                const next = new URLSearchParams(searchParams);
-                const newHistory = historyForPreviousPage(cursorHistory);
-                if (newHistory.length > 0) {
-                  next.set("cursor", newHistory[newHistory.length - 1]);
-                  next.set("history", serializeCursorHistory(newHistory));
-                } else {
-                  next.delete("cursor");
-                  next.delete("history");
-                }
-                setSearchParams(next);
-              }}
+              onClick={goToPreviousPage}
               disabled={cursorHistory.length === 0 || isLoading || isMutating}
             >
               Previous
@@ -1364,13 +1416,7 @@ export default function ReviewsPage() {
             <Button
               type="button"
               variant="secondary"
-              onClick={() => {
-                if (!nextCursor) return;
-                const next = new URLSearchParams(searchParams);
-                next.set("cursor", nextCursor);
-                next.set("history", serializeCursorHistory(historyForNextPage(cursorHistory, nextCursor)));
-                setSearchParams(next);
-              }}
+              onClick={goToNextPage}
               disabled={!hasMore || !nextCursor || isLoading || isMutating}
             >
               Next
