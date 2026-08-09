@@ -594,9 +594,13 @@ export default function ReviewsPage() {
     [effectiveReviews, selectedReviewId],
   );
 
+  // Collapsed by default even when there's no reply yet — most of the imported reviews have
+  // never been replied to, so defaulting to an open 4-row textarea for every single one of
+  // them was the single biggest contributor to the panel's height. The compact "No reply yet"
+  // prompt below expands it on click instead (same on-demand pattern as the photo strip).
   useEffect(() => {
     setReplyDraft(selectedReview?.reply ?? "");
-    setIsReplyEditing(!selectedReview?.reply);
+    setIsReplyEditing(false);
   }, [selectedReview?.id, selectedReview?.reply]);
 
   useEffect(() => {
@@ -1178,20 +1182,25 @@ export default function ReviewsPage() {
                   <aside className={styles.detailPanel} aria-label="Review details">
                     <div className={styles.detailHeader}>
                       <div className={styles.detailStatusRow}>
-                        <div className={styles.ratingLarge} aria-label={`${selectedReview.rating} out of 5 stars`}>
-                          <StarRating value={selectedReview.rating} size={16} />
-                        </div>
                         <ReviewStatusBadge status={selectedReview.status} />
                         {selectedReview.moderationStatus === "auto_approved" ? (
                           <span className={styles.autoApprovedBadge}>Auto Approved</span>
                         ) : null}
                       </div>
                       <h2 className={styles.detailTitle}>{selectedReview.title ?? "Untitled review"}</h2>
+                      <div className={styles.ratingLarge} aria-label={`${selectedReview.rating} out of 5 stars`}>
+                        <StarRating value={selectedReview.rating} size={15} />
+                      </div>
                     </div>
 
                     <div className={styles.detailDivider} />
 
                     <div className={styles.detailBody}>
+                      <div className={styles.detailSection}>
+                        <p className={styles.detailLabel}>Review</p>
+                        <p className={styles.reviewContentText}>{selectedReview.content}</p>
+                      </div>
+
                       {aiSummaries[selectedReview.productId] ? (
                         <div className={styles.aiSummaryCallout}>
                           <p className={styles.aiSummaryLabel}>✨ AI Summary</p>
@@ -1209,11 +1218,6 @@ export default function ReviewsPage() {
                           </RemixLink>
                         </div>
                       ) : null}
-
-                      <div className={styles.detailSection}>
-                        <p className={styles.detailLabel}>Review</p>
-                        <p className={styles.reviewContentText}>{selectedReview.content}</p>
-                      </div>
 
                       <div className={styles.detailMeta}>
                         <div className={styles.detailMetaRow}>
@@ -1326,6 +1330,13 @@ export default function ReviewsPage() {
                               </Button>
                             </div>
                           </>
+                        ) : !isReplyEditing ? (
+                          <div className={styles.replyPrompt}>
+                            <p className={styles.detailPlaceholder}>No reply yet.</p>
+                            <Button type="button" variant="ghost" onClick={() => setIsReplyEditing(true)}>
+                              Reply
+                            </Button>
+                          </div>
                         ) : (
                           <>
                             <div className={styles.replyField}>

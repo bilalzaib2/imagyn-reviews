@@ -457,18 +457,18 @@
   white-space: nowrap;
 }
 
-/* Three fixed zones instead of one long scroll: .detailHeader (identity — rating/status/
-   title) and .detailActions (Approve/Reject/Actions) never scroll, so a merchant always sees
+/* Three fixed zones instead of one long scroll: .detailHeader (identity — status/title/
+   rating) and .detailActions (Approve/Reject/Actions) never scroll, so a merchant always sees
    what's selected and can always act without hunting for the buttons. Only .detailBody
-   scrolls internally, and only up to max-height — the "secondary workspace" the proposal
-   called for, bounded so it can never grow taller than the list column's own 40rem
-   .listScroll max-height. flex (not grid) is what makes a bounded-height child with its own
-   overflow actually work reliably here. */
+   scrolls internally, and only up to max-height — a deliberately tight cap (not matched to
+   the list's own taller scroll height) so the panel reads as a compact, calm secondary
+   surface rather than visually competing with the list for space. flex (not grid) is what
+   makes a bounded-height child with its own overflow actually work reliably here. */
 .detailPanel {
   display: flex;
   flex-direction: column;
-  gap: var(--space-4);
-  padding: var(--space-5) var(--space-6);
+  gap: var(--space-3);
+  padding: var(--space-4) var(--space-5);
   border: 1px solid var(--color-border);
   border-left: 3px solid var(--color-accent);
   border-radius: var(--radius-lg);
@@ -476,12 +476,12 @@
   box-shadow: var(--shadow-sm);
   position: sticky;
   top: var(--space-5);
-  max-height: 40rem;
+  max-height: 32rem;
 }
 
 .detailHeader {
   display: grid;
-  gap: var(--space-2);
+  gap: 0.35rem;
   flex-shrink: 0;
 }
 
@@ -493,7 +493,7 @@
 
 .detailTitle {
   margin: 0;
-  font-size: var(--text-xl);
+  font-size: var(--text-lg);
   font-weight: 600;
   letter-spacing: -0.02em;
 }
@@ -532,7 +532,7 @@
    flex column (a well-known CSS gotcha otherwise). */
 .detailBody {
   display: grid;
-  gap: var(--space-5);
+  gap: var(--space-4);
   flex: 1 1 auto;
   min-height: 0;
   overflow-y: auto;
@@ -544,7 +544,7 @@
 .aiSummaryCallout {
   display: grid;
   gap: var(--space-2);
-  padding: var(--space-4);
+  padding: var(--space-3);
   border-radius: var(--radius-lg);
   background: color-mix(in srgb, var(--color-accent) 4%, var(--color-surface));
 }
@@ -705,6 +705,16 @@
 .replyActions {
   display: flex;
   justify-content: flex-end;
+}
+
+/* Default, collapsed state when a review has no reply yet — a single quiet line instead of
+   an always-open 4-row textarea, matching the same on-demand pattern as the photo strip's
+   "+N" chip. Clicking "Reply" reveals the actual textarea (see isReplyEditing). */
+.replyPrompt {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
 }
 
 /* A compact single-row strip (not a multi-row grid) — only the first PHOTO_PREVIEW_COUNT
