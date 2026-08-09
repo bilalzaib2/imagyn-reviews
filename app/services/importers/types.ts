@@ -30,6 +30,14 @@ export interface ParsedReviewRow {
   verifiedPurchase: string;
   createdAt: string;
   status: string;
+  // The review's stable ID on its source platform, when the source provides one (Judge.me's
+  // export calls this `metaobject_handle`). Optional — a source with no stable ID per-review
+  // leaves this unset, and reviewImportExport.server.ts's isDuplicate falls back to
+  // content-based matching. Stored on Review.externalId so a second import of the same file
+  // is idempotent by ID, not just by content.
+  externalId?: string;
+  reply?: string;
+  repliedAt?: string;
 }
 
 export interface ParsedImport {

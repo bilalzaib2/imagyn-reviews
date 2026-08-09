@@ -147,13 +147,14 @@ export const action = async ({ request }: ActionFunctionArgs): Promise<ActionDat
     if (intent === "import-csv") {
       const fileContent = String(formData.get("fileContent") || "");
       const source = (String(formData.get("source") || "csv")) as ImportSource;
+      const dryRun = formData.get("dryRun") === "true";
 
       if (!fileContent.trim()) {
         return { ok: false, intent, error: "The file is empty." };
       }
 
       const store = await getOrCreateStore(session.shop);
-      const result = await importReviews(store.id, source, fileContent, admin);
+      const result = await importReviews(store.id, source, fileContent, admin, dryRun);
       const nothingImported = result.imported === 0 && result.duplicates === 0;
       const hasIssues = result.errors.length > 0 || result.missingProducts.length > 0;
 
@@ -161,7 +162,7 @@ export const action = async ({ request }: ActionFunctionArgs): Promise<ActionDat
         return {
           ok: false,
           intent,
-          error: "No rows could be imported. See the details below.",
+          error: dryRun ? "Dry run: no rows would be imported. See the details below." : "No rows could be imported. See the details below.",
           importResult: result,
         };
       }
@@ -169,7 +170,9 @@ export const action = async ({ request }: ActionFunctionArgs): Promise<ActionDat
       return {
         ok: true,
         intent,
-        message: `Imported ${result.imported} review${result.imported === 1 ? "" : "s"}.`,
+        message: dryRun
+          ? `Dry run complete — ${result.expectedImportedCount} review${result.expectedImportedCount === 1 ? "" : "s"} would be imported. No changes were made.`
+          : `Imported ${result.imported} review${result.imported === 1 ? "" : "s"}.`,
         importResult: result,
       };
     }
@@ -267,6 +270,11 @@ export const action = async ({ request }: ActionFunctionArgs): Promise<ActionDat
 
     return { ok: false, error: "Unsupported action." };
   } catch (error) {
+    // Logged here (not just returned to the client) so an unexpected failure — as opposed to
+    // the normal, expected per-row rejections importReviews already logs itself — is still
+    // diagnosable from Railway logs even if the merchant never reports the exact error text
+    // shown in the UI.
+    console.error(`[app.reviews] action "${intent}" failed:`, error);
     return {
       ok: false,
       intent,
@@ -572,7 +580,7 @@ export default function ReviewsPage() {
     reader.readAsText(file);
   };
 
-  const submitImportFile = () => {
+  const submitImportFile = (dryRun: boolean) => {
     if (!importFileContent) {
       return;
     }
@@ -581,6 +589,7 @@ export default function ReviewsPage() {
     formData.append("_intent", "import-csv");
     formData.append("source", importSource);
     formData.append("fileContent", importFileContent);
+    formData.append("dryRun", dryRun ? "true" : "false");
     importFetcher.submit(formData, { method: "post" });
   };
 
@@ -1326,11 +1335,18 @@ export default function ReviewsPage() {
         title="Import reviews"
         primaryAction={{
           content: isImporting ? "Importing…" : "Import",
-          onAction: submitImportFile,
+          onAction: () => submitImportFile(false),
           disabled: !importFileContent || isImporting,
           loading: isImporting,
         }}
-        secondaryActions={[{ content: "Close", onAction: closeImportModal }]}
+        secondaryActions={[
+          {
+            content: "Dry run",
+            onAction: () => submitImportFile(true),
+            disabled: !importFileContent || isImporting,
+          },
+          { content: "Close", onAction: closeImportModal },
+        ]}
       >
         <Modal.Section>
           <div className={styles.importSourceRow}>
@@ -1360,6 +1376,11 @@ export default function ReviewsPage() {
             />
             {importFileName ? <span className={styles.filterLabel}>{importFileName}</span> : null}
           </div>
+
+          <p className={styles.detailSubvalue}>
+            &ldquo;Dry run&rdquo; checks product matching and duplicates against your live catalog without creating
+            any reviews — use it to see exactly what a real import would do first.
+          </p>
 
           {importFileError ? <Banner tone="critical">{importFileError}</Banner> : null}
 
@@ -1394,13 +1415,18 @@ export default function ReviewsPage() {
               <Banner tone={importFetcher.data.ok ? "success" : "critical"}>
                 {importFetcher.data.ok ? importFetcher.data.message : importFetcher.data.error}
               </Banner>
+              {importFetcher.data.importResult.dryRun ? (
+                <Banner tone="info">No reviews were created — this was a dry run.</Banner>
+              ) : null}
               <p className={styles.detailSubvalue}>
-                {importFetcher.data.importResult.imported} imported ·{" "}
-                {importFetcher.data.importResult.duplicates} duplicate{importFetcher.data.importResult.duplicates === 1 ? "" : "s"} skipped ·{" "}
+                {importFetcher.data.importResult.totalRows} total rows ·{" "}
+                {importFetcher.data.importResult.matchedRows} matched ·{" "}
+                {importFetcher.data.importResult.unmatchedRows} unmatched ·{" "}
+                {importFetcher.data.importResult.duplicateRows} duplicate{importFetcher.data.importResult.duplicateRows === 1 ? "" : "s"} ·{" "}
+                {importFetcher.data.importResult.invalidRows} invalid ·{" "}
                 {importFetcher.data.importResult.heldForModeration} held for moderation ·{" "}
-                {importFetcher.data.importResult.missingProducts.length} missing product
-                {importFetcher.data.importResult.missingProducts.length === 1 ? "" : "s"} ·{" "}
-                {importFetcher.data.importResult.errors.length} error{importFetcher.data.importResult.errors.length === 1 ? "" : "s"}
+                {importFetcher.data.importResult.dryRun ? "would import " : "imported "}
+                {importFetcher.data.importResult.expectedImportedCount}
               </p>
 
               {importFetcher.data.importResult.missingProducts.length > 0 ? (
@@ -1409,7 +1435,12 @@ export default function ReviewsPage() {
                   <ul className={styles.importErrorList}>
                     {importFetcher.data.importResult.missingProducts.map((issue, index) => (
                       <li key={index}>
-                        Row {issue.row}: {issue.reason}
+                        Row {issue.row}
+                        {issue.productTitle ? ` — "${issue.productTitle}"` : ""}
+                        {issue.productId ? ` (product ID: ${issue.productId})` : ""}
+                        {issue.productHandle ? ` (handle: ${issue.productHandle})` : ""}
+                        {issue.productUrl ? ` (URL: ${issue.productUrl})` : ""}
+                        : {issue.reason}
                       </li>
                     ))}
                   </ul>

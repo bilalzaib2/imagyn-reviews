@@ -23,6 +23,9 @@ const FIELD_ALIASES: FieldAliases = {
   verifiedPurchase: ["verified_purchase", "verified"],
   createdAt: ["created_at", "date", "review_date"],
   status: ["status", "approved"],
+  externalId: ["external_id", "review_id", "id"],
+  reply: ["reply", "merchant_reply", "response"],
+  repliedAt: ["reply_date", "replied_at", "response_date"],
 };
 
 const REQUIRED_FIELDS: Array<keyof FieldAliases> = ["product", "rating", "content"];

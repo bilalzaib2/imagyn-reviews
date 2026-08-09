@@ -192,6 +192,15 @@ model Review {
   moderationStatus String?
   moderationReason String?
 
+  // The imported review's stable ID on its source platform (Judge.me's export calls this
+  // `metaobject_handle` — a UUID-based handle, not a plain integer, but stable and unique per
+  // review) — see reviewImportExport.server.ts's isDuplicate. Nullable: customer-submitted
+  // reviews and any import source that genuinely has no stable ID never set this, and fall
+  // back to content-based duplicate detection. Not a hard DB unique constraint — duplicate
+  // prevention is an application-level check-before-create (see isDuplicate), same as the
+  // rest of this pipeline, so a constraint violation is never a code path this app relies on.
+  externalId       String?
+
   createdAt        DateTime     @default(now())
   updatedAt        DateTime     @updatedAt
 
@@ -206,6 +215,7 @@ model Review {
   @@index([verifiedPurchase])
   @@index([featured])
   @@index([helpfulCount])
+  @@index([storeId, externalId])
 }
 
 enum ReviewMediaType {

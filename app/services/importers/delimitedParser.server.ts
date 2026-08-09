@@ -86,6 +86,9 @@ export function parseDelimitedReviewFile(
       verifiedPurchase: get("verifiedPurchase"),
       createdAt: get("createdAt"),
       status: get("status"),
+      externalId: get("externalId") || undefined,
+      reply: get("reply") || undefined,
+      repliedAt: get("repliedAt") || undefined,
     };
 
     return postProcess ? postProcess(row, record) : row;

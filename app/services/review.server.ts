@@ -65,6 +65,14 @@ export interface CreateReviewInput {
   // (manual admin creation, CSV import), which never ran through Moderation Rules at all.
   moderationStatus?: string | null;
   moderationReason?: string | null;
+  // Both for reviewImportExport.server.ts's CSV import, same as createdAt/autoApprove above —
+  // never set by a customer-facing submission path. externalId is the review's stable ID on
+  // its source platform (Judge.me's `metaobject_handle`), used for idempotent re-import
+  // duplicate detection; reply/repliedAt preserve a merchant's existing reply from the
+  // platform being migrated from, rather than losing it on import.
+  externalId?: string | null;
+  reply?: string | null;
+  repliedAt?: Date | null;
 }
 
 export interface UpdateReviewInput {
@@ -421,6 +429,9 @@ export async function createReview(data: CreateReviewInput) {
       photoUrls: data.photoUrls || null,
       moderationStatus: data.moderationStatus ?? null,
       moderationReason: data.moderationReason ?? null,
+      externalId: data.externalId || null,
+      reply: data.reply || null,
+      repliedAt: data.repliedAt ?? null,
       ...(data.createdAt ? { createdAt: data.createdAt } : {}),
       ...(approveNow ? { status: ReviewStatus.APPROVED, isPublished: true } : {}),
     },
