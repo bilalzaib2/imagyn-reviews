@@ -48,6 +48,15 @@ import { IMPORT_SOURCES, type ImportSource } from "../services/importers/types";
 import { importReviews, type ImportResult } from "../services/reviewImportExport.server";
 import { getOrCreateStore } from "../services/store.server";
 import { authenticateAdminDeduped } from "../services/auth-dedupe.server";
+import {
+  historyForNextPage,
+  historyForPreviousPage,
+  pageNumberFor,
+  parseCursorHistory,
+  rangeFor,
+  serializeCursorHistory,
+  totalPagesFor,
+} from "../services/cursorPagination.shared";
 import styles from "../styles/app.reviews.module.css";
 import shellStyles from "../styles/app.shell.module.css";
 
@@ -60,6 +69,10 @@ type ActionData = {
 };
 
 const STATUS_VALUES: string[] = Object.values(ReviewStatus);
+
+// Shared by the loader (query page size) and the component (computing total page count and
+// the "Showing X–Y of Z" range) so the two can never drift apart.
+const REVIEWS_PAGE_SIZE = 25;
 
 export const loader = async ({ request }: LoaderFunctionArgs) => {
   const { session } = await authenticateAdminDeduped(request);
@@ -76,8 +89,12 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
   const dateFrom = url.searchParams.get("dateFrom") || undefined;
   const dateTo = url.searchParams.get("dateTo") || undefined;
   const verifiedPurchase = url.searchParams.get("verifiedPurchase") === "true";
+  // Only ever the cursor for the CURRENT page — the client derives page number and
+  // Previous-button behavior from its own `history` URL param (an accumulated stack of every
+  // cursor visited), which the loader never needs to see: it only has to run the query for
+  // whichever single page is currently requested. See the component's cursorHistory/
+  // goToNextPage/goToPreviousPage for that logic.
   const cursor = url.searchParams.get("cursor") || undefined;
-  const prevCursor = url.searchParams.get("prevCursor") || undefined;
   const sortParam = url.searchParams.get("sort")?.trim() === "helpful" ? "helpful" : "newest";
 
   try {
@@ -90,12 +107,13 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
       dateTo,
       verifiedPurchase: verifiedPurchase || undefined,
       cursor,
-      limit: 20,
+      limit: REVIEWS_PAGE_SIZE,
       sort: sortParam,
     });
 
-    // Batched, not per-review — bounded by this page's own 20-review limit, and a pure
-    // cache read (see getAiSummariesForProducts), so this never triggers AI generation.
+    // Batched, not per-review — bounded by this page's own REVIEWS_PAGE_SIZE-review limit,
+    // and a pure cache read (see getAiSummariesForProducts), so this never triggers AI
+    // generation.
     const productIds = Array.from(new Set(result.reviews.map((review) => review.productId)));
     const aiSummaries = await getAiSummariesForProducts(productIds);
 
@@ -113,7 +131,6 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
       dateFrom: dateFrom ?? "",
       dateTo: dateTo ?? "",
       verifiedPurchase,
-      prevCursor: prevCursor ?? "",
       sort: sortParam,
     };
   } catch (error) {
@@ -131,7 +148,6 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
       dateFrom: dateFrom ?? "",
       dateTo: dateTo ?? "",
       verifiedPurchase,
-      prevCursor: prevCursor ?? "",
       sort: sortParam,
     };
   }
@@ -296,6 +312,8 @@ const formatLongDate = (value: Date) =>
     year: "numeric",
   }).format(new Date(value));
 
+const formatCount = (value: number) => new Intl.NumberFormat("en").format(value);
+
 export default function ReviewsPage() {
   const {
     reviews,
@@ -311,7 +329,6 @@ export default function ReviewsPage() {
     dateFrom: initialDateFrom,
     dateTo: initialDateTo,
     verifiedPurchase: initialVerifiedPurchase,
-    prevCursor: initialPrevCursor,
     sort: initialSort,
   } = useLoaderData<typeof loader>();
 
@@ -324,6 +341,20 @@ export default function ReviewsPage() {
   const isMutating = mutationFetcher.state !== "idle";
 
   const [searchParams, setSearchParams] = useSearchParams();
+
+  // Cursor-based pagination stays cursor-based all the way through — no offset/skip query,
+  // even for page 400 of a 100k-review store — but a merchant still needs a page number and a
+  // Previous button that reliably works more than one hop back, neither of which a bare
+  // "cursor" scalar can support alone. `history` is the fix: a URL-persisted stack of every
+  // cursor visited to reach the current page. Page number is just its length + 1; Previous
+  // pops the stack (restoring the exact cursor used to reach the prior page, not a guess);
+  // Next pushes the current page's own nextCursor. Direct navigation/reload/bookmarking works
+  // for free, since this is plain URL state, not client-only memory.
+  const cursorHistory = useMemo(() => parseCursorHistory(searchParams.get("history")), [searchParams]);
+  const currentPage = pageNumberFor(cursorHistory);
+  const totalPages = totalPagesFor(totalCount, REVIEWS_PAGE_SIZE);
+  const { start: rangeStart, end: rangeEnd } = rangeFor(currentPage, REVIEWS_PAGE_SIZE, totalCount, reviews.length);
+
   const [searchInput, setSearchInput] = useState(initialSearch);
   const [selectedReviewId, setSelectedReviewId] = useState<string | null>(null);
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
@@ -417,7 +448,7 @@ export default function ReviewsPage() {
       }
 
       next.delete("cursor");
-      next.delete("prevCursor");
+      next.delete("history");
       setSearchParams(next);
     }, 280);
 
@@ -437,7 +468,7 @@ export default function ReviewsPage() {
 
     if (resetPagination) {
       next.delete("cursor");
-      next.delete("prevCursor");
+      next.delete("history");
     }
 
     setSearchParams(next);
@@ -873,7 +904,11 @@ export default function ReviewsPage() {
 
         <Section
           title="Review management"
-          description={`Showing ${totalCount} review${totalCount === 1 ? "" : "s"}.`}
+          description={
+            totalCount === 0
+              ? "No reviews yet."
+              : `Showing ${formatCount(rangeStart)}–${formatCount(rangeEnd)} of ${formatCount(totalCount)} review${totalCount === 1 ? "" : "s"}.`
+          }
           actions={
             <div className={styles.bulkActions}>
               <label className={styles.bulkSelectAll}>
@@ -1296,28 +1331,33 @@ export default function ReviewsPage() {
               type="button"
               variant="secondary"
               onClick={() => {
+                if (cursorHistory.length === 0) return;
                 const next = new URLSearchParams(searchParams);
-                if (initialPrevCursor) {
-                  next.set("cursor", initialPrevCursor);
-                  next.delete("prevCursor");
+                const newHistory = historyForPreviousPage(cursorHistory);
+                if (newHistory.length > 0) {
+                  next.set("cursor", newHistory[newHistory.length - 1]);
+                  next.set("history", serializeCursorHistory(newHistory));
                 } else {
                   next.delete("cursor");
+                  next.delete("history");
                 }
                 setSearchParams(next);
               }}
-              disabled={!initialPrevCursor || isLoading || isMutating}
+              disabled={cursorHistory.length === 0 || isLoading || isMutating}
             >
               Previous
             </Button>
+            <p className={styles.pageInfo}>
+              Page {formatCount(currentPage)} of {formatCount(totalPages)}
+            </p>
             <Button
               type="button"
               variant="secondary"
               onClick={() => {
+                if (!nextCursor) return;
                 const next = new URLSearchParams(searchParams);
-                if (nextCursor) {
-                  next.set("cursor", nextCursor);
-                  next.set("prevCursor", searchParams.get("cursor") ?? initialPrevCursor ?? "");
-                }
+                next.set("cursor", nextCursor);
+                next.set("history", serializeCursorHistory(historyForNextPage(cursorHistory, nextCursor)));
                 setSearchParams(next);
               }}
               disabled={!hasMore || !nextCursor || isLoading || isMutating}
