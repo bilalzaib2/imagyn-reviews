@@ -198,7 +198,7 @@ export default function AppearancePage() {
           <UpgradePrompt
             feature="Brand Studio"
             description="Customize colors, typography, spacing, and widget style so reviews match your brand instead of a default look."
-            benefit="Growth and above include full storefront customization, plus unlimited reviews, photo reviews, and AI review summaries."
+            benefit="Growth and above include full storefront customization — colors, typography, multiple widget themes — plus AI review summaries."
             requiredPlanName="Growth"
             billingHref={`/app/billing${location.search}`}
           />

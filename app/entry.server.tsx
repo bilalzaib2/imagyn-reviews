@@ -5,8 +5,15 @@ import { createReadableStreamFromReadable } from "@react-router/node";
 import { type EntryContext } from "react-router";
 import { isbot } from "isbot";
 import { addDocumentResponseHeaders } from "./shopify.server";
+import { startReviewRequestScheduler } from "./services/reviewRequestScheduler.server";
 
 export const streamTimeout = 5000;
+
+// Module scope, not inside handleRequest — this file is imported exactly once when the server
+// process boots (Node module caching), which is the one safe place to start a singleton
+// background interval. See reviewRequestScheduler.server.ts for why this doesn't need an
+// external cron/queue.
+startReviewRequestScheduler();
 
 export default async function handleRequest(
   request: Request,

@@ -60,17 +60,32 @@ export class PermissionError extends Error {
   }
 }
 
+// Free tier. Per the 2026 pricing restructure: Starter includes unlimited reviews/requests,
+// automated initial review-request emails, photo/video reviews, imports, and core analytics —
+// PRO (Growth/Scale) is reserved for advanced/AI/automation/analytics and deeper customization
+// (Brand Studio, custom branding, multiple widget themes) rather than core functionality.
 const STARTER: Permissions = {
-  maxPublishedReviews: 50,
+  maxPublishedReviews: null,
   canImportCSV: true,
-  canImportUnlimitedCSV: false,
+  canImportUnlimitedCSV: true,
   canUseManualReviewRequests: true,
-  canUseAutomaticReviewRequests: false,
+  // Entitlement true — the scheduled-dispatch sweep (reviewRequestScheduler.server.ts) means a
+  // "scheduled" request now genuinely sends automatically regardless of plan. The one remaining
+  // gate is external, not plan-based: order-triggered *creation* stays off app-wide via
+  // ORDER_AUTOMATION_ENABLED (config/features.ts) until Shopify approves the fulfillments/create
+  // webhook's Protected Customer Data access — see webhooks.fulfillments.create.tsx.
+  canUseAutomaticReviewRequests: true,
+  // Follow-up reminder emails (a distinct, not-yet-built feature) stay a PRO differentiator —
+  // see plans.ts's Growth features.
   canUseEmailReminders: false,
-  canUsePhotoReviews: false,
-  canUseVideoReviews: false,
+  canUsePhotoReviews: true,
+  // Entitlement true; video review upload itself isn't built yet (no enforcement point exists
+  // anywhere in the codebase) — plans.ts still marks this comingSoon on every tier until it is.
+  canUseVideoReviews: true,
   canUseAI: false,
-  canUseAnalytics: false,
+  // Entitlement true; every plan already renders the same dashboard (app._index.tsx) — there is
+  // no differentiated "advanced" analytics built yet for Growth to exclusively offer.
+  canUseAnalytics: true,
   canUseCustomBranding: false,
   canUseBrandStudio: false,
   canUseMultipleWidgetThemes: false,
@@ -86,21 +101,8 @@ const STARTER: Permissions = {
 
 const GROWTH: Permissions = {
   ...STARTER,
-  maxPublishedReviews: null,
-  canImportUnlimitedCSV: true,
-  // Entitlement is true — Growth is the plan that includes this. Whether it's actually live
-  // today is a separate, build-status question (see plans.ts's `comingSoon` tags: both of
-  // these are currently gated off app-wide by ORDER_AUTOMATION_ENABLED pending Shopify's
-  // Protected Customer Data approval, config/features.ts). Keeping the entitlement true means
-  // the moment that approval lands and the flag flips, every Growth+ store already has access
-  // — no plan-data migration needed.
-  canUseAutomaticReviewRequests: true,
   canUseEmailReminders: true,
-  canUsePhotoReviews: true,
   canUseAI: true,
-  // Entitlement true; no differentiated "advanced" analytics exists yet beyond the dashboard
-  // every plan already sees (app._index.tsx) — see plans.ts's comingSoon tag.
-  canUseAnalytics: true,
   canUseCustomBranding: true,
   canUseBrandStudio: true,
   canUseMultipleWidgetThemes: true,

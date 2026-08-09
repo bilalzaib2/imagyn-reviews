@@ -40,15 +40,23 @@ export const PLANS: Record<PlanId, Plan> = {
     price: 0,
     currencyCode: "USD",
     trialDays: 0,
-    tagline: "Everything you need to start collecting reviews.",
+    tagline: "Everything you need to start collecting reviews — free, no limits on the core.",
     features: [
-      { label: "Up to 50 reviews" },
-      { label: "Manual review requests" },
-      { label: "Basic review widgets" },
-      { label: "Basic moderation" },
-      { label: "Email notifications" },
+      { label: "Unlimited reviews" },
+      { label: "Unlimited review requests" },
+      // Delivered by reviewRequestScheduler.server.ts's sweep for any request that reaches
+      // "scheduled" (today: manually created with a delay). Order-triggered *creation* of that
+      // scheduled request is a separate, external gate — see permissions.ts's STARTER comment.
+      { label: "Automated initial review-request emails" },
+      { label: "Photo reviews" },
+      { label: "Video reviews", comingSoon: true },
+      { label: "Review widgets & rating badges" },
+      { label: "Moderation & merchant replies" },
+      { label: "Unlimited CSV imports" },
       { label: "Verified buyer badge" },
-      { label: "CSV import (limited)" },
+      { label: "Helpful voting" },
+      { label: "Core analytics" },
+      { label: "SEO structured data" },
       { label: "Community support" },
     ],
   },
@@ -58,18 +66,11 @@ export const PLANS: Record<PlanId, Plan> = {
     price: 9.99,
     currencyCode: "USD",
     trialDays: 14,
-    tagline: "For stores actively growing customer trust.",
+    tagline: "For stores that want AI, deeper automation, and full brand control.",
     features: [
       { label: "Everything in Starter" },
-      { label: "Unlimited reviews" },
-      { label: "Unlimited CSV imports" },
-      // Both gated off by ORDER_AUTOMATION_ENABLED (config/features.ts) pending Shopify's
-      // Protected Customer Data approval — the entitlement exists (permissions.ts) but the
-      // trigger itself isn't live for any store yet, so this can't be shown as included.
-      { label: "Automatic review requests", comingSoon: true },
-      { label: "Automatic email reminders", comingSoon: true },
       { label: "AI review summaries" },
-      { label: "Photo reviews" },
+      { label: "Automatic email reminders", comingSoon: true },
       // No differentiated analytics beyond the dashboard every plan already sees.
       { label: "Advanced analytics", comingSoon: true },
       { label: "Custom branding" },
@@ -87,7 +88,6 @@ export const PLANS: Record<PlanId, Plan> = {
     tagline: "For high-volume stores that need white-label control.",
     features: [
       { label: "Everything in Growth" },
-      { label: "Video reviews", comingSoon: true },
       { label: "White label", comingSoon: true },
       { label: "Custom email domain (SMTP, Resend, Postmark)", comingSoon: true },
       { label: "API access", comingSoon: true },
