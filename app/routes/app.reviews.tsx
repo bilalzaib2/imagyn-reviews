@@ -69,6 +69,20 @@ type ActionData = {
 
 const STATUS_VALUES: string[] = Object.values(ReviewStatus);
 
+// Drives the compact status segmented control in the toolbar (replaces a <select>) — "" means
+// "All", matching how the loader already treats a missing/empty status param.
+const STATUS_FILTER_OPTIONS: Array<{ label: string; value: string }> = [
+  { label: "All", value: "" },
+  { label: "Pending", value: ReviewStatus.PENDING },
+  { label: "Approved", value: ReviewStatus.APPROVED },
+  { label: "Rejected", value: ReviewStatus.REJECTED },
+];
+
+// How many photo thumbnails the detail panel shows before collapsing the rest behind a
+// "+N" chip — keeps the panel compact without ever hiding a photo's delete action, since
+// clicking the chip reveals the rest (see showAllPhotos below).
+const PHOTO_PREVIEW_COUNT = 4;
+
 // Shared by the loader (query page size) and the component (computing total page count and
 // the "Showing X–Y of Z" range) so the two can never drift apart.
 const REVIEWS_PAGE_SIZE = 25;
@@ -428,18 +442,17 @@ export default function ReviewsPage() {
   const [isReplyEditing, setIsReplyEditing] = useState(false);
   const [actionsMenuOpen, setActionsMenuOpen] = useState(false);
   const [moreActionsMenuOpen, setMoreActionsMenuOpen] = useState(false);
+  const [filtersOpen, setFiltersOpen] = useState(false);
+  const [showAllPhotos, setShowAllPhotos] = useState(false);
 
-  // Defaults open if a link/bookmark already points at one of these filters, so a merchant
-  // never lands on a filtered view without seeing which filter is actually active.
-  const [showMoreFilters, setShowMoreFilters] = useState(
-    () =>
-      Boolean(initialRating) ||
-      Boolean(initialProduct) ||
-      Boolean(initialDateFrom) ||
-      Boolean(initialDateTo) ||
-      initialVerifiedPurchase ||
-      initialSort === "helpful",
-  );
+  const activeFilterCount = [
+    initialRating,
+    initialProduct,
+    initialDateFrom,
+    initialDateTo,
+    initialVerifiedPurchase ? "yes" : "",
+    initialSort === "helpful" ? "yes" : "",
+  ].filter(Boolean).length;
 
   const [isImportModalOpen, setIsImportModalOpen] = useState(false);
   const [importSource, setImportSource] = useState<ImportSource>("csv");
@@ -585,6 +598,10 @@ export default function ReviewsPage() {
     setReplyDraft(selectedReview?.reply ?? "");
     setIsReplyEditing(!selectedReview?.reply);
   }, [selectedReview?.id, selectedReview?.reply]);
+
+  useEffect(() => {
+    setShowAllPhotos(false);
+  }, [selectedReview?.id]);
 
   useEffect(() => {
     setActionsMenuOpen(false);
@@ -881,149 +898,158 @@ export default function ReviewsPage() {
           </label>
 
           <div className={styles.toolbarControls}>
-            <label className={styles.filterGroup}>
-              <span className={styles.filterLabel}>Status</span>
-              <select
-                className={styles.filterSelect}
-                value={initialStatus}
-                onChange={(event) => updateQuery({ status: event.target.value || undefined })}
-              >
-                <option value="">All</option>
-                <option value={ReviewStatus.PENDING}>Pending</option>
-                <option value={ReviewStatus.APPROVED}>Approved</option>
-                <option value={ReviewStatus.REJECTED}>Rejected</option>
-              </select>
-            </label>
-
-            <Button type="button" variant="ghost" onClick={() => setShowMoreFilters((open) => !open)}>
-              {showMoreFilters ? "Fewer filters" : "More filters"}
-            </Button>
-          </div>
-
-          {showMoreFilters ? (
-            <div className={styles.toolbarControls}>
-              <label className={styles.filterGroup}>
-                <span className={styles.filterLabel}>Rating</span>
-                <select
-                  className={styles.filterSelect}
-                  value={initialRating}
-                  onChange={(event) => updateQuery({ rating: event.target.value || undefined })}
+            <div className={styles.statusSegments} role="group" aria-label="Filter by status">
+              {STATUS_FILTER_OPTIONS.map((option) => (
+                <button
+                  key={option.value || "all"}
+                  type="button"
+                  className={`${styles.statusSegment} ${initialStatus === option.value ? styles.statusSegmentActive : ""}`}
+                  aria-pressed={initialStatus === option.value}
+                  onClick={() => updateQuery({ status: option.value || undefined })}
                 >
-                  <option value="">Any</option>
-                  <option value="5">5 stars</option>
-                  <option value="4">4 stars</option>
-                  <option value="3">3 stars</option>
-                  <option value="2">2 stars</option>
-                  <option value="1">1 star</option>
-                </select>
-              </label>
-
-              <label className={styles.filterGroup}>
-                <span className={styles.filterLabel}>Product</span>
-                <input
-                  className={styles.filterInput}
-                  type="text"
-                  value={initialProduct}
-                  onChange={(event) => updateQuery({ product: event.target.value || undefined })}
-                  placeholder="Any product"
-                />
-              </label>
-
-              <label className={styles.filterGroup}>
-                <span className={styles.filterLabel}>Date from</span>
-                <input
-                  className={styles.filterInput}
-                  type="date"
-                  value={initialDateFrom}
-                  onChange={(event) => updateQuery({ dateFrom: event.target.value || undefined })}
-                />
-              </label>
-
-              <label className={styles.filterGroup}>
-                <span className={styles.filterLabel}>Date to</span>
-                <input
-                  className={styles.filterInput}
-                  type="date"
-                  value={initialDateTo}
-                  onChange={(event) => updateQuery({ dateTo: event.target.value || undefined })}
-                />
-              </label>
-
-              <label className={styles.checkboxGroup}>
-                <input
-                  className={styles.checkboxInput}
-                  type="checkbox"
-                  checked={initialVerifiedPurchase}
-                  onChange={(event) => updateQuery({ verifiedPurchase: event.target.checked })}
-                />
-                <span className={styles.checkboxLabel}>Verified purchase</span>
-              </label>
-
-              <label className={styles.filterGroup}>
-                <span className={styles.filterLabel}>Sort</span>
-                <select
-                  className={styles.filterSelect}
-                  value={initialSort}
-                  onChange={(event) => updateQuery({ sort: event.target.value === "helpful" ? "helpful" : undefined })}
-                >
-                  <option value="newest">Newest</option>
-                  <option value="helpful">Most Helpful</option>
-                </select>
-              </label>
+                  {option.label}
+                </button>
+              ))}
             </div>
-          ) : null}
+
+            <Popover
+              active={filtersOpen}
+              onClose={() => setFiltersOpen(false)}
+              activator={
+                <Button
+                  type="button"
+                  variant="secondary"
+                  onClick={() => setFiltersOpen((open) => !open)}
+                  aria-haspopup="menu"
+                  aria-expanded={filtersOpen}
+                >
+                  Filters{activeFilterCount > 0 ? ` · ${activeFilterCount}` : ""}
+                </Button>
+              }
+            >
+              <div className={styles.filtersPanel}>
+                <label className={styles.filterGroup}>
+                  <span className={styles.filterLabel}>Rating</span>
+                  <select
+                    className={styles.filterSelect}
+                    value={initialRating}
+                    onChange={(event) => updateQuery({ rating: event.target.value || undefined })}
+                  >
+                    <option value="">Any</option>
+                    <option value="5">5 stars</option>
+                    <option value="4">4 stars</option>
+                    <option value="3">3 stars</option>
+                    <option value="2">2 stars</option>
+                    <option value="1">1 star</option>
+                  </select>
+                </label>
+
+                <label className={styles.filterGroup}>
+                  <span className={styles.filterLabel}>Product</span>
+                  <input
+                    className={styles.filterInput}
+                    type="text"
+                    value={initialProduct}
+                    onChange={(event) => updateQuery({ product: event.target.value || undefined })}
+                    placeholder="Any product"
+                  />
+                </label>
+
+                <label className={styles.filterGroup}>
+                  <span className={styles.filterLabel}>Date from</span>
+                  <input
+                    className={styles.filterInput}
+                    type="date"
+                    value={initialDateFrom}
+                    onChange={(event) => updateQuery({ dateFrom: event.target.value || undefined })}
+                  />
+                </label>
+
+                <label className={styles.filterGroup}>
+                  <span className={styles.filterLabel}>Date to</span>
+                  <input
+                    className={styles.filterInput}
+                    type="date"
+                    value={initialDateTo}
+                    onChange={(event) => updateQuery({ dateTo: event.target.value || undefined })}
+                  />
+                </label>
+
+                <label className={styles.checkboxGroup}>
+                  <input
+                    className={styles.checkboxInput}
+                    type="checkbox"
+                    checked={initialVerifiedPurchase}
+                    onChange={(event) => updateQuery({ verifiedPurchase: event.target.checked })}
+                  />
+                  <span className={styles.checkboxLabel}>Verified purchase</span>
+                </label>
+
+                <label className={styles.filterGroup}>
+                  <span className={styles.filterLabel}>Sort</span>
+                  <select
+                    className={styles.filterSelect}
+                    value={initialSort}
+                    onChange={(event) => updateQuery({ sort: event.target.value === "helpful" ? "helpful" : undefined })}
+                  >
+                    <option value="newest">Newest</option>
+                    <option value="helpful">Most Helpful</option>
+                  </select>
+                </label>
+
+                {activeFilterCount > 0 ? (
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    onClick={() =>
+                      updateQuery({
+                        rating: undefined,
+                        product: undefined,
+                        dateFrom: undefined,
+                        dateTo: undefined,
+                        verifiedPurchase: undefined,
+                        sort: undefined,
+                      })
+                    }
+                  >
+                    Clear filters
+                  </Button>
+                ) : null}
+              </div>
+            </Popover>
+          </div>
         </div>
 
         {mutationError ? <p className={styles.feedbackError}>{mutationError}</p> : null}
         {isLoading ? <p className={styles.feedbackMuted}>Refreshing review results...</p> : null}
 
-        <Section
-          title="Review management"
-          description={
-            totalCount === 0
-              ? "No reviews yet."
-              : `Showing ${formatCount(rangeStart)}–${formatCount(rangeEnd)} of ${formatCount(totalCount)} review${totalCount === 1 ? "" : "s"}.`
-          }
-          actions={
-            <div className={styles.bulkActions}>
-              <label className={styles.bulkSelectAll}>
-                <input
-                  type="checkbox"
-                  checked={allPageSelected}
-                  onChange={(event) => toggleSelectAllOnPage(event.target.checked)}
-                  disabled={isLoading || isMutating || effectiveReviews.length === 0}
-                />
-                <span>Select page</span>
-              </label>
-              {selectedIds.length > 0 ? (
-                <>
-                  <span className={styles.bulkCount}>{selectedIds.length} selected</span>
-                  <Button
-                    type="button"
-                    onClick={() => applyBulkAction("bulkApprove")}
-                    disabled={isMutating}
-                  >
-                    Approve
-                  </Button>
-                  <Button
-                    type="button"
-                    onClick={() => applyBulkAction("bulkReject")}
-                    disabled={isMutating}
-                  >
-                    Reject
-                  </Button>
-                  <Button
-                    type="button"
-                    onClick={() => applyBulkAction("bulkDelete")}
-                    disabled={isMutating}
-                  >
-                    Delete
-                  </Button>
-                </>
-              ) : null}
-            </div>
-          }
-        >
+        <Section title="Review management">
+          <div className={styles.resultsBar}>
+            {selectedIds.length > 0 ? (
+              <div className={styles.bulkBar}>
+                <span className={styles.bulkCount}>{selectedIds.length} selected</span>
+                <Button type="button" onClick={() => applyBulkAction("bulkApprove")} disabled={isMutating}>
+                  Approve
+                </Button>
+                <Button type="button" onClick={() => applyBulkAction("bulkReject")} disabled={isMutating}>
+                  Reject
+                </Button>
+                <Button type="button" onClick={() => applyBulkAction("bulkDelete")} disabled={isMutating}>
+                  Delete
+                </Button>
+                <Button type="button" variant="ghost" onClick={() => setSelectedIds([])} disabled={isMutating}>
+                  Clear
+                </Button>
+              </div>
+            ) : (
+              <p className={styles.resultsCount}>
+                {totalCount === 0
+                  ? "No reviews yet."
+                  : `Showing ${formatCount(rangeStart)}–${formatCount(rangeEnd)} of ${formatCount(totalCount)} review${totalCount === 1 ? "" : "s"}.`}
+              </p>
+            )}
+          </div>
+
           <div className={styles.splitLayout}>
             {isLoading ? (
               <>
@@ -1068,7 +1094,6 @@ export default function ReviewsPage() {
                   </Button>
                 </div>
                 <aside className={styles.detailPanel}>
-                  <p className={styles.detailEyebrow}>Review details</p>
                   <h2 className={styles.detailTitle}>Select a review</h2>
                   <p className={styles.detailText}>
                     Full review details, moderation actions, and merchant reply appear once a review is selected.
@@ -1081,6 +1106,15 @@ export default function ReviewsPage() {
                     ArrowUp/ArrowDown from the already-focusable review rows below; this
                     container itself is never a focus target. */}
                 <div className={styles.listColumn} onKeyDown={onListKeyDown}>
+                  <label className={styles.bulkSelectAll}>
+                    <input
+                      type="checkbox"
+                      checked={allPageSelected}
+                      onChange={(event) => toggleSelectAllOnPage(event.target.checked)}
+                      disabled={isLoading || isMutating || effectiveReviews.length === 0}
+                    />
+                    <span>Select page</span>
+                  </label>
                   <div className={styles.listScroll}>
                     <div className={styles.list}>
                       {effectiveReviews.map((review) => {
@@ -1116,13 +1150,15 @@ export default function ReviewsPage() {
                                   onChange={(event) => toggleSelection(review.id, event.target.checked)}
                                 />
                               </label>
-                              <div className={styles.rating} aria-label={`${review.rating} out of 5 stars`}>
-                                <StarRating value={review.rating} />
-                              </div>
                               <div className={styles.reviewContent}>
+                                <div className={styles.reviewTopLine}>
+                                  <div className={styles.rating} aria-label={`${review.rating} out of 5 stars`}>
+                                    <StarRating value={review.rating} />
+                                  </div>
+                                  <ReviewStatusBadge status={review.status} />
+                                </div>
                                 <h2 className={styles.reviewTitle}>{reviewTitle}</h2>
                                 <div className={styles.reviewMetaRow}>
-                                  <ReviewStatusBadge status={review.status} />
                                   <span className={styles.metaCustomer}>{customerName}</span>
                                   <span className={styles.metaSeparator} aria-hidden="true">·</span>
                                   <span className={styles.metaProduct}>{productName}</span>
@@ -1141,17 +1177,16 @@ export default function ReviewsPage() {
                 {selectedReview ? (
                   <aside className={styles.detailPanel} aria-label="Review details">
                     <div className={styles.detailHeader}>
-                      <p className={styles.detailEyebrow}>Selected review</p>
                       <div className={styles.detailStatusRow}>
+                        <div className={styles.ratingLarge} aria-label={`${selectedReview.rating} out of 5 stars`}>
+                          <StarRating value={selectedReview.rating} size={16} />
+                        </div>
                         <ReviewStatusBadge status={selectedReview.status} />
                         {selectedReview.moderationStatus === "auto_approved" ? (
                           <span className={styles.autoApprovedBadge}>Auto Approved</span>
                         ) : null}
                       </div>
                       <h2 className={styles.detailTitle}>{selectedReview.title ?? "Untitled review"}</h2>
-                      <div className={styles.ratingLarge} aria-label={`${selectedReview.rating} out of 5 stars`}>
-                        <StarRating value={selectedReview.rating} size={18} />
-                      </div>
                     </div>
 
                     <div className={styles.detailDivider} />
@@ -1229,13 +1264,16 @@ export default function ReviewsPage() {
                             return <p className={styles.detailPlaceholder}>No photos have been uploaded for this review.</p>;
                           }
 
+                          const shownMedia = showAllPhotos ? visibleMedia : visibleMedia.slice(0, PHOTO_PREVIEW_COUNT);
+                          const hiddenCount = visibleMedia.length - shownMedia.length;
+
                           return (
-                            <div className={styles.photoGrid}>
-                              {visibleMedia.map((item) => (
-                                <div key={item.id} className={styles.photoItem}>
+                            <div className={styles.photoStrip}>
+                              {shownMedia.map((item) => (
+                                <div key={item.id} className={styles.photoThumb}>
                                   <a href={item.url} target="_blank" rel="noreferrer" aria-label="View full size">
                                     <img
-                                      className={styles.photoImage}
+                                      className={styles.photoThumbImage}
                                       src={item.thumbnailUrl ?? item.url}
                                       alt="Review attachment"
                                       loading="lazy"
@@ -1252,6 +1290,16 @@ export default function ReviewsPage() {
                                   </button>
                                 </div>
                               ))}
+                              {hiddenCount > 0 ? (
+                                <button
+                                  type="button"
+                                  className={styles.photoMoreButton}
+                                  onClick={() => setShowAllPhotos(true)}
+                                  aria-label={`Show ${hiddenCount} more photo${hiddenCount === 1 ? "" : "s"}`}
+                                >
+                                  +{hiddenCount}
+                                </button>
+                              ) : null}
                             </div>
                           );
                         })()}

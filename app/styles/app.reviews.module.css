@@ -23,17 +23,36 @@
   gap: var(--space-4);
 }
 
-.bulkActions {
+/* Sits where the results count normally reads ("Showing X–Y of Z") — swaps to the bulk
+   action bar the instant 1+ rows are selected, instead of the old permanently-reserved
+   header row that shifted the whole section when selection changed. Fixed min-height keeps
+   the swap from causing a layout jump. */
+.resultsBar {
+  display: flex;
+  align-items: center;
+  min-height: 2.25rem;
+}
+
+.resultsCount {
+  margin: 0;
+  color: var(--color-text-muted);
+  font-size: var(--text-sm);
+}
+
+.bulkBar {
   display: flex;
   align-items: center;
   flex-wrap: wrap;
   gap: var(--space-2);
 }
 
+/* Lives at the top of the list column now (not the section header) — see proposal: "Select
+   page" belongs with the list it operates on. */
 .bulkSelectAll {
   display: inline-flex;
   align-items: center;
   gap: 0.45rem;
+  margin-bottom: var(--space-2);
   color: var(--color-text-muted);
   font-size: var(--text-sm);
 }
@@ -42,6 +61,51 @@
   color: var(--color-text-muted);
   font-size: var(--text-sm);
   margin-right: var(--space-2);
+}
+
+/* Compact segmented control replacing the old Status <select> — reads faster for 4 options
+   and reads as a single control rather than a form field. */
+.statusSegments {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  padding: 2px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  background: var(--color-surface-muted);
+}
+
+.statusSegment {
+  border: none;
+  background: transparent;
+  padding: 0.5rem 0.85rem;
+  border-radius: calc(var(--radius-md) - 2px);
+  font-size: var(--text-sm);
+  color: var(--color-text-muted);
+  cursor: pointer;
+  white-space: nowrap;
+  transition: background-color var(--transition-base), color var(--transition-base);
+}
+
+.statusSegment:hover {
+  color: var(--color-text);
+}
+
+.statusSegmentActive {
+  background: var(--color-surface);
+  color: var(--color-text);
+  font-weight: 600;
+  box-shadow: var(--shadow-sm);
+}
+
+/* The Rating/Product/Date/Verified/Sort fields, consolidated behind a single "Filters"
+   button's Popover instead of a permanent second toolbar row — same fields, same handlers,
+   just not always taking up vertical space. */
+.filtersPanel {
+  display: grid;
+  gap: var(--space-3);
+  padding: var(--space-4);
+  min-width: 16rem;
 }
 
 .searchField {
@@ -251,6 +315,15 @@
   min-width: 0;
 }
 
+/* Rating + status lead every row — the fastest scan signal, so it sits above the title
+   instead of the status badge being buried in the customer/product meta line below. */
+.reviewTopLine {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  margin-bottom: var(--space-1);
+}
+
 /* Clamped to 2 lines and given a matching min-height, so a one-word title and a
    full-sentence title occupy exactly the same vertical space — row height stays
    predictable no matter what a merchant or customer typed. */
@@ -384,10 +457,18 @@
   white-space: nowrap;
 }
 
+/* Three fixed zones instead of one long scroll: .detailHeader (identity — rating/status/
+   title) and .detailActions (Approve/Reject/Actions) never scroll, so a merchant always sees
+   what's selected and can always act without hunting for the buttons. Only .detailBody
+   scrolls internally, and only up to max-height — the "secondary workspace" the proposal
+   called for, bounded so it can never grow taller than the list column's own 40rem
+   .listScroll max-height. flex (not grid) is what makes a bounded-height child with its own
+   overflow actually work reliably here. */
 .detailPanel {
-  display: grid;
-  gap: var(--space-5);
-  padding: var(--space-6);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+  padding: var(--space-5) var(--space-6);
   border: 1px solid var(--color-border);
   border-left: 3px solid var(--color-accent);
   border-radius: var(--radius-lg);
@@ -395,11 +476,13 @@
   box-shadow: var(--shadow-sm);
   position: sticky;
   top: var(--space-5);
+  max-height: 40rem;
 }
 
 .detailHeader {
   display: grid;
-  gap: var(--space-3);
+  gap: var(--space-2);
+  flex-shrink: 0;
 }
 
 .detailStatusRow {
@@ -408,17 +491,9 @@
   gap: var(--space-2);
 }
 
-.detailEyebrow {
-  margin: 0;
-  color: var(--color-text-muted);
-  font-size: var(--text-xs);
-  letter-spacing: 0.2em;
-  text-transform: uppercase;
-}
-
 .detailTitle {
   margin: 0;
-  font-size: var(--text-2xl);
+  font-size: var(--text-xl);
   font-weight: 600;
   letter-spacing: -0.02em;
 }
@@ -426,6 +501,7 @@
 .detailDivider {
   height: 1px;
   margin: 0;
+  flex-shrink: 0;
   background: var(--color-border);
 }
 
@@ -435,6 +511,7 @@
   justify-content: space-between;
   gap: var(--space-2);
   flex-wrap: wrap;
+  flex-shrink: 0;
 }
 
 .moderationButtons {
@@ -448,12 +525,18 @@
   padding-inline: var(--space-3);
 }
 
-/* Everything between the hero and the sticky actions row lives in one calm, generously
-   spaced column — no dividers between these sections, just gap. Only two dividers remain
-   on the whole panel: after the hero, and before the actions row. */
+/* The one scrollable zone in the panel — everything between the identity strip and the
+   pinned actions row (review text, meta, AI summary, photos, reply) lives in one calm,
+   generously spaced column with no dividers, just gap. flex:1 + min-height:0 is required for
+   a flex child's own max-height/overflow to actually take effect inside a bounded-height
+   flex column (a well-known CSS gotcha otherwise). */
 .detailBody {
   display: grid;
-  gap: var(--space-6);
+  gap: var(--space-5);
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  padding-right: var(--space-1);
 }
 
 /* The one prominent, unmissable AI surface in the panel — a quiet tint, not a hard box,
@@ -624,34 +707,40 @@
   justify-content: flex-end;
 }
 
-.photoGrid {
-  display: grid;
+/* A compact single-row strip (not a multi-row grid) — only the first PHOTO_PREVIEW_COUNT
+   thumbnails render by default, with .photoMoreButton revealing the rest on demand. Every
+   photo's delete action stays reachable, just not all visible at once. */
+.photoStrip {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
   gap: var(--space-2);
-  grid-template-columns: repeat(auto-fit, minmax(110px, 1fr));
 }
 
-.photoItem {
+.photoThumb {
   position: relative;
+  flex: none;
+  width: 48px;
+  height: 48px;
   border-radius: var(--radius-sm);
   overflow: hidden;
   background: var(--color-surface-muted);
   box-shadow: var(--shadow-sm);
 }
 
-.photoImage {
+.photoThumbImage {
   display: block;
   width: 100%;
   height: 100%;
-  min-height: 84px;
   object-fit: cover;
 }
 
 .photoDeleteButton {
   position: absolute;
-  top: 4px;
-  right: 4px;
-  width: 22px;
-  height: 22px;
+  top: 2px;
+  right: 2px;
+  width: 18px;
+  height: 18px;
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -659,13 +748,34 @@
   border-radius: var(--radius-full);
   background: rgba(0, 0, 0, 0.55);
   color: #fff;
-  font-size: 14px;
+  font-size: 12px;
   line-height: 1;
   cursor: pointer;
 }
 
 .photoDeleteButton:hover {
   background: rgba(0, 0, 0, 0.75);
+}
+
+.photoMoreButton {
+  flex: none;
+  width: 48px;
+  height: 48px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px dashed var(--color-border-strong);
+  border-radius: var(--radius-sm);
+  background: var(--color-surface-muted);
+  color: var(--color-text-muted);
+  font-size: var(--text-xs);
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.photoMoreButton:hover {
+  background: var(--color-surface-strong);
+  color: var(--color-text);
 }
 
 .detailLabel {
