@@ -1,5 +1,14 @@
-import { useEffect, useRef, useState } from "react";
-import { Link, useFetcher, useLoaderData, useLocation, useNavigation, useRevalidator, useRouteError } from "react-router";
+import { useEffect, useMemo, useRef, useState } from "react";
+import {
+  Link,
+  useFetcher,
+  useLoaderData,
+  useLocation,
+  useNavigation,
+  useRevalidator,
+  useRouteError,
+  useSearchParams,
+} from "react-router";
 import type { ActionFunctionArgs, HeadersFunction, LoaderFunctionArgs } from "react-router";
 import { boundary } from "@shopify/shopify-app-react-router/server";
 import {
@@ -18,12 +27,25 @@ import { Container } from "../components/ui/Container";
 import { ProgressBar } from "../components/ui/ProgressBar";
 import { authenticateAdminDeduped } from "../services/auth-dedupe.server";
 import { getOrCreateStore, getProductSyncState, startProductSync, type ProductSyncState } from "../services/store.server";
-import { getProducts } from "../services/product.server";
+import { getProductsPage } from "../services/product.server";
 import { isProductSyncInProgress, runProductSync } from "../services/productSync.server";
+import {
+  historyForNextPage,
+  historyForPreviousPage,
+  pageNumberFor,
+  parseCursorHistory,
+  rangeFor,
+  serializeCursorHistory,
+  totalPagesFor,
+} from "../services/cursorPagination.shared";
 import shellStyles from "../styles/app.shell.module.css";
 import styles from "../styles/app.products.module.css";
 
-type ProductListItem = Awaited<ReturnType<typeof getProducts>>[number];
+// Same page size as the Reviews list — see cursorPagination.shared.ts for the pagination
+// architecture this reuses wholesale.
+const PRODUCTS_PAGE_SIZE = 25;
+
+type ProductListItem = Awaited<ReturnType<typeof getProductsPage>>["products"][number];
 
 type ActionData = {
   ok: boolean;
@@ -33,6 +55,10 @@ type ActionData = {
 
 type LoaderData = {
   products: ProductListItem[];
+  nextCursor: string | null;
+  hasMore: boolean;
+  totalCount: number;
+  search: string;
   syncState: ProductSyncState | null;
   error: string | null;
 };
@@ -40,18 +66,33 @@ type LoaderData = {
 export const loader = async ({ request }: LoaderFunctionArgs): Promise<LoaderData> => {
   const { session } = await authenticateAdminDeduped(request);
 
+  const url = new URL(request.url);
+  const search = url.searchParams.get("search")?.trim() || undefined;
+  const cursor = url.searchParams.get("cursor") || undefined;
+
   try {
     const store = await getOrCreateStore(session.shop);
-    const [products, syncState] = await Promise.all([getProducts(store.id), getProductSyncState(store.id)]);
+    const [page, syncState] = await Promise.all([
+      getProductsPage(store.id, { search, cursor, limit: PRODUCTS_PAGE_SIZE }),
+      getProductSyncState(store.id),
+    ]);
 
     return {
-      products,
+      products: page.products,
+      nextCursor: page.nextCursor,
+      hasMore: page.hasMore,
+      totalCount: page.totalCount,
+      search: search ?? "",
       syncState,
       error: null,
     };
   } catch (error) {
     return {
       products: [],
+      nextCursor: null,
+      hasMore: false,
+      totalCount: 0,
+      search: search ?? "",
       syncState: null,
       error: error instanceof Error ? error.message : "Unable to load products.",
     };
@@ -126,7 +167,15 @@ const formatCount = (value: number) => new Intl.NumberFormat("en").format(value)
 const POLL_INTERVAL_MS = 1500;
 
 export default function ProductsPage() {
-  const { products, syncState: initialSyncState, error } = useLoaderData<typeof loader>();
+  const {
+    products,
+    nextCursor,
+    hasMore,
+    totalCount,
+    search: initialSearch,
+    syncState: initialSyncState,
+    error,
+  } = useLoaderData<typeof loader>();
   const actionFetcher = useFetcher<ActionData>();
   const statusFetcher = useFetcher<ProductSyncState>();
   const navigation = useNavigation();
@@ -134,6 +183,17 @@ export default function ProductsPage() {
   const location = useLocation();
 
   const isLoading = navigation.state !== "idle";
+
+  const [searchParams, setSearchParams] = useSearchParams();
+  const [searchInput, setSearchInput] = useState(initialSearch);
+
+  // Same cursor-stack pagination as the Reviews page — see cursorPagination.shared.ts. Page
+  // number is derived purely from the URL's `history` stack, so it survives direct navigation/
+  // reload and supports a Previous that reliably works more than one hop back.
+  const cursorHistory = useMemo(() => parseCursorHistory(searchParams.get("history")), [searchParams]);
+  const currentPage = pageNumberFor(cursorHistory);
+  const totalPages = totalPagesFor(totalCount, PRODUCTS_PAGE_SIZE);
+  const { start: rangeStart, end: rangeEnd } = rangeFor(currentPage, PRODUCTS_PAGE_SIZE, totalCount, products.length);
 
   const [syncState, setSyncState] = useState<ProductSyncState | null>(initialSyncState);
   const [toastState, setToastState] = useState<{ content: string; error?: boolean } | null>(null);
@@ -144,6 +204,31 @@ export default function ProductsPage() {
   const attempted = (syncState?.synced ?? 0) + (syncState?.failed ?? 0);
   const percent =
     syncState?.total && syncState.total > 0 ? Math.min(100, Math.round((attempted / syncState.total) * 100)) : null;
+
+  useEffect(() => {
+    setSearchInput(initialSearch);
+  }, [initialSearch]);
+
+  // Debounced search — resets pagination to page 1 on every change, same convention as the
+  // Reviews page's own search field.
+  useEffect(() => {
+    const timeoutId = window.setTimeout(() => {
+      const next = new URLSearchParams(searchParams);
+      const trimmedSearch = searchInput.trim();
+
+      if (trimmedSearch) {
+        next.set("search", trimmedSearch);
+      } else {
+        next.delete("search");
+      }
+
+      next.delete("cursor");
+      next.delete("history");
+      setSearchParams(next);
+    }, 280);
+
+    return () => window.clearTimeout(timeoutId);
+  }, [searchInput, searchParams, setSearchParams]);
 
   // Picks up the latest polled snapshot from the status fetcher into local state, so the rest
   // of this component only ever reads one `syncState`, whether it came from the initial page
@@ -156,7 +241,7 @@ export default function ProductsPage() {
 
   // Polls app.products.sync-status.tsx every ~1.5s while a sync is running — a dedicated
   // lightweight route rather than re-running this page's own loader, so polling doesn't
-  // re-fetch and re-serialize the full product table on every tick.
+  // re-fetch and re-serialize the current product page on every tick.
   useEffect(() => {
     if (!isSyncing) {
       return;
@@ -180,9 +265,9 @@ export default function ProductsPage() {
   }, [isSyncing]);
 
   // Fires exactly once per sync, on the running -> completed/failed transition — refreshes the
-  // product table (a new full-catalog sync can add/update far more rows than the initial page
-  // load knew about) and shows the completion toast required by spec: "Successfully synced X
-  // products."
+  // currently-viewed product page (a new full-catalog sync can add/update far more rows than
+  // the initial page load knew about) and shows the completion toast required by spec:
+  // "Successfully synced X products."
   useEffect(() => {
     const prevStatus = prevStatusRef.current;
     const nextStatus = syncState?.status ?? null;
@@ -225,6 +310,28 @@ export default function ProductsPage() {
 
   const handleSync = () => {
     actionFetcher.submit({ _intent: "sync-products" }, { method: "post" });
+  };
+
+  const goToPreviousPage = () => {
+    if (cursorHistory.length === 0) return;
+    const next = new URLSearchParams(searchParams);
+    const newHistory = historyForPreviousPage(cursorHistory);
+    if (newHistory.length > 0) {
+      next.set("cursor", newHistory[newHistory.length - 1]);
+      next.set("history", serializeCursorHistory(newHistory));
+    } else {
+      next.delete("cursor");
+      next.delete("history");
+    }
+    setSearchParams(next);
+  };
+
+  const goToNextPage = () => {
+    if (!nextCursor) return;
+    const next = new URLSearchParams(searchParams);
+    next.set("cursor", nextCursor);
+    next.set("history", serializeCursorHistory(historyForNextPage(cursorHistory, nextCursor)));
+    setSearchParams(next);
   };
 
   const rows = products.map((product: ProductListItem) => [
@@ -304,6 +411,23 @@ export default function ProductsPage() {
             </div>
           ) : null}
 
+          <label className={styles.searchField}>
+            <input
+              className={styles.searchInput}
+              type="search"
+              placeholder="Search products by name, handle, or vendor"
+              value={searchInput}
+              onChange={(event) => setSearchInput(event.target.value)}
+              aria-label="Search products"
+            />
+          </label>
+
+          <p className={styles.resultsSummary}>
+            {totalCount === 0
+              ? "No products found."
+              : `Showing ${formatCount(rangeStart)}–${formatCount(rangeEnd)} of ${formatCount(totalCount)} product${totalCount === 1 ? "" : "s"}.`}
+          </p>
+
           <div className={styles.tableCard}>
             <Card>
               {isLoading ? (
@@ -313,11 +437,19 @@ export default function ProductsPage() {
                 </div>
               ) : products.length === 0 ? (
                 <div className={styles.emptyState}>
-                  <h2 className={styles.emptyStateTitle}>No products synced yet</h2>
-                  <p className={styles.emptyStateText}>Sync your Shopify catalog to bring products into Imagyn Reviews.</p>
-                  <Button type="button" onClick={handleSync} disabled={isSyncing || actionFetcher.state !== "idle"}>
-                    {isSyncing ? "Syncing…" : "Sync Products"}
-                  </Button>
+                  <h2 className={styles.emptyStateTitle}>
+                    {initialSearch ? "No products match your search" : "No products synced yet"}
+                  </h2>
+                  <p className={styles.emptyStateText}>
+                    {initialSearch
+                      ? "Try a different search term, or clear the search to see your full catalog."
+                      : "Sync your Shopify catalog to bring products into Imagyn Reviews."}
+                  </p>
+                  {!initialSearch ? (
+                    <Button type="button" onClick={handleSync} disabled={isSyncing || actionFetcher.state !== "idle"}>
+                      {isSyncing ? "Syncing…" : "Sync Products"}
+                    </Button>
+                  ) : null}
                 </div>
               ) : (
                 <BlockStack gap="400">
@@ -330,6 +462,23 @@ export default function ProductsPage() {
                 </BlockStack>
               )}
             </Card>
+          </div>
+
+          <div className={styles.pagination}>
+            <Button
+              type="button"
+              variant="secondary"
+              onClick={goToPreviousPage}
+              disabled={cursorHistory.length === 0 || isLoading}
+            >
+              Previous
+            </Button>
+            <p className={styles.pageInfo}>
+              Page {formatCount(currentPage)} of {formatCount(totalPages)}
+            </p>
+            <Button type="button" variant="secondary" onClick={goToNextPage} disabled={!hasMore || !nextCursor || isLoading}>
+              Next
+            </Button>
           </div>
         </div>
       </Container>

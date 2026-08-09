@@ -1,5 +1,5 @@
 import type { AdminApiContext } from "@shopify/shopify-app-react-router/server";
-import type { Product } from "@prisma/client";
+import type { Prisma, Product } from "@prisma/client";
 import prisma from "../db.server";
 
 export interface ShopifyProductNode {
@@ -261,6 +261,11 @@ export async function syncAllProducts(
   return { synced, failed, total };
 }
 
+// Unbounded on purpose — every existing caller (the manual-review product picker on
+// app.reviews.new.tsx/app.reviews.$id.edit.tsx, and productMatcher.server.ts's Judge.me
+// import matching, which needs the *entire* catalog loaded once to build its in-memory
+// lookup maps) genuinely needs the full list, not a page of it. Do not add pagination here —
+// see getProductsPage below for the Products admin page's own, separate, paginated query.
 export async function getProducts(storeId: string) {
   return prisma.product.findMany({
     where: {
@@ -270,6 +275,64 @@ export async function getProducts(storeId: string) {
       name: "asc",
     },
   });
+}
+
+export interface ProductQueryOptions {
+  search?: string;
+  cursor?: string;
+  limit?: number;
+}
+
+export interface ProductQueryResult {
+  products: Product[];
+  nextCursor: string | null;
+  hasMore: boolean;
+  totalCount: number;
+}
+
+// The Products admin page's own query — same cursor-pagination shape as review.server.ts's
+// queryReviews (real DB LIMIT via `take`, a real COUNT query for totalCount, `id` as a stable
+// tiebreak so cursor pagination can't skip or duplicate rows when two products share a sort
+// key). Deliberately a separate function from getProducts above rather than a shared one with
+// an optional pagination flag — the existing unbounded callers must never accidentally start
+// receiving a truncated list because a default changed underneath them.
+export async function getProductsPage(storeId: string, options: ProductQueryOptions = {}): Promise<ProductQueryResult> {
+  const limit = options.limit ?? 25;
+
+  const where: Prisma.ProductWhereInput = {
+    storeId,
+    ...(options.search
+      ? {
+          OR: [
+            { name: { contains: options.search } },
+            { handle: { contains: options.search } },
+            { vendor: { contains: options.search } },
+          ],
+        }
+      : {}),
+  };
+
+  const orderBy: Prisma.ProductOrderByWithRelationInput[] = [{ name: "asc" }, { id: "asc" }];
+
+  const [totalCount, products] = await Promise.all([
+    prisma.product.count({ where }),
+    prisma.product.findMany({
+      where,
+      orderBy,
+      take: limit + 1,
+      ...(options.cursor ? { cursor: { id: options.cursor }, skip: 1 } : {}),
+    }),
+  ]);
+
+  const hasMore = products.length > limit;
+  const pagedProducts = hasMore ? products.slice(0, limit) : products;
+
+  return {
+    products: pagedProducts,
+    nextCursor: hasMore && pagedProducts.length > 0 ? pagedProducts[pagedProducts.length - 1].id : null,
+    hasMore,
+    totalCount,
+  };
 }
 
 export async function getProduct(id: string) {
