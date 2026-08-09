@@ -436,9 +436,20 @@ export default function ReviewsPage() {
     }
   }, [importFetcher.data, revalidator]);
 
+  // `searchParams` deliberately isn't a dependency here — clicking Next/Previous also changes
+  // searchParams (cursor/history), and if this effect re-ran on that change too, its debounce
+  // timer would fire ~280ms later and unconditionally strip the cursor/history it just set,
+  // snapping the merchant straight back to page 1. This should only ever fire in response to
+  // the merchant actually typing in the search box. A ref keeps it reading the latest
+  // searchParams when it does fire, without making that value a re-trigger source.
+  const searchParamsRef = useRef(searchParams);
+  useEffect(() => {
+    searchParamsRef.current = searchParams;
+  }, [searchParams]);
+
   useEffect(() => {
     const timeoutId = window.setTimeout(() => {
-      const next = new URLSearchParams(searchParams);
+      const next = new URLSearchParams(searchParamsRef.current);
       const trimmedSearch = searchInput.trim();
 
       if (trimmedSearch) {
@@ -453,7 +464,7 @@ export default function ReviewsPage() {
     }, 280);
 
     return () => window.clearTimeout(timeoutId);
-  }, [searchInput, searchParams, setSearchParams]);
+  }, [searchInput, setSearchParams]);
 
   const updateQuery = (updates: Record<string, string | boolean | undefined>, resetPagination = true) => {
     const next = new URLSearchParams(searchParams);
