@@ -1,0 +1,50 @@
+.wrap {
+  display: grid;
+  gap: var(--space-2);
+}
+
+.track {
+  height: 6px;
+  border-radius: var(--radius-full);
+  background: var(--color-surface-muted);
+  overflow: hidden;
+}
+
+.fill {
+  height: 100%;
+  border-radius: var(--radius-full);
+  background: var(--color-accent);
+  transition: width 300ms ease-out;
+}
+
+/* No known total yet (Shopify's product count call hasn't resolved) — a moving band rather
+   than a bar frozen at 0%, so the merchant sees the sync is alive, not stalled. */
+.indeterminate {
+  width: 30% !important;
+  animation: indeterminate-sweep 1.2s ease-in-out infinite;
+}
+
+@keyframes indeterminate-sweep {
+  0% {
+    transform: translateX(-100%);
+  }
+  100% {
+    transform: translateX(333%);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .fill {
+    transition: none;
+  }
+
+  .indeterminate {
+    animation: none;
+  }
+}
+
+.label {
+  margin: 0;
+  font-size: var(--text-sm);
+  color: var(--color-text-muted);
+}

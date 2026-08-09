@@ -1,7 +1,6 @@
 import type { AdminApiContext } from "@shopify/shopify-app-react-router/server";
 import type { Product } from "@prisma/client";
 import prisma from "../db.server";
-import { getOrCreateStore } from "./store.server";
 
 export interface ShopifyProductNode {
   id: string;
@@ -14,25 +13,131 @@ export interface ShopifyProductNode {
   featuredImage: { url: string } | null;
 }
 
-interface ProductsQueryResponse {
-  data?: {
-    products: {
-      nodes: ShopifyProductNode[];
-    };
-  };
-  errors?: Array<{ message: string }>;
+// Shopify's own hard ceiling on `first` for this connection — not a business choice, so it's
+// the one "limit" that's correct to keep. Pagination via pageInfo/endCursor below is what
+// makes catalog size otherwise unbounded: this constant controls request count, not how many
+// products get synced.
+const PRODUCTS_PAGE_SIZE = 250;
+
+// Bounded retry for Shopify's cost-based GraphQL throttling — a catalog large enough to need
+// hundreds of pages will hit THROTTLED responses in normal operation, not as a rare edge case,
+// so retrying is part of normal pagination, not error handling bolted on afterward.
+const MAX_THROTTLE_RETRIES = 6;
+const FALLBACK_THROTTLE_WAIT_MS = 2000;
+
+interface ThrottleStatus {
+  maximumAvailable: number;
+  currentlyAvailable: number;
+  restoreRate: number;
 }
 
-export interface ProductSyncResult {
-  products: Product[];
-  totalCount: number;
-  syncedCount: number;
-  failedCount: number;
+interface GraphqlEnvelope<T> {
+  data?: T;
+  errors?: Array<{ message: string; extensions?: { code?: string } }>;
+  extensions?: { cost?: { requestedQueryCost: number; throttleStatus?: ThrottleStatus } };
 }
 
-const PRODUCTS_QUERY = `#graphql
-  query GetProducts {
-    products(first: 100) {
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+function isThrottled(errors: GraphqlEnvelope<unknown>["errors"]): boolean {
+  return Boolean(errors?.some((error) => error.extensions?.code === "THROTTLED"));
+}
+
+// Waits long enough to comfortably afford the next request rather than the bare minimum — if
+// currentlyAvailable already covers a full page's cost, this is a no-op.
+async function waitForThrottleBudget(throttleStatus: ThrottleStatus | undefined, neededPoints: number) {
+  if (!throttleStatus) return;
+  const deficit = neededPoints - throttleStatus.currentlyAvailable;
+  if (deficit <= 0) return;
+
+  const waitMs = Math.ceil((deficit / throttleStatus.restoreRate) * 1000);
+  await sleep(Math.max(waitMs, 500));
+}
+
+// Every Shopify Admin GraphQL call in this file goes through here rather than admin.graphql()
+// directly, so pagination self-paces against Shopify's cost budget instead of just retrying
+// blindly after getting throttled — for a 100k-product catalog (400 pages), the difference is
+// a sync that completes steadily vs. one that spends most of its time in backoff.
+async function graphqlWithThrottleHandling<T>(
+  admin: AdminApiContext,
+  query: string,
+  variables: Record<string, unknown> | undefined,
+  estimatedCost: number,
+): Promise<T> {
+  for (let attempt = 1; attempt <= MAX_THROTTLE_RETRIES; attempt++) {
+    const response = await admin.graphql(query, variables ? { variables } : undefined);
+    const json = (await response.json()) as GraphqlEnvelope<T>;
+    const throttleStatus = json.extensions?.cost?.throttleStatus;
+
+    if (isThrottled(json.errors)) {
+      if (attempt === MAX_THROTTLE_RETRIES) {
+        throw new Error("Shopify API rate limit exceeded — too many throttled retries during product sync.");
+      }
+      if (throttleStatus) {
+        await waitForThrottleBudget(throttleStatus, estimatedCost);
+      } else {
+        await sleep(FALLBACK_THROTTLE_WAIT_MS);
+      }
+      continue;
+    }
+
+    if (json.errors && json.errors.length > 0) {
+      throw new Error(json.errors.map((error) => error.message).join(" "));
+    }
+
+    if (!json.data) {
+      throw new Error("Shopify did not return any data.");
+    }
+
+    // Pace the *next* call proactively — waiting until we get throttled and retrying is
+    // strictly slower than just not sending a request we already know will be rejected.
+    if (throttleStatus && throttleStatus.currentlyAvailable < estimatedCost) {
+      await waitForThrottleBudget(throttleStatus, estimatedCost);
+    }
+
+    return json.data;
+  }
+
+  throw new Error("Shopify API rate limit exceeded — too many throttled retries during product sync.");
+}
+
+const PRODUCTS_COUNT_QUERY = `#graphql
+  query ImagynProductsCount {
+    productsCount {
+      count
+    }
+  }
+`;
+
+// Informational only — Shopify itself may report this as an approximation once a catalog
+// passes roughly 10k products (see the API's own `precision` field on CountResult, which this
+// intentionally doesn't surface further than "best effort"). The pagination loop below never
+// relies on this number to decide when it's done; only `hasNextPage` does that. A merchant
+// sees this as the progress bar's denominator, never as a completion condition.
+export async function getShopifyProductCount(admin: AdminApiContext): Promise<number | null> {
+  try {
+    const data = await graphqlWithThrottleHandling<{ productsCount?: { count?: number } }>(
+      admin,
+      PRODUCTS_COUNT_QUERY,
+      undefined,
+      1,
+    );
+    return data.productsCount?.count ?? null;
+  } catch (error) {
+    console.error("[productSync] Unable to fetch Shopify product count:", error);
+    return null;
+  }
+}
+
+const PRODUCTS_PAGE_QUERY = `#graphql
+  query ImagynProductsPage($first: Int!, $after: String) {
+    products(first: $first, after: $after) {
+      pageInfo {
+        hasNextPage
+        endCursor
+      }
       nodes {
         id
         title
@@ -49,76 +154,111 @@ const PRODUCTS_QUERY = `#graphql
   }
 `;
 
-export async function getShopifyProducts(admin: AdminApiContext): Promise<ShopifyProductNode[]> {
-  const response = await admin.graphql(PRODUCTS_QUERY);
-  const json = (await response.json()) as ProductsQueryResponse;
-
-  if (json.errors && json.errors.length > 0) {
-    throw new Error(json.errors.map((error) => error.message).join(" "));
-  }
-
-  if (!json.data) {
-    throw new Error("Shopify did not return any product data.");
-  }
-
-  return json.data.products.nodes;
+interface ProductsPageResponse {
+  products: {
+    pageInfo: { hasNextPage: boolean; endCursor: string | null };
+    nodes: ShopifyProductNode[];
+  };
 }
 
-export async function syncProducts(admin: AdminApiContext, shop: string): Promise<ProductSyncResult> {
-  const store = await getOrCreateStore(shop);
-  const products = await getShopifyProducts(admin);
-
-  let syncedCount = 0;
-  let failedCount = 0;
-
-  for (const product of products) {
-    if (!product.id) {
-      failedCount += 1;
-      continue;
-    }
-
-    try {
-      await prisma.product.upsert({
-        where: {
-          shopifyProductId: product.id,
-        },
-        update: {
-          storeId: store.id,
-          name: product.title,
-          handle: product.handle,
-          vendor: product.vendor,
-          productType: product.productType,
-          status: product.status,
-          featuredImage: product.featuredImage?.url ?? null,
-          description: product.description,
-          slug: product.handle,
-        },
-        create: {
-          storeId: store.id,
-          shopifyProductId: product.id,
-          name: product.title,
-          handle: product.handle,
-          vendor: product.vendor,
-          productType: product.productType,
-          status: product.status,
-          featuredImage: product.featuredImage?.url ?? null,
-          description: product.description,
-          slug: product.handle,
-        },
-      });
-      syncedCount += 1;
-    } catch (error) {
-      failedCount += 1;
-      console.error(`Failed to sync Shopify product ${product.id}:`, error);
-    }
+async function upsertShopifyProduct(storeId: string, product: ShopifyProductNode): Promise<boolean> {
+  if (!product.id) {
+    return false;
   }
 
-  return {
-    products: await getProducts(store.id),
-    totalCount: products.length,
-    syncedCount,
-    failedCount,
-  };
+  try {
+    await prisma.product.upsert({
+      where: {
+        shopifyProductId: product.id,
+      },
+      update: {
+        storeId,
+        name: product.title,
+        handle: product.handle,
+        vendor: product.vendor,
+        productType: product.productType,
+        status: product.status,
+        featuredImage: product.featuredImage?.url ?? null,
+        description: product.description,
+        slug: product.handle,
+        lastSyncedAt: new Date(),
+      },
+      create: {
+        storeId,
+        shopifyProductId: product.id,
+        name: product.title,
+        handle: product.handle,
+        vendor: product.vendor,
+        productType: product.productType,
+        status: product.status,
+        featuredImage: product.featuredImage?.url ?? null,
+        description: product.description,
+        slug: product.handle,
+        lastSyncedAt: new Date(),
+      },
+    });
+    return true;
+  } catch (error) {
+    console.error(`Failed to sync Shopify product ${product.id}:`, error);
+    return false;
+  }
+}
+
+export interface ProductSyncProgress {
+  synced: number;
+  failed: number;
+  total: number | null;
+}
+
+// Pages through the ENTIRE catalog via cursor pagination — no page-count cap, no product-count
+// cap; the loop's only exit condition is Shopify's own `hasNextPage`. Upserts each page as it
+// arrives rather than accumulating the full catalog in memory first, so this scales the same
+// way at 100 products or 100,000. `onProgress` fires after every page (not every product) —
+// frequent enough for a live progress bar, infrequent enough not to hammer the DB once per
+// product on a huge catalog.
+export async function syncAllProducts(
+  admin: AdminApiContext,
+  storeId: string,
+  onProgress: (progress: ProductSyncProgress) => Promise<void> | void,
+): Promise<ProductSyncProgress> {
+  const total = await getShopifyProductCount(admin);
+  let synced = 0;
+  let failed = 0;
+  await onProgress({ synced, failed, total });
+
+  let after: string | null = null;
+  let hasNextPage = true;
+
+  // Empirically ~1-2 cost points per product node at this field selection (id/title/handle/
+  // vendor/productType/status/description/featuredImage — all scalar/single-object, no
+  // further connections) — 250 * 2 is a deliberately generous estimate for the throttle
+  // pacing above, not a real Shopify-published constant.
+  const estimatedPageCost = PRODUCTS_PAGE_SIZE * 2;
+
+  while (hasNextPage) {
+    const data: ProductsPageResponse = await graphqlWithThrottleHandling<ProductsPageResponse>(
+      admin,
+      PRODUCTS_PAGE_QUERY,
+      { first: PRODUCTS_PAGE_SIZE, after },
+      estimatedPageCost,
+    );
+
+    for (const node of data.products.nodes) {
+      const ok = await upsertShopifyProduct(storeId, node);
+      if (ok) {
+        synced += 1;
+      } else {
+        failed += 1;
+      }
+    }
+
+    hasNextPage = data.products.pageInfo.hasNextPage;
+    after = data.products.pageInfo.endCursor;
+
+    await onProgress({ synced, failed, total });
+  }
+
+  return { synced, failed, total };
 }
 
 export async function getProducts(storeId: string) {
@@ -150,7 +290,7 @@ export async function getProductForStore(id: string, storeId: string) {
 }
 
 // `shopifyProductId` is stored in GraphQL GID form (set from the Admin GraphQL API in
-// syncProducts above), but callers on the storefront side — and review-import sources like
+// syncAllProducts above), but callers on the storefront side — and review-import sources like
 // Judge.me, which export the bare numeric id — only ever have Shopify's bare numeric id (e.g.
 // Liquid's `product.id`), so it's normalized to GID form before lookup. Exported for reuse by
 // importers/productMatcher.server.ts rather than re-implementing GID normalization there.
@@ -199,3 +339,5 @@ export async function getProductsForStoreByIdentifiers(
     },
   });
 }
+
+export type { Product };

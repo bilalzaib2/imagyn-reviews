@@ -135,6 +135,99 @@ export async function updateModerationSettings(
   });
 }
 
+export type ProductSyncStatus = "idle" | "running" | "completed" | "failed";
+
+export interface ProductSyncState {
+  status: ProductSyncStatus;
+  total: number | null;
+  synced: number;
+  failed: number;
+  startedAt: Date | null;
+  finishedAt: Date | null;
+  error: string | null;
+}
+
+function toProductSyncStatus(value: string): ProductSyncStatus {
+  return value === "running" || value === "completed" || value === "failed" ? value : "idle";
+}
+
+// Full-catalog product sync progress (see product.server.ts's syncAllProducts and
+// productSync.server.ts's runProductSync) — read by the products page and its polling status
+// route. Gating the Judge.me importer on this (only allow it once status is "completed") is
+// planned but not yet wired up — out of scope for this pass, deliberately deferred.
+export async function getProductSyncState(id: string): Promise<ProductSyncState> {
+  const store = await prisma.store.findUnique({
+    where: { id },
+    select: {
+      productSyncStatus: true,
+      productSyncTotal: true,
+      productSyncSynced: true,
+      productSyncFailed: true,
+      productSyncStartedAt: true,
+      productSyncFinishedAt: true,
+      productSyncError: true,
+    },
+  });
+
+  return {
+    status: toProductSyncStatus(store?.productSyncStatus ?? "idle"),
+    total: store?.productSyncTotal ?? null,
+    synced: store?.productSyncSynced ?? 0,
+    failed: store?.productSyncFailed ?? 0,
+    startedAt: store?.productSyncStartedAt ?? null,
+    finishedAt: store?.productSyncFinishedAt ?? null,
+    error: store?.productSyncError ?? null,
+  };
+}
+
+// Resets counters to zero rather than leaving the previous run's numbers on screen while the
+// new one ramps up — a merchant re-running sync should see 0/? immediately, not the old run's
+// final count sitting there looking like live progress.
+export async function startProductSync(id: string) {
+  return prisma.store.update({
+    where: { id },
+    data: {
+      productSyncStatus: "running",
+      productSyncTotal: null,
+      productSyncSynced: 0,
+      productSyncFailed: 0,
+      productSyncStartedAt: new Date(),
+      productSyncFinishedAt: null,
+      productSyncError: null,
+    },
+  });
+}
+
+// Called after every page of the Shopify pagination loop (see product.server.ts's
+// syncAllProducts) — each call is a small, independent write rather than one held-open
+// transaction for the whole sync, since a sync can run for minutes across tens of thousands of
+// products and the polling status route needs to see progress as it happens, not just at the
+// end.
+export async function updateProductSyncProgress(
+  id: string,
+  data: { synced: number; failed: number; total: number | null },
+) {
+  return prisma.store.update({
+    where: { id },
+    data: {
+      productSyncSynced: data.synced,
+      productSyncFailed: data.failed,
+      productSyncTotal: data.total,
+    },
+  });
+}
+
+export async function finishProductSync(id: string, data: { status: "completed" | "failed"; error: string | null }) {
+  return prisma.store.update({
+    where: { id },
+    data: {
+      productSyncStatus: data.status,
+      productSyncFinishedAt: new Date(),
+      productSyncError: data.error,
+    },
+  });
+}
+
 export async function setDevelopmentStoreFlag(id: string, isDevelopmentStore: boolean) {
   return prisma.store.update({
     where: {

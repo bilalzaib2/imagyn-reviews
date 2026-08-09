@@ -92,6 +92,22 @@ model Store {
   moderationBannedWords     String  @default("")
   moderationNotifyOnHold    Boolean @default(false)
   moderationNotifyEmail     String?
+
+  // Full-catalog product sync progress (see product.server.ts's syncAllProducts and
+  // productSync.server.ts's runProductSync). One row per store — only one sync runs at a
+  // time per store, so this doesn't need its own table. status: "idle" | "running" |
+  // "completed" | "failed". `productSyncTotal` is informational only (from Shopify's
+  // productsCount, which Shopify itself may report as an approximation above ~10k products);
+  // `productSyncSynced`/`productSyncFailed` are exact, since this app incremented them itself
+  // for every product it actually upserted. Gating the Judge.me importer on this (only once
+  // status is "completed") is planned but not yet wired up — deliberately out of scope here.
+  productSyncStatus     String    @default("idle")
+  productSyncTotal      Int?
+  productSyncSynced     Int       @default(0)
+  productSyncFailed     Int       @default(0)
+  productSyncStartedAt  DateTime?
+  productSyncFinishedAt DateTime?
+  productSyncError      String?
 }
 
 model Product {
