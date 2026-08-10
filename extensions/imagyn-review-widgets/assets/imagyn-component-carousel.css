@@ -23,6 +23,14 @@
      is the standard fix: the column may shrink to 0 and grows to fill 1fr, full stop,
      regardless of what its content would prefer to be. */
   grid-template-columns: minmax(0, 1fr);
+  /* If anything upstream (the Theme Editor's app-block wrapper, a theme section, etc.)
+     ever hands this grid more block-axis space than its own rows need, the default
+     align-content behaves like `stretch` and grows the auto-sized rows (heading/viewport/
+     controls) to fill it — showing up as a large gap after the cards/nav. `start` is what
+     actually keeps this grid's height pinned to its real content instead of whatever
+     height its container happens to offer; it's a no-op when nothing imposes extra height,
+     so it costs nothing either way. */
+  align-content: start;
   gap: var(--imagyn-space-px-md, 16px);
   font-family: var(--imagyn-font-family);
   color: var(--imagyn-color-text, inherit);
@@ -56,14 +64,21 @@
 
 .imagyn-carousel__track {
   display: flex;
-  /* The actual fix for "excessively tall cards with huge empty space": flex rows default
-     to align-items: stretch, so one long review used to force every card in the same row
-     to match its height — the product-footer's margin-top: auto then rendered that forced
-     extra height as a visible empty gap. flex-start lets each slide size to its own
-     content — combined with the review-body clamp below (nothing can grow unbounded in
-     the first place), cards now land at a naturally similar, compact height instead of
-     being artificially stretched. */
-  align-items: flex-start;
+  /* The track is a <ul> (semantically correct — the cards are a list of reviews), but
+     browsers still paint default disc markers on its <li> children even once they become
+     flex items; display: flex alone does not reset list styling. list-style/margin/padding
+     here is the actual fix for the black bullet dots between cards, not a cosmetic cover-up. */
+  list-style: none;
+  margin: 0;
+  /* stretch (the flex default) gives every card in a row the same outer height — wanted,
+     for a coherent row of equal-size cards — and is now safe because nothing inside a card
+     can grow unbounded any more: .imagyn-review-card__body below is pinned to exactly 4
+     lines (min-height *and* max via line-clamp, not just a cap), so the tallest a card can
+     ever get is already bounded before stretch even applies. Stretching used to blow this
+     up because the body had no minimum and only a max via overflow — a one-line review and
+     a ten-line review could differ by hundreds of pixels, and stretch forced every card in
+     that row to match whichever was tallest. */
+  align-items: stretch;
   width: 100%;
   min-width: 0;
   gap: var(--imagyn-space-px-md, 16px);
@@ -75,7 +90,11 @@
   overflow-x: auto;
   scroll-snap-type: x mandatory;
   scroll-padding-inline: var(--imagyn-space-px-md, 16px);
+  /* padding-inline: 0 explicitly overrides the <ul> default (~40px, reserved for marker
+     indent) — padding-block alone never touched it, so the track was carrying a stray left
+     inset even after list-style: none removed the marker glyph itself. */
   padding-block: var(--imagyn-space-3xs, 0.2em);
+  padding-inline: 0;
   /* Scrollbar stays available (accessibility/discoverability) but visually quiet. */
   scrollbar-width: thin;
 }
@@ -91,6 +110,7 @@
   flex: 0 0 260px;
   min-width: 0;
   max-width: 100%;
+  list-style: none;
   scroll-snap-align: start;
 }
 
@@ -103,29 +123,45 @@
   }
 }
 
+/* height: 100% is what actually lets this box fill the equal height align-items: stretch
+   now gives .imagyn-carousel__slide (the <li>) — a block child doesn't auto-fill a taller
+   parent just because the parent stretched; without this the card would stay sized to its
+   own content inside a taller <li>, defeating the point of stretch (and leaving the extra
+   space as an invisible gap below the card instead of a usable one inside it). */
 .imagyn-carousel__slide .imagyn-review-card {
   display: flex;
   flex-direction: column;
+  height: 100%;
+  box-sizing: border-box;
   gap: var(--imagyn-space-sm, 0.6em);
 }
 
-/* Real, natural text truncation on the one field with unbounded length — not a
-   max-height/overflow hack on the whole card. This is what actually keeps every slide's
-   height close to uniform; align-items: flex-start above only stops the *symptom*
-   (forced stretching) from spreading to neighboring cards. */
+/* Pinned to exactly 4 lines both ways — max via line-clamp (long reviews truncate) *and*
+   min via min-height (short reviews still reserve the same space) — using the same em
+   math as the clamp (line-height 1.5 × 4 lines = 6em, relative to this element's own
+   font-size token, not a hardcoded pixel guess). This is the actual fix for uneven card
+   heights: the one field with genuinely unbounded length is now bounded on both ends, so
+   every card's title/stars/product row lands in the same place regardless of review length. */
 .imagyn-carousel__slide .imagyn-review-card__body {
   display: -webkit-box;
   -webkit-box-orient: vertical;
   -webkit-line-clamp: 4;
   overflow: hidden;
+  min-height: 6em;
 }
 
+/* margin-top: auto pins this to the bottom of the (now equal-height, see .imagyn-carousel__
+   slide .imagyn-review-card above) card — every card's product row lands at the same
+   vertical position regardless of whether that card also has a title or photo. This is
+   safe now (it wasn't before the body was pinned to a fixed 4-line height above): the
+   available space it can push through is bounded by the same fixed card height every
+   other card in the row already has, not by one review's unbounded text length. */
 .imagyn-carousel__product {
   display: flex;
   align-items: center;
   gap: var(--imagyn-space-xs, 0.4em);
   padding-top: var(--imagyn-space-xs, 0.4em);
-  margin-top: var(--imagyn-space-sm, 0.6em);
+  margin-top: auto;
   border-top: var(--imagyn-border-width, 1px) solid var(--imagyn-color-border, rgba(0, 0, 0, 0.08));
   text-decoration: none;
   color: inherit;
