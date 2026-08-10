@@ -36,6 +36,14 @@
 
 .imagyn-carousel__track {
   display: flex;
+  /* The actual fix for "excessively tall cards with huge empty space": flex rows default
+     to align-items: stretch, so one long review used to force every card in the same row
+     to match its height — the product-footer's margin-top: auto then rendered that forced
+     extra height as a visible empty gap. flex-start lets each slide size to its own
+     content — combined with the review-body clamp below (nothing can grow unbounded in
+     the first place), cards now land at a naturally similar, compact height instead of
+     being artificially stretched. */
+  align-items: flex-start;
   gap: var(--imagyn-space-px-md, 16px);
   overflow-x: auto;
   scroll-snap-type: x mandatory;
@@ -45,16 +53,39 @@
   scrollbar-width: thin;
 }
 
+/* Fixed desktop card width (matches the existing 260px precedent already reserved for
+   carousel-style layouts in imagyn-component-review-card.css) rather than a fluid
+   viewport-relative size — a compact, predictable ~4 cards visible on a full-width
+   desktop section, not a viewport-scaled guess. */
 .imagyn-carousel__slide {
-  flex: 0 0 clamp(240px, 80vw, 320px);
+  flex: 0 0 260px;
   scroll-snap-align: start;
 }
 
+/* Mobile: one clearly dominant card with a small peek of the next, not a shrunk desktop
+   grid — the near-full-width basis below is what actually produces a "clean single-card"
+   feel while still hinting there's more to scroll to. */
+@media (max-width: 640px) {
+  .imagyn-carousel__slide {
+    flex-basis: 86%;
+  }
+}
+
 .imagyn-carousel__slide .imagyn-review-card {
-  height: 100%;
   display: flex;
   flex-direction: column;
   gap: var(--imagyn-space-sm, 0.6em);
+}
+
+/* Real, natural text truncation on the one field with unbounded length — not a
+   max-height/overflow hack on the whole card. This is what actually keeps every slide's
+   height close to uniform; align-items: flex-start above only stops the *symptom*
+   (forced stretching) from spreading to neighboring cards. */
+.imagyn-carousel__slide .imagyn-review-card__body {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 4;
+  overflow: hidden;
 }
 
 .imagyn-carousel__product {
@@ -62,7 +93,7 @@
   align-items: center;
   gap: var(--imagyn-space-xs, 0.4em);
   padding-top: var(--imagyn-space-xs, 0.4em);
-  margin-top: auto;
+  margin-top: var(--imagyn-space-sm, 0.6em);
   border-top: var(--imagyn-border-width, 1px) solid var(--imagyn-color-border, rgba(0, 0, 0, 0.08));
   text-decoration: none;
   color: inherit;
