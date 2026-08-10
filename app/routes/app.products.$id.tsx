@@ -83,7 +83,8 @@ export const loader = async ({ request, params }: LoaderFunctionArgs) => {
 };
 
 export const action = async ({ request, params }: ActionFunctionArgs): Promise<ActionData> => {
-  await authenticateAdminDeduped(request);
+  const { session } = await authenticateAdminDeduped(request);
+  const store = await getOrCreateStore(session.shop);
 
   const productId = params.id ?? "";
   const formData = await request.formData();
@@ -98,7 +99,7 @@ export const action = async ({ request, params }: ActionFunctionArgs): Promise<A
   }
 
   try {
-    await regenerateAiSummary(productId);
+    await regenerateAiSummary(store.id, productId);
     return { ok: true, message: "AI Review Summary regenerated." };
   } catch (error) {
     return {

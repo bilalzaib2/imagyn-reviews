@@ -139,9 +139,8 @@ vi.mock("../db.server", () => ({
       }),
       create: vi.fn(async ({ data }: { data: Partial<FakeRequest> & { storeId: string } }) => {
         const row = seedRequest({
-          id: `req_${nextId++}`,
-          storeId: data.storeId,
           ...data,
+          id: `req_${nextId++}`,
         });
         return withInclude(row);
       }),

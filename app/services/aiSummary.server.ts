@@ -126,9 +126,14 @@ async function getApprovedReviewCount(productId: string): Promise<number> {
 // action (always runs when clicked) and maybeAutoRegenerateAiSummary below (only past its
 // own threshold check). Never called from a storefront-facing loader — this is the one
 // function in the whole feature that actually talks to an AI provider.
-export async function regenerateAiSummary(productId: string): Promise<ProductAiSummaryRecord> {
-  const product = await prisma.product.findUnique({
-    where: { id: productId },
+//
+// storeId is required and the product lookup is scoped by it — without this, a merchant
+// could regenerate (and overwrite) another store's ProductAiSummary just by knowing its
+// productId, with the plan check running against the *victim* store's plan instead of the
+// caller's. Same ownership pattern as review.server.ts's createReview.
+export async function regenerateAiSummary(storeId: string, productId: string): Promise<ProductAiSummaryRecord> {
+  const product = await prisma.product.findFirst({
+    where: { id: productId, storeId },
     select: { id: true, name: true, storeId: true },
   });
 
@@ -136,7 +141,7 @@ export async function regenerateAiSummary(productId: string): Promise<ProductAiS
     throw new Error("Product not found.");
   }
 
-  const permissions = await getStorePermissions(product.storeId);
+  const permissions = await getStorePermissions(storeId);
   assertPermission(permissions, "canUseAI", "AI review summaries require the Pro plan.", "growth");
 
   const reviews = await prisma.review.findMany({
@@ -185,7 +190,7 @@ export async function regenerateAiSummary(productId: string): Promise<ProductAiS
 // page" applied to the admin, not just the storefront). Only regenerates once enough new
 // approved reviews have accumulated since the last generation, or if no summary exists
 // yet at all — never runs unconditionally on every mutation.
-export async function maybeAutoRegenerateAiSummary(productId: string): Promise<void> {
+export async function maybeAutoRegenerateAiSummary(storeId: string, productId: string): Promise<void> {
   try {
     const [existing, approvedCount] = await Promise.all([
       prisma.productAiSummary.findUnique({ where: { productId }, select: { reviewCountUsed: true } }),
@@ -203,7 +208,7 @@ export async function maybeAutoRegenerateAiSummary(productId: string): Promise<v
       return;
     }
 
-    await regenerateAiSummary(productId);
+    await regenerateAiSummary(storeId, productId);
   } catch (error) {
     // A Starter-plan store hitting the AI-summaries plan gate is expected, not a failure —
     // nothing to log. Any other error (AI provider issue, etc.) still gets logged.

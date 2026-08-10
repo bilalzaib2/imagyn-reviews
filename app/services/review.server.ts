@@ -561,7 +561,7 @@ async function setReviewStatus(
   // regardless of AI latency. maybeAutoRegenerateAiSummary does its own threshold check
   // and only actually calls the AI provider when enough new approved reviews warrant it.
   if (status === ReviewStatus.APPROVED) {
-    void maybeAutoRegenerateAiSummary(existing.productId);
+    void maybeAutoRegenerateAiSummary(storeId, existing.productId);
   }
 
   return review;
@@ -660,7 +660,7 @@ export async function bulkModerateReviews(
   await Promise.all(affectedProductIds.map((productId) => recalculateProductStats(productId)));
 
   if (status === ReviewStatus.APPROVED) {
-    affectedProductIds.forEach((productId) => void maybeAutoRegenerateAiSummary(productId));
+    affectedProductIds.forEach((productId) => void maybeAutoRegenerateAiSummary(storeId, productId));
   }
 
   return { count: result.count, affectedProductIds };
