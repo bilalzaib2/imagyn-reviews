@@ -114,12 +114,14 @@
   scroll-snap-align: start;
 }
 
-/* Mobile: one clearly dominant card with a small peek of the next, not a shrunk desktop
-   grid — the near-full-width basis below is what actually produces a "clean single-card"
-   feel while still hinting there's more to scroll to. */
+/* Mobile: one clearly dominant card with a visible peek of the next — 80% (down from an
+   earlier 86%) both shows more of that peek, reinforcing the carousel affordance, and keeps
+   the card from ballooning as wide as the viewport on larger phones, which (combined with
+   .imagyn-carousel__media's max-height above) is what keeps mobile cards from reading as
+   noticeably larger than the desktop ones. */
 @media (max-width: 640px) {
   .imagyn-carousel__slide {
-    flex-basis: 86%;
+    flex-basis: 80%;
   }
 }
 
@@ -217,10 +219,19 @@
    tall (the single largest contributor to card height); 2:1 is ~130px, a real reduction,
    not just a cosmetic crop, while still reading as a genuine photo, not a thumbnail. The
    image supports the review here — it isn't the card's primary content the way it can be
-   in the full Product Reviews Widget gallery. */
+   in the full Product Reviews Widget gallery.
+
+   max-height is the actual fix for "still large on mobile": aspect-ratio is width-relative,
+   and the mobile slide below is a much wider flex-basis (86% of viewport, often 300px+) than
+   the fixed 260px desktop card — so the same 2:1 ratio produced a visibly taller image on
+   mobile, and because align-items: stretch on the track applies across the *entire* row (all
+   reviews, not just the currently-visible slide), that one taller image was inflating every
+   card's equal height. Capping the absolute height decouples it from card width entirely, so
+   the image (and therefore the whole card) stays the same size regardless of viewport. */
 .imagyn-carousel__media {
   width: 100%;
   aspect-ratio: 2 / 1;
+  max-height: 140px;
   border-radius: var(--imagyn-radius-sm, 4px);
   object-fit: cover;
 }
