@@ -1,0 +1,44 @@
+.medallion {
+  flex-shrink: 0;
+  transition: opacity var(--transition-base), filter var(--transition-base);
+}
+
+.medallionUnlocked .medallionRing {
+  stroke: var(--color-accent);
+  stroke-width: 1;
+}
+
+.medallionUnlocked .medallionFill {
+  fill: color-mix(in srgb, var(--color-accent) 12%, transparent);
+}
+
+.medallionUnlocked .medallionGlyph {
+  fill: var(--color-accent);
+}
+
+.medallionUnlocked .medallionGlyphStroke {
+  stroke: var(--color-accent);
+  stroke-width: 1.25;
+}
+
+.medallionLocked {
+  opacity: 0.45;
+}
+
+.medallionLocked .medallionRing {
+  stroke: var(--color-border);
+  stroke-width: 1;
+}
+
+.medallionLocked .medallionFill {
+  fill: var(--color-surface-muted);
+}
+
+.medallionLocked .medallionGlyph {
+  fill: var(--color-text-muted);
+}
+
+.medallionLocked .medallionGlyphStroke {
+  stroke: var(--color-text-muted);
+  stroke-width: 1.25;
+}

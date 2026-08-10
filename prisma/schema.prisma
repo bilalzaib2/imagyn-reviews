@@ -46,6 +46,7 @@ model Store {
   widgets      Widget[]
   appearances  Appearance[]
   emailTemplates EmailTemplate[]
+  achievements Achievement[]
 
   // Order-lifecycle automation settings (see review-request.server.ts's createFromOrder and
   // webhooks.fulfillments.create.tsx). autoRequestTrigger is a plain string, not an enum, so
@@ -418,4 +419,38 @@ model EmailTemplate {
   updatedAt    DateTime        @updatedAt
 
   @@index([storeId, type, isActive])
+}
+
+// Medals/Achievements — see app/services/achievements.server.ts. One row per (store, key)
+// once a milestone-style medal is genuinely earned (real, storeId-scoped data crossed the
+// threshold) — this is a ledger of "this happened," not a settings table, so it's never
+// written to from client input. Only medals whose definition has `persistent: true` in
+// achievements.shared.ts get a row here; a live/current-status medal (e.g. Trending) is
+// recomputed on every read and never persisted, since claiming a permanent badge for an
+// inherently time-bound signal would misrepresent it. Once written, a row is never deleted
+// or "un-earned" if the underlying metric later dips — the achievement genuinely happened.
+model Achievement {
+  id        String   @id @default(cuid())
+  storeId   String
+  store     Store    @relation(fields: [storeId], references: [id], onDelete: Cascade)
+
+  // Stable key from achievements.shared.ts's ACHIEVEMENT_DEFINITIONS, e.g.
+  // "verified_reviews_100" — never a display name, so renaming a medal in the UI later never
+  // requires a data migration.
+  key       String
+
+  // The real, derived date this was earned — never "now" unless that IS the accurate
+  // detection date for that specific medal (see achievements.server.ts's per-family comments
+  // for which medals can derive an exact historical date vs. only a first-detected date).
+  earnedAt  DateTime
+
+  // JSON snapshot of the stats at the moment this was earned (e.g. { count: 100 } or
+  // { percentile: 10, storesConsidered: 42 }) — for display richness only ("earned at 100
+  // verified reviews"), never re-derived from this column.
+  metadata  String?
+
+  createdAt DateTime @default(now())
+
+  @@unique([storeId, key])
+  @@index([storeId])
 }
