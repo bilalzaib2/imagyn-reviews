@@ -27,6 +27,7 @@ import { Section } from "../components/ui/Section";
 import { RequestStatusBadge } from "../components/requests/RequestStatusBadge";
 import { RequestLifecycleTimeline } from "../components/requests/RequestLifecycleTimeline";
 import { authenticateAdminDeduped } from "../services/auth-dedupe.server";
+import { getOrCreateStore } from "../services/store.server";
 import {
   reviewRequestService,
   type ReviewRequestDateFilter,
@@ -116,7 +117,8 @@ const emptyFormState: RequestFormState = {
 };
 
 export const loader = async ({ request }: LoaderFunctionArgs): Promise<LoaderData> => {
-  await authenticateAdminDeduped(request);
+  const { session } = await authenticateAdminDeduped(request);
+  const store = await getOrCreateStore(session.shop);
 
   const url = new URL(request.url);
   const search = url.searchParams.get("search")?.trim() || "";
@@ -130,15 +132,15 @@ export const loader = async ({ request }: LoaderFunctionArgs): Promise<LoaderDat
 
   try {
     const [result, customers, products] = await Promise.all([
-      reviewRequestService.listRequests({
+      reviewRequestService.listRequests(store.id, {
         search: search || undefined,
         status: status ? (status as ReviewRequestStatus) : undefined,
         dateFilter,
         page,
         pageSize: 10,
       }),
-      reviewRequestService.listCustomers(),
-      reviewRequestService.listProducts(),
+      reviewRequestService.listCustomers(store.id),
+      reviewRequestService.listProducts(store.id),
     ]);
 
     return {
@@ -173,7 +175,8 @@ export const loader = async ({ request }: LoaderFunctionArgs): Promise<LoaderDat
 };
 
 export const action = async ({ request }: ActionFunctionArgs): Promise<ActionData> => {
-  await authenticateAdminDeduped(request);
+  const { session } = await authenticateAdminDeduped(request);
+  const store = await getOrCreateStore(session.shop);
 
   const formData = await request.formData();
   const intent = String(formData.get("_intent") || "");
@@ -191,7 +194,7 @@ export const action = async ({ request }: ActionFunctionArgs): Promise<ActionDat
         return { ok: false, error: "Customer, product, and delay are required.", intent };
       }
 
-      await reviewRequestService.createRequest({
+      await reviewRequestService.createRequest(store.id, {
         name: name || email,
         email,
         productId,
@@ -216,7 +219,7 @@ export const action = async ({ request }: ActionFunctionArgs): Promise<ActionDat
         return { ok: false, error: "Request, customer, product, and delay are required.", intent };
       }
 
-      await reviewRequestService.updateRequest(requestId, {
+      await reviewRequestService.updateRequest(store.id, requestId, {
         name: name || email,
         email,
         productId,
@@ -236,7 +239,7 @@ export const action = async ({ request }: ActionFunctionArgs): Promise<ActionDat
         return { ok: false, error: "Request and delay are required.", intent };
       }
 
-      await reviewRequestService.rescheduleRequest(requestId, delayDays);
+      await reviewRequestService.rescheduleRequest(store.id, requestId, delayDays);
       return { ok: true, message: "Review request rescheduled.", intent };
     }
 
@@ -246,7 +249,7 @@ export const action = async ({ request }: ActionFunctionArgs): Promise<ActionDat
         return { ok: false, error: "Request id is required.", intent };
       }
 
-      await reviewRequestService.resendRequest(requestId);
+      await reviewRequestService.resendRequest(store.id, requestId);
       return { ok: true, message: "Review request queued again.", intent };
     }
 
@@ -256,7 +259,7 @@ export const action = async ({ request }: ActionFunctionArgs): Promise<ActionDat
         return { ok: false, error: "Request id is required.", intent };
       }
 
-      await reviewRequestService.cancelRequest(requestId);
+      await reviewRequestService.cancelRequest(store.id, requestId);
       return { ok: true, message: "Review request cancelled.", intent };
     }
 
@@ -266,7 +269,7 @@ export const action = async ({ request }: ActionFunctionArgs): Promise<ActionDat
         return { ok: false, error: "Request id is required.", intent };
       }
 
-      await reviewRequestService.deleteRequest(requestId);
+      await reviewRequestService.deleteRequest(store.id, requestId);
       return { ok: true, message: "Review request deleted.", intent };
     }
 

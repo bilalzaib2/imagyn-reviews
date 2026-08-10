@@ -257,11 +257,17 @@ export const dispatchRequestEmail = async (request: ReviewRequestRecord): Promis
 };
 
 export const reviewRequestService = {
-  async listRequests(options: ReviewRequestListOptions = {}): Promise<ReviewRequestListResult> {
+  // storeId is required and folded into the same `where` as every other filter — the admin
+  // Requests page (app.requests.tsx) is the only merchant-facing caller of this; the scheduler
+  // sweep (reviewRequestScheduler.server.ts) and internal dispatch (getRequest below) are
+  // deliberately separate, unscoped-by-design code paths that process every store's due
+  // requests in one pass, not per-request admin reads.
+  async listRequests(storeId: string, options: ReviewRequestListOptions = {}): Promise<ReviewRequestListResult> {
     const pageSize = options.pageSize ?? 10;
     const page = Math.max(options.page ?? 1, 1);
 
     const where = {
+      storeId,
       ...(options.status ? { status: options.status } : {}),
       ...(options.search
         ? {
@@ -295,6 +301,10 @@ export const reviewRequestService = {
     };
   },
 
+  // Internal-only (reviewRequestDispatch.server.ts's enqueueReviewRequestDispatch, called from
+  // the scheduler sweep) — deliberately NOT storeId-scoped, since the sweep resolves a
+  // requestId it already found via its own cross-store query, not from any merchant input.
+  // Never call this from an admin route; use listRequests/getOwnedRequest instead.
   async getRequest(id: string) {
     const request = await prisma.reviewRequest.findUnique({
       where: { id },
@@ -328,16 +338,23 @@ export const reviewRequestService = {
     };
   },
 
-  async listProducts() {
+  // Feeds the admin Requests page's product picker — scoped so a merchant can never even see,
+  // let alone select, another store's product.
+  async listProducts(storeId: string) {
     return prisma.product.findMany({
+      where: { storeId },
       select: { id: true, name: true, storeId: true },
       orderBy: { name: "asc" },
     });
   },
 
-  async listCustomers() {
+  // Feeds the admin Requests page's customer picker — scoped so a merchant can never see
+  // another store's customer names/emails (this was a live PII leak before storeId was added
+  // here; see the master audit that found it).
+  async listCustomers(storeId: string) {
     return prisma.review.findMany({
       where: {
+        storeId,
         deletedAt: null,
         reviewerEmail: { not: null },
       },
@@ -350,7 +367,12 @@ export const reviewRequestService = {
     });
   },
 
-  async createRequest(data: {
+  // storeId is the caller's already-authenticated store, never derived from the client-supplied
+  // productId — same "resolve the product through the trusted storeId, not the other way
+  // around" pattern review.server.ts's createReview uses. Without this, a merchant could still
+  // POST an arbitrary productId directly (bypassing the now-scoped listProducts picker) and
+  // create a request against another store's product.
+  async createRequest(storeId: string, data: {
     productId: string;
     email: string;
     name: string;
@@ -359,8 +381,8 @@ export const reviewRequestService = {
     delayDays: number;
     status?: ReviewRequestStatus;
   }) {
-    const product = await prisma.product.findUnique({
-      where: { id: data.productId },
+    const product = await prisma.product.findFirst({
+      where: { id: data.productId, storeId },
       select: { id: true, storeId: true, name: true },
     });
 
@@ -446,7 +468,10 @@ export const reviewRequestService = {
     };
   },
 
-  async updateRequest(id: string, data: {
+  // storeId is checked in the same lookup that resolves the target row, not as a follow-up
+  // comparison — a cross-tenant id produces the exact same "not found" a bogus id would,
+  // matching requireReview's convention in review.server.ts.
+  async updateRequest(storeId: string, id: string, data: {
     productId?: string | null;
     email?: string | null;
     name?: string | null;
@@ -455,10 +480,19 @@ export const reviewRequestService = {
     delayDays?: number | null;
     status?: ReviewRequestStatus;
   }) {
-    const existing = await prisma.reviewRequest.findUnique({ where: { id } });
+    const existing = await prisma.reviewRequest.findFirst({ where: { id, storeId } });
 
     if (!existing) {
       throw new Error("Review request not found.");
+    }
+
+    // Reassigning to a different product must stay inside the same store — same reasoning as
+    // createRequest's product lookup above.
+    if (data.productId) {
+      const product = await prisma.product.findFirst({ where: { id: data.productId, storeId } });
+      if (!product) {
+        throw new Error("Product not found.");
+      }
     }
 
     const nextDelay = data.delayDays == null ? existing.delayDays : Math.max(data.delayDays, 0);
@@ -483,8 +517,8 @@ export const reviewRequestService = {
     }).then(mapRequestRecord);
   },
 
-  async rescheduleRequest(id: string, delayDays: number) {
-    const existing = await prisma.reviewRequest.findUnique({ where: { id } });
+  async rescheduleRequest(storeId: string, id: string, delayDays: number) {
+    const existing = await prisma.reviewRequest.findFirst({ where: { id, storeId } });
 
     if (!existing) {
       throw new Error("Review request not found.");
@@ -501,8 +535,10 @@ export const reviewRequestService = {
     }).then(mapRequestRecord);
   },
 
-  async resendRequest(id: string) {
-    const existing = await prisma.reviewRequest.findUnique({ where: { id } });
+  // The one operation here that sends a real email — ownership must be verified before any of
+  // the token/dispatch side effects below, not just before the return value is built.
+  async resendRequest(storeId: string, id: string) {
+    const existing = await prisma.reviewRequest.findFirst({ where: { id, storeId } });
 
     if (!existing) {
       throw new Error("Review request not found.");
@@ -528,8 +564,8 @@ export const reviewRequestService = {
     return nextStatus === "sending" ? dispatchRequestEmail(updated) : updated;
   },
 
-  async cancelRequest(id: string) {
-    const existing = await prisma.reviewRequest.findUnique({ where: { id } });
+  async cancelRequest(storeId: string, id: string) {
+    const existing = await prisma.reviewRequest.findFirst({ where: { id, storeId } });
 
     if (!existing) {
       throw new Error("Review request not found.");
@@ -542,8 +578,8 @@ export const reviewRequestService = {
     }).then(mapRequestRecord);
   },
 
-  async deleteRequest(id: string) {
-    const existing = await prisma.reviewRequest.findUnique({ where: { id } });
+  async deleteRequest(storeId: string, id: string) {
+    const existing = await prisma.reviewRequest.findFirst({ where: { id, storeId } });
 
     if (!existing) {
       throw new Error("Review request not found.");
