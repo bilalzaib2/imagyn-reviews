@@ -12,14 +12,6 @@
     return div.innerHTML;
   }
 
-  function formatDate(value) {
-    try {
-      return new Date(value).toLocaleDateString(undefined, { year: "numeric", month: "short", day: "numeric" });
-    } catch (error) {
-      return "";
-    }
-  }
-
   // Mirrors reviews-widget.js's renderVerifiedBadge exactly (same filled-circle-with-
   // cutout-check icon, same imagyn-review-card__verified-icon/-label classes, same
   // "Verified Buyer" label) — kept as its own small copy rather than a cross-script
@@ -53,7 +45,6 @@
     html += '<span class="imagyn-review-card__name">' + escapeHtml(review.reviewerName) + "</span>";
     html += renderVerifiedBadge(review);
     html += "</span>";
-    html += '<span class="imagyn-review-card__date">' + formatDate(review.createdAt) + "</span>";
     html += "</div>";
 
     html += '<span class="imagyn-review-card__stars" aria-hidden="true">' + renderStars(review.rating) + "</span>";
