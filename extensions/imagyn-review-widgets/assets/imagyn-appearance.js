@@ -178,6 +178,21 @@
     }
   }
 
+  // Unlike every other apply* helper, this needs the element itself (not just its .style) —
+  // a CSS custom property alone can't express "is there a logo at all," so a
+  // data-imagyn-logo attribute toggles the .imagyn-summary__logo slot's visibility in CSS
+  // (imagyn-component-summary.css), while the property itself supplies the actual image.
+  function applyImages(root, images) {
+    var logoUrl = images && images.logoUrl;
+    if (logoUrl) {
+      root.style.setProperty("--imagyn-logo-url", 'url("' + String(logoUrl).replace(/"/g, '\\"') + '")');
+      root.setAttribute("data-imagyn-logo", "true");
+    } else {
+      root.style.removeProperty("--imagyn-logo-url");
+      root.removeAttribute("data-imagyn-logo");
+    }
+  }
+
   function applyAnimation(style, animation) {
     if (!animation) return;
     if (animation.motion === "reduced") {
@@ -197,7 +212,8 @@
     // so draft edits never leak outside the preview frame.
     apply: function (tokens, target) {
       if (!tokens) return;
-      var style = (target || document.documentElement).style;
+      var root = target || document.documentElement;
+      var style = root.style;
 
       applyTypography(style, tokens.typography);
       applyColors(style, tokens.colors);
@@ -208,7 +224,8 @@
       applyButtons(style, tokens.buttons);
       applyLayout(style, tokens.layout);
       applyAnimation(style, tokens.animation);
-      // tokens.stars / tokens.images: reserved categories, no independent tokens yet.
+      applyImages(root, tokens.images);
+      // tokens.stars: reserved category, no independent tokens yet.
     },
   };
 

@@ -302,6 +302,9 @@
     }
 
     var html = '<div class="imagyn-summary imagyn-fade-in">';
+    // Hidden by CSS unless imagyn-appearance.js's applyImages() has set a logo (Brand
+    // Studio's Logo control) — see imagyn-component-summary.css's .imagyn-summary__logo.
+    html += '<div class="imagyn-summary__logo" aria-hidden="true"></div>';
 
     if (showStats) {
       var srSummary =

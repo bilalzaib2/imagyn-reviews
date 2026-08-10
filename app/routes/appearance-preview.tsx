@@ -113,6 +113,7 @@ export const loader = ({ request }: LoaderFunctionArgs) => {
     <div>
       <p class="imagyn-preview-label">Ratings &amp; Reviews section</p>
       <div class="imagyn-summary">
+        <div class="imagyn-summary__logo" aria-hidden="true"></div>
         <div class="imagyn-summary__quickbar">
           <span class="imagyn-summary__quickbar-stars" aria-hidden="true">&#9733;&#9733;&#9733;&#9733;&#9733;</span>
           <span class="imagyn-summary__quickbar-rating">4.9</span>

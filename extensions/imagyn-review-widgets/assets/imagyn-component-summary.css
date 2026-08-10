@@ -27,6 +27,26 @@
   color: var(--imagyn-color-text, inherit);
 }
 
+/* Hidden by default — Brand Studio's Logo control (appearance.shared.ts's
+   AppearanceTokens.images.logoUrl). imagyn-appearance.js's applyImages() sets both the
+   --imagyn-logo-url custom property and the [data-imagyn-logo] attribute together, so this
+   only ever renders once a merchant has actually set a logo. */
+.imagyn-summary__logo {
+  display: none;
+  width: 32px;
+  height: 32px;
+  border-radius: var(--imagyn-radius-sm, 4px);
+  background-size: contain;
+  background-position: center;
+  background-repeat: no-repeat;
+  flex-shrink: 0;
+}
+
+[data-imagyn-logo] .imagyn-summary__logo {
+  display: block;
+  background-image: var(--imagyn-logo-url);
+}
+
 .imagyn-summary__quickbar {
   display: flex;
   align-items: center;

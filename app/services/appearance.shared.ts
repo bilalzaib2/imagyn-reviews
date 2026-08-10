@@ -96,10 +96,17 @@ export interface AppearanceButtonTokens {
 // without restructuring this contract when one is added.
 export type AppearanceStarTokens = Record<string, never>;
 
-// Reserved category — the Media Gallery and avatar treatments currently inherit Corners
-// and have no dedicated tokens of their own. Extension seam only; do not add speculative
-// fields until a widget actually needs them.
-export type AppearanceImageTokens = Record<string, never>;
+export interface AppearanceImageTokens {
+  /** null = no logo shown (the default). Rendered as a small brand mark at the top of the
+   *  Ratings & Reviews summary (see imagyn-appearance.js's applyImages and
+   *  imagyn-component-summary.css's .imagyn-summary__logo) — the one place all three widget
+   *  types (Reviews, Rating Badge, Collection Badges) share, per this token contract's own
+   *  "one shared source of truth" convention. Media Gallery/avatar treatments remain
+   *  unimplemented — see AppearanceStarTokens above for that same "reserved, not yet needed"
+   *  pattern this category used to be.
+   */
+  logoUrl: string | null;
+}
 
 export interface AppearanceReviewCardTokens {
   /** STOREFRONT_DESIGN_SYSTEM.md §16's documented "border or whitespace, never both"
@@ -166,7 +173,7 @@ export const getDefaultAppearanceTokens = (): AppearanceTokens => ({
   borders: { width: 1 },
   buttons: { style: "solid" },
   stars: {},
-  images: {},
+  images: { logoUrl: null },
   // "border" matches the Review Card redesign as actually shipped: a hairline top rule
   // plus generous padding, not whitespace alone (STOREFRONT_DESIGN_SYSTEM.md §16's
   // "border" choice — the padding is how much room surrounds it, not a second method).

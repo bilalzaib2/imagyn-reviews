@@ -125,7 +125,19 @@ export const appearanceService = {
   // partial unique indexes aren't a clean fit for Prisma's schema DSL, and
   // application-level enforcement already matches this codebase's convention — see
   // widgetService's own resolution order).
+  //
+  // The ownership check below matters now that Brand Studio's Saved Themes section (Pro)
+  // makes this reachable from a real form submission for the first time — without it, a
+  // store could pass another store's Appearance row id and either activate someone else's
+  // theme for itself or (since only the caller's own rows get deactivated by the updateMany
+  // below) leave two stores both showing isActive:true. Same ownership-check convention
+  // widget.server.ts's mutations already use.
   async setActive(storeId: string, id: string): Promise<AppearanceRecord> {
+    const existing = await prisma.appearance.findUnique({ where: { id } });
+    if (!existing || existing.storeId !== storeId) {
+      throw new Error("Theme not found.");
+    }
+
     const [, activated] = await prisma.$transaction([
       prisma.appearance.updateMany({ where: { storeId, isActive: true }, data: { isActive: false } }),
       prisma.appearance.update({ where: { id }, data: { isActive: true } }),
