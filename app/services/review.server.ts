@@ -11,7 +11,7 @@ const RATING_MAX = 5;
 
 const reviewInclude = {
   product: {
-    select: { id: true, name: true, featuredImage: true },
+    select: { id: true, name: true, handle: true, featuredImage: true },
   },
   media: {
     orderBy: { createdAt: "asc" },
@@ -211,6 +211,79 @@ export async function getStoreReviews(storeId: string, options: ReviewQueryOptio
 
 export async function getProductReviews(productId: string, options: ReviewQueryOptions = {}) {
   return queryReviews({ productId }, options);
+}
+
+export interface FeaturedReview {
+  id: string;
+  reviewerName: string;
+  verifiedPurchase: boolean;
+  rating: number;
+  title: string | null;
+  content: string;
+  createdAt: Date;
+  product: { id: string; name: string; handle: string | null; featuredImage: string | null };
+  media: Array<{
+    id: string;
+    type: string;
+    url: string;
+    thumbnailUrl: string | null;
+    width: number | null;
+    height: number | null;
+  }>;
+}
+
+// Store-wide (cross-product), public-facing read for the Review Carousel widget — real
+// approved reviews only, never fabricated. Merchant-curated `featured: true` reviews lead
+// (most recent first); if that alone doesn't fill the requested count, backfills with the
+// store's best real reviews (highest helpful count, then most recent) rather than leaving the
+// carousel sparse or empty just because nothing's been flagged featured yet. The backfill
+// query only runs when actually needed (fewer than `limit` featured reviews exist), and
+// explicitly excludes ids already chosen so nothing is duplicated in the second batch.
+export async function getFeaturedReviews(storeId: string, limit = 12): Promise<FeaturedReview[]> {
+  const baseWhere = { storeId, deletedAt: null, status: ReviewStatus.APPROVED } as const;
+
+  const featured = await prisma.review.findMany({
+    where: { ...baseWhere, featured: true },
+    include: reviewInclude,
+    orderBy: [{ createdAt: "desc" }, { id: "desc" }],
+    take: limit,
+  });
+
+  let combined = featured;
+
+  if (combined.length < limit) {
+    const backfill = await prisma.review.findMany({
+      where: { ...baseWhere, id: { notIn: combined.map((review) => review.id) } },
+      include: reviewInclude,
+      orderBy: [{ helpfulCount: "desc" }, { createdAt: "desc" }, { id: "desc" }],
+      take: limit - combined.length,
+    });
+    combined = [...combined, ...backfill];
+  }
+
+  return combined.map((review) => ({
+    id: review.id,
+    reviewerName: review.reviewerName,
+    verifiedPurchase: review.verifiedPurchase,
+    rating: review.rating,
+    title: review.title,
+    content: review.content,
+    createdAt: review.createdAt,
+    product: {
+      id: review.product.id,
+      name: review.product.name,
+      handle: review.product.handle,
+      featuredImage: review.product.featuredImage,
+    },
+    media: review.media.map((item) => ({
+      id: item.id,
+      type: item.type,
+      url: item.url,
+      thumbnailUrl: item.thumbnailUrl,
+      width: item.width,
+      height: item.height,
+    })),
+  }));
 }
 
 export interface StoreReviewStats {

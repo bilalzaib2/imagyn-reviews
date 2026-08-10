@@ -10,10 +10,13 @@ import { authenticateAdminDeduped } from "../services/auth-dedupe.server";
 // the query params directly — they're only ever set by this app's own widgetCards config,
 // but there's no reason to let an open template/handle pair build an arbitrary
 // admin.shopify.com URL.
-const ALLOWED_BLOCKS: Record<string, "product" | "collection"> = {
+const ALLOWED_BLOCKS: Record<string, "product" | "collection" | "index"> = {
   star_rating: "product",
   rating_badge: "product",
   collection_rating_badges: "collection",
+  // Store-wide, not per-product — opens on the homepage template, matching this block's
+  // own default placement ("homepage-featured" in widget.shared.ts's defaultSettingsByType).
+  review_carousel: "index",
 };
 
 export const loader = async ({ request }: LoaderFunctionArgs) => {

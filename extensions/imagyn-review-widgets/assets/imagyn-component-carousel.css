@@ -1,0 +1,133 @@
+/*
+ * Imagyn Reviews — Review Carousel component.
+ *
+ * A store-wide (not per-product) featured-reviews section, typically placed on the
+ * homepage. Reuses .imagyn-review-card as-is (imagyn-component-review-card.css) for each
+ * slide's content — this file only adds the horizontal track/navigation shell around it.
+ * Native scroll-snap, not a JS animation loop, drives the sliding — the same mechanism
+ * this design system already reserved for carousel-style layouts (see
+ * .imagyn-reviews--layout-carousel's own scroll-snap-align rule) — so touch/trackpad swipe
+ * works for free on mobile, and the nav buttons are just scrollBy() calls.
+ *
+ * Load imagyn-tokens.css, imagyn-typography.css, imagyn-utilities.css, and
+ * imagyn-component-review-card.css before this file.
+ */
+
+.imagyn-carousel {
+  display: grid;
+  gap: var(--imagyn-space-px-md, 16px);
+  font-family: var(--imagyn-font-family);
+  color: var(--imagyn-color-text, inherit);
+  max-width: var(--imagyn-carousel-max-width, 1080px);
+  margin-inline: auto;
+  padding-inline: var(--imagyn-space-px-md, 16px);
+}
+
+.imagyn-carousel__heading {
+  margin: 0;
+  text-align: center;
+  font-size: var(--imagyn-font-size-lg, 20px);
+  font-weight: var(--imagyn-font-weight-semibold, 600);
+}
+
+.imagyn-carousel__viewport {
+  position: relative;
+}
+
+.imagyn-carousel__track {
+  display: flex;
+  gap: var(--imagyn-space-px-md, 16px);
+  overflow-x: auto;
+  scroll-snap-type: x mandatory;
+  scroll-padding-inline: var(--imagyn-space-px-md, 16px);
+  padding-block: var(--imagyn-space-3xs, 0.2em);
+  /* Scrollbar stays available (accessibility/discoverability) but visually quiet. */
+  scrollbar-width: thin;
+}
+
+.imagyn-carousel__slide {
+  flex: 0 0 clamp(240px, 80vw, 320px);
+  scroll-snap-align: start;
+}
+
+.imagyn-carousel__slide .imagyn-review-card {
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: var(--imagyn-space-sm, 0.6em);
+}
+
+.imagyn-carousel__product {
+  display: flex;
+  align-items: center;
+  gap: var(--imagyn-space-xs, 0.4em);
+  padding-top: var(--imagyn-space-xs, 0.4em);
+  margin-top: auto;
+  border-top: var(--imagyn-border-width, 1px) solid var(--imagyn-color-border, rgba(0, 0, 0, 0.08));
+  text-decoration: none;
+  color: inherit;
+}
+
+.imagyn-carousel__product-image {
+  width: 32px;
+  height: 32px;
+  border-radius: var(--imagyn-radius-sm, 4px);
+  object-fit: cover;
+  flex-shrink: 0;
+  background: var(--imagyn-color-border, rgba(0, 0, 0, 0.06));
+}
+
+.imagyn-carousel__product-name {
+  font-size: var(--imagyn-font-size-sm, 13px);
+  font-weight: var(--imagyn-font-weight-medium, 500);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.imagyn-carousel__media {
+  width: 100%;
+  aspect-ratio: 4 / 3;
+  border-radius: var(--imagyn-radius-sm, 4px);
+  object-fit: cover;
+}
+
+.imagyn-carousel__controls {
+  display: flex;
+  justify-content: center;
+  gap: var(--imagyn-space-sm, 0.6em);
+}
+
+.imagyn-carousel__nav {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  border-radius: var(--imagyn-radius-full, 999px);
+  border: var(--imagyn-border-width, 1px) solid var(--imagyn-color-border, rgba(0, 0, 0, 0.16));
+  background: var(--imagyn-color-surface, #ffffff);
+  color: var(--imagyn-color-text, inherit);
+  cursor: pointer;
+  transition: border-color var(--imagyn-duration-fast, 120ms) var(--imagyn-easing, ease-out);
+}
+
+.imagyn-carousel__nav:hover {
+  border-color: var(--imagyn-color-text, currentColor);
+}
+
+.imagyn-carousel__nav:focus-visible {
+  outline: 2px solid var(--imagyn-color-focus, #0a0a0a);
+  outline-offset: 2px;
+}
+
+.imagyn-carousel__nav svg {
+  width: 16px;
+  height: 16px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .imagyn-carousel__track {
+    scroll-behavior: auto;
+  }
+}

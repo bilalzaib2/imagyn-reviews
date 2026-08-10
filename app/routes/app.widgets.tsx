@@ -36,14 +36,16 @@ type LoaderData = {
 
 type PageView = "gallery" | "customize";
 
-// The theme extension ships exactly three real, installable blocks (see
+// The theme extension ships four real, installable blocks (see
 // extensions/imagyn-review-widgets/blocks/*.liquid — names below match their Shopify
 // block names exactly). Only "review-list" is wired to admin-editable settings today
-// (getStorefrontWidgetSettings always resolves that one type); Product Rating Badge and
-// Collection Rating Badge are configured entirely in the Shopify Theme Editor and have no
-// in-app settings to open, so their cards link out instead of pretending to have a
-// working Customize flow. Featured Collection Badge and Related Products Badge don't
-// exist as blocks at all yet — reserved placeholders only, per explicit product direction.
+// (getStorefrontWidgetSettings always resolves that one type); Product Rating Badge,
+// Collection Rating Badge, and Review Carousel are configured entirely in the Shopify Theme
+// Editor and have no in-app settings to open, so their cards link out instead of pretending
+// to have a working Customize flow (Review Carousel's real settings — heading, review count —
+// live in review_carousel.liquid's own schema, editable there). Featured Collection Badge and
+// Related Products Badge don't exist as blocks at all yet — reserved placeholders only, per
+// explicit product direction.
 type WidgetCardStatus = "editable" | "theme-editor" | "reserved";
 
 interface WidgetCardDef {
@@ -83,6 +85,14 @@ const widgetCards: WidgetCardDef[] = [
     status: "theme-editor",
     blockName: "Collection Ratings",
     blockHandle: "collection_rating_badges",
+  },
+  {
+    key: "review-carousel",
+    title: "Review Carousel",
+    description: "A store-wide, scrollable showcase of your best real reviews — typically placed on the homepage.",
+    status: "theme-editor",
+    blockName: "Review Carousel",
+    blockHandle: "review_carousel",
   },
   {
     key: "featured-collection-badge",

@@ -208,3 +208,20 @@ export async function getStorefrontWidgetSettings(
 
   return resolved;
 }
+
+// Store-wide counterpart of getStorefrontWidgetSettings above, for widgets that have no
+// "current product" context (the Review Carousel is placed once, typically on the homepage,
+// not per-product) — reuses the same store-wide-match branch rather than routing through the
+// product-scoped resolution that doesn't apply here. `type` defaults to "review-carousel"
+// since that's the only widget this is used for today, but isn't hardcoded to it.
+export async function getStorefrontCarouselSettings(
+  storeId: string,
+  type: WidgetType = "review-carousel",
+): Promise<WidgetSettings> {
+  const storeScoped = await widgetService.listWidgets(storeId);
+  const match = storeScoped.find(
+    (widget) => widget.type === type && widget.productId === null && widget.settings.enabled,
+  );
+
+  return match ? match.settings : getDefaultWidgetSettings(type);
+}
