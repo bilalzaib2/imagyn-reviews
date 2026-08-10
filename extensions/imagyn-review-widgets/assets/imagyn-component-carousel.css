@@ -128,26 +128,44 @@
    parent just because the parent stretched; without this the card would stay sized to its
    own content inside a taller <li>, defeating the point of stretch (and leaving the extra
    space as an invisible gap below the card instead of a usable one inside it). */
+/* Carousel cards run noticeably tighter than the shared .imagyn-review-card default
+   (padding: 24px, gap: 0.6em) — this is a density override scoped entirely to
+   .imagyn-carousel__slide, so List/Grid layouts elsewhere are untouched. */
 .imagyn-carousel__slide .imagyn-review-card {
   display: flex;
   flex-direction: column;
   height: 100%;
   box-sizing: border-box;
-  gap: var(--imagyn-space-sm, 0.6em);
+  padding: var(--imagyn-space-px-md, 16px);
+  gap: var(--imagyn-space-xs, 0.4em);
 }
 
-/* Pinned to exactly 4 lines both ways — max via line-clamp (long reviews truncate) *and*
+.imagyn-carousel__slide .imagyn-review-card__header {
+  margin-bottom: var(--imagyn-space-3xs, 0.2em);
+}
+
+.imagyn-carousel__slide .imagyn-review-card__stars {
+  margin-bottom: var(--imagyn-space-3xs, 0.2em);
+}
+
+.imagyn-carousel__slide .imagyn-review-card__title {
+  margin-bottom: 0;
+}
+
+/* Pinned to exactly 3 lines both ways — max via line-clamp (long reviews truncate) *and*
    min via min-height (short reviews still reserve the same space) — using the same em
-   math as the clamp (line-height 1.5 × 4 lines = 6em, relative to this element's own
+   math as the clamp (line-height 1.5 × 3 lines = 4.5em, relative to this element's own
    font-size token, not a hardcoded pixel guess). This is the actual fix for uneven card
    heights: the one field with genuinely unbounded length is now bounded on both ends, so
-   every card's title/stars/product row lands in the same place regardless of review length. */
+   every card's title/stars/product row lands in the same place regardless of review length.
+   3 lines (not the original 4) is also most of this pass's height reduction — the body was
+   the single largest contributor to how tall a "compact" card could still get. */
 .imagyn-carousel__slide .imagyn-review-card__body {
   display: -webkit-box;
   -webkit-box-orient: vertical;
-  -webkit-line-clamp: 4;
+  -webkit-line-clamp: 3;
   overflow: hidden;
-  min-height: 6em;
+  min-height: 4.5em;
 }
 
 /* margin-top: auto pins this to the bottom of the (now equal-height, see .imagyn-carousel__
@@ -160,7 +178,7 @@
   display: flex;
   align-items: center;
   gap: var(--imagyn-space-xs, 0.4em);
-  padding-top: var(--imagyn-space-xs, 0.4em);
+  padding-top: var(--imagyn-space-3xs, 0.2em);
   margin-top: auto;
   border-top: var(--imagyn-border-width, 1px) solid var(--imagyn-color-border, rgba(0, 0, 0, 0.08));
   text-decoration: none;
@@ -195,9 +213,14 @@
   white-space: nowrap;
 }
 
+/* 2:1 instead of the review-detail gallery's 4:3 — at a 260px-wide card, 4:3 was ~195px
+   tall (the single largest contributor to card height); 2:1 is ~130px, a real reduction,
+   not just a cosmetic crop, while still reading as a genuine photo, not a thumbnail. The
+   image supports the review here — it isn't the card's primary content the way it can be
+   in the full Product Reviews Widget gallery. */
 .imagyn-carousel__media {
   width: 100%;
-  aspect-ratio: 4 / 3;
+  aspect-ratio: 2 / 1;
   border-radius: var(--imagyn-radius-sm, 4px);
   object-fit: cover;
 }
