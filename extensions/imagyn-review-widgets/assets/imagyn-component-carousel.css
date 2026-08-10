@@ -114,14 +114,14 @@
   scroll-snap-align: start;
 }
 
-/* Mobile: one clearly dominant card with a visible peek of the next — 80% (down from an
-   earlier 86%) both shows more of that peek, reinforcing the carousel affordance, and keeps
-   the card from ballooning as wide as the viewport on larger phones, which (combined with
-   .imagyn-carousel__media's max-height above) is what keeps mobile cards from reading as
-   noticeably larger than the desktop ones. */
+/* Mobile: one clearly dominant card with a visible peek of the next. A flat percentage alone
+   doesn't work across real phone widths — 80% is ~259px on a 324px viewport (fine) but ~344px
+   on a 430px viewport (a large phone), well past "not ~300px+" — so this caps at 280px while
+   staying percentage-driven (72%) on narrower phones, rather than picking one flat number that
+   is either too wide on large phones or too cramped on small ones. */
 @media (max-width: 640px) {
   .imagyn-carousel__slide {
-    flex-basis: 80%;
+    flex-basis: min(72%, 280px);
   }
 }
 
