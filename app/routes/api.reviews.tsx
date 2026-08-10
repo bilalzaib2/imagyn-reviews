@@ -245,7 +245,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
       verifiedPurchase: false,
     });
 
-    const review = await createReview({
+    const review = await createReview(store.id, {
       productId: product.id,
       rating,
       title: title || null,

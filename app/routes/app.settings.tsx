@@ -123,7 +123,7 @@ export const action = async ({ request }: ActionFunctionArgs): Promise<ActionDat
 
   const permissions = await getStorePermissions(store.id);
   if (!permissions.canUseAutomaticReviewRequests) {
-    return { ok: false, error: "Automatic review requests require the Growth plan or higher." };
+    return { ok: false, error: "Automatic review requests require the Pro plan." };
   }
 
   const autoRequestEnabled = formData.get("autoRequestEnabled") === "true";
@@ -342,8 +342,8 @@ export default function SettingsPage() {
               </Banner>
             ) : !planIncludesAutomaticRequests ? (
               <Banner tone="info">
-                Automatic review requests require the Growth plan or higher.{" "}
-                <a href="/app/billing">Upgrade to Growth</a> to turn this on.
+                Automatic review requests require the Pro plan.{" "}
+                <a href="/app/billing">Upgrade to Pro</a> to turn this on.
               </Banner>
             ) : null}
             <Checkbox

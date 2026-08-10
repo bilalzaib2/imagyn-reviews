@@ -34,7 +34,6 @@ import {
   bulkModerateReviews,
   deleteReply,
   deleteReview,
-  distinctProductIdsFor,
   getStoreReviews,
   rejectReview,
   replyToReview,
@@ -168,6 +167,7 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
 
 export const action = async ({ request }: ActionFunctionArgs): Promise<ActionData> => {
   const { admin, session } = await authenticateAdminDeduped(request);
+  const store = await getOrCreateStore(session.shop);
 
   const formData = await request.formData();
   const intent = String(formData.get("_intent") || "");
@@ -182,7 +182,6 @@ export const action = async ({ request }: ActionFunctionArgs): Promise<ActionDat
         return { ok: false, intent, error: "The file is empty." };
       }
 
-      const store = await getOrCreateStore(session.shop);
       const result = await importReviews(store.id, source, fileContent, admin, dryRun);
       const nothingImported = result.imported === 0 && result.duplicates === 0;
       const hasIssues = result.errors.length > 0 || result.missingProducts.length > 0;
@@ -213,7 +212,8 @@ export const action = async ({ request }: ActionFunctionArgs): Promise<ActionDat
         return { ok: false, error: "Missing review id." };
       }
 
-      const review = intent === "approve" ? await approveReview(reviewId) : await rejectReview(reviewId);
+      const review =
+        intent === "approve" ? await approveReview(store.id, reviewId) : await rejectReview(store.id, reviewId);
       // Status just changed, which is the one thing the public review summary/JSON-LD
       // depends on — always resync, regardless of direction (approve adds a review to the
       // public set, reject removes one that may have been approved before).
@@ -228,7 +228,7 @@ export const action = async ({ request }: ActionFunctionArgs): Promise<ActionDat
         return { ok: false, error: "Missing review id." };
       }
 
-      const review = await deleteReview(reviewId);
+      const review = await deleteReview(store.id, reviewId);
       void syncProductStructuredData(admin, review.productId);
       return { ok: true, intent, message: "Review deleted." };
     }
@@ -241,7 +241,7 @@ export const action = async ({ request }: ActionFunctionArgs): Promise<ActionDat
         return { ok: false, error: "Missing review id." };
       }
 
-      await replyToReview(reviewId, reply);
+      await replyToReview(store.id, reviewId, reply);
       return { ok: true, intent, message: intent === "replyCreate" ? "Reply published." : "Reply updated." };
     }
 
@@ -252,7 +252,7 @@ export const action = async ({ request }: ActionFunctionArgs): Promise<ActionDat
         return { ok: false, error: "Missing review id." };
       }
 
-      await deleteReply(reviewId);
+      await deleteReply(store.id, reviewId);
       return { ok: true, intent, message: "Reply deleted." };
     }
 
@@ -263,7 +263,7 @@ export const action = async ({ request }: ActionFunctionArgs): Promise<ActionDat
         return { ok: false, error: "Missing media id." };
       }
 
-      await deleteReviewMedia(mediaId);
+      await deleteReviewMedia(store.id, mediaId);
       return { ok: true, intent, message: "Photo deleted." };
     }
 
@@ -277,19 +277,18 @@ export const action = async ({ request }: ActionFunctionArgs): Promise<ActionDat
         return { ok: false, error: "No reviews selected." };
       }
 
-      // Captured before the mutation (same requirement bulkDeleteReviews/bulkModerateReviews
-      // already have internally, per their own use of this same helper) — resolving after a
-      // bulkDelete would find nothing, since the affected reviews are soft-deleted by then.
-      const affectedProductIds = await distinctProductIdsFor(ids);
-
       if (intent === "bulkDelete") {
-        await bulkDeleteReviews(ids);
-        void Promise.all(affectedProductIds.map((productId) => syncProductStructuredData(admin, productId)));
+        const result = await bulkDeleteReviews(store.id, ids);
+        void Promise.all(result.affectedProductIds.map((productId) => syncProductStructuredData(admin, productId)));
         return { ok: true, intent, message: "Selected reviews deleted." };
       }
 
-      await bulkModerateReviews(ids, intent === "bulkApprove" ? ReviewStatus.APPROVED : ReviewStatus.REJECTED);
-      void Promise.all(affectedProductIds.map((productId) => syncProductStructuredData(admin, productId)));
+      const result = await bulkModerateReviews(
+        store.id,
+        ids,
+        intent === "bulkApprove" ? ReviewStatus.APPROVED : ReviewStatus.REJECTED,
+      );
+      void Promise.all(result.affectedProductIds.map((productId) => syncProductStructuredData(admin, productId)));
       return {
         ok: true,
         intent,

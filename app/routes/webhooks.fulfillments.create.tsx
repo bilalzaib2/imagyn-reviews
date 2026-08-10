@@ -52,7 +52,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
 
     const permissions = await getStorePermissions(store.id);
     if (!permissions.canUseAutomaticReviewRequests) {
-      console.log(`Skipping ${topic} for ${shop}: automatic review requests require the Growth plan or higher.`);
+      console.log(`Skipping ${topic} for ${shop}: automatic review requests require the Pro plan.`);
       return new Response();
     }
 

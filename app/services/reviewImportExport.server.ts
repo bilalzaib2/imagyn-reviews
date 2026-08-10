@@ -210,7 +210,7 @@ async function importRow(
     return willAutoApprove ? { kind: "imported", tier: match.tier } : { kind: "pending", tier: match.tier };
   }
 
-  const review = await createReview({
+  const review = await createReview(storeId, {
     productId: match.productId,
     rating,
     title: row.title || null,

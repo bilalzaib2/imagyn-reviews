@@ -16,6 +16,7 @@ import { buildReviewRequestEmail } from "../services/notifications/templates.ser
 import {
   EMAIL_TEMPLATE_VARIABLES,
   getDefaultEmailTemplateContent,
+  sanitizeEmailTemplateContentForPlan,
   type EmailTemplateContent,
 } from "../services/email.shared";
 import shellStyles from "../styles/app.shell.module.css";
@@ -106,7 +107,12 @@ export const action = async ({ request }: ActionFunctionArgs): Promise<ActionDat
         return { ok: false, intent, error };
       }
 
-      await emailTemplateService.upsertActive(store.id, { content });
+      // Server-side enforcement of canUseAdvancedEmailStudio, not just the UI hiding the
+      // "Coming to Pro" card below — see sanitizeEmailTemplateContentForPlan's own comment.
+      const permissions = await getStorePermissions(store.id);
+      const safeContent = sanitizeEmailTemplateContentForPlan(content, permissions.canUseAdvancedEmailStudio);
+
+      await emailTemplateService.upsertActive(store.id, { content: safeContent });
       return { ok: true, intent: "save" };
     }
 

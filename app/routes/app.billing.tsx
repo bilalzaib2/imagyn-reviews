@@ -47,7 +47,7 @@ export const loader = async ({ request }: LoaderFunctionArgs): Promise<LoaderDat
   };
 };
 
-// Paid plans (Growth, Pro) are never created or cancelled from here — Shopify Managed Pricing
+// The paid plan (Pro) is never created or cancelled from here — Shopify Managed Pricing
 // owns that entire flow on its own hosted page (see app.billing.manage.tsx). The only action
 // this route still performs itself is Starter, because it's a local, no-Shopify-charge choice
 // (see selectStarterPlan) rather than a Billing API operation.
@@ -121,13 +121,13 @@ function PlanCard({
           disabled={isBusy || isCurrent}
           className={`${styles.cardAction} ${isCurrent ? styles.ctaSecondary : styles.ctaPrimary}`}
         >
-          {isCurrent ? "Current plan" : "Select Starter"}
+          {isCurrent ? "Current plan" : "Select Free"}
         </button>
       ) : isCurrent ? (
         // Downgrading is also Shopify's to manage under Managed Pricing — same hosted page,
         // where picking a lower (or no) plan is just another selection.
         <a href={manageUrl} className={`${styles.cardAction} ${styles.ctaSecondary}`}>
-          Downgrade to Starter
+          Downgrade to Free
         </a>
       ) : (
         // Paid plans are never requested from app code — Shopify Managed Pricing hosts the

@@ -2,14 +2,20 @@
 // display data only: what a plan is *allowed to do* lives in permissions.ts, keyed off the
 // same PlanId, and every gate in the app reads permissions, never this file, directly (see
 // permissions.ts's header comment for why). app.billing.tsx and every marketing/App-Store
-// surface read `features` from here so "what does Growth include" only ever has one answer
+// surface read `features` from here so "what does Pro include" only ever has one answer
 // inside this repo.
 //
-// "owner" is a real PlanId (see permissions.ts) but is deliberately excluded from PLAN_ORDER /
-// getAllPlans() below — it must never render on the pricing page, in Shopify's billing config,
-// on the website, or in the App Store listing. It exists purely so a Store row can carry
-// `plan: "owner"` and have permissions.ts grant it everything, with no billing subscription and
-// no plan-name checks anywhere else in the app (see billing.server.ts's getBillingSnapshot).
+// The product is locked to exactly two merchant-facing plans, Free and Pro (see PLAN_ORDER
+// below) — "starter" and "growth" are the internal identifiers behind those two names.
+// "scale" and "owner" both remain real PlanId values (permissions.ts still resolves them, and
+// billing.server.ts's syncBillingFromShopify can still map an existing Shopify subscription
+// onto "scale") but neither is ever selectable or shown again: "owner" is purely internal (a
+// Store row can carry `plan: "owner"` and have permissions.ts grant it everything, with no
+// billing subscription and no plan-name checks anywhere else in the app — see
+// billing.server.ts's getBillingSnapshot), and "scale" is a retired third tier kept only so a
+// merchant who was already subscribed to it before this change keeps their current
+// entitlements (identical to Pro's today — see permissions.ts's SCALE) instead of being
+// silently downgraded.
 export type PlanId = "starter" | "growth" | "scale" | "owner";
 
 export interface PlanFeature {
@@ -36,7 +42,7 @@ export interface Plan {
 export const PLANS: Record<PlanId, Plan> = {
   starter: {
     id: "starter",
-    name: "Starter",
+    name: "Free",
     price: 0,
     currencyCode: "USD",
     trialDays: 0,
@@ -63,7 +69,7 @@ export const PLANS: Record<PlanId, Plan> = {
   },
   growth: {
     id: "growth",
-    name: "Growth",
+    name: "Pro",
     price: 9.99,
     currencyCode: "USD",
     trialDays: 14,
@@ -82,6 +88,8 @@ export const PLANS: Record<PlanId, Plan> = {
       { label: "Priority support" },
     ],
   },
+  // Retired third tier — excluded from PLAN_ORDER, so getAllPlans()/the billing page never
+  // render it. Kept defined only for existing subscribers; see PlanId's own comment above.
   scale: {
     id: "scale",
     name: "Scale",
@@ -113,8 +121,11 @@ export const PLANS: Record<PlanId, Plan> = {
 };
 
 // The only plans that may ever appear on the pricing page, in Shopify's billing config, on
-// the website, or in the App Store listing. Deliberately omits "owner".
-export const PLAN_ORDER: PlanId[] = ["starter", "growth", "scale"];
+// the website, or in the App Store listing — exactly Free and Pro, per the product's locked
+// two-plan positioning. Deliberately omits "owner" (internal-only, see plans.owner below) and
+// "scale" (retired from the merchant-facing surface; see PlanId's own comment for why the
+// identifier itself is kept around rather than deleted).
+export const PLAN_ORDER: PlanId[] = ["starter", "growth"];
 
 export function getPlan(id: PlanId): Plan {
   return PLANS[id];

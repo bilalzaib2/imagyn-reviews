@@ -316,8 +316,8 @@ export default function AnalyticsPage() {
             <UpgradePrompt
               feature="Advanced analytics"
               description="Time-to-review, conversion broken down by request source and delay, and an AI-generated digest of what customers say across your catalog."
-              benefit="Growth and above include deeper conversion insights and AI review themes, on top of everything in Free analytics."
-              requiredPlanName="Growth"
+              benefit="Pro includes deeper conversion insights and AI review themes, on top of everything in Free analytics."
+              requiredPlanName="Pro"
               billingHref="/app/billing"
             />
           )}

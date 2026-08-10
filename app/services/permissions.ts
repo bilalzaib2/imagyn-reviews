@@ -57,7 +57,7 @@ export interface Permissions {
 // Thrown by any gate below when a store lacks a capability — the one shape every caller
 // catches, same convention the old PlanLimitError established. `requiredPlan` drives the
 // upgrade prompt (see components/ui/UpgradePrompt.tsx) rather than the message alone, so the
-// UI can render a real "Upgrade to Growth" action instead of parsing text.
+// UI can render a real "Upgrade to Pro" action instead of parsing text.
 export class PermissionError extends Error {
   constructor(
     message: string,

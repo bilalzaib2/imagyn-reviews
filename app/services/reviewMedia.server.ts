@@ -192,9 +192,13 @@ export async function getProductMediaGallery(productId: string, limit = 24): Pro
 }
 
 // Admin-only moderation action: deletes a single media item independently of its review
-// (the review itself, and any other photos on it, are untouched).
-export async function deleteReviewMedia(mediaId: string) {
-  const media = await prisma.reviewMedia.findUnique({ where: { id: mediaId } });
+// (the review itself, and any other photos on it, are untouched). Scoped through the parent
+// review's storeId (ReviewMedia carries no storeId of its own) — a mediaId belonging to
+// another store's review resolves to the same "not found" a bogus id would.
+export async function deleteReviewMedia(storeId: string, mediaId: string) {
+  const media = await prisma.reviewMedia.findFirst({
+    where: { id: mediaId, review: { storeId } },
+  });
 
   if (!media) {
     throw new Error("Media not found.");

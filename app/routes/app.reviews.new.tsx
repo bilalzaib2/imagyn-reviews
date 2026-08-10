@@ -43,7 +43,8 @@ const parseValues = (formData: FormData): ReviewFormValues => ({
 });
 
 export const action = async ({ request }: ActionFunctionArgs) => {
-  await authenticateAdminDeduped(request);
+  const { session } = await authenticateAdminDeduped(request);
+  const store = await getOrCreateStore(session.shop);
 
   const formData = await request.formData();
   const values = parseValues(formData);
@@ -53,7 +54,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
   }
 
   try {
-    await createReview({
+    await createReview(store.id, {
       productId: values.productId,
       rating: values.rating,
       title: values.title || null,

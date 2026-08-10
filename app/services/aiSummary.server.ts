@@ -137,7 +137,7 @@ export async function regenerateAiSummary(productId: string): Promise<ProductAiS
   }
 
   const permissions = await getStorePermissions(product.storeId);
-  assertPermission(permissions, "canUseAI", "AI review summaries require the Growth plan or higher.", "growth");
+  assertPermission(permissions, "canUseAI", "AI review summaries require the Pro plan.", "growth");
 
   const reviews = await prisma.review.findMany({
     where: { productId, deletedAt: null, status: ReviewStatus.APPROVED },

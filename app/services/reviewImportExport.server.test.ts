@@ -50,6 +50,12 @@ vi.mock("../db.server", () => ({
         const product = fakeProducts.find((p) => p.id === where.id);
         return product ? { id: product.id, storeId: product.storeId, name: product.name } : null;
       }),
+      // createReview/updateReview (review.server.ts) resolve products through this, scoped by
+      // storeId, not findUnique — see review.server.test.ts for the ownership-check coverage.
+      findFirst: vi.fn(async ({ where }: { where: { id: string; storeId: string } }) => {
+        const product = fakeProducts.find((p) => p.id === where.id && p.storeId === where.storeId);
+        return product ? { id: product.id, storeId: product.storeId, name: product.name } : null;
+      }),
       update: vi.fn(async () => ({})),
     },
     store: {

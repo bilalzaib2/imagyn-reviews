@@ -102,8 +102,12 @@ function validateReviewInput(input: { rating: number; content: string; reviewerN
   }
 }
 
-async function requireReview(id: string) {
-  const existing = await prisma.review.findFirst({ where: { id, deletedAt: null } });
+// storeId is required and checked in the same query, not as a follow-up comparison — a
+// cross-tenant id must produce the exact same "not found" outcome a genuinely-missing id
+// would, so a caller can never distinguish "doesn't exist" from "isn't yours". Same
+// ownership-check convention widget.server.ts/appearance.server.ts already use.
+async function requireReview(storeId: string, id: string) {
+  const existing = await prisma.review.findFirst({ where: { id, storeId, deletedAt: null } });
 
   if (!existing) {
     throw new Error("Review not found.");
@@ -387,9 +391,13 @@ export async function getReview(id: string) {
   });
 }
 
-export async function createReview(data: CreateReviewInput) {
-  const product = await prisma.product.findUnique({
-    where: { id: data.productId },
+// storeId is the caller's already-authenticated store, never derived from the client-supplied
+// productId — the product lookup below is scoped to it, so a productId belonging to another
+// store resolves to "not found" instead of silently creating a review under the wrong tenant
+// (or worse, letting the caller's review get attributed to a store it doesn't own).
+export async function createReview(storeId: string, data: CreateReviewInput) {
+  const product = await prisma.product.findFirst({
+    where: { id: data.productId, storeId },
     select: { id: true, storeId: true, name: true },
   });
 
@@ -445,8 +453,8 @@ export async function createReview(data: CreateReviewInput) {
 
 // Status changes (PENDING/APPROVED/REJECTED) are deliberately not accepted here and go
 // through approveReview/rejectReview instead, so the moderation workflow has one entry point.
-export async function updateReview(id: string, data: UpdateReviewInput) {
-  const existing = await requireReview(id);
+export async function updateReview(storeId: string, id: string, data: UpdateReviewInput) {
+  const existing = await requireReview(storeId, id);
 
   const nextRating = data.rating ?? existing.rating;
   const nextContent = data.content ?? existing.content;
@@ -454,14 +462,15 @@ export async function updateReview(id: string, data: UpdateReviewInput) {
 
   validateReviewInput({ rating: nextRating, content: nextContent, reviewerName: nextReviewerName });
 
-  let nextStoreId = existing.storeId;
   let nextProductId = existing.productId;
   let nextProductTitle = existing.productTitle;
 
   if (data.productId && data.productId !== existing.productId) {
-    const product = await prisma.product.findUnique({
-      where: { id: data.productId },
-      select: { id: true, storeId: true, name: true },
+    // Scoped to the same store as the review being edited — a merchant can only ever
+    // reassign a review to one of their own products, never move it onto another store's.
+    const product = await prisma.product.findFirst({
+      where: { id: data.productId, storeId },
+      select: { id: true, name: true },
     });
 
     if (!product) {
@@ -469,14 +478,12 @@ export async function updateReview(id: string, data: UpdateReviewInput) {
     }
 
     nextProductId = product.id;
-    nextStoreId = product.storeId;
     nextProductTitle = product.name;
   }
 
   const review = await prisma.review.update({
     where: { id },
     data: {
-      storeId: nextStoreId,
       productId: nextProductId,
       productTitle: nextProductTitle,
       rating: nextRating,
@@ -501,8 +508,8 @@ export async function updateReview(id: string, data: UpdateReviewInput) {
   return review;
 }
 
-export async function deleteReview(id: string) {
-  const existing = await requireReview(id);
+export async function deleteReview(storeId: string, id: string) {
+  const existing = await requireReview(storeId, id);
 
   const review = await prisma.review.update({
     where: { id },
@@ -515,8 +522,12 @@ export async function deleteReview(id: string) {
   return review;
 }
 
-async function setReviewStatus(id: string, status: typeof ReviewStatus.APPROVED | typeof ReviewStatus.REJECTED) {
-  const existing = await requireReview(id);
+async function setReviewStatus(
+  storeId: string,
+  id: string,
+  status: typeof ReviewStatus.APPROVED | typeof ReviewStatus.REJECTED,
+) {
+  const existing = await requireReview(storeId, id);
 
   // Only a transition INTO published state can push a store over its plan's published-review
   // cap — re-approving an already-published review, or rejecting one, never needs this check.
@@ -531,7 +542,7 @@ async function setReviewStatus(id: string, status: typeof ReviewStatus.APPROVED 
 
       if (publishedCount >= limit) {
         throw new PermissionError(
-          `The Starter plan is limited to ${limit} published reviews. Upgrade to Growth for unlimited reviews.`,
+          `The Free plan is limited to ${limit} published reviews. Upgrade to Pro for unlimited reviews.`,
           "growth",
         );
       }
@@ -556,16 +567,16 @@ async function setReviewStatus(id: string, status: typeof ReviewStatus.APPROVED 
   return review;
 }
 
-export async function approveReview(id: string) {
-  return setReviewStatus(id, ReviewStatus.APPROVED);
+export async function approveReview(storeId: string, id: string) {
+  return setReviewStatus(storeId, id, ReviewStatus.APPROVED);
 }
 
-export async function rejectReview(id: string) {
-  return setReviewStatus(id, ReviewStatus.REJECTED);
+export async function rejectReview(storeId: string, id: string) {
+  return setReviewStatus(storeId, id, ReviewStatus.REJECTED);
 }
 
-export async function replyToReview(id: string, reply: string) {
-  await requireReview(id);
+export async function replyToReview(storeId: string, id: string, reply: string) {
+  await requireReview(storeId, id);
 
   const trimmedReply = reply.trim();
 
@@ -580,8 +591,8 @@ export async function replyToReview(id: string, reply: string) {
   });
 }
 
-export async function deleteReply(id: string) {
-  await requireReview(id);
+export async function deleteReply(storeId: string, id: string) {
+  await requireReview(storeId, id);
 
   return prisma.review.update({
     where: { id },
@@ -590,51 +601,51 @@ export async function deleteReply(id: string) {
   });
 }
 
-export async function distinctProductIdsFor(ids: string[]) {
-  const reviews = await prisma.review.findMany({
-    where: { id: { in: ids }, deletedAt: null },
-    select: { productId: true },
-  });
-
-  return Array.from(new Set(reviews.map((review) => review.productId)));
+export interface BulkReviewMutationResult {
+  count: number;
+  affectedProductIds: string[];
 }
 
+// Scoped to `storeId` in the same query that resolves which ids are even real — a
+// cross-tenant id in the selection is silently excluded rather than throwing, exactly like a
+// non-existent id would be, so a bulk action can never touch or even reveal the existence of
+// another store's reviews.
 export async function bulkModerateReviews(
+  storeId: string,
   ids: string[],
   status: typeof ReviewStatus.APPROVED | typeof ReviewStatus.REJECTED,
-) {
+): Promise<BulkReviewMutationResult> {
   if (ids.length === 0) {
-    return { count: 0 };
+    return { count: 0, affectedProductIds: [] };
   }
 
-  const affectedProductIds = await distinctProductIdsFor(ids);
+  const owned = await prisma.review.findMany({
+    where: { id: { in: ids }, storeId, deletedAt: null },
+    select: { id: true, productId: true, isPublished: true },
+  });
 
-  // Same cap setReviewStatus enforces for a single approval, applied per store — bulk-approve
-  // is a separate updateMany() call, not a loop over setReviewStatus, so it needs its own check.
+  if (owned.length === 0) {
+    return { count: 0, affectedProductIds: [] };
+  }
+
+  const ownedIds = owned.map((review) => review.id);
+  const affectedProductIds = Array.from(new Set(owned.map((review) => review.productId)));
+
+  // Same cap setReviewStatus enforces for a single approval — bulk-approve is a separate
+  // updateMany() call, not a loop over setReviewStatus, so it needs its own check.
   if (status === ReviewStatus.APPROVED) {
-    const targets = await prisma.review.findMany({
-      where: { id: { in: ids }, deletedAt: null, isPublished: false },
-      select: { storeId: true },
-    });
+    const permissions = await getStorePermissions(storeId);
+    const limit = permissions.maxPublishedReviews;
 
-    const storeIds = new Set(targets.map((target) => target.storeId));
-
-    for (const storeId of storeIds) {
-      const permissions = await getStorePermissions(storeId);
-      const limit = permissions.maxPublishedReviews;
-
-      if (limit === null) {
-        continue;
-      }
-
+    if (limit !== null) {
       const alreadyPublished = await prisma.review.count({
         where: { storeId, deletedAt: null, isPublished: true },
       });
-      const aboutToApprove = targets.filter((target) => target.storeId === storeId).length;
+      const aboutToApprove = owned.filter((review) => !review.isPublished).length;
 
       if (alreadyPublished + aboutToApprove > limit) {
         throw new PermissionError(
-          `The Starter plan is limited to ${limit} published reviews. Upgrade to Growth for unlimited reviews.`,
+          `The Free plan is limited to ${limit} published reviews. Upgrade to Pro for unlimited reviews.`,
           "growth",
         );
       }
@@ -642,7 +653,7 @@ export async function bulkModerateReviews(
   }
 
   const result = await prisma.review.updateMany({
-    where: { id: { in: ids }, deletedAt: null },
+    where: { id: { in: ownedIds }, deletedAt: null },
     data: { status, isPublished: status === ReviewStatus.APPROVED },
   });
 
@@ -652,24 +663,34 @@ export async function bulkModerateReviews(
     affectedProductIds.forEach((productId) => void maybeAutoRegenerateAiSummary(productId));
   }
 
-  return result;
+  return { count: result.count, affectedProductIds };
 }
 
-export async function bulkDeleteReviews(ids: string[]) {
+export async function bulkDeleteReviews(storeId: string, ids: string[]): Promise<BulkReviewMutationResult> {
   if (ids.length === 0) {
-    return { count: 0 };
+    return { count: 0, affectedProductIds: [] };
   }
 
-  const affectedProductIds = await distinctProductIdsFor(ids);
+  const owned = await prisma.review.findMany({
+    where: { id: { in: ids }, storeId, deletedAt: null },
+    select: { id: true, productId: true },
+  });
+
+  if (owned.length === 0) {
+    return { count: 0, affectedProductIds: [] };
+  }
+
+  const ownedIds = owned.map((review) => review.id);
+  const affectedProductIds = Array.from(new Set(owned.map((review) => review.productId)));
 
   const result = await prisma.review.updateMany({
-    where: { id: { in: ids }, deletedAt: null },
+    where: { id: { in: ownedIds }, deletedAt: null },
     data: { deletedAt: new Date() },
   });
 
   await Promise.all(affectedProductIds.map((productId) => recalculateProductStats(productId)));
 
-  return result;
+  return { count: result.count, affectedProductIds };
 }
 
 export interface HelpfulVoteResult {

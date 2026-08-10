@@ -47,6 +47,32 @@ export function mergeEmailTemplateContent(partial: Partial<EmailTemplateContent>
   return { ...getDefaultEmailTemplateContent(), ...partial };
 }
 
+// The server-side enforcement point for canUseAdvancedEmailStudio (see permissions.ts) —
+// app.email-studio.tsx's save action must call this before persisting, exactly like
+// app.appearance.tsx's save action strips Pro-only Brand Studio fields for Free stores,
+// rather than trusting that the UI never sent them. Every field on EmailTemplateContent today
+// (subject/heading/bodyText/buttonText/accentColor/logoUrl) is base, Free-tier functionality —
+// there is no Pro-only field to strip yet (see permissions.ts's canUseAdvancedEmailStudio
+// comment: multiple templates/themes, a reminder-email variant, and deeper layout/styling
+// control are Pro-only and not built). canUseAdvancedEmailStudio is accepted now, ahead of
+// having anything to gate, so this is the one place a future Pro-only field gets threaded in —
+// the day one ships, it's added to the allow-list below guarded by this flag, not left to a
+// UI-only check.
+export function sanitizeEmailTemplateContentForPlan(
+  content: EmailTemplateContent,
+  canUseAdvancedEmailStudio: boolean,
+): EmailTemplateContent {
+  void canUseAdvancedEmailStudio;
+  return {
+    subject: content.subject,
+    heading: content.heading,
+    bodyText: content.bodyText,
+    buttonText: content.buttonText,
+    accentColor: content.accentColor,
+    logoUrl: content.logoUrl,
+  };
+}
+
 export interface EmailTemplateVariableValues {
   customerName: string;
   storeName: string;

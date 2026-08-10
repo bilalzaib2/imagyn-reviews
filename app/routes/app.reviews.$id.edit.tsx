@@ -52,7 +52,8 @@ const parseValues = (formData: FormData): ReviewFormValues => ({
 });
 
 export const action = async ({ request, params }: ActionFunctionArgs) => {
-  const { admin } = await authenticateAdminDeduped(request);
+  const { admin, session } = await authenticateAdminDeduped(request);
+  const store = await getOrCreateStore(session.shop);
   const reviewId = params.id ?? "";
 
   if (!reviewId) {
@@ -66,10 +67,12 @@ export const action = async ({ request, params }: ActionFunctionArgs) => {
     // Fetched before the update so the sync-or-not decision below reflects the review's
     // status going into this edit, not after — an edited PENDING/REJECTED review was never
     // part of the public structured data in the first place, so editing its content is a
-    // no-op for search engines and shouldn't trigger a write.
+    // no-op for search engines and shouldn't trigger a write. updateReview below is the
+    // security-relevant call (it rejects a cross-store id outright); this read is only used
+    // for the resync decision.
     const existingReview = await getReview(reviewId);
 
-    const updated = await updateReview(reviewId, {
+    const updated = await updateReview(store.id, reviewId, {
       rating: values.rating,
       title: values.title || null,
       content: values.content,

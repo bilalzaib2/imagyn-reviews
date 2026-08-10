@@ -95,7 +95,7 @@ export const action = async ({ request }: ActionFunctionArgs): Promise<ActionDat
     }
 
     if (intent === "createTheme") {
-      assertPermission(permissions, "canUseBrandStudio", "Saved themes require the Growth plan or higher.", "growth");
+      assertPermission(permissions, "canUseBrandStudio", "Saved themes require the Pro plan.", "growth");
 
       const name = String(formData.get("name") || "").trim();
       if (!name) {
@@ -107,7 +107,7 @@ export const action = async ({ request }: ActionFunctionArgs): Promise<ActionDat
     }
 
     if (intent === "setActiveTheme") {
-      assertPermission(permissions, "canUseBrandStudio", "Saved themes require the Growth plan or higher.", "growth");
+      assertPermission(permissions, "canUseBrandStudio", "Saved themes require the Pro plan.", "growth");
 
       const themeId = String(formData.get("themeId") || "");
       if (!themeId) {
@@ -543,7 +543,7 @@ export default function AppearancePage() {
                   feature="Advanced customization"
                   description="Fine-tune maximum content width and motion — plus star size/shape and media gallery treatments as they ship."
                   benefit="Growth and above include deeper layout controls on top of everything in Free Brand Studio."
-                  requiredPlanName="Growth"
+                  requiredPlanName="Pro"
                   billingHref={`/app/billing${location.search}`}
                 />
               )}
@@ -602,7 +602,7 @@ export default function AppearancePage() {
                   feature="Saved Themes"
                   description="Save multiple configurations — a holiday look, a sale look, your everyday brand look — and switch between them instantly."
                   benefit="Growth and above include unlimited saved themes on top of everything in Free Brand Studio."
-                  requiredPlanName="Growth"
+                  requiredPlanName="Pro"
                   billingHref={`/app/billing${location.search}`}
                 />
               )}

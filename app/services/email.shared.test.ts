@@ -4,6 +4,7 @@ import {
   getDefaultEmailTemplateContent,
   mergeEmailTemplateContent,
   renderTemplateVariables,
+  sanitizeEmailTemplateContentForPlan,
 } from "./email.shared";
 
 describe("getDefaultEmailTemplateContent", () => {
@@ -57,6 +58,33 @@ describe("renderTemplateVariables", () => {
 
   it("leaves an unrecognized token as literal text instead of throwing", () => {
     expect(renderTemplateVariables("Hi {{unknown_token}}!", values)).toBe("Hi {{unknown_token}}!");
+  });
+});
+
+describe("sanitizeEmailTemplateContentForPlan", () => {
+  const customContent = {
+    subject: "Custom subject",
+    heading: "Custom heading",
+    bodyText: "Custom body",
+    buttonText: "Rate it",
+    accentColor: "#ff0000",
+    logoUrl: "https://example.com/logo.png",
+  };
+
+  it("preserves every base field for a Free (non-advanced) store — the base editor is free for everyone", () => {
+    expect(sanitizeEmailTemplateContentForPlan(customContent, false)).toEqual(customContent);
+  });
+
+  it("preserves every base field for a Pro (advanced) store identically", () => {
+    expect(sanitizeEmailTemplateContentForPlan(customContent, true)).toEqual(customContent);
+  });
+
+  it("only ever returns the declared EmailTemplateContent fields, dropping anything else on the input object", () => {
+    const withExtra = { ...customContent, someFutureProOnlyField: "smuggled" } as typeof customContent;
+    const sanitized = sanitizeEmailTemplateContentForPlan(withExtra, false);
+
+    expect(sanitized).toEqual(customContent);
+    expect(sanitized).not.toHaveProperty("someFutureProOnlyField");
   });
 });
 
