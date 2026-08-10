@@ -20,8 +20,9 @@
     }
   }
 
-  // Mirrors reviews-widget.js's renderVerifiedBadge exactly (a small check icon + quiet
-  // text, never a colored pill) — kept as its own small copy rather than a cross-script
+  // Mirrors reviews-widget.js's renderVerifiedBadge exactly (same filled-circle-with-
+  // cutout-check icon, same imagyn-review-card__verified-icon/-label classes, same
+  // "Verified Buyer" label) — kept as its own small copy rather than a cross-script
   // import, matching this extension's existing convention of each widget script being
   // self-contained (see rating-badge.js/collection-rating-badges.js, which don't share
   // helpers with reviews-widget.js either beyond window.ImagynShared/ImagynAppearance).
@@ -31,8 +32,11 @@
     }
     return (
       '<span class="imagyn-review-card__verified">' +
-      '<svg viewBox="0 0 24 24" aria-hidden="true" width="12" height="12"><path fill="currentColor" d="M9 16.2l-3.5-3.5L4 14.2l5 5 11-11-1.5-1.5z"></path></svg>' +
-      "<span>Verified</span>" +
+      '<svg class="imagyn-review-card__verified-icon" viewBox="0 0 20 20" aria-hidden="true" focusable="false">' +
+      '<circle cx="10" cy="10" r="10" fill="currentColor"></circle>' +
+      '<path d="M6 10.4 8.7 13 14 7.5" stroke="var(--imagyn-color-surface, #fff)" stroke-width="1.7" fill="none" stroke-linecap="round" stroke-linejoin="round"></path>' +
+      "</svg>" +
+      '<span class="imagyn-review-card__verified-label">Verified Buyer</span>' +
       "</span>"
     );
   }

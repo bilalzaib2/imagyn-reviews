@@ -15,12 +15,22 @@
 
 .imagyn-carousel {
   display: grid;
+  /* Explicitly cap the (single, implicit) grid column at the available space instead of
+     leaving it at the default `auto` track, which sizes to the *max-content* of its items.
+     Grid items default to `min-width: auto` — their own content's intrinsic minimum — so a
+     wide-enough descendant (see .imagyn-carousel__product-name's nowrap text below) could
+     pull the column, and therefore this whole section, wider than the page. minmax(0, 1fr)
+     is the standard fix: the column may shrink to 0 and grows to fill 1fr, full stop,
+     regardless of what its content would prefer to be. */
+  grid-template-columns: minmax(0, 1fr);
   gap: var(--imagyn-space-px-md, 16px);
   font-family: var(--imagyn-font-family);
   color: var(--imagyn-color-text, inherit);
+  width: 100%;
   max-width: var(--imagyn-carousel-max-width, 1080px);
   margin-inline: auto;
   padding-inline: var(--imagyn-space-px-md, 16px);
+  box-sizing: border-box;
 }
 
 .imagyn-carousel__heading {
@@ -30,8 +40,18 @@
   font-weight: var(--imagyn-font-weight-semibold, 600);
 }
 
+/* The true clipping boundary (the "viewport" in viewport/track separation): the track's
+   real, unclipped content width can be far wider than this box — that's expected and
+   fine — but nothing wider than this element is ever allowed to escape it. min-width: 0
+   overrides this element's own default `min-width: auto` as a grid item (see .imagyn-
+   carousel above); overflow: hidden independently guarantees the same per spec ("the
+   automatic minimum size is 0 for boxes with overflow other than visible"). Both are set
+   for defense in depth across engines. */
 .imagyn-carousel__viewport {
   position: relative;
+  width: 100%;
+  min-width: 0;
+  overflow: hidden;
 }
 
 .imagyn-carousel__track {
@@ -44,7 +64,14 @@
      the first place), cards now land at a naturally similar, compact height instead of
      being artificially stretched. */
   align-items: flex-start;
+  width: 100%;
+  min-width: 0;
   gap: var(--imagyn-space-px-md, 16px);
+  /* This is what makes the carousel internally scrollable — the track's own real content
+     width can exceed the viewport above; only *this* box's overflow is ever exposed, and
+     only inside the hard clip .imagyn-carousel__viewport already establishes. Native
+     scroll (not a transform/JS animation loop) gives touch/trackpad swipe for free and
+     keeps the gesture scoped to the carousel rather than the page. */
   overflow-x: auto;
   scroll-snap-type: x mandatory;
   scroll-padding-inline: var(--imagyn-space-px-md, 16px);
@@ -56,9 +83,14 @@
 /* Fixed desktop card width (matches the existing 260px precedent already reserved for
    carousel-style layouts in imagyn-component-review-card.css) rather than a fluid
    viewport-relative size — a compact, predictable ~4 cards visible on a full-width
-   desktop section, not a viewport-scaled guess. */
+   desktop section, not a viewport-scaled guess. min-width: 0 stops this flex item's own
+   content (e.g. a long product name below) from forcing it wider than its flex-basis —
+   the same class of fix .imagyn-carousel__viewport applies one level up; max-width: 100%
+   is a safety net for the mobile flex-basis below. */
 .imagyn-carousel__slide {
   flex: 0 0 260px;
+  min-width: 0;
+  max-width: 100%;
   scroll-snap-align: start;
 }
 
@@ -97,6 +129,7 @@
   border-top: var(--imagyn-border-width, 1px) solid var(--imagyn-color-border, rgba(0, 0, 0, 0.08));
   text-decoration: none;
   color: inherit;
+  min-width: 0;
 }
 
 .imagyn-carousel__product-image {
@@ -108,7 +141,17 @@
   background: var(--imagyn-color-border, rgba(0, 0, 0, 0.06));
 }
 
+/* The actual trigger of the document-level horizontal overflow bug: white-space: nowrap
+   means this element's un-wrapped text is its intrinsic minimum width. Without min-width:
+   0, that intrinsic minimum climbs up through .imagyn-carousel__product (a flex row) into
+   .imagyn-carousel__slide, .imagyn-carousel__track, and .imagyn-carousel__viewport — each
+   a flex/grid item that (per spec) defaults to min-width: auto, i.e. "at least as wide as
+   my content wants to be" — and from there into .imagyn-carousel's grid column, forcing
+   the whole section wider than the page. overflow/text-overflow/white-space above still
+   control how the (now width-capped) box paints; min-width: 0 is what makes the box
+   *actually* stop at that width instead of just visually clipping inside an oversized one. */
 .imagyn-carousel__product-name {
+  min-width: 0;
   font-size: var(--imagyn-font-size-sm, 13px);
   font-weight: var(--imagyn-font-weight-medium, 500);
   overflow: hidden;
