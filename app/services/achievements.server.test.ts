@@ -128,7 +128,7 @@ vi.mock("../db.server", () => ({
   },
 }));
 
-const { evaluateAchievements } = await import("./achievements.server");
+const { evaluateAchievements, getEarnedMedalsForStorefront } = await import("./achievements.server");
 
 beforeEach(() => {
   reviews = [];
@@ -335,5 +335,53 @@ describe("no-fabrication safeguard", () => {
     const second = await evaluateAchievements("store_1");
 
     expect(second).toEqual(first);
+  });
+});
+
+describe("getEarnedMedalsForStorefront", () => {
+  function seedAchievement(storeId: string, key: string, earnedAt: Date) {
+    achievementRows.push({ id: `ach_${nextAchievementId++}`, storeId, key, earnedAt, metadata: null });
+  }
+
+  it("only returns the requesting store's own earned medals — never another store's", async () => {
+    seedAchievement("store_1", "verified_reviews_10", new Date(2026, 0, 1));
+    seedAchievement("store_2", "verified_reviews_100", new Date(2026, 0, 1));
+
+    const medals = await getEarnedMedalsForStorefront("store_1");
+
+    expect(medals).toHaveLength(1);
+    expect(medals[0].key).toBe("verified_reviews_10");
+  });
+
+  it("returns an empty array (not an error) for a store with nothing earned yet", async () => {
+    const medals = await getEarnedMedalsForStorefront("store_1");
+    expect(medals).toEqual([]);
+  });
+
+  it("collapses a family to only its highest earned tier", async () => {
+    seedAchievement("store_1", "verified_reviews_10", new Date(2026, 0, 1));
+    seedAchievement("store_1", "verified_reviews_50", new Date(2026, 1, 1));
+    seedAchievement("store_1", "verified_reviews_100", new Date(2026, 2, 1));
+
+    const medals = await getEarnedMedalsForStorefront("store_1");
+    const verifiedVoiceMedals = medals.filter((m) => m.key.startsWith("verified_reviews_"));
+
+    expect(verifiedVoiceMedals).toHaveLength(1);
+    expect(verifiedVoiceMedals[0].key).toBe("verified_reviews_100");
+  });
+
+  it("only exposes display-safe fields — no metadata, counts, or other-store data", async () => {
+    seedAchievement("store_1", "top_stores_10", new Date(2026, 0, 1));
+
+    const medals = await getEarnedMedalsForStorefront("store_1");
+
+    expect(Object.keys(medals[0]).sort()).toEqual(["category", "description", "earnedAt", "key", "name"].sort());
+  });
+
+  it("never fabricates a medal for a key that no longer has a real definition", async () => {
+    seedAchievement("store_1", "retired_medal_key", new Date(2026, 0, 1));
+
+    const medals = await getEarnedMedalsForStorefront("store_1");
+    expect(medals).toEqual([]);
   });
 });

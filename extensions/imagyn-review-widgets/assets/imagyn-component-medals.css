@@ -1,0 +1,68 @@
+/*
+ * Imagyn Reviews — Medals component.
+ *
+ * Storefront display of a store's earned Medals/Achievements (see app/services/
+ * achievements.server.ts's getEarnedMedalsForStorefront — the only data source this reads).
+ * Renders nothing at all when the store has no earned medals yet (see reviews-widget.js's
+ * renderMedals) — there is no "locked" or empty-placeholder state on the storefront, only
+ * real, earned ones. Same "text label, never a visual gimmick" restraint as AI Summary
+ * (imagyn-component-summary.css): a quiet row of subtle outline pills, not colorful trophy
+ * artwork, so it reads as part of the same editorial trust-signal flow as the rating and
+ * recommendation stats above it, not a separate decorative block.
+ *
+ * Load imagyn-tokens.css and imagyn-component-ratings-section.css (for
+ * .imagyn-ratings-section__label) before this file.
+ */
+
+.imagyn-medals {
+  display: grid;
+  gap: var(--imagyn-space-sm, 0.6em);
+}
+
+.imagyn-medals__list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--imagyn-space-xs, 0.4em);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.imagyn-medal {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--imagyn-space-2xs, 0.3em);
+  padding: var(--imagyn-space-2xs, 0.3em) var(--imagyn-space-sm, 0.6em);
+  border: var(--imagyn-border-width, 1px) solid var(--imagyn-color-border, rgba(0, 0, 0, 0.08));
+  border-radius: var(--imagyn-radius-full, 999px);
+  font-size: var(--imagyn-font-size-sm, 13px);
+  font-weight: var(--imagyn-font-weight-medium, 500);
+  color: var(--imagyn-color-text, inherit);
+  white-space: nowrap;
+}
+
+.imagyn-medal__icon {
+  flex-shrink: 0;
+  width: 16px;
+  height: 16px;
+}
+
+.imagyn-medal__icon circle:first-child {
+  stroke: var(--imagyn-color-star, #f5a623);
+  stroke-width: 1;
+  fill: none;
+}
+
+.imagyn-medal__icon .imagyn-medal__icon-fill {
+  fill: color-mix(in srgb, var(--imagyn-color-star, #f5a623) 14%, transparent);
+}
+
+.imagyn-medal__icon .imagyn-medal__icon-glyph {
+  fill: var(--imagyn-color-star, #f5a623);
+}
+
+@media (max-width: 480px) {
+  .imagyn-medal {
+    font-size: var(--imagyn-font-size-xs, 12px);
+  }
+}

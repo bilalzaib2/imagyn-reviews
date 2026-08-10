@@ -348,3 +348,55 @@ export async function evaluateAchievements(storeId: string): Promise<Achievement
 
   return [...verifiedVoices, ...peakMonth, ...trust, ...topStores, ...trending];
 }
+
+export interface StorefrontMedal {
+  key: string;
+  name: string;
+  description: string;
+  category: AchievementDefinition["category"];
+  earnedAt: string;
+}
+
+// Public-storefront read path (see api.reviews.tsx) — deliberately NOT evaluateAchievements.
+// That function runs a real, multi-query computation per family (including a platform-wide
+// aggregate for Top Stores) meant for an authenticated merchant's occasional admin-page visit,
+// not for every anonymous storefront page view. This instead only reads the already-persisted
+// Achievement ledger — one indexed query, storeId-scoped — so a medal appears on the
+// storefront once it's been detected on a merchant's next /app/medals visit, not live on every
+// shopper's page load. Only persistent (ledger-backed) medals can appear here; Trending has no
+// ledger row by design (see achievements.shared.ts) and is therefore admin-only for now.
+// Returns only the highest-earned tier per family — a shopper doesn't need to see every
+// intermediate milestone a store has ever crossed, just its current standing — and only the
+// display-safe fields a storefront visitor should ever see (no metadata, no counts, no
+// percentiles, no other store's data of any kind).
+export async function getEarnedMedalsForStorefront(storeId: string): Promise<StorefrontMedal[]> {
+  const rows = await prisma.achievement.findMany({
+    where: { storeId },
+    select: { key: true, earnedAt: true },
+  });
+
+  const definitionByKey = new Map(ACHIEVEMENT_DEFINITIONS.map((definition) => [definition.key, definition]));
+
+  const highestByFamily = new Map<string, { definition: AchievementDefinition; earnedAt: Date }>();
+  for (const row of rows) {
+    const definition = definitionByKey.get(row.key);
+    // Skips silently rather than throwing — a retired/unknown key (see the Achievement.key
+    // comment in schema.prisma) must never break a real merchant's storefront.
+    if (!definition) continue;
+
+    const current = highestByFamily.get(definition.family);
+    if (!current || definition.tier > current.definition.tier) {
+      highestByFamily.set(definition.family, { definition, earnedAt: row.earnedAt });
+    }
+  }
+
+  return Array.from(highestByFamily.values())
+    .sort((a, b) => b.earnedAt.getTime() - a.earnedAt.getTime())
+    .map(({ definition, earnedAt }) => ({
+      key: definition.key,
+      name: definition.name,
+      description: definition.description,
+      category: definition.category,
+      earnedAt: earnedAt.toISOString(),
+    }));
+}

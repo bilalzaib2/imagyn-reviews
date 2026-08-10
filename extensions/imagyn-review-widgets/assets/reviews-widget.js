@@ -278,6 +278,61 @@
     return html;
   }
 
+  // Same original glyph paths as the admin's Medallion component
+  // (app/components/medals/Medallion.tsx) — kept in sync by hand so a merchant sees the same
+  // mark in the admin and on their own storefront. Not a reproduction of any third party's
+  // badge artwork.
+  var MEDAL_GLYPH_BY_CATEGORY = {
+    verified: "M9 16.2l-3.5-3.5L4 14.2l5 5 11-11-1.5-1.5z",
+    milestone: "M4 17h16l-5-9-3.5 6-2-3z",
+    trust: "M12 3l7 3v6c0 4.4-3 8-7 9-4-1-7-4.6-7-9V6z",
+    ranking: "M12 12m-3 0a3 3 0 1 0 6 0a3 3 0 1 0 -6 0",
+    trending: "M4 16l6-6 4 4 6-7",
+  };
+
+  function buildMedallionSvg(category) {
+    var inner =
+      '<circle cx="12" cy="12" r="10.5"></circle>' +
+      '<circle cx="12" cy="12" r="9" class="imagyn-medal__icon-fill"></circle>';
+
+    if (category === "ranking") {
+      inner +=
+        '<circle cx="12" cy="12" r="5.5" fill="none" class="imagyn-medal__icon-glyph" ' +
+        'style="stroke:currentColor;stroke-width:1.25"></circle>' +
+        '<circle cx="12" cy="12" r="2" class="imagyn-medal__icon-glyph"></circle>';
+    } else {
+      var d = MEDAL_GLYPH_BY_CATEGORY[category] || MEDAL_GLYPH_BY_CATEGORY.verified;
+      inner += '<path d="' + d + '" class="imagyn-medal__icon-glyph"></path>';
+    }
+
+    return '<svg class="imagyn-medal__icon" viewBox="0 0 24 24" fill="none" aria-hidden="true">' + inner + "</svg>";
+  }
+
+  // Only ever renders medals the backend has already determined are genuinely earned (see
+  // achievements.server.ts's getEarnedMedalsForStorefront) — this never evaluates or infers
+  // achievement state itself, and there is no "locked" variant rendered here at all. Empty
+  // array (a store with nothing earned yet, or Medals not yet visited in the admin) renders
+  // nothing, matching renderAiSummary's own empty-state convention above.
+  function renderMedals(medals) {
+    if (!medals || medals.length === 0) {
+      return "";
+    }
+
+    var html = '<div class="imagyn-medals">';
+    html += '<p class="imagyn-ratings-section__label">Medals</p>';
+    html += '<ul class="imagyn-medals__list">';
+    for (var i = 0; i < medals.length; i++) {
+      var medal = medals[i];
+      html +=
+        '<li class="imagyn-medal" title="' + escapeHtml(medal.description) + '">' +
+        buildMedallionSvg(medal.category) +
+        "<span>" + escapeHtml(medal.name) + "</span>" +
+        "</li>";
+    }
+    html += "</ul></div>";
+    return html;
+  }
+
   // The inline rating summary (stars, numeral, count, and the Write a Review trigger) has
   // moved to the Rating Badge block, positioned above the product title to match the
   // native Shopify/Atoms pattern (see rating-badge.js) — this component now covers only
@@ -286,7 +341,7 @@
   // the rating — both it and the badge's trigger control the same underlying form (see the
   // "imagyn:write-review-toggle"/"imagyn:write-review-state" events below), so opening or
   // closing the form from either place keeps both buttons' state in sync.
-  function renderSummary(summaryEl, summary, s, aiSummary) {
+  function renderSummary(summaryEl, summary, s, aiSummary, medals) {
     var totalReviews = summary.totalReviews || 0;
     var averageRating = summary.averageRating || 0;
     var ratingCounts = summary.ratingCounts || { 1: 0, 2: 0, 3: 0, 4: 0, 5: 0 };
@@ -296,7 +351,9 @@
     var recommendPercent = totalReviews > 0 ? Math.round(((ratingCounts[5] || 0) + (ratingCounts[4] || 0)) / totalReviews * 100) : 0;
     var hasEmptyState = totalReviews === 0;
 
-    if (!showStats && !hasEmptyState && !aiSummary && !showWrite) {
+    var hasMedals = medals && medals.length > 0;
+
+    if (!showStats && !hasEmptyState && !aiSummary && !showWrite && !hasMedals) {
       summaryEl.innerHTML = "";
       return;
     }
@@ -364,6 +421,7 @@
     // getAiSummary — a pure read, never a generation trigger), so this never adds latency
     // or blocks rendering. Renders nothing at all until a merchant has generated one.
     html += renderAiSummary(aiSummary);
+    html += renderMedals(medals);
 
     html += "</div>"; // summary
 
@@ -867,6 +925,7 @@
               data.summary || { averageRating: 0, totalReviews: 0, ratingCounts: { 1: 0, 2: 0, 3: 0, 4: 0, 5: 0 } },
               s,
               data.aiSummary || null,
+              data.medals || [],
             );
           }
 

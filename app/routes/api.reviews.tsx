@@ -18,6 +18,7 @@ import { getStoreBySlug } from "../services/store.server";
 import { getStorefrontWidgetSettings } from "../services/widget.server";
 import { getAiSummary } from "../services/aiSummary.server";
 import { getStorefrontAppearance } from "../services/appearance.server";
+import { getEarnedMedalsForStorefront } from "../services/achievements.server";
 import { getStorePermissions } from "../services/permissions";
 import { evaluateReview, getModerationSettings, sendHeldReviewNotification } from "../services/moderationRules.server";
 
@@ -111,7 +112,7 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
   // setting, entirely outside our admin UI).
   const permissions = await getStorePermissions(store.id);
 
-  const [summary, result, widget, aiSummary, gallery, appearance] = await Promise.all([
+  const [summary, result, widget, aiSummary, gallery, appearance, medals] = await Promise.all([
     getPublicReviewSummary(product.id),
     getProductReviews(product.id, { status: ReviewStatus.APPROVED, limit: 50 }),
     getStorefrontWidgetSettings(store.id, product.id, "review-list", permissions.canUseMultipleWidgetThemes),
@@ -125,6 +126,9 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
     // (this one, plus the Rating Badge fetching the same endpoint independently)
     // consumes the same resolved value. See imagyn-appearance.js.
     getStorefrontAppearance(store.id),
+    // Store-wide (not product-scoped) earned Medals — a pure, cheap ledger read, never the
+    // full evaluateAchievements computation (see that function's own comment for why).
+    getEarnedMedalsForStorefront(store.id),
   ]);
 
   const orderedReviews = sort === "helpful" ? rankByHelpfulness(result.reviews) : result.reviews;
@@ -143,6 +147,7 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
     // saved-widget-settings side is already coerced server-side above.
     permissions: { canUseAdvancedLayout: permissions.canUseMultipleWidgetThemes },
     appearance,
+    medals,
     aiSummary: aiSummary
       ? { summary: aiSummary.summary, recommendation: aiSummary.recommendation }
       : null,
