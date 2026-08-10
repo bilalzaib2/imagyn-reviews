@@ -86,6 +86,22 @@
     return html;
   }
 
+  // Shown immediately on init, replaced the moment real data (or the empty/error state)
+  // arrives — approximates the real slide's shape (imagyn-component-skeleton.css's
+  // reserved primitives, the same ones reviews-widget.js's renderSummarySkeleton already
+  // uses) rather than a generic spinner, so there's no layout jump when content lands.
+  function renderCarouselSkeleton(track) {
+    var slide =
+      '<li class="imagyn-carousel__slide" aria-hidden="true">' +
+      '<div class="imagyn-review-card">' +
+      '<div class="imagyn-skeleton imagyn-skeleton--title"></div>' +
+      '<div class="imagyn-skeleton imagyn-skeleton--text" style="width:90%"></div>' +
+      '<div class="imagyn-skeleton imagyn-skeleton--text" style="width:70%"></div>' +
+      "</div>" +
+      "</li>";
+    track.innerHTML = slide + slide + slide;
+  }
+
   function initCarousel(container) {
     var heading = container.getAttribute("data-heading") || "";
     var limit = container.getAttribute("data-review-count") || "12";
@@ -93,6 +109,8 @@
     var viewport = container.querySelector("[data-imagyn-carousel-viewport]");
     var track = container.querySelector("[data-imagyn-carousel-track]");
     var controls = container.querySelector("[data-imagyn-carousel-controls]");
+
+    renderCarouselSkeleton(track);
 
     fetch(PROXY_PATH + "?limit=" + encodeURIComponent(limit), { headers: { Accept: "application/json" } })
       .then(function (response) {
