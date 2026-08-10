@@ -2,23 +2,15 @@ import { type ReactNode, useEffect, useMemo, useState } from "react";
 import { useFetcher, useLoaderData, useLocation, useNavigation, useRevalidator, useRouteError } from "react-router";
 import type { ActionFunctionArgs, HeadersFunction, LoaderFunctionArgs } from "react-router";
 import { boundary } from "@shopify/shopify-app-react-router/server";
-import {
-  ActionList,
-  BlockStack,
-  Checkbox,
-  Frame,
-  Popover,
-  RangeSlider,
-  Select,
-  Text,
-  TextField,
-  Toast,
-} from "@shopify/polaris";
+import { ActionList, Checkbox, Frame, Popover, Text, Toast } from "@shopify/polaris";
 
 import { Button } from "../components/ui/Button";
-import { ColorField } from "../components/ui/ColorField";
 import { Container } from "../components/ui/Container";
 import { authenticateAdminDeduped } from "../services/auth-dedupe.server";
+import { getOrCreateStore } from "../services/store.server";
+import { getStorePermissions } from "../services/permissions";
+import { getStorefrontAppearance } from "../services/appearance.server";
+import { getDefaultAppearanceTokens, type AppearanceTokens } from "../services/appearance.shared";
 import { widgetService } from "../services/widget.server";
 import { getDefaultWidgetSettings, type WidgetSettings, type WidgetType } from "../services/widget.shared";
 import type { WidgetRecord } from "../services/widget.server";
@@ -36,6 +28,10 @@ type LoaderData = {
   widgets: WidgetRecord[];
   shop: string;
   error: string | null;
+  // Gates Grid/Carousel — see widget.server.ts's getStorefrontWidgetSettings for why the real
+  // enforcement lives server-side, not just in whether this page shows the option.
+  canUseMultipleWidgetThemes: boolean;
+  appearanceTokens: AppearanceTokens;
 };
 
 type PageView = "gallery" | "customize";
@@ -102,13 +98,24 @@ const widgetCards: WidgetCardDef[] = [
   },
 ];
 
-const reservedRoadmapItems = ["AI Summary styling", "Video Reviews", "Review Highlights"];
+// Genuinely not built anywhere yet — no enforcement point in reviews-widget.js for any of
+// these, on any plan. Shown as an honest "Coming to Pro" list rather than as editable
+// controls that would silently do nothing (see this file's previous version, and
+// docs/DESIGN_SYSTEM.md's "never show a feature as included unless it's genuinely built"
+// rule, already established for plans.ts's PlanFeature.comingSoon).
+const proRoadmapItems = [
+  "Multiple saved widget themes",
+  "Custom CSS injection",
+  "Numeral display alongside stars",
+  "Customer-photo toggle in the review list",
+  "Infinite scroll",
+  "Default sort & filter presets",
+];
 
 const sampleReviews = [
   {
     id: "r1",
     name: "Ava Patel",
-    country: "US",
     date: "Jun 12, 2026",
     verified: true,
     title: "Elegant and surprisingly fast",
@@ -118,7 +125,6 @@ const sampleReviews = [
   {
     id: "r2",
     name: "Luca Moretti",
-    country: "IT",
     date: "Jun 9, 2026",
     verified: true,
     title: "Clean design, better conversion",
@@ -128,7 +134,6 @@ const sampleReviews = [
   {
     id: "r3",
     name: "Harper Chen",
-    country: "CA",
     date: "May 28, 2026",
     verified: false,
     title: "Feels native to Shopify",
@@ -137,26 +142,40 @@ const sampleReviews = [
   },
 ];
 
-const toNumberValue = (value: number | [number, number]) => (typeof value === "number" ? value : value[0]);
 const REVIEWS_WIDGET_TYPE: WidgetType = "review-list";
 
 export const loader = async ({ request }: LoaderFunctionArgs): Promise<LoaderData> => {
   const { session } = await authenticateAdminDeduped(request);
+  const store = await getOrCreateStore(session.shop);
 
   try {
-    const widgets = await widgetService.listWidgets();
-    return { widgets, shop: session.shop, error: null };
+    const [widgets, permissions, appearanceTokens] = await Promise.all([
+      widgetService.listWidgets(store.id),
+      getStorePermissions(store.id),
+      getStorefrontAppearance(store.id),
+    ]);
+
+    return {
+      widgets,
+      shop: session.shop,
+      error: null,
+      canUseMultipleWidgetThemes: permissions.canUseMultipleWidgetThemes,
+      appearanceTokens,
+    };
   } catch (error) {
     return {
       widgets: [],
       shop: session.shop,
       error: error instanceof Error ? error.message : "Unable to load widgets.",
+      canUseMultipleWidgetThemes: false,
+      appearanceTokens: getDefaultAppearanceTokens(),
     };
   }
 };
 
 export const action = async ({ request }: ActionFunctionArgs): Promise<ActionData> => {
-  await authenticateAdminDeduped(request);
+  const { session } = await authenticateAdminDeduped(request);
+  const store = await getOrCreateStore(session.shop);
 
   const formData = await request.formData();
   const intent = String(formData.get("_intent") || "");
@@ -168,8 +187,18 @@ export const action = async ({ request }: ActionFunctionArgs): Promise<ActionDat
       const type = String(formData.get("type") || "review-list") as WidgetType;
       const settings = JSON.parse(String(formData.get("settings") || "{}")) as WidgetSettings;
 
+      // Defense in depth — the admin UI never offers a non-"list" layout control, but a
+      // direct POST bypassing it shouldn't be able to set one on a non-Pro store either. See
+      // widget.server.ts's getStorefrontWidgetSettings for the storefront-side coercion.
+      if (settings.layout && settings.layout !== "list") {
+        const permissions = await getStorePermissions(store.id);
+        if (!permissions.canUseMultipleWidgetThemes) {
+          settings.layout = "list";
+        }
+      }
+
       if (widgetId) {
-        const updated = await widgetService.updateWidget(widgetId, {
+        const updated = await widgetService.updateWidget(store.id, widgetId, {
           name: widgetName,
           type,
           settings,
@@ -178,6 +207,7 @@ export const action = async ({ request }: ActionFunctionArgs): Promise<ActionDat
       }
 
       const created = await widgetService.createWidget({
+        storeId: store.id,
         name: widgetName,
         type,
         settings,
@@ -191,7 +221,7 @@ export const action = async ({ request }: ActionFunctionArgs): Promise<ActionDat
         return { ok: false, error: "Save the widget before duplicating it." };
       }
 
-      const duplicate = await widgetService.duplicateWidget(widgetId);
+      const duplicate = await widgetService.duplicateWidget(store.id, widgetId);
       return { ok: true, message: "Widget duplicated.", widgetId: duplicate.id };
     }
 
@@ -201,7 +231,7 @@ export const action = async ({ request }: ActionFunctionArgs): Promise<ActionDat
         return { ok: false, error: "Select a widget to delete." };
       }
 
-      await widgetService.deleteWidget(widgetId);
+      await widgetService.deleteWidget(store.id, widgetId);
       return { ok: true, message: "Widget deleted." };
     }
 
@@ -211,7 +241,7 @@ export const action = async ({ request }: ActionFunctionArgs): Promise<ActionDat
         return { ok: false, error: "Save the widget before resetting it." };
       }
 
-      const reset = await widgetService.resetWidget(widgetId);
+      const reset = await widgetService.resetWidget(store.id, widgetId);
       return { ok: true, message: "Widget reset to defaults.", widgetId: reset.id };
     }
 
@@ -237,100 +267,90 @@ function ReservedRow({ label }: { label: string }) {
   return (
     <div className={styles.reservedRow}>
       <span className={styles.reservedRowLabel}>{label}</span>
-      <span className={styles.comingSoonPill}>Coming soon</span>
+      <span className={styles.comingSoonPill}>Coming to Pro</span>
     </div>
   );
 }
 
-function renderStars(count: number, size: number, color: string, filled: boolean, outline: boolean) {
+function renderStars(count: number, size: number, color: string) {
   return Array.from({ length: 5 }, (_, index) => {
     const active = index < count;
-    const symbol = outline && !filled ? "☆" : active ? "★" : "☆";
     return (
-      <span key={`${symbol}-${index}`} style={{ fontSize: `${size}px`, color: active ? color : `${color}66`, lineHeight: 1 }}>
-        {symbol}
+      <span key={index} style={{ fontSize: `${size}px`, color: active ? color : `${color}66`, lineHeight: 1 }}>
+        ★
       </span>
     );
   });
 }
 
-function ReviewPreviewCard({ settings, review }: { settings: WidgetSettings; review: (typeof sampleReviews)[number] }) {
-  const avatarRadius = settings.avatarShape === "square" ? 12 : settings.avatarShape === "rounded" ? 18 : 999;
+// Every color/radius/font value here comes from the store's real, saved Appearance System
+// tokens (Brand Studio) — the actual source of truth the live storefront resolves to, per
+// reviews-widget.css's Appearance-first CSS variable fallback chain. This preview no longer
+// reads WidgetSettings' own color/typography/spacing fields at all: those are legacy and, for
+// this widget, always superseded by Appearance on the real storefront (see reviews-widget.css),
+// so styling this preview from them would show a merchant something they'd never actually see.
+// Review name/title/body text is still representative sample copy, not live data — matching
+// how a settings preview conventionally works, distinct from the styling engine above it.
+function ReviewPreviewCard({
+  tokens,
+  settings,
+  review,
+}: {
+  tokens: AppearanceTokens;
+  settings: WidgetSettings;
+  review: (typeof sampleReviews)[number];
+}) {
+  const textColor = tokens.colors.textColor ?? "#111111";
 
   return (
     <div
       className={styles.previewCard}
       style={{
-        background: settings.backgroundColor,
-        color: settings.textColor,
-        borderColor: settings.borderColor,
-        borderRadius: `${settings.borderRadius}px`,
-        borderWidth: `${settings.borderWidth}px`,
-        padding: `${settings.padding}px`,
-        gap: `${settings.gap}px`,
-        boxShadow:
-          settings.shadow === "none"
-            ? "none"
-            : settings.shadow === "soft"
-              ? "0 10px 30px rgba(17,17,17,0.06)"
-              : "0 18px 40px rgba(17,17,17,0.10)",
+        background: tokens.colors.surfaceColor,
+        color: textColor,
+        borderColor: tokens.colors.borderColor,
+        borderRadius: `${tokens.corners.radius}px`,
+        borderWidth: `${tokens.borders.width}px`,
+        padding: "20px",
+        gap: "12px",
       }}
     >
-      <div className={styles.previewMetaTop}>
-        {settings.showAvatar ? (
-          <div
-            className={styles.previewAvatar}
-            style={{ borderRadius: `${avatarRadius}px`, background: settings.accentColor, color: settings.backgroundColor }}
-          >
-            {review.name
-              .split(" ")
-              .map((part) => part[0])
-              .join("")
-              .slice(0, 2)}
-          </div>
-        ) : null}
-        <div className={styles.previewHeaderBlock}>
-          <div className={styles.previewStars}>{renderStars(review.rating, settings.starSize, settings.starColor, settings.starFilled, settings.starOutline)}</div>
-          <div className={styles.previewIdentity}>
-            {settings.showReviewerName ? <span>{review.name}</span> : null}
-            {settings.showVerifiedBadge && review.verified ? (
-              <span className={styles.previewVerified}>
-                <svg className={styles.previewVerifiedIcon} viewBox="0 0 20 20" aria-hidden="true" focusable="false">
-                  <circle cx="10" cy="10" r="10" fill="currentColor" />
-                  <path d="M6 10.4 8.7 13 14 7.5" stroke={settings.backgroundColor} strokeWidth="1.7" fill="none" strokeLinecap="round" strokeLinejoin="round" />
-                </svg>
-                <span className={styles.previewVerifiedLabel}>Verified Buyer</span>
-              </span>
-            ) : null}
-            {settings.showCountry ? <span>{review.country}</span> : null}
-            {settings.showDate ? <span>{review.date}</span> : null}
-          </div>
+      <div className={styles.previewCardHeader}>
+        <div className={styles.previewIdentity}>
+          <span>{review.name}</span>
+          {settings.showVerifiedBadge && review.verified ? (
+            <span className={styles.previewVerified}>
+              <svg className={styles.previewVerifiedIcon} viewBox="0 0 20 20" aria-hidden="true" focusable="false">
+                <circle cx="10" cy="10" r="10" fill="currentColor" />
+                <path d="M6 10.4 8.7 13 14 7.5" stroke={tokens.colors.surfaceColor} strokeWidth="1.7" fill="none" strokeLinecap="round" strokeLinejoin="round" />
+              </svg>
+              <span className={styles.previewVerifiedLabel}>Verified Buyer</span>
+            </span>
+          ) : null}
+          <span>{review.date}</span>
         </div>
+        <div className={styles.previewStars}>{renderStars(review.rating, 15, tokens.colors.starColor)}</div>
       </div>
       <div className={styles.previewBodyBlock}>
-        <div style={{ fontSize: `${settings.headingFontSize}px`, fontWeight: Number(settings.fontWeight), letterSpacing: `${settings.letterSpacing}px` }}>
-          {review.title}
-        </div>
-        <p style={{ fontSize: `${settings.bodyFontSize}px`, lineHeight: settings.lineHeight, margin: 0 }}>{review.body}</p>
+        <div style={{ fontSize: `${18 * tokens.typography.scale}px`, fontWeight: 600 }}>{review.title}</div>
+        <p style={{ fontSize: `${14 * tokens.typography.scale}px`, lineHeight: 1.6, margin: 0 }}>{review.body}</p>
       </div>
     </div>
   );
 }
 
-function WidgetPreview({ settings }: { settings: WidgetSettings }) {
-  const previewBackground = settings.darkMode ? "#111111" : "#F5F4EF";
-  const previewSurface = settings.darkMode ? "#1B1B1B" : "#FFFFFF";
-  const justifyContent = settings.alignment === "center" ? "center" : settings.alignment === "right" ? "flex-end" : "flex-start";
+function WidgetPreview({ tokens, settings }: { tokens: AppearanceTokens; settings: WidgetSettings }) {
+  const layoutReviews = settings.layout === "grid" ? sampleReviews : sampleReviews.slice(0, settings.layout === "carousel" ? 2 : 3);
 
   return (
-    <div className={styles.previewFrame} style={{ background: previewBackground }}>
+    <div className={styles.previewFrame} style={{ background: "#F5F4EF" }}>
       <div className={styles.previewBrowserBar}>
         <span />
         <span />
         <span />
       </div>
-      <div className={styles.previewStorefront} style={{ background: previewSurface, padding: `${settings.margins}px` }}>
-        <div className={styles.previewProductShell} style={{ width: `min(100%, ${settings.containerWidth}px)` }}>
+      <div className={styles.previewStorefront} style={{ background: "#FFFFFF", padding: "24px" }}>
+        <div className={styles.previewProductShell}>
           <div className={styles.previewProductHeader}>
             <Text as="h2" variant="headingLg">
               Coastal Cotton Tee
@@ -340,22 +360,22 @@ function WidgetPreview({ settings }: { settings: WidgetSettings }) {
             </Text>
           </div>
 
-          <div className={styles.listPreview}>
-            {sampleReviews.map((review) => (
-              <ReviewPreviewCard key={review.id} settings={settings} review={review} />
+          <div className={settings.layout === "grid" ? styles.gridPreview : styles.listPreview}>
+            {layoutReviews.map((review) => (
+              <ReviewPreviewCard key={review.id} tokens={tokens} settings={settings} review={review} />
             ))}
           </div>
 
-          <div className={styles.previewActions} style={{ justifyContent }}>
+          <div className={styles.previewActions}>
             {settings.showWriteReviewButton ? (
               <button
                 type="button"
                 className={styles.previewButton}
                 style={{
-                  background: settings.buttonStyle === "outline" ? "transparent" : settings.buttonColor,
-                  color: settings.buttonStyle === "outline" ? settings.buttonColor : "#FFFFFF",
-                  borderColor: settings.buttonColor,
-                  borderRadius: `${settings.buttonRadius}px`,
+                  background: tokens.buttons.style === "solid" ? tokens.colors.starColor : "transparent",
+                  color: tokens.buttons.style === "solid" ? tokens.colors.surfaceColor : tokens.colors.starColor,
+                  borderColor: tokens.colors.starColor,
+                  borderRadius: `${tokens.corners.radius}px`,
                 }}
               >
                 Write Review
@@ -366,10 +386,10 @@ function WidgetPreview({ settings }: { settings: WidgetSettings }) {
                 type="button"
                 className={styles.previewButton}
                 style={{
-                  background: settings.buttonStyle === "ghost" ? "transparent" : settings.buttonColor,
-                  color: settings.buttonStyle === "ghost" ? settings.buttonColor : "#FFFFFF",
-                  borderColor: settings.buttonColor,
-                  borderRadius: `${settings.buttonRadius}px`,
+                  background: "transparent",
+                  color: tokens.colors.textColor ?? "#111111",
+                  borderColor: tokens.colors.borderColor,
+                  borderRadius: `${tokens.corners.radius}px`,
                 }}
               >
                 Load More
@@ -383,7 +403,7 @@ function WidgetPreview({ settings }: { settings: WidgetSettings }) {
 }
 
 export default function WidgetsPage() {
-  const { widgets, error } = useLoaderData<typeof loader>();
+  const { widgets, error, canUseMultipleWidgetThemes, appearanceTokens } = useLoaderData<typeof loader>();
   const location = useLocation();
   // Carries embedded/host/shop context the same way app.billing.tsx's manageUrl does — this is
   // a real top-level navigation (required to break out of the iframe), not a fetcher, so it
@@ -577,7 +597,7 @@ export default function WidgetsPage() {
                       </div>
                       <p className={styles.widgetCardDescription}>{card.description}</p>
                       <div className={styles.widgetCardThumbnailPlaceholder}>
-                        <span className={styles.previewStars}>{renderStars(5, 16, "#111111", true, false)}</span>
+                        <span className={styles.previewStars}>{renderStars(5, 16, appearanceTokens.colors.starColor)}</span>
                       </div>
                       <div className={styles.widgetCardMeta}>
                         <span className={styles.widgetCardMetaLabel}>Configured in the Shopify Theme Editor</span>
@@ -605,7 +625,7 @@ export default function WidgetsPage() {
                     <p className={styles.widgetCardDescription}>{card.description}</p>
                     <div className={styles.widgetCardThumbnail}>
                       <div className={styles.widgetCardThumbnailScale}>
-                        <WidgetPreview settings={{ ...draftSettings, widgetName: draftName }} />
+                        <WidgetPreview tokens={appearanceTokens} settings={{ ...draftSettings, widgetName: draftName }} />
                       </div>
                     </div>
                     <div className={styles.widgetCardMeta}>
@@ -624,8 +644,7 @@ export default function WidgetsPage() {
                       >
                         <div className={styles.quickEditPopover}>
                           <Checkbox label="Enable widget" checked={draftSettings.enabled} onChange={(value) => updateSetting("enabled", value)} />
-                          <ColorField label="Primary color" value={draftSettings.primaryColor} onChange={(value) => updateSetting("primaryColor", value)} />
-                          <ColorField label="Star color" value={draftSettings.starColor} onChange={(value) => updateSetting("starColor", value)} />
+                          <Checkbox label="Show verified buyer badge" checked={draftSettings.showVerifiedBadge} onChange={(value) => updateSetting("showVerifiedBadge", value)} />
                           <Button
                             type="button"
                             variant="primary"
@@ -666,7 +685,11 @@ export default function WidgetsPage() {
                       {draftSettings.enabled ? "Enabled" : "Disabled"}
                     </span>
                   </div>
-                  <WidgetPreview settings={{ ...draftSettings, widgetName: draftName }} />
+                  <WidgetPreview tokens={appearanceTokens} settings={{ ...draftSettings, widgetName: draftName }} />
+                  <p className={styles.previewNote}>
+                    Colors, typography, and spacing come from{" "}
+                    <a href={`/app/appearance${location.search}`}>Brand Studio</a>.
+                  </p>
                 </div>
 
                 <div className={styles.inspectorActionsBar}>
@@ -725,157 +748,54 @@ export default function WidgetsPage() {
 
               <div className={styles.inspectorSettingsColumn}>
                 <InspectorSection title="Name">
-                  <TextField label="Widget name" labelHidden value={draftName} onChange={setDraftName} autoComplete="off" />
-                </InspectorSection>
-
-                <div className={styles.inspectorDivider} />
-
-                <InspectorSection title="Appearance">
-                  <p className={styles.inspectorGroupLabel}>Colors</p>
-                  <div className={styles.settingsGrid}>
-                    <ColorField label="Primary" value={draftSettings.primaryColor} onChange={(value) => updateSetting("primaryColor", value)} />
-                    <ColorField label="Accent" value={draftSettings.accentColor} onChange={(value) => updateSetting("accentColor", value)} />
-                    <ColorField label="Background" value={draftSettings.backgroundColor} onChange={(value) => updateSetting("backgroundColor", value)} />
-                    <ColorField label="Text" value={draftSettings.textColor} onChange={(value) => updateSetting("textColor", value)} />
-                    <ColorField label="Border" value={draftSettings.borderColor} onChange={(value) => updateSetting("borderColor", value)} />
-                    <ColorField label="Star" value={draftSettings.starColor} onChange={(value) => updateSetting("starColor", value)} />
-                    <ColorField label="Button" value={draftSettings.buttonColor} onChange={(value) => updateSetting("buttonColor", value)} />
-                  </div>
-
-                  <p className={styles.inspectorGroupLabel}>Typography</p>
-                  <BlockStack gap="300">
-                    <RangeSlider label="Heading size" min={14} max={40} value={draftSettings.headingFontSize} onChange={(value) => updateSetting("headingFontSize", toNumberValue(value))} output />
-                    <RangeSlider label="Body size" min={12} max={22} value={draftSettings.bodyFontSize} onChange={(value) => updateSetting("bodyFontSize", toNumberValue(value))} output />
-                    <Select label="Weight" options={[{ label: "Regular", value: "400" }, { label: "Medium", value: "500" }, { label: "Semibold", value: "600" }, { label: "Bold", value: "700" }]} value={draftSettings.fontWeight} onChange={(value) => updateSetting("fontWeight", value)} />
-                    <RangeSlider label="Letter spacing" min={0} max={4} step={0.5} value={draftSettings.letterSpacing} onChange={(value) => updateSetting("letterSpacing", toNumberValue(value))} output />
-                    <RangeSlider label="Line height" min={1} max={2} step={0.1} value={draftSettings.lineHeight} onChange={(value) => updateSetting("lineHeight", toNumberValue(value))} output />
-                  </BlockStack>
-
-                  <p className={styles.inspectorGroupLabel}>Corner radius</p>
-                  <RangeSlider label="Card corner radius" labelHidden min={0} max={40} value={draftSettings.borderRadius} onChange={(value) => updateSetting("borderRadius", toNumberValue(value))} output />
-
-                  <p className={styles.inspectorGroupLabel}>Border</p>
-                  <RangeSlider label="Border width" min={0} max={4} value={draftSettings.borderWidth} onChange={(value) => updateSetting("borderWidth", toNumberValue(value))} output />
-
-                  <p className={styles.inspectorGroupLabel}>Shadow</p>
-                  <Select label="Shadow" labelHidden options={[{ label: "None", value: "none" }, { label: "Soft", value: "soft" }, { label: "Medium", value: "medium" }]} value={draftSettings.shadow} onChange={(value) => updateSetting("shadow", value)} />
-
-                  <p className={styles.inspectorGroupLabel}>Buttons</p>
-                  <BlockStack gap="300">
-                    <RangeSlider label="Button radius" min={0} max={999} value={draftSettings.buttonRadius} onChange={(value) => updateSetting("buttonRadius", toNumberValue(value))} output />
-                    <Select label="Button style" options={[{ label: "Solid", value: "solid" }, { label: "Outline", value: "outline" }, { label: "Ghost", value: "ghost" }]} value={draftSettings.buttonStyle} onChange={(value) => updateSetting("buttonStyle", value)} />
-                  </BlockStack>
-                </InspectorSection>
-
-                <div className={styles.inspectorDivider} />
-
-                <InspectorSection title="Layout">
-                  <p className={styles.inspectorGroupLabel}>Spacing</p>
-                  <BlockStack gap="300">
-                    <RangeSlider label="Padding" min={8} max={40} value={draftSettings.padding} onChange={(value) => updateSetting("padding", toNumberValue(value))} output />
-                    <RangeSlider label="Gap" min={8} max={32} value={draftSettings.gap} onChange={(value) => updateSetting("gap", toNumberValue(value))} output />
-                    <RangeSlider label="Margins" min={0} max={48} value={draftSettings.margins} onChange={(value) => updateSetting("margins", toNumberValue(value))} output />
-                    <RangeSlider label="Vertical spacing" min={8} max={32} value={draftSettings.verticalSpacing} onChange={(value) => updateSetting("verticalSpacing", toNumberValue(value))} output />
-                  </BlockStack>
-
-                  <p className={styles.inspectorGroupLabel}>Alignment</p>
-                  <Select label="Alignment" labelHidden options={[{ label: "Left", value: "left" }, { label: "Center", value: "center" }, { label: "Right", value: "right" }]} value={draftSettings.alignment} onChange={(value) => updateSetting("alignment", value)} />
-
-                  <p className={styles.inspectorGroupLabel}>Width</p>
-                  <BlockStack gap="300">
-                    <RangeSlider label="Container width" min={280} max={1200} value={draftSettings.containerWidth} onChange={(value) => updateSetting("containerWidth", toNumberValue(value))} output />
-                    <RangeSlider label="Card width" min={220} max={420} value={draftSettings.cardWidth} onChange={(value) => updateSetting("cardWidth", toNumberValue(value))} output />
-                  </BlockStack>
-
-                  <p className={styles.inspectorGroupLabel}>Card style</p>
-                  <div className={styles.cardStyleRow}>
-                    <span className={styles.cardStyleActive}>List</span>
-                    <span className={styles.cardStyleReserved}>Carousel · Coming soon</span>
-                    <span className={styles.cardStyleReserved}>Floating Review Widget · Coming soon</span>
-                  </div>
+                  <input
+                    className={styles.textInput}
+                    type="text"
+                    aria-label="Widget name"
+                    value={draftName}
+                    onChange={(event) => setDraftName(event.target.value)}
+                  />
                 </InspectorSection>
 
                 <div className={styles.inspectorDivider} />
 
                 <InspectorSection title="Content">
-                  <p className={styles.inspectorGroupLabel}>Stars</p>
-                  <BlockStack gap="300">
-                    <RangeSlider label="Star size" min={12} max={28} value={draftSettings.starSize} onChange={(value) => updateSetting("starSize", toNumberValue(value))} output />
-                    <Checkbox label="Filled" checked={draftSettings.starFilled} onChange={(value) => updateSetting("starFilled", value)} />
-                    <Checkbox label="Outline" checked={draftSettings.starOutline} onChange={(value) => updateSetting("starOutline", value)} />
-                  </BlockStack>
+                  <p className={styles.inspectorGroupLabel}>Trust signals</p>
+                  <div className={styles.checkboxStack}>
+                    <Checkbox label="Show verified buyer badge" checked={draftSettings.showVerifiedBadge} onChange={(value) => updateSetting("showVerifiedBadge", value)} />
+                  </div>
 
-                  <p className={styles.inspectorGroupLabel}>Rating text</p>
-                  <ReservedRow label="Show numeral alongside stars" />
-
-                  <p className={styles.inspectorGroupLabel}>Reviewer name</p>
-                  <Checkbox label="Show reviewer name" checked={draftSettings.showReviewerName} onChange={(value) => updateSetting("showReviewerName", value)} />
-
-                  <p className={styles.inspectorGroupLabel}>Verified badge</p>
-                  <Checkbox label="Show verified buyer badge" checked={draftSettings.showVerifiedBadge} onChange={(value) => updateSetting("showVerifiedBadge", value)} />
-
-                  <p className={styles.inspectorGroupLabel}>Date</p>
-                  <BlockStack gap="300">
-                    <Checkbox label="Show date" checked={draftSettings.showDate} onChange={(value) => updateSetting("showDate", value)} />
-                    <Checkbox label="Show country" checked={draftSettings.showCountry} onChange={(value) => updateSetting("showCountry", value)} />
-                  </BlockStack>
-
-                  <p className={styles.inspectorGroupLabel}>Photos</p>
-                  <ReservedRow label="Show customer photos in the review list" />
-                </InspectorSection>
-
-                <div className={styles.inspectorDivider} />
-
-                <InspectorSection title="Behaviour">
-                  <p className={styles.inspectorGroupLabel}>Pagination</p>
-                  <Checkbox label="Show Load More button" checked={draftSettings.showLoadMoreButton} onChange={(value) => updateSetting("showLoadMoreButton", value)} />
-
-                  <p className={styles.inspectorGroupLabel}>Infinite scroll</p>
-                  <ReservedRow label="Load more reviews automatically while scrolling" />
-
-                  <p className={styles.inspectorGroupLabel}>Sorting</p>
-                  <ReservedRow label="Merchant-configurable default sort order" />
-
-                  <p className={styles.inspectorGroupLabel}>Default filter</p>
-                  <ReservedRow label="Pre-select a rating or status filter" />
-
-                  <p className={styles.inspectorGroupLabel}>Interactions</p>
-                  <BlockStack gap="300">
+                  <p className={styles.inspectorGroupLabel}>Actions</p>
+                  <div className={styles.checkboxStack}>
                     <Checkbox label="Show Write a Review button" checked={draftSettings.showWriteReviewButton} onChange={(value) => updateSetting("showWriteReviewButton", value)} />
-                    <Select
-                      label="Placement"
-                      options={[
-                        { label: "Product header", value: "product-header" },
-                        { label: "Product body", value: "product-body" },
-                        { label: "Homepage featured", value: "homepage-featured" },
-                        { label: "Collection highlight", value: "collection-highlight" },
-                        { label: "Floating corner", value: "floating-corner" },
-                      ]}
-                      value={draftSettings.placement}
-                      onChange={(value) => updateSetting("placement", value)}
-                    />
-                    <Select
-                      label="Entrance animation"
-                      options={[
-                        { label: "Fade", value: "fade" },
-                        { label: "Slide", value: "slide" },
-                        { label: "Lift", value: "lift" },
-                        { label: "Stagger", value: "stagger" },
-                      ]}
-                      value={draftSettings.animation}
-                      onChange={(value) => updateSetting("animation", value)}
-                    />
-                  </BlockStack>
+                    <Checkbox label="Show Load More button" checked={draftSettings.showLoadMoreButton} onChange={(value) => updateSetting("showLoadMoreButton", value)} />
+                  </div>
                 </InspectorSection>
 
                 <div className={styles.inspectorDivider} />
 
-                <InspectorSection title="Advanced">
-                  <BlockStack gap="300">
-                    <Checkbox label="Enable animations" checked={draftSettings.enableAnimations} onChange={(value) => updateSetting("enableAnimations", value)} />
-                    <Checkbox label="Dark mode preview" checked={draftSettings.darkMode} onChange={(value) => updateSetting("darkMode", value)} />
-                    <TextField label="Custom CSS" value={draftSettings.customCss} onChange={(value) => updateSetting("customCss", value)} autoComplete="off" multiline={6} />
-                  </BlockStack>
+                <InspectorSection title="Layout">
+                  <p className={styles.inspectorText}>
+                    Choose List, Grid, or Carousel directly in the block&apos;s settings in the Shopify Theme Editor.
+                  </p>
+                  {canUseMultipleWidgetThemes ? (
+                    <p className={styles.planNoteIncluded}>✓ Grid and Carousel are available on your plan.</p>
+                  ) : (
+                    <div className={styles.reservedRow}>
+                      <span className={styles.reservedRowLabel}>Grid &amp; Carousel layouts</span>
+                      <span className={styles.comingSoonPill}>Pro</span>
+                    </div>
+                  )}
+                </InspectorSection>
+
+                <div className={styles.inspectorDivider} />
+
+                <InspectorSection title="Coming to Pro">
+                  <div className={styles.checkboxStack}>
+                    {proRoadmapItems.map((item) => (
+                      <ReservedRow key={item} label={item} />
+                    ))}
+                  </div>
                 </InspectorSection>
               </div>
             </div>
@@ -883,9 +803,9 @@ export default function WidgetsPage() {
 
           {view === "gallery" ? (
             <div className={styles.roadmapSection}>
-              <p className={styles.detailEyebrow}>Coming soon</p>
+              <p className={styles.detailEyebrow}>Coming to Pro</p>
               <div className={styles.comingSoonRow}>
-                {reservedRoadmapItems.map((item) => (
+                {proRoadmapItems.map((item) => (
                   <span key={item} className={styles.comingSoonPill}>
                     {item}
                   </span>

@@ -9,6 +9,16 @@ export type WidgetType =
 export interface WidgetSettings {
   widgetName: string;
   enabled: boolean;
+  // "list" | "grid" | "carousel" — Grid/Carousel are Pro-only (see permissions.ts's
+  // canUseMultipleWidgetThemes and widget.server.ts's getStorefrontWidgetSettings, which
+  // coerces this back to "list" for a non-Pro store regardless of what's saved here).
+  // Genuinely wired: see extensions/imagyn-review-widgets/blocks/star_rating.liquid's own
+  // `layout` schema field and reviews-widget.js's readThemeOverrides/applyStyle — a merchant
+  // can also set this directly as a native Shopify Theme Editor block setting, independent of
+  // this admin-saved value; the Theme Editor's own choice takes priority when present (see
+  // resolveSettings in reviews-widget.js), which is exactly why the Pro coercion has to happen
+  // server-side rather than only by hiding an admin control.
+  layout: string;
   placement: string;
   animation: string;
   primaryColor: string;
@@ -55,6 +65,7 @@ const defaultSettingsByType: Record<WidgetType, WidgetSettings> = {
   "star-rating": {
     widgetName: "Star Rating",
     enabled: true,
+    layout: "list",
     placement: "product-header",
     animation: "fade",
     primaryColor: "#111111",
@@ -99,6 +110,7 @@ const defaultSettingsByType: Record<WidgetType, WidgetSettings> = {
   "review-list": {
     widgetName: "Review List",
     enabled: true,
+    layout: "list",
     placement: "product-body",
     animation: "fade",
     primaryColor: "#111111",
@@ -143,6 +155,7 @@ const defaultSettingsByType: Record<WidgetType, WidgetSettings> = {
   "review-carousel": {
     widgetName: "Review Carousel",
     enabled: true,
+    layout: "list",
     placement: "homepage-featured",
     animation: "slide",
     primaryColor: "#111111",
@@ -187,6 +200,7 @@ const defaultSettingsByType: Record<WidgetType, WidgetSettings> = {
   "review-grid": {
     widgetName: "Review Grid",
     enabled: true,
+    layout: "list",
     placement: "homepage-grid",
     animation: "fade",
     primaryColor: "#111111",
@@ -231,6 +245,7 @@ const defaultSettingsByType: Record<WidgetType, WidgetSettings> = {
   "masonry-grid": {
     widgetName: "Masonry Grid",
     enabled: true,
+    layout: "list",
     placement: "collection-highlight",
     animation: "stagger",
     primaryColor: "#111111",
@@ -275,6 +290,7 @@ const defaultSettingsByType: Record<WidgetType, WidgetSettings> = {
   "floating-badge": {
     widgetName: "Floating Badge",
     enabled: true,
+    layout: "list",
     placement: "floating-corner",
     animation: "lift",
     primaryColor: "#111111",

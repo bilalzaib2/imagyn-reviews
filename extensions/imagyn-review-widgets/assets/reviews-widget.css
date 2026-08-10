@@ -1,12 +1,15 @@
 .imagyn-reviews {
   font-family: inherit;
-  color: var(--imagyn-text-color, inherit);
-  background: var(--imagyn-background-color, transparent);
-  /* Brand Studio's Typography Scale (--imagyn-font-size-base) takes over as the base
-     em-anchor for every --imagyn-space-* gap inside the widget; the legacy per-widget
-     --imagyn-body-font-size (Widget Builder's own Appearance tab) is now only the
-     fallback for stores whose Appearance System script hasn't loaded, not a competing
-     source of truth. */
+  /* Brand Studio's --imagyn-color-text/--imagyn-color-surface take over as the base text/
+     background source; the legacy per-widget --imagyn-text-color/--imagyn-background-color
+     (Widget Builder's own Appearance tab) are now only the fallback for stores whose
+     Appearance System script hasn't loaded — matching the same priority already established
+     for --imagyn-color-star/--imagyn-color-border/--imagyn-radius-md/--imagyn-btn-background
+     below and --imagyn-font-size-base right after this. This was the one property pair still
+     missing that fallback, which let an untouched Widget Builder default (#111111/#FFFFFF)
+     silently override a merchant's actual Brand Studio colors. */
+  color: var(--imagyn-color-text, var(--imagyn-text-color, inherit));
+  background: var(--imagyn-color-surface, var(--imagyn-background-color, transparent));
   font-size: var(--imagyn-font-size-base, var(--imagyn-body-font-size, inherit));
 }
 

@@ -366,15 +366,42 @@
   color: var(--color-text-muted);
 }
 
-.settingsGrid {
+.textInput {
+  width: 100%;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  background: var(--color-surface);
+  color: var(--color-text);
+  padding: 0.75rem 0.9rem;
+  font: inherit;
+}
+
+.checkboxStack {
   display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: var(--space-3);
+  gap: var(--space-2);
+}
+
+.inspectorText {
+  margin: 0 0 var(--space-2);
+  font-size: var(--text-sm);
+  color: var(--color-text-muted);
+  line-height: 1.55;
+}
+
+.inspectorText a {
+  color: var(--color-text);
+  text-decoration: underline;
+}
+
+.planNoteIncluded {
+  margin: 0;
+  font-size: var(--text-sm);
+  color: var(--color-success);
 }
 
 /* Deliberately lower-contrast than a live control (reduced opacity, not-allowed cursor,
    tighter padding) so a merchant scanning the section can tell at a glance which rows are
-   real without reading every "Coming soon" pill individually. */
+   real without reading every "Coming to Pro" pill individually. */
 .reservedRow {
   display: flex;
   align-items: center;
@@ -384,39 +411,12 @@
   border: 1px dashed var(--color-border);
   border-radius: var(--radius-md);
   background: var(--color-surface-muted);
-  opacity: 0.6;
+  opacity: 0.75;
   cursor: not-allowed;
 }
 
 .reservedRowLabel {
   font-size: var(--text-xs);
-  color: var(--color-text-muted);
-}
-
-.cardStyleRow {
-  display: flex;
-  flex-wrap: wrap;
-  gap: var(--space-2);
-}
-
-.cardStyleActive {
-  display: inline-flex;
-  align-items: center;
-  border-radius: var(--radius-full);
-  padding: 0.4rem 0.85rem;
-  font-size: var(--text-sm);
-  font-weight: 600;
-  background: var(--color-accent-soft);
-  color: var(--color-text);
-}
-
-.cardStyleReserved {
-  display: inline-flex;
-  align-items: center;
-  border: 1px dashed var(--color-border-strong);
-  border-radius: var(--radius-full);
-  padding: 0.4rem 0.85rem;
-  font-size: var(--text-sm);
   color: var(--color-text-muted);
 }
 
@@ -451,6 +451,8 @@
 .previewProductShell {
   display: grid;
   gap: 1.5rem;
+  width: 100%;
+  max-width: 640px;
   margin: 0 auto;
 }
 
@@ -471,32 +473,34 @@
   gap: 1rem;
 }
 
+.gridPreview {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 1rem;
+}
+
 .previewCard {
   display: grid;
   border-style: solid;
 }
 
-.previewMetaTop {
+.previewCardHeader {
   display: flex;
   align-items: flex-start;
-  gap: 0.9rem;
+  justify-content: space-between;
+  gap: 0.75rem;
 }
 
-.previewAvatar {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 2.4rem;
-  height: 2.4rem;
-  font-size: 0.82rem;
-  font-weight: 700;
-  flex-shrink: 0;
-}
-
-.previewHeaderBlock,
 .previewBodyBlock {
   display: grid;
   gap: 0.4rem;
+}
+
+.previewNote {
+  margin: 0;
+  font-size: var(--text-xs);
+  color: var(--color-text-muted);
+  text-align: center;
 }
 
 .previewIdentity {
@@ -558,7 +562,7 @@
     min-height: 540px;
   }
 
-  .settingsGrid {
+  .gridPreview {
     grid-template-columns: 1fr;
   }
 }

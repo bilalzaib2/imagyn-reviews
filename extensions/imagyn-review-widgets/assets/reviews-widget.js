@@ -845,6 +845,17 @@
           }
 
           var s = resolveSettings(data.widget, themeOverrides);
+
+          // Grid/Carousel is Pro-only (permissions.ts's canUseMultipleWidgetThemes). The
+          // saved-widget-settings side is already coerced server-side (getStorefrontWidgetSettings),
+          // but a merchant can *also* pick Grid/Carousel directly as a native Shopify Theme
+          // Editor block setting (see themeOverrides.layout above), which this app has no
+          // server-side control over rendering — so this is the actual enforcement point for
+          // that path, not just an admin UI restriction.
+          if (data.permissions && !data.permissions.canUseAdvancedLayout) {
+            s.layout = "list";
+          }
+
           applyStyle(root, s);
 
           if (summaryEl) {

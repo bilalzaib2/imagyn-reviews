@@ -18,6 +18,7 @@ import { getStoreBySlug } from "../services/store.server";
 import { getStorefrontWidgetSettings } from "../services/widget.server";
 import { getAiSummary } from "../services/aiSummary.server";
 import { getStorefrontAppearance } from "../services/appearance.server";
+import { getStorePermissions } from "../services/permissions";
 import { evaluateReview, getModerationSettings, sendHeldReviewNotification } from "../services/moderationRules.server";
 
 // Shared with api.reviews.batch.tsx so the two public review endpoints respond identically.
@@ -103,10 +104,17 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
     return json({ ok: false, error: "Product not found for this shop." }, { status: 404 });
   }
 
+  // Resolved before the parallel batch below because getStorefrontWidgetSettings needs it to
+  // decide whether to honor a Grid/Carousel layout (Pro-only — see permissions.ts's
+  // canUseMultipleWidgetThemes and widget.server.ts's own comment on why this can't just be a
+  // UI-hiding trick: Grid/Carousel is also selectable as a native Shopify Theme Editor block
+  // setting, entirely outside our admin UI).
+  const permissions = await getStorePermissions(store.id);
+
   const [summary, result, widget, aiSummary, gallery, appearance] = await Promise.all([
     getPublicReviewSummary(product.id),
     getProductReviews(product.id, { status: ReviewStatus.APPROVED, limit: 50 }),
-    getStorefrontWidgetSettings(store.id, product.id),
+    getStorefrontWidgetSettings(store.id, product.id, "review-list", permissions.canUseMultipleWidgetThemes),
     // Pure cache read — never triggers generation, so this can never slow down or block a
     // storefront page view. Returns null until a merchant has generated one at least once.
     getAiSummary(product.id),
@@ -129,6 +137,11 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
     ok: true,
     summary,
     widget,
+    // Consulted by reviews-widget.js before honoring a Grid/Carousel choice made directly in
+    // the Shopify Theme Editor (a native block setting, entirely outside widget.settings —
+    // see getStorefrontWidgetSettings's own comment) — the one enforcement point left once the
+    // saved-widget-settings side is already coerced server-side above.
+    permissions: { canUseAdvancedLayout: permissions.canUseMultipleWidgetThemes },
     appearance,
     aiSummary: aiSummary
       ? { summary: aiSummary.summary, recommendation: aiSummary.recommendation }
