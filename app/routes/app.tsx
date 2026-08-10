@@ -50,6 +50,7 @@ export default function App() {
     { label: "Email Studio", path: "/app/email-studio" },
     { label: "Widgets", path: "/app/widgets" },
     { label: "Brand Studio", path: "/app/appearance" },
+    { label: "Analytics", path: "/app/analytics" },
     { label: "Settings", path: "/app/settings" },
     { label: "Billing", path: "/app/billing" },
   ];
