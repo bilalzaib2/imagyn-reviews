@@ -5,6 +5,7 @@ import { boundary } from "@shopify/shopify-app-react-router/server";
 import { Container } from "../components/ui/Container";
 import { Section } from "../components/ui/Section";
 import { Card } from "../components/ui/Card";
+import { ProgressBar } from "../components/ui/ProgressBar";
 import { Medallion } from "../components/medals/Medallion";
 import { authenticateAdminDeduped } from "../services/auth-dedupe.server";
 import { getOrCreateStore } from "../services/store.server";
@@ -50,15 +51,6 @@ function formatEarnedDate(value: string) {
   return new Intl.DateTimeFormat("en", { month: "short", day: "numeric", year: "numeric" }).format(new Date(value));
 }
 
-function ProgressBar({ current, target }: { current: number; target: number }) {
-  const percent = target > 0 ? Math.min(100, Math.round((current / target) * 100)) : 0;
-  return (
-    <div className={styles.progressTrack} role="progressbar" aria-valuenow={percent} aria-valuemin={0} aria-valuemax={100}>
-      <div className={styles.progressFill} style={{ width: `${percent}%` }} />
-    </div>
-  );
-}
-
 function MedalCard({ status }: { status: AchievementStatus }) {
   const isPercentTarget = status.category === "trust" || status.category === "ranking";
 
@@ -77,12 +69,14 @@ function MedalCard({ status }: { status: AchievementStatus }) {
           )
         ) : status.progress ? (
           <div className={styles.medalProgress}>
-            <ProgressBar current={status.progress.current} target={status.progress.target} />
-            <p className={styles.medalProgressText}>
-              {status.progress.current}
-              {isPercentTarget ? "%" : ""} of {status.progress.target}
-              {isPercentTarget ? "%" : ""}
-            </p>
+            <ProgressBar
+              percent={
+                status.progress.target > 0
+                  ? Math.min(100, Math.round((status.progress.current / status.progress.target) * 100))
+                  : 0
+              }
+              label={`${status.progress.current}${isPercentTarget ? "%" : ""} of ${status.progress.target}${isPercentTarget ? "%" : ""}`}
+            />
           </div>
         ) : (
           <p className={styles.medalMeta}>Not yet earned</p>

@@ -22,7 +22,7 @@ const GLYPH_BY_CATEGORY: Record<AchievementCategory, string> = {
 export function Medallion({
   category,
   unlocked,
-  size = 56,
+  size = 60,
 }: {
   category: AchievementCategory;
   unlocked: boolean;
@@ -40,6 +40,10 @@ export function Medallion({
     >
       <circle cx="12" cy="12" r="10.5" className={styles.medallionRing} />
       <circle cx="12" cy="12" r="9" className={styles.medallionFill} />
+      {/* A single hairline inner ring, unlocked only — the one deliberate "material" cue
+          (a struck/engraved medal reads as having a raised face, not a flat sticker) kept
+          to exactly one extra stroke rather than layered gradients or glow. */}
+      {unlocked ? <circle cx="12" cy="12" r="7.25" className={styles.medallionInnerRing} fill="none" /> : null}
       {category === "ranking" ? (
         <>
           <circle cx="12" cy="12" r="5.5" className={styles.medallionGlyphStroke} fill="none" />

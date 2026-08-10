@@ -1,6 +1,12 @@
 .medallion {
   flex-shrink: 0;
-  transition: opacity var(--transition-base), filter var(--transition-base);
+}
+
+/* A quiet elevation, not a decorative glow — the same --shadow-sm every other raised
+   surface in the app uses (Card, etc.), applied only to earned medals so the achieved
+   ones read as sitting slightly above the page while locked ones stay flat. */
+.medallionUnlocked {
+  filter: drop-shadow(0 1px 2px rgba(17, 17, 17, 0.08));
 }
 
 .medallionUnlocked .medallionRing {
@@ -12,6 +18,11 @@
   fill: color-mix(in srgb, var(--color-accent) 12%, transparent);
 }
 
+.medallionInnerRing {
+  stroke: color-mix(in srgb, var(--color-accent) 22%, transparent);
+  stroke-width: 0.75;
+}
+
 .medallionUnlocked .medallionGlyph {
   fill: var(--color-accent);
 }
@@ -21,12 +32,13 @@
   stroke-width: 1.25;
 }
 
-.medallionLocked {
-  opacity: 0.45;
-}
-
+/* Deliberately no opacity reduction here — a flat, semi-transparent medal reads as
+   "broken" or "not loaded" rather than "not yet earned." Locked medals stay fully opaque
+   and precise; the muted ring/fill/glyph colors below (the same quiet tones used for
+   secondary text and borders elsewhere in the app) are what signal "reserved," not a
+   faded-out render of the unlocked version. */
 .medallionLocked .medallionRing {
-  stroke: var(--color-border);
+  stroke: var(--color-border-strong);
   stroke-width: 1;
 }
 
