@@ -91,7 +91,7 @@ export default function MedalsPage() {
 
   return (
     <Container as="main">
-      <div className={shellStyles.page}>
+      <div className={`${shellStyles.page} ${styles.page}`}>
         <header className={shellStyles.header}>
           <div className={shellStyles.headerContent}>
             <p className={shellStyles.eyebrow}>Imagyn Reviews</p>

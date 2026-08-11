@@ -4,9 +4,11 @@
 
 /* A quiet elevation, not a decorative glow — the same --shadow-sm every other raised
    surface in the app uses (Card, etc.), applied only to earned medals so the achieved
-   ones read as sitting slightly above the page while locked ones stay flat. */
+   ones read as sitting slightly above the page while locked ones stay flat. Nudged very
+   slightly stronger than the first pass (0.08 -> 0.10 alpha) — still a hairline shadow,
+   not a glow, but with enough presence to read as a struck object rather than a flat icon. */
 .medallionUnlocked {
-  filter: drop-shadow(0 1px 2px rgba(17, 17, 17, 0.08));
+  filter: drop-shadow(0 1px 2px rgba(17, 17, 17, 0.1));
 }
 
 .medallionUnlocked .medallionRing {
@@ -14,12 +16,15 @@
   stroke-width: 1;
 }
 
+/* Fill and inner-ring opacity nudged up slightly from the first pass (12% -> 16%, 22% ->
+   32%) — still entirely monochrome (no new color, no gradient), just enough more presence
+   that the unlocked state reads as deliberately "earned" rather than merely "not locked." */
 .medallionUnlocked .medallionFill {
-  fill: color-mix(in srgb, var(--color-accent) 12%, transparent);
+  fill: color-mix(in srgb, var(--color-accent) 16%, transparent);
 }
 
 .medallionInnerRing {
-  stroke: color-mix(in srgb, var(--color-accent) 22%, transparent);
+  stroke: color-mix(in srgb, var(--color-accent) 32%, transparent);
   stroke-width: 0.75;
 }
 

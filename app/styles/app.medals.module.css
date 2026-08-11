@@ -1,14 +1,37 @@
+/* A page-scoped tightening of the shared shell's gap (--space-8, used for every admin
+   page's own top-level rhythm) — reduced here only, not in app.shell.module.css, so this
+   stays a Medals-specific refinement rather than a change to every other admin page. */
+.page {
+  gap: var(--space-6);
+}
+
 .medalGrid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  /* auto-fit (not auto-fill): with auto-fill, a family with only 1-2 medals still reserves
+     as many equal-width column tracks as would fit the row, leaving present cards pinned
+     narrow on the left with a large dead gap to the right. auto-fit collapses the unused
+     tracks instead, so a sparse family's cards redistribute across the row — "balanced"
+     regardless of whether a category has 1, 2, 3, or 4 medals, per the actual requirement,
+     rather than leaving an empty area purely because the family happens to be smaller. */
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
   gap: var(--space-5);
+  /* Grid items default to align-items: stretch, i.e. every card in a row is forced to
+     match the height of the tallest card in that row — the root cause of cards reading as
+     taller than their content needs and carrying dead space at the bottom. start lets each
+     card size to its own content; cards still align at the same top edge within a row. */
+  align-items: start;
 }
 
 .medalCard {
   display: flex;
   align-items: flex-start;
   gap: var(--space-4);
-  padding: var(--space-6);
+  padding: var(--space-5);
+  /* Caps how wide a card can grow when auto-fit above redistributes extra row space to a
+     sparse family (e.g. a single-medal category) — without this, that one card would
+     stretch edge-to-edge, which reads as an accidentally huge card, not a balanced grid. */
+  max-width: 380px;
+  width: 100%;
 }
 
 /* A quiet tint, not a colored badge — the same "2% of the text color into the surface"
