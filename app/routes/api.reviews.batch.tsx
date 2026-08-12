@@ -1,7 +1,7 @@
 import type { LoaderFunctionArgs } from "react-router";
 import { authenticate } from "../shopify.server";
 import { getPublicReviewSummaryBatch } from "../services/review.server";
-import { getProductsForStoreByIdentifiers } from "../services/product.server";
+import { getOrSyncProductsForStoreByIdentifiers } from "../services/product.server";
 import { getStoreBySlug } from "../services/store.server";
 import { getStorefrontAppearance } from "../services/appearance.server";
 import { json, isPreflight, preflightResponse, storeSlugFromShop } from "./api.reviews";
@@ -32,7 +32,7 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
     return preflightResponse();
   }
 
-  await authenticate.public.appProxy(request);
+  const { admin } = await authenticate.public.appProxy(request);
 
   const url = new URL(request.url);
   const shop = url.searchParams.get("shop")?.trim() || "";
@@ -54,10 +54,17 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
   }
 
   const [products, appearance] = await Promise.all([
-    getProductsForStoreByIdentifiers(store.id, {
-      shopifyProductIds: productIds,
-      handles,
-    }),
+    // Falls back to a bounded, per-item lazy sync (see product.server.ts) for whichever
+    // requested products aren't in our Product table yet — the fast path (everything
+    // already synced) is unchanged: one DB read, no Shopify API calls.
+    getOrSyncProductsForStoreByIdentifiers(
+      store.id,
+      {
+        shopifyProductIds: productIds,
+        handles,
+      },
+      admin,
+    ),
     // Store-level, not per-product — every Collection Rating Badge on the page resolves
     // the same tokens the Product Reviews widget and Product Rating Badge do.
     getStorefrontAppearance(store.id),

@@ -488,4 +488,113 @@ export async function getProductsForStoreByIdentifiers(
   });
 }
 
+type ProductIdentifierRow = Awaited<ReturnType<typeof getProductsForStoreByIdentifiers>>[number];
+
+const PRODUCT_BY_HANDLE_QUERY = `#graphql
+  query ImagynProductByHandle($handle: String!) {
+    productByHandle(handle: $handle) {
+      id
+      title
+      handle
+      vendor
+      productType
+      status
+      description
+      featuredImage {
+        url
+      }
+    }
+  }
+`;
+
+interface ProductByHandleResponse {
+  productByHandle: ShopifyProductNode | null;
+}
+
+// Handle counterpart of fetchShopifyProductById — needed because the Collection Ratings
+// batch caller (collection-rating-badges.js's theme-agnostic fallback) only ever has a
+// product handle, scraped from a /products/{handle} link, never Shopify's numeric id.
+async function fetchShopifyProductByHandle(admin: AdminApiContext, handle: string): Promise<ShopifyProductNode | null> {
+  const data = await graphqlWithThrottleHandling<ProductByHandleResponse>(admin, PRODUCT_BY_HANDLE_QUERY, { handle }, 2);
+  return data.productByHandle ?? null;
+}
+
+// Handle counterpart of syncSingleProductIfExists — same upsertShopifyProduct, same
+// "write nothing for a handle Shopify doesn't recognize" guarantee, just entered by handle
+// instead of id. node.id from the handle lookup is already a real Shopify GID, so the
+// post-upsert re-read reuses getProductForStoreByShopifyId exactly like the id-based path.
+async function syncSingleProductByHandleIfExists(admin: AdminApiContext, storeId: string, handle: string): Promise<Product | null> {
+  const node = await fetchShopifyProductByHandle(admin, handle);
+  if (!node) {
+    return null;
+  }
+
+  const upserted = await upsertShopifyProduct(storeId, node);
+  if (!upserted) {
+    return null;
+  }
+
+  return getProductForStoreByShopifyId(node.id, storeId);
+}
+
+// A collection page can legitimately ask about up to MAX_IDENTIFIERS (100, see
+// api.reviews.batch.tsx) products in one request. Only bounding concern here: a store that
+// has genuinely never been synced could otherwise turn one page load into 100 sequential
+// Shopify lookups. Capped low and run in parallel — this only ever needs to cover the
+// occasional never-synced straggler, not a cold-start full catalog (the full sync and the
+// single-product lazy fallback both already exist for that).
+const MAX_LAZY_SYNC_PER_BATCH = 12;
+
+// Batch-request counterpart of getOrSyncProductForStoreByShopifyId. The fast path — every
+// requested product already synced — is identical to getProductsForStoreByIdentifiers: one
+// DB read, no Shopify API calls. Only identifiers with no local match fall through to a
+// bounded set of per-item lazy lookups (by id or by handle, matching how each identifier was
+// supplied), reusing the exact same single-product resolvers above — no separate upsert path.
+export async function getOrSyncProductsForStoreByIdentifiers(
+  storeId: string,
+  identifiers: { shopifyProductIds: string[]; handles: string[] },
+  admin: AdminApiContext | undefined,
+): Promise<ProductIdentifierRow[]> {
+  const existing = await getProductsForStoreByIdentifiers(storeId, identifiers);
+
+  if (!admin) {
+    return existing;
+  }
+
+  const resolvedGids = new Set(existing.map((product) => product.shopifyProductId).filter((id): id is string => Boolean(id)));
+  const resolvedHandles = new Set(existing.map((product) => product.handle).filter((handle): handle is string => Boolean(handle)));
+
+  const missingIds = identifiers.shopifyProductIds.filter((id) => !resolvedGids.has(toProductGid(id)));
+  const missingHandles = identifiers.handles.filter((handle) => !resolvedHandles.has(handle));
+
+  const missing = [
+    ...missingIds.map((value) => ({ kind: "id" as const, value })),
+    ...missingHandles.map((value) => ({ kind: "handle" as const, value })),
+  ].slice(0, MAX_LAZY_SYNC_PER_BATCH);
+
+  if (missing.length === 0) {
+    return existing;
+  }
+
+  const resolved = await Promise.all(
+    missing.map((entry) => {
+      const lookup =
+        entry.kind === "id"
+          ? syncSingleProductIfExists(admin, storeId, entry.value)
+          : syncSingleProductByHandleIfExists(admin, storeId, entry.value);
+
+      return lookup.catch((error) => {
+        console.error(`[productSync] Lazy batch lookup failed for ${entry.kind} ${entry.value} (store ${storeId}):`, error);
+        return null;
+      });
+    }),
+  );
+
+  const newlyResolved: ProductIdentifierRow[] = resolved
+    .filter((product): product is Product => product !== null)
+    .map((product) => ({ id: product.id, shopifyProductId: product.shopifyProductId, handle: product.handle }));
+
+  return existing.concat(newlyResolved);
+}
+
 export type { Product };

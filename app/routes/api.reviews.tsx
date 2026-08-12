@@ -175,6 +175,11 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
       title: review.title,
       content: review.content,
       createdAt: review.createdAt,
+      // The merchant's own public reply (set via the admin's existing reply/edit/delete
+      // actions in app.reviews.tsx) — display-safe as-is, no separate redaction needed the
+      // way reviewerEmail/reviewerLocation above require.
+      reply: review.reply,
+      repliedAt: review.repliedAt,
       helpfulCount: review.helpfulCount,
       notHelpfulCount: review.notHelpfulCount,
       myVote: myVotes[review.id] ?? null,

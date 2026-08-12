@@ -696,6 +696,25 @@
     );
   }
 
+  // The merchant's own reply to this review (Review.reply/repliedAt — set via the admin's
+  // existing reply/edit/delete actions in app.reviews.tsx). Renders nothing when a review
+  // has no reply, matching this widget's established "render nothing until there's real
+  // content" rule (see renderAiSummary/renderMedals above).
+  function renderMerchantReply(review) {
+    if (!review.reply) {
+      return "";
+    }
+
+    return (
+      '<div class="imagyn-review-card__reply">' +
+      '<p class="imagyn-review-card__reply-label">Store reply' +
+      (review.repliedAt ? " · " + formatDate(review.repliedAt) : "") +
+      "</p>" +
+      '<p class="imagyn-review-card__reply-body">' + escapeHtml(review.reply) + "</p>" +
+      "</div>"
+    );
+  }
+
   function renderList(listEl, data, s, visibleCount, onLoadMore) {
     var reviews = data.reviews || [];
     var visibleReviews = reviews.slice(0, visibleCount);
@@ -724,6 +743,7 @@
                 : "") +
               '<p class="imagyn-review-card__body">' + escapeHtml(review.content) + "</p>" +
               renderReviewMedia(review) +
+              renderMerchantReply(review) +
               '<div class="imagyn-review-card__footer">' + renderHelpfulRow(review) + "</div>" +
               "</li>"
             );

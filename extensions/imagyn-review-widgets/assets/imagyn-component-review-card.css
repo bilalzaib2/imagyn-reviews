@@ -140,6 +140,31 @@
   margin-top: var(--imagyn-space-px-md, 16px);
 }
 
+/* The merchant's reply, set apart with a left rule rather than a filled/boxed background —
+   consistent with this card's own "border only, never a boxed background" separation
+   philosophy (see the file header comment above). */
+.imagyn-review-card__reply {
+  margin-top: var(--imagyn-space-px-md, 16px);
+  padding-left: var(--imagyn-space-px-md, 16px);
+  border-left: var(--imagyn-border-width, 1px) solid var(--imagyn-color-border, rgba(0, 0, 0, 0.08));
+}
+
+.imagyn-review-card__reply-label {
+  margin: 0 0 var(--imagyn-space-3xs, 0.2em);
+  font-size: var(--imagyn-font-size-xs, 12px);
+  font-weight: var(--imagyn-font-weight-semibold, 600);
+  color: var(--imagyn-color-text, inherit);
+  opacity: var(--imagyn-color-text-muted-opacity, 0.6);
+}
+
+.imagyn-review-card__reply-body {
+  margin: 0;
+  font-size: var(--imagyn-font-size-base, 15px);
+  font-weight: var(--imagyn-font-weight-regular, 400);
+  line-height: var(--imagyn-line-height-base, 1.5);
+  color: var(--imagyn-color-text, inherit);
+}
+
 /* Right-aligned and quiet, per spec — the review's own content stays the focus. */
 .imagyn-review-card__helpful {
   display: flex;
