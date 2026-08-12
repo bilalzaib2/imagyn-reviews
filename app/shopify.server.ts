@@ -8,6 +8,7 @@ import { PrismaSessionStorage } from "@shopify/shopify-app-session-storage-prism
 import prisma from "./db.server";
 import { getOrCreateStore } from "./services/store.server";
 import { syncBillingFromShopify } from "./services/billing/billing.server";
+import { triggerInitialProductSyncIfNeeded } from "./services/productSync.server";
 
 const appUrl = process.env.SHOPIFY_APP_URL || process.env.APP_URL || "http://127.0.0.1:3000";
 const apiKey = process.env.SHOPIFY_API_KEY || "development-api-key";
@@ -42,6 +43,15 @@ const shopify = shopifyApp({
     afterAuth: async ({ session, admin }) => {
       const store = await getOrCreateStore(session.shop);
       await syncBillingFromShopify(admin, store);
+
+      // Storefront widgets (app/routes/api.reviews.tsx) 404 for any Shopify product that
+      // isn't yet in our own Product table, and until now the only thing that ever populated
+      // it was a merchant manually visiting the Products admin page and clicking "Sync
+      // products" — a real store could sit fully installed with every widget broken until
+      // someone happened to do that. This kicks off that same sync automatically, exactly
+      // once per store (see triggerInitialProductSyncIfNeeded's own "idle" gate), so a newly
+      // installed store's catalog exists without requiring that manual step first.
+      await triggerInitialProductSyncIfNeeded(session.shop, store.id);
     },
   },
   ...(process.env.SHOP_CUSTOM_DOMAIN

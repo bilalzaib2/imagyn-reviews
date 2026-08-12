@@ -373,6 +373,91 @@ export async function getProductForStoreByShopifyId(shopifyProductId: string, st
   });
 }
 
+const PRODUCT_BY_ID_QUERY = `#graphql
+  query ImagynProductById($id: ID!) {
+    product(id: $id) {
+      id
+      title
+      handle
+      vendor
+      productType
+      status
+      description
+      featuredImage {
+        url
+      }
+    }
+  }
+`;
+
+interface ProductByIdResponse {
+  product: ShopifyProductNode | null;
+}
+
+// Single-product counterpart of PRODUCTS_PAGE_QUERY above — used only by the storefront's
+// lazy fallback below (syncSingleProductIfExists), never by the full-catalog sync, which
+// stays entirely on its own cursor pagination. A lone product lookup doesn't need the page
+// query's throttle budgeting to matter much, but goes through the same
+// graphqlWithThrottleHandling as everything else in this file rather than a bespoke fetch.
+async function fetchShopifyProductById(admin: AdminApiContext, shopifyProductGid: string): Promise<ShopifyProductNode | null> {
+  const data = await graphqlWithThrottleHandling<ProductByIdResponse>(admin, PRODUCT_BY_ID_QUERY, { id: shopifyProductGid }, 2);
+  return data.product ?? null;
+}
+
+// The storefront (app/routes/api.reviews.tsx) 404s a product that's a real, valid Shopify
+// product but hasn't been through a full-catalog sync yet (syncAllProducts) — either because
+// that merchant never ran one, or ran it before this product existed in their catalog. Rather
+// than leaving the widget broken until someone happens to notice and re-run the full sync,
+// this resolves just the one product actually being requested, on demand — through the exact
+// same upsertShopifyProduct the full sync already uses, so there remains exactly one code
+// path that ever writes a Product row from Shopify data. Returns null, writing nothing at
+// all, when Shopify itself has no such product (an invalid/foreign id) — this never creates a
+// row for a product that doesn't genuinely exist on the shop.
+async function syncSingleProductIfExists(admin: AdminApiContext, storeId: string, shopifyProductId: string): Promise<Product | null> {
+  const gid = toProductGid(shopifyProductId);
+  const node = await fetchShopifyProductById(admin, gid);
+
+  if (!node) {
+    return null;
+  }
+
+  const upserted = await upsertShopifyProduct(storeId, node);
+  if (!upserted) {
+    return null;
+  }
+
+  return getProductForStoreByShopifyId(shopifyProductId, storeId);
+}
+
+// Storefront-facing lookup used by api.reviews.tsx in place of a bare
+// getProductForStoreByShopifyId call. The fast path — a product that's already synced — is
+// identical to calling getProductForStoreByShopifyId directly: one DB read, no Shopify API
+// call. Only a genuine cache miss falls through to syncSingleProductIfExists above. `admin`
+// is whatever the caller's own App Proxy authentication already resolved (undefined only if
+// that shop genuinely has no session) — this degrades to the same null/"not found" result the
+// caller already handles today, rather than throwing.
+export async function getOrSyncProductForStoreByShopifyId(
+  shopifyProductId: string,
+  storeId: string,
+  admin: AdminApiContext | undefined,
+): Promise<Product | null> {
+  const existing = await getProductForStoreByShopifyId(shopifyProductId, storeId);
+  if (existing) {
+    return existing;
+  }
+
+  if (!admin) {
+    return null;
+  }
+
+  try {
+    return await syncSingleProductIfExists(admin, storeId, shopifyProductId);
+  } catch (error) {
+    console.error(`[productSync] Lazy single-product lookup failed for ${shopifyProductId} (store ${storeId}):`, error);
+    return null;
+  }
+}
+
 // Batched counterpart of getProductForStoreByShopifyId, for scanning many product cards at
 // once (collection grids, search results) without one query per product. Accepts a mix of
 // Shopify product ids and/or handles, since theme card markup exposes one or the other

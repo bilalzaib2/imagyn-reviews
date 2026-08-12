@@ -13,7 +13,7 @@ import {
   readImageFilesFromFormData,
   uploadReviewImages,
 } from "../services/reviewMedia.server";
-import { getProductForStoreByShopifyId } from "../services/product.server";
+import { getOrSyncProductForStoreByShopifyId } from "../services/product.server";
 import { getStoreBySlug } from "../services/store.server";
 import { getStorefrontWidgetSettings } from "../services/widget.server";
 import { getAiSummary } from "../services/aiSummary.server";
@@ -77,7 +77,10 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
 
   // Throws a 400 Response when the request wasn't genuinely forwarded by Shopify's App
   // Proxy (missing/invalid signature) — this is what actually rejects non-Shopify traffic.
-  await authenticate.public.appProxy(request);
+  // `admin` (present whenever a session exists for the shop — always true for an installed
+  // app) is what getOrSyncProductForStoreByShopifyId below uses for its lazy single-product
+  // fallback, the same way the action below already uses it for image uploads.
+  const { admin } = await authenticate.public.appProxy(request);
 
   const url = new URL(request.url);
   // `shop` is one of the query params covered by the signature just verified above, so
@@ -99,7 +102,10 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
     return json({ ok: false, error: "Shop not found." }, { status: 404 });
   }
 
-  const product = await getProductForStoreByShopifyId(productId, store.id);
+  // Falls back to a lazy, on-demand single-product sync (see product.server.ts) when this
+  // product hasn't been through a full-catalog sync yet — the fast path (already synced) is
+  // unchanged: one DB read, no Shopify API call.
+  const product = await getOrSyncProductForStoreByShopifyId(productId, store.id, admin);
 
   if (!product) {
     return json({ ok: false, error: "Product not found for this shop." }, { status: 404 });
@@ -233,7 +239,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
     return json({ ok: false, error: "Shop not found." }, { status: 404 });
   }
 
-  const product = await getProductForStoreByShopifyId(productId, store.id);
+  const product = await getOrSyncProductForStoreByShopifyId(productId, store.id, admin);
 
   if (!product) {
     return json({ ok: false, error: "Product not found for this shop." }, { status: 404 });

@@ -6,6 +6,8 @@ import { unauthenticated } from "../shopify.server";
 import { syncAllProducts } from "./product.server";
 import {
   finishProductSync,
+  getProductSyncState,
+  startProductSync,
   updateProductSyncProgress,
   type ProductSyncState,
 } from "./store.server";
@@ -56,5 +58,39 @@ export async function runProductSync(shop: string, storeId: string): Promise<voi
       // window above lets a merchant retry.
       console.error(`[productSync] Failed to record failure state for store ${storeId}:`, writeError);
     }
+  }
+}
+
+// Shared by both trigger points — app.products.tsx's manual "Sync products" action and
+// triggerInitialProductSyncIfNeeded below — so there's exactly one place that marks a sync
+// "running" and fires the (deliberately unawaited) background job.
+async function startAndRunProductSync(shop: string, storeId: string): Promise<void> {
+  await startProductSync(storeId);
+
+  runProductSync(shop, storeId).catch((error) => {
+    console.error(`[productSync] Unhandled error starting product sync for ${shop}:`, error);
+  });
+}
+
+// Called from shopify.server.ts's afterAuth, which fires on every OAuth completion (fresh
+// install AND reinstall/re-auth alike — see that file's own comment on this). Gated on
+// productSyncStatus still being "idle" — i.e. this store has never had a sync started at
+// all — so this only ever acts once per store's lifetime: a store that already completed a
+// sync, is currently running one, or previously failed one is left untouched here, matching
+// "don't block/interrupt the merchant unnecessarily." A merchant can always fall back to the
+// existing manual "Sync products" action (app.products.tsx) to retry or re-sync later,
+// regardless of this gate.
+export async function triggerInitialProductSyncIfNeeded(shop: string, storeId: string): Promise<void> {
+  try {
+    const state = await getProductSyncState(storeId);
+    if (state.status !== "idle") {
+      return;
+    }
+
+    await startAndRunProductSync(shop, storeId);
+  } catch (error) {
+    // Must never break authentication — installing/opening the app has to keep working even
+    // if this best-effort kickoff fails outright (e.g. a DB blip reading sync state).
+    console.error(`[productSync] Unable to start initial product sync for ${shop}:`, error);
   }
 }
