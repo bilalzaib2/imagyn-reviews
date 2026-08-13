@@ -26,4 +26,15 @@
   display: flex;
   width: 100%;
   flex-basis: 100%;
+  /* The box above already spans the same width as the price/title (its parent's normal
+     flow gives it the full row) — but a flex container's own children default to
+     justify-content: flex-start, so the star+count content itself was hugging the left
+     edge of that box instead of sitting on the same center axis as the (centered) title
+     and price above it. This is the one property needed to center the content within
+     the box the badge already correctly occupies — confirmed live on Katran: content
+     center moved from 96px to matching the price/title center at 240px on a real
+     visible card, with no change to the box's own position/width. Centering here has no
+     effect on themes whose cards are left- or right-aligned instead of centered, since
+     it only centers this row's own content within whatever width it already has. */
+  justify-content: center;
 }
