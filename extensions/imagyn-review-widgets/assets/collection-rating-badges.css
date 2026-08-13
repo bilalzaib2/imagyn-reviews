@@ -2,9 +2,28 @@
  * Collection Ratings embed — context-specific styling only.
  * The badge's own visual style (colors, typography, icon sizing) lives in
  * imagyn-component-badge.css, shared with other components that render a badge.
- * This file only concerns itself with how the badge sits within a Dawn product card.
+ * This file only concerns itself with how the badge sits within a product card.
  */
 
 .imagyn-card-badge {
   margin-top: var(--imagyn-space-sm, 0.6em);
+  /* imagyn-component-badge.css's shared default is inline-flex (correct for other
+     consumers, e.g. a badge sitting inline next to other content) — this embed instead
+     inserts the badge as a sibling right after the card's price element
+     (collection-rating-badges.js's findPriceAnchor), and it must always land on its own
+     row below the price, not inline with whatever's left on the price's line. `flex`
+     (not `inline-flex`) is block-level on the outside while keeping the star+count
+     children laid out in a row internally — no visual change to the badge itself, only
+     to how it participates in the card's normal block flow. width: 100% + flex-basis:
+     100% are defense-in-depth for the (uncommon, but real across other themes) case
+     where the badge's immediate parent is itself a flex/grid row rather than block flow:
+     width: 100% claims the full row so nothing else can sit beside it, and flex-basis:
+     100% pushes it onto a new line in any flex parent that allows wrapping. Verified
+     against Katran's live theme (Ella), whose price-wrapper's parent is plain block
+     flow, where display: block alone already suffices — the extra properties are for
+     other themes/parents this file doesn't have a live example of yet, not something
+     Katran itself needs. */
+  display: flex;
+  width: 100%;
+  flex-basis: 100%;
 }
