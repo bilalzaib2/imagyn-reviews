@@ -164,6 +164,36 @@
     return found;
   }
 
+  // Theme-agnostic price-anchor lookup: no theme/merchant-specific class names (e.g. Dawn's
+  // ".price" or Ella's ".card-price") — "price" as a class-name substring is the one
+  // convention virtually every Shopify theme actually uses somewhere in its card markup, so
+  // matching on that generically covers Dawn, Ella, and everything in between the same way
+  // the fallback card/heading detection already does. Picks the outermost matching element
+  // (excludes any match nested inside another match, so a card whose price/compare-at-price
+  // are two spans inside one wrapper anchors on the wrapper, not the first inner span) and,
+  // if more than one remains, the last in document order — the price block reliably reads as
+  // the last "price"-classed content in a card, sale price included. Returns null (never
+  // throws) when nothing matches, so the caller can fall back safely.
+  function findPriceAnchor(card) {
+    var candidates = card.querySelectorAll('[class*="price"]');
+    var topLevel = [];
+
+    for (var i = 0; i < candidates.length; i++) {
+      var isNested = false;
+      for (var j = 0; j < candidates.length; j++) {
+        if (i !== j && candidates[j].contains(candidates[i])) {
+          isNested = true;
+          break;
+        }
+      }
+      if (!isNested) {
+        topLevel.push(candidates[i]);
+      }
+    }
+
+    return topLevel.length > 0 ? topLevel[topLevel.length - 1] : null;
+  }
+
   function injectBadge(entry, summary) {
     // Enforced directly, independent of the PROCESSED_ATTR bookkeeping in findCards: this
     // exact card must never end up with more than one badge, regardless of how it got here.
@@ -183,9 +213,12 @@
       '<span class="imagyn-card-badge__stars" aria-hidden="true">' + renderStars(summary.averageRating) + "</span>" +
       '<span class="imagyn-card-badge__count">(' + summary.totalReviews + ")</span>";
 
-    // Beneath the title, always: inserted as the next sibling of the visible <h3
-    // class="card__heading"> (see findCards — Dawn renders this heading twice per card).
-    entry.heading.parentElement.insertBefore(badge, entry.heading.nextSibling);
+    // Immediately after the price block when one is detectable (findPriceAnchor); falls back
+    // to right after the title/heading — the previous, still-correct behavior — for any card
+    // where no price element is found, so a theme without a detectable price never loses the
+    // badge entirely over a placement preference.
+    var anchor = findPriceAnchor(entry.card) || entry.heading;
+    anchor.parentElement.insertBefore(badge, anchor.nextSibling);
 
     return true;
   }
