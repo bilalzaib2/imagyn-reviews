@@ -209,11 +209,21 @@ export default function ProductsPage() {
     setSearchInput(initialSearch);
   }, [initialSearch]);
 
-  // Debounced search — resets pagination to page 1 on every change, same convention as the
-  // Reviews page's own search field.
+  // `searchParams` deliberately isn't a dependency here — clicking Next/Previous also changes
+  // searchParams (cursor/history), and if this effect re-ran on that change too, its debounce
+  // timer would fire ~280ms later and unconditionally strip the cursor/history it just set,
+  // snapping the merchant straight back to page 1. This should only ever fire in response to
+  // the merchant actually typing in the search box. A ref keeps it reading the latest
+  // searchParams when it does fire, without making that value a re-trigger source. Same
+  // pattern as app.reviews.tsx's own search field — see its comment for the full incident.
+  const searchParamsRef = useRef(searchParams);
+  useEffect(() => {
+    searchParamsRef.current = searchParams;
+  }, [searchParams]);
+
   useEffect(() => {
     const timeoutId = window.setTimeout(() => {
-      const next = new URLSearchParams(searchParams);
+      const next = new URLSearchParams(searchParamsRef.current);
       const trimmedSearch = searchInput.trim();
 
       if (trimmedSearch) {
@@ -228,7 +238,7 @@ export default function ProductsPage() {
     }, 280);
 
     return () => window.clearTimeout(timeoutId);
-  }, [searchInput, searchParams, setSearchParams]);
+  }, [searchInput, setSearchParams]);
 
   // Picks up the latest polled snapshot from the status fetcher into local state, so the rest
   // of this component only ever reads one `syncState`, whether it came from the initial page
