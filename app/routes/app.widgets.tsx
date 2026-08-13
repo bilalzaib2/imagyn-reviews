@@ -610,7 +610,14 @@ export default function WidgetsPage() {
                         <span className={styles.previewStars}>{renderStars(5, 16, appearanceTokens.colors.starColor)}</span>
                       </div>
                       <div className={styles.widgetCardMeta}>
-                        <span className={styles.widgetCardMetaLabel}>Configured in the Shopify Theme Editor</span>
+                        {/* Action-oriented, not a status claim — this app has no way to know
+                            whether a merchant has actually added/configured this block on
+                            their live theme (no read_themes scope, no detection anywhere in
+                            this codebase). The old copy ("Configured in the Shopify Theme
+                            Editor") read as a declarative status, which merchants who HAD
+                            already configured it reasonably took as confirmation nothing was
+                            wrong on our end. This wording makes no claim either way. */}
+                        <span className={styles.widgetCardMetaLabel}>Add and configure in the Shopify Theme Editor</span>
                       </div>
                       <div className={styles.widgetCardActions}>
                         <a
