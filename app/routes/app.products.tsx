@@ -221,6 +221,16 @@ export default function ProductsPage() {
     searchParamsRef.current = searchParams;
   }, [searchParams]);
 
+  // `setSearchParams` also isn't a dependency, for the same reason `statusFetcher` is
+  // omitted from the polling effect below: React Router doesn't guarantee this function's
+  // identity is stable across re-renders, and this page re-renders more than most after any
+  // navigation (sync-status polling, statusFetcher, revalidator all settling) — enough for a
+  // fresh `setSearchParams` reference to still re-trigger this effect right after Next/
+  // Previous, reintroducing the exact revert this effect exists to prevent. Confirmed live:
+  // Next produced two extra reverting navigations (~280ms apart) even with searchParams
+  // already excluded above, traced to this effect's own delete("cursor")/delete("history")
+  // calls. Whichever closure over setSearchParams runs still dispatches to the same
+  // underlying router, so omitting it here is safe.
   useEffect(() => {
     const timeoutId = window.setTimeout(() => {
       const next = new URLSearchParams(searchParamsRef.current);
@@ -238,7 +248,8 @@ export default function ProductsPage() {
     }, 280);
 
     return () => window.clearTimeout(timeoutId);
-  }, [searchInput, setSearchParams]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [searchInput]);
 
   // Picks up the latest polled snapshot from the status fetcher into local state, so the rest
   // of this component only ever reads one `syncState`, whether it came from the initial page
