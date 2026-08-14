@@ -828,6 +828,18 @@ export default function ReviewsPage() {
   const allPageSelected =
     effectiveReviews.length > 0 && effectiveReviews.every((review) => selectedIds.includes(review.id));
 
+  // Same status-awareness as the single-review detail panel, extended to a selection: only
+  // disable the bulk action when EVERY selected review already shares that exact status (a
+  // genuinely no-op action for the whole selection) — a mixed selection (some pending, some
+  // already approved) still gets a fully active Approve, since it's meaningful for the
+  // pending ones. Reviews not present in the current page's effectiveReviews (e.g. a stale
+  // selection after pagination) don't count toward either state.
+  const selectedReviewRows = effectiveReviews.filter((review) => selectedIds.includes(review.id));
+  const allSelectedApproved =
+    selectedReviewRows.length > 0 && selectedReviewRows.every((review) => review.status === ReviewStatus.APPROVED);
+  const allSelectedRejected =
+    selectedReviewRows.length > 0 && selectedReviewRows.every((review) => review.status === ReviewStatus.REJECTED);
+
   return (
     <>
       <Container as="main">
@@ -1031,10 +1043,18 @@ export default function ReviewsPage() {
             {selectedIds.length > 0 ? (
               <div className={styles.bulkBar}>
                 <span className={styles.bulkCount}>{selectedIds.length} selected</span>
-                <Button type="button" onClick={() => applyBulkAction("bulkApprove")} disabled={isMutating}>
+                <Button
+                  type="button"
+                  onClick={() => applyBulkAction("bulkApprove")}
+                  disabled={isMutating || allSelectedApproved}
+                >
                   Approve
                 </Button>
-                <Button type="button" onClick={() => applyBulkAction("bulkReject")} disabled={isMutating}>
+                <Button
+                  type="button"
+                  onClick={() => applyBulkAction("bulkReject")}
+                  disabled={isMutating || allSelectedRejected}
+                >
                   Reject
                 </Button>
                 <Button type="button" onClick={() => applyBulkAction("bulkDelete")} disabled={isMutating}>
@@ -1392,21 +1412,33 @@ export default function ReviewsPage() {
 
                     <div className={styles.detailActions}>
                       <div className={styles.moderationButtons}>
-                        <Button
-                          type="button"
-                          variant="primary"
-                          onClick={() => applySingleStatus(selectedReview.id, ReviewStatus.APPROVED)}
-                          disabled={isMutating}
-                        >
-                          Approve
-                        </Button>
-                        <Button
-                          type="button"
-                          onClick={() => applySingleStatus(selectedReview.id, ReviewStatus.REJECTED)}
-                          disabled={isMutating}
-                        >
-                          Reject
-                        </Button>
+                        {/* Status-aware: a review already in a given state doesn't get an
+                            active action for that same state again — Approve only appears
+                            when the review isn't already Approved, Reject only when it isn't
+                            already Rejected. The opposite action always remains available
+                            (Approved -> Reject, Rejected -> Approve/restore) since
+                            review.server.ts's approveReview/rejectReview are plain,
+                            unconditional status setters with no state-machine restriction —
+                            this is a UI truthfulness fix, not a new backend capability. */}
+                        {selectedReview.status !== ReviewStatus.APPROVED ? (
+                          <Button
+                            type="button"
+                            variant="primary"
+                            onClick={() => applySingleStatus(selectedReview.id, ReviewStatus.APPROVED)}
+                            disabled={isMutating}
+                          >
+                            Approve
+                          </Button>
+                        ) : null}
+                        {selectedReview.status !== ReviewStatus.REJECTED ? (
+                          <Button
+                            type="button"
+                            onClick={() => applySingleStatus(selectedReview.id, ReviewStatus.REJECTED)}
+                            disabled={isMutating}
+                          >
+                            Reject
+                          </Button>
+                        ) : null}
                       </div>
                       <Popover
                         active={actionsMenuOpen}

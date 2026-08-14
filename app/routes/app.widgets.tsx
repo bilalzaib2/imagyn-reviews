@@ -43,10 +43,18 @@ type PageView = "gallery" | "customize";
 // Collection Rating Badge, and Review Carousel are configured entirely in the Shopify Theme
 // Editor and have no in-app settings to open, so their cards link out instead of pretending
 // to have a working Customize flow (Review Carousel's real settings — heading, review count —
-// live in review_carousel.liquid's own schema, editable there). Featured Collection Badge and
-// Related Products Badge don't exist as blocks at all yet — reserved placeholders only, per
-// explicit product direction.
-type WidgetCardStatus = "editable" | "theme-editor" | "reserved";
+// live in review_carousel.liquid's own schema, editable there).
+//
+// "Featured Collection Badge" and "Related Products Badge" were previously listed as
+// separate, unimplemented ("reserved") cards. They are not a distinct feature: Collection
+// Rating Badge's own schema text and its collection-rating-badges.js DOM-scan are already
+// theme-section-agnostic — they inject onto any Dawn-style product card found anywhere on
+// the page, confirmed live on a real merchant (Katran): 16 visible badges rendered on the
+// homepage's Featured Collection grid using the exact same Collection Ratings embed used on
+// plain collection pages, with zero separate placement or code. Keeping two "Coming soon"
+// cards for a surface the shipped block already covers was the actual bug — see this card's
+// description below, which now says so explicitly instead of implying it's still pending.
+type WidgetCardStatus = "editable" | "theme-editor";
 
 interface WidgetCardDef {
   key: string;
@@ -81,7 +89,12 @@ const widgetCards: WidgetCardDef[] = [
   {
     key: "collection-rating-badge",
     title: "Collection Rating Badge",
-    description: "Star ratings on product cards across collection and search grids.",
+    // One embed, enabled once, that already covers every product-grid surface on the
+    // storefront — including Featured Collection sections and most Related Products
+    // sections, not just plain collection/search grids. Previously listed as two
+    // additional "Coming soon" cards implying they needed separate work; they don't.
+    description:
+      "Star ratings on product cards everywhere they appear in a grid — collection pages, search results, featured collections, and most related-product sections. One embed, enabled once in the Shopify Theme Editor.",
     status: "theme-editor",
     blockName: "Collection Ratings",
     blockHandle: "collection_rating_badges",
@@ -93,18 +106,6 @@ const widgetCards: WidgetCardDef[] = [
     status: "theme-editor",
     blockName: "Review Carousel",
     blockHandle: "review_carousel",
-  },
-  {
-    key: "featured-collection-badge",
-    title: "Featured Collection Badge",
-    description: "A curated ratings highlight for featured-collection sections.",
-    status: "reserved",
-  },
-  {
-    key: "related-products-badge",
-    title: "Related Products Badge",
-    description: "Ratings shown alongside related and recommended products.",
-    status: "reserved",
   },
 ];
 
@@ -349,6 +350,77 @@ function ReviewPreviewCard({
   );
 }
 
+// Review Carousel's gallery-card thumbnail — reuses ReviewPreviewCard (the same real-structure
+// card the Product Reviews Widget's own thumbnail renders below) laid out as a fixed-width
+// horizontal row instead of a grid/list, so the gallery card reads as an actual carousel
+// snapshot rather than the generic star-row placeholder every other "theme-editor" card gets
+// (see the widgetCards.map branch below). 260px card width matches the real storefront
+// carousel's own slide width (imagyn-component-carousel.css's .imagyn-carousel__slide), so the
+// preview's proportions match what a merchant actually sees after adding the block.
+const carouselPreviewSettings = getDefaultWidgetSettings(REVIEWS_WIDGET_TYPE);
+
+function CarouselThumbnailPreview({ tokens }: { tokens: AppearanceTokens }) {
+  return (
+    <div className={styles.carouselThumbnailTrack}>
+      {sampleReviews.map((review) => (
+        <div key={review.id} className={styles.carouselThumbnailCard}>
+          <ReviewPreviewCard tokens={tokens} settings={carouselPreviewSettings} review={review} />
+        </div>
+      ))}
+    </div>
+  );
+}
+
+// Product Rating Badge's gallery thumbnail — matches rating-badge.js's actual rendered
+// structure exactly: star row, then a bold numeric average, then a muted "(N reviews)"
+// count — not just a bare star row. rating-badge.js's own markup has no separate
+// "average" element unless totalReviews > 0, which is always true for this representative
+// preview (a badge with zero reviews is designed to hide itself entirely on the real
+// storefront — showing that state here would just be an empty box, not useful as a preview).
+function RatingBadgeThumbnailPreview({ tokens }: { tokens: AppearanceTokens }) {
+  const sampleAverage = 4.6;
+  const sampleCount = 128;
+
+  return (
+    <div className={styles.ratingBadgePreviewRow}>
+      <span className={styles.previewStars}>{renderStars(Math.round(sampleAverage), 15, tokens.colors.starColor)}</span>
+      <span className={styles.ratingBadgePreviewAverage} style={{ color: tokens.colors.textColor ?? "#111111" }}>
+        {sampleAverage.toFixed(1)}
+      </span>
+      <span className={styles.ratingBadgePreviewCount}>({sampleCount} reviews)</span>
+    </div>
+  );
+}
+
+// Collection Rating Badge's gallery thumbnail — the real block never renders as an isolated
+// badge; it's injected as its own row directly beneath the price on an existing product
+// card (collection-rating-badges.js's findPriceAnchor + collection-rating-badges.css's
+// centered, full-width row — see both for the placement/centering this preview mirrors).
+// Shown here inside a small mock product card, since a bare badge with nothing around it
+// wouldn't communicate that context at all. Card chrome (image/title/price) is
+// representative-only; the badge row's structure/centering/star treatment matches the real
+// embed exactly, including its lack of a separate numeric average (Collection Ratings only
+// ever shows stars + count, unlike Product Rating Badge's average+count).
+function CollectionBadgeThumbnailPreview({ tokens }: { tokens: AppearanceTokens }) {
+  const sampleCount = 24;
+
+  return (
+    <div className={styles.collectionBadgeMockCard}>
+      <div className={styles.collectionBadgeMockImage} aria-hidden="true" />
+      <div className={styles.collectionBadgeMockTitle} style={{ color: tokens.colors.textColor ?? "#111111" }}>
+        Coastal Cotton Tee
+      </div>
+      <div className={styles.collectionBadgeMockPrice} style={{ color: tokens.colors.textColor ?? "#111111" }}>
+        $48.00
+      </div>
+      <div className={styles.collectionBadgeMockBadgeRow}>
+        <span className={styles.previewStars}>{renderStars(5, 13, tokens.colors.starColor)}</span>
+        <span className={styles.collectionBadgeMockCount}>({sampleCount})</span>
+      </div>
+    </div>
+  );
+}
+
 function WidgetPreview({ tokens, settings }: { tokens: AppearanceTokens; settings: WidgetSettings }) {
   const layoutReviews = settings.layout === "grid" ? sampleReviews : sampleReviews.slice(0, settings.layout === "carousel" ? 2 : 3);
 
@@ -585,19 +657,6 @@ export default function WidgetsPage() {
           ) : view === "gallery" ? (
             <div className={styles.cardGrid}>
               {widgetCards.map((card) => {
-                if (card.status === "reserved") {
-                  return (
-                    <div key={card.key} className={styles.widgetCard} data-reserved="true">
-                      <div className={styles.widgetCardHeader}>
-                        <h2 className={styles.widgetCardTitle}>{card.title}</h2>
-                        <span className={styles.comingSoonPill}>Coming soon</span>
-                      </div>
-                      <p className={styles.widgetCardDescription}>{card.description}</p>
-                      <div className={styles.widgetCardThumbnailPlaceholder}>Preview not yet available</div>
-                    </div>
-                  );
-                }
-
                 if (card.status === "theme-editor") {
                   return (
                     <div key={card.key} className={styles.widgetCard}>
@@ -606,9 +665,25 @@ export default function WidgetsPage() {
                         <span className={styles.installBadge}>Available</span>
                       </div>
                       <p className={styles.widgetCardDescription}>{card.description}</p>
-                      <div className={styles.widgetCardThumbnailPlaceholder}>
-                        <span className={styles.previewStars}>{renderStars(5, 16, appearanceTokens.colors.starColor)}</span>
-                      </div>
+                      {card.key === "review-carousel" ? (
+                        // The only one of these three that's genuinely a scaled-down full
+                        // storefront mockup (matches WidgetPreview's own big-shell-shrunk-to-
+                        // thumbnail pattern) — the scale wrapper exists for that reason, not
+                        // for the two smaller, single-row previews below.
+                        <div className={styles.widgetCardThumbnail}>
+                          <div className={styles.widgetCardThumbnailScale}>
+                            <CarouselThumbnailPreview tokens={appearanceTokens} />
+                          </div>
+                        </div>
+                      ) : card.key === "product-rating-badge" ? (
+                        <div className={styles.widgetCardThumbnailPlaceholder}>
+                          <RatingBadgeThumbnailPreview tokens={appearanceTokens} />
+                        </div>
+                      ) : card.key === "collection-rating-badge" ? (
+                        <div className={styles.widgetCardThumbnailPlaceholder}>
+                          <CollectionBadgeThumbnailPreview tokens={appearanceTokens} />
+                        </div>
+                      ) : null}
                       <div className={styles.widgetCardMeta}>
                         {/* Action-oriented, not a status claim — this app has no way to know
                             whether a merchant has actually added/configured this block on
@@ -646,7 +721,11 @@ export default function WidgetsPage() {
                       </div>
                     </div>
                     <div className={styles.widgetCardMeta}>
-                      <span className={styles.installBadge}>Available</span>
+                      {/* No separate "Available" pill here — this card already shows its one
+                          real, DB-backed status (Enabled/Disabled) in the header above. A
+                          second "Available" label next to it was redundant at best and read
+                          as contradictory at worst (Enabled + Available on the same card, as
+                          if they were two different claims about two different things). */}
                       <span className={styles.widgetCardMetaLabel}>Block: {card.blockName}</span>
                     </div>
                     <div className={styles.widgetCardActions}>

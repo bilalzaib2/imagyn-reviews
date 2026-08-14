@@ -130,13 +130,16 @@
   pointer-events: none;
 }
 
+/* Compact, non-scaled preview box for the two smaller single-row previews (Product Rating
+   Badge, Collection Rating Badge) — a solid border, matching .widgetCardThumbnail, since
+   this now holds real representative content, not a "not built yet" placeholder. */
 .widgetCardThumbnailPlaceholder {
   display: flex;
   align-items: center;
   justify-content: center;
   height: 9rem;
   border-radius: var(--radius-md);
-  border: 1px dashed var(--color-border);
+  border: 1px solid var(--color-border);
   background: var(--color-surface-muted);
   color: var(--color-text-muted);
   font-size: var(--text-xs);
@@ -186,6 +189,15 @@
 .statusDisabled {
   background: var(--color-surface-strong);
   color: var(--color-text-muted);
+}
+
+/* Imagyn's own brand accent, not a merchant-facing color — this pill is admin-side widget
+   status chrome, never rendered on the storefront. Approved palette: #EAFBB2 lime + black
+   text, no blue/amber. Layout (padding/radius/size/weight/tracking) stays on the shared
+   .installBadge rule above; only background/color are overridden here. */
+.installBadge {
+  background: #eafbb2;
+  color: #000000;
 }
 
 .comingSoonPill {
@@ -479,6 +491,24 @@
   gap: 1rem;
 }
 
+/* Review Carousel gallery-card thumbnail — a horizontal, non-wrapping row so it reads as a
+   carousel snapshot rather than a grid/list. 260px matches the real storefront carousel's own
+   slide width (imagyn-component-carousel.css's .imagyn-carousel__slide). Sits inside the same
+   .widgetCardThumbnail/.widgetCardThumbnailScale scale-down wrapper the full WidgetPreview uses.
+   Backdrop is Imagyn's own admin chrome (not merchant-configurable, unlike the review cards
+   inside it, which stay on live Appearance tokens) — #F5F5F5 per the approved Imagyn Reviews
+   neutral-surface color, not the merchant-customizable storefront background. */
+.carouselThumbnailTrack {
+  display: flex;
+  gap: 1rem;
+  padding: 20px;
+  background: #f5f5f5;
+}
+
+.carouselThumbnailCard {
+  flex: 0 0 260px;
+}
+
 .previewCard {
   display: grid;
   border-style: solid;
@@ -565,4 +595,68 @@
   .gridPreview {
     grid-template-columns: 1fr;
   }
+}
+
+/* Product Rating Badge thumbnail — mirrors rating-badge.css's real .imagyn-rating-badge
+   structure (font-size 0.9em row, bold average, muted underlined count), not just a bare
+   star row. */
+.ratingBadgePreviewRow {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4em;
+  font-size: 0.9em;
+}
+
+.ratingBadgePreviewAverage {
+  font-weight: 600;
+}
+
+.ratingBadgePreviewCount {
+  opacity: 0.7;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  font-size: 0.95em;
+}
+
+/* Collection Rating Badge thumbnail — a small mock product card, since the real badge only
+   ever renders attached to an existing card (beneath its price), never on its own. Card
+   chrome is representative-only; the badge row itself (centered, own row, stars + count with
+   no separate average) matches the real embed's actual structure and placement exactly. */
+.collectionBadgeMockCard {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.4em;
+  width: 140px;
+}
+
+.collectionBadgeMockImage {
+  width: 56px;
+  height: 56px;
+  border-radius: var(--radius-sm);
+  background: var(--color-border);
+}
+
+.collectionBadgeMockTitle {
+  font-size: 0.7rem;
+  font-weight: 500;
+  text-align: center;
+}
+
+.collectionBadgeMockPrice {
+  font-size: 0.7rem;
+  text-align: center;
+}
+
+.collectionBadgeMockBadgeRow {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.3em;
+  width: 100%;
+}
+
+.collectionBadgeMockCount {
+  font-size: 0.65rem;
+  opacity: 0.6;
 }
