@@ -14,6 +14,7 @@ import { getDefaultAppearanceTokens, type AppearanceTokens } from "../services/a
 import { widgetService } from "../services/widget.server";
 import { getDefaultWidgetSettings, type WidgetSettings, type WidgetType } from "../services/widget.shared";
 import type { WidgetRecord } from "../services/widget.server";
+import { detectWidgetInstallStatus, type WidgetInstallKey, type WidgetInstallStatus } from "../services/widgetInstallDetection.server";
 import shellStyles from "../styles/app.shell.module.css";
 import styles from "../styles/app.widgets.module.css";
 
@@ -32,6 +33,15 @@ type LoaderData = {
   // enforcement lives server-side, not just in whether this page shows the option.
   canUseMultipleWidgetThemes: boolean;
   appearanceTokens: AppearanceTokens;
+  installStatus: Record<WidgetInstallKey, WidgetInstallStatus>;
+};
+
+const UNKNOWN_INSTALL_STATUS: WidgetInstallStatus = { state: "unknown", reason: "Not checked yet." };
+const fallbackInstallStatus: Record<WidgetInstallKey, WidgetInstallStatus> = {
+  "product-reviews-widget": UNKNOWN_INSTALL_STATUS,
+  "product-rating-badge": UNKNOWN_INSTALL_STATUS,
+  "collection-rating-badge": UNKNOWN_INSTALL_STATUS,
+  "review-carousel": UNKNOWN_INSTALL_STATUS,
 };
 
 type PageView = "gallery" | "customize";
@@ -160,10 +170,14 @@ export const loader = async ({ request }: LoaderFunctionArgs): Promise<LoaderDat
   const store = await getOrCreateStore(session.shop);
 
   try {
-    const [widgets, permissions, appearanceTokens] = await Promise.all([
+    // Detection hits the merchant's own live storefront (see widgetInstallDetection.server.ts)
+    // — kept out of the main Promise.all and given its own catch so a slow/unreachable
+    // storefront degrades to "unknown" for every widget instead of failing the whole page.
+    const [widgets, permissions, appearanceTokens, installStatus] = await Promise.all([
       widgetService.listWidgets(store.id),
       getStorePermissions(store.id),
       getStorefrontAppearance(store.id),
+      detectWidgetInstallStatus(session.shop, store.id).catch(() => fallbackInstallStatus),
     ]);
 
     return {
@@ -172,6 +186,7 @@ export const loader = async ({ request }: LoaderFunctionArgs): Promise<LoaderDat
       error: null,
       canUseMultipleWidgetThemes: permissions.canUseMultipleWidgetThemes,
       appearanceTokens,
+      installStatus,
     };
   } catch (error) {
     return {
@@ -180,6 +195,7 @@ export const loader = async ({ request }: LoaderFunctionArgs): Promise<LoaderDat
       error: error instanceof Error ? error.message : "Unable to load widgets.",
       canUseMultipleWidgetThemes: false,
       appearanceTokens: getDefaultAppearanceTokens(),
+      installStatus: fallbackInstallStatus,
     };
   }
 };
@@ -484,8 +500,46 @@ function WidgetPreview({ tokens, settings }: { tokens: AppearanceTokens; setting
   );
 }
 
+// One place to turn a WidgetInstallStatus into what the card actually renders — the single
+// spot that guarantees an installed widget can never show "Add to Theme" (see
+// widgetInstallDetection.server.ts's docblock), since every card branch below calls this
+// instead of building its own label/pill logic.
+function InstallStateBadge({ status }: { status: WidgetInstallStatus }) {
+  if (status.state === "installed") {
+    return <span className={styles.installStateInstalled}>Installed</span>;
+  }
+  if (status.state === "not-installed") {
+    return <span className={styles.installStateNotInstalled}>Not Installed</span>;
+  }
+  return <span className={styles.installBadge}>Available</span>;
+}
+
+function InstallStateAction({ status, addToThemeHref }: { status: WidgetInstallStatus; addToThemeHref: string }) {
+  if (status.state === "installed") {
+    return (
+      <span className={styles.installedIndicator}>
+        <span aria-hidden="true">✓</span> Installed
+      </span>
+    );
+  }
+  if (status.state === "not-installed") {
+    return (
+      <a className={styles.themeEditorLink} href={addToThemeHref}>
+        Add to Theme
+      </a>
+    );
+  }
+  // Unknown must never claim "Add to Theme" — it may already be installed. "Open Theme
+  // Editor" is neutral either way.
+  return (
+    <a className={styles.themeEditorLink} href={addToThemeHref}>
+      Open Theme Editor
+    </a>
+  );
+}
+
 export default function WidgetsPage() {
-  const { widgets, error, canUseMultipleWidgetThemes, appearanceTokens } = useLoaderData<typeof loader>();
+  const { widgets, error, canUseMultipleWidgetThemes, appearanceTokens, installStatus } = useLoaderData<typeof loader>();
   const location = useLocation();
   // Carries embedded/host/shop context the same way app.billing.tsx's manageUrl does — this is
   // a real top-level navigation (required to break out of the iframe), not a fetcher, so it
@@ -658,11 +712,24 @@ export default function WidgetsPage() {
             <div className={styles.cardGrid}>
               {widgetCards.map((card) => {
                 if (card.status === "theme-editor") {
+                  const status = installStatus[card.key as WidgetInstallKey] ?? UNKNOWN_INSTALL_STATUS;
+                  // Detected live against this store's own storefront (see
+                  // widgetInstallDetection.server.ts) — for installed/not-installed the meta
+                  // label states the fact plainly; for unknown it surfaces the actual reason
+                  // detection couldn't tell, rather than a generic action nudge that would read
+                  // as a status claim either way.
+                  const metaLabel =
+                    status.state === "installed"
+                      ? `Block: ${card.blockName} — detected live on your storefront.`
+                      : status.state === "not-installed"
+                        ? `Block: ${card.blockName} — not yet added to your theme.`
+                        : status.reason ?? "Install state can't be determined automatically.";
+
                   return (
                     <div key={card.key} className={styles.widgetCard}>
                       <div className={styles.widgetCardHeader}>
                         <h2 className={styles.widgetCardTitle}>{card.title}</h2>
-                        <span className={styles.installBadge}>Available</span>
+                        <InstallStateBadge status={status} />
                       </div>
                       <p className={styles.widgetCardDescription}>{card.description}</p>
                       {card.key === "review-carousel" ? (
@@ -685,26 +752,27 @@ export default function WidgetsPage() {
                         </div>
                       ) : null}
                       <div className={styles.widgetCardMeta}>
-                        {/* Action-oriented, not a status claim — this app has no way to know
-                            whether a merchant has actually added/configured this block on
-                            their live theme (no read_themes scope, no detection anywhere in
-                            this codebase). The old copy ("Configured in the Shopify Theme
-                            Editor") read as a declarative status, which merchants who HAD
-                            already configured it reasonably took as confirmation nothing was
-                            wrong on our end. This wording makes no claim either way. */}
-                        <span className={styles.widgetCardMetaLabel}>Add and configure in the Shopify Theme Editor</span>
+                        <span className={styles.widgetCardMetaLabel}>{metaLabel}</span>
                       </div>
                       <div className={styles.widgetCardActions}>
-                        <a
-                          className={styles.themeEditorLink}
-                          href={addToThemeHref(card.blockHandle!)}
-                        >
-                          Add to Theme
-                        </a>
+                        <InstallStateAction status={status} addToThemeHref={addToThemeHref(card.blockHandle!)} />
                       </div>
                     </div>
                   );
                 }
+
+                const reviewsInstallStatus = installStatus["product-reviews-widget"] ?? UNKNOWN_INSTALL_STATUS;
+                // Enabled/Disabled (header pill) is this widget's own DB-backed on/off
+                // setting — a different axis from whether the block has been added to the
+                // theme at all. Both are real, so both are shown, in two different places, so
+                // neither reads as a restatement of the other (see this card's previous
+                // "no separate Available pill" fix for why that distinction matters here).
+                const reviewsMetaLabel =
+                  reviewsInstallStatus.state === "installed"
+                    ? `Block: ${card.blockName} — detected live on your storefront.`
+                    : reviewsInstallStatus.state === "not-installed"
+                      ? `Block: ${card.blockName} — not yet added to your theme.`
+                      : `Block: ${card.blockName}. ${reviewsInstallStatus.reason ?? "Install state can't be determined automatically."}`;
 
                 return (
                   <div key={card.key} className={styles.widgetCard}>
@@ -721,12 +789,7 @@ export default function WidgetsPage() {
                       </div>
                     </div>
                     <div className={styles.widgetCardMeta}>
-                      {/* No separate "Available" pill here — this card already shows its one
-                          real, DB-backed status (Enabled/Disabled) in the header above. A
-                          second "Available" label next to it was redundant at best and read
-                          as contradictory at worst (Enabled + Available on the same card, as
-                          if they were two different claims about two different things). */}
-                      <span className={styles.widgetCardMetaLabel}>Block: {card.blockName}</span>
+                      <span className={styles.widgetCardMetaLabel}>{reviewsMetaLabel}</span>
                     </div>
                     <div className={styles.widgetCardActions}>
                       <Popover
@@ -757,12 +820,7 @@ export default function WidgetsPage() {
                       <Button type="button" variant="primary" onClick={() => setView("customize")}>
                         Customize
                       </Button>
-                      <a
-                        className={styles.themeEditorLink}
-                        href={addToThemeHref(card.blockHandle!)}
-                      >
-                        Add to Theme
-                      </a>
+                      <InstallStateAction status={reviewsInstallStatus} addToThemeHref={addToThemeHref(card.blockHandle!)} />
                     </div>
                   </div>
                 );

@@ -200,6 +200,45 @@
   color: #000000;
 }
 
+/* Install-state pill — a third semantic distinct from statusEnabled/Disabled (which describe
+   the Product Reviews Widget's own on/off setting) and from .installBadge's lime "Available"
+   (which means "exists, install state unknown"). Green = positively confirmed present on the
+   live storefront; muted = positively confirmed absent. Both are load-bearing claims, only
+   shown when detection actually succeeded — see widgetInstallDetection.server.ts. */
+.installStateInstalled {
+  composes: statusEnabled;
+}
+
+.installStateNotInstalled {
+  composes: statusDisabled;
+}
+
+/* Action-row equivalent of .themeEditorLink for an already-installed widget — same size/shape
+   so the actions row doesn't reflow between states, but visually inert (no hover affordance,
+   muted border) since there's nothing to do here. Never a link: an installed widget has no
+   "add" action, and text alone ("✓ Installed") is the whole point — see widgetInstallDetection
+   .server.ts's docblock on why this must never read "Add to Theme". */
+.installedIndicator {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.4rem;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  background: var(--color-surface-muted);
+  color: var(--color-text-muted);
+  font-weight: 600;
+  font-size: var(--text-sm);
+  padding: 0.65rem 1rem;
+}
+
+.installReasonNote {
+  margin: 0;
+  color: var(--color-text-muted);
+  font-size: var(--text-xs);
+  line-height: 1.5;
+}
+
 .comingSoonPill {
   display: inline-flex;
   align-items: center;
