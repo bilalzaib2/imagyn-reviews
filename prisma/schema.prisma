@@ -342,6 +342,11 @@ model ReviewRequest {
   @@unique([shopifyOrderId, productId])
   @@index([status])
   @@index([scheduledFor])
+  // Every admin-facing query (reviewRequestService.listRequests) filters by storeId first —
+  // this was the one access pattern with no storeId-prefixed index at all (contrast Review's
+  // own storeId-prefixed indexes above), invisible at today's volume but a genuine scaling
+  // risk since a request lands here on every fulfilled order line item.
+  @@index([storeId, status, createdAt])
 }
 
 model Widget {

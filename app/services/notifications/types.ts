@@ -3,6 +3,11 @@ export interface EmailSendRequest {
   subject: string;
   html: string;
   text: string;
+  // Provider-level metadata echoed back on delivery webhooks (see resend.server.ts and
+  // webhooks.resend.tsx) — optional and provider-specific (a provider without tag support
+  // just ignores it), so this stays here rather than forcing every EmailProvider
+  // implementation to support it.
+  tags?: Record<string, string>;
 }
 
 export interface EmailSendResult {

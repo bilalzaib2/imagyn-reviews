@@ -217,7 +217,15 @@ export const dispatchRequestEmail = async (request: ReviewRequestRecord): Promis
 
   for (let attempt = request.sendAttempts; attempt < MAX_SEND_ATTEMPTS; attempt += 1) {
     try {
-      await getEmailProvider().sendEmail({ to: request.email, subject, html, text });
+      await getEmailProvider().sendEmail({
+        to: request.email,
+        subject,
+        html,
+        text,
+        // Lets webhooks.resend.tsx correlate a delivery event back to this exact row via the
+        // existing unique requestToken column — no new schema column needed for that lookup.
+        tags: { request_token: request.requestToken },
+      });
 
       const updated = await prisma.reviewRequest.update({
         where: { id: request.id },
@@ -255,6 +263,61 @@ export const dispatchRequestEmail = async (request: ReviewRequestRecord): Promis
 
   return mapRequestRecord(updated);
 };
+
+// Monotonic rank for the delivery-tracking portion of the lifecycle — used only by
+// webhooks.resend.tsx's forward-only status updates below, so a delivery event that arrives
+// out of order (Resend's own webhook delivery, like Shopify's, is at-least-once and
+// unordered) can never regress what the merchant sees. "completed"/"cancelled"/"failed" are
+// deliberately excluded: those are decided by the admin action or the customer's own
+// submission, never by a delivery-tracking signal — see isTerminalForWebhooks.
+const LIFECYCLE_RANK: Partial<Record<ReviewRequestStatus, number>> = {
+  sending: 1,
+  sent: 2,
+  delivered: 3,
+  opened: 4,
+  clicked: 5,
+};
+
+const isTerminalForWebhooks = (status: ReviewRequestStatus): boolean =>
+  status === "completed" || status === "cancelled" || status === "failed";
+
+// Shared by markRequestDelivered/markRequestOpened — applies a forward-only status update,
+// silently doing nothing if the request is already at or past that point, or already
+// terminal. Returns whether it actually changed anything, purely so the webhook route can log
+// a meaningful outcome without a second query.
+async function applyForwardOnlyStatus(token: string, nextStatus: "delivered" | "opened"): Promise<boolean> {
+  const existing = await prisma.reviewRequest.findUnique({ where: { requestToken: token } });
+
+  if (!existing) {
+    return false;
+  }
+
+  const currentStatus = existing.status as ReviewRequestStatus;
+
+  if (isTerminalForWebhooks(currentStatus)) {
+    return false;
+  }
+
+  const currentRank = LIFECYCLE_RANK[currentStatus] ?? 0;
+  const nextRank = LIFECYCLE_RANK[nextStatus] as number;
+
+  if (nextRank <= currentRank) {
+    return false;
+  }
+
+  await prisma.reviewRequest.update({
+    where: { id: existing.id },
+    data: {
+      status: nextStatus,
+      // Reuses openedAt exactly the way markRequestClicked already does — this schema has no
+      // separate deliveredAt/clickedAt column, so openedAt is "first time we know the customer
+      // (or their inbox) actually engaged," whichever signal got there first.
+      ...(nextStatus === "opened" ? { openedAt: existing.openedAt ?? new Date() } : {}),
+    },
+  });
+
+  return true;
+}
 
 export const reviewRequestService = {
   // storeId is required and folded into the same `where` as every other filter — the admin
@@ -365,6 +428,49 @@ export const reviewRequestService = {
       distinct: ["reviewerEmail"],
       orderBy: { reviewerEmail: "asc" },
     });
+  },
+
+  // Backs the create-request modal's inline duplicate warning (app.requests.tsx) — read-only,
+  // never blocks by itself. The caller decides whether to surface a warning and let the
+  // merchant confirm anyway; this just answers "what already exists for this exact
+  // (customer, product) pair," scoped to storeId the same way createRequest's own product
+  // lookup is, so it can never see another store's data.
+  async getExistingRequestContext(
+    storeId: string,
+    params: { email: string; productId: string },
+  ): Promise<{ hasPendingRequest: boolean; hasSentRequest: boolean; hasExistingReview: boolean }> {
+    const email = params.email.trim();
+
+    const [pending, sent, review] = await Promise.all([
+      prisma.reviewRequest.findFirst({
+        where: {
+          storeId,
+          productId: params.productId,
+          email,
+          status: { in: ["pending", "scheduled", "sending"] },
+        },
+        select: { id: true },
+      }),
+      prisma.reviewRequest.findFirst({
+        where: {
+          storeId,
+          productId: params.productId,
+          email,
+          status: { in: ["sent", "delivered", "opened", "clicked"] },
+        },
+        select: { id: true },
+      }),
+      prisma.review.findFirst({
+        where: { storeId, productId: params.productId, reviewerEmail: email, deletedAt: null },
+        select: { id: true },
+      }),
+    ]);
+
+    return {
+      hasPendingRequest: Boolean(pending),
+      hasSentRequest: Boolean(sent),
+      hasExistingReview: Boolean(review),
+    };
   },
 
   // storeId is the caller's already-authenticated store, never derived from the client-supplied
@@ -544,6 +650,15 @@ export const reviewRequestService = {
       throw new Error("Review request not found.");
     }
 
+    // A completed request already has a submitted review tied to it — issuing a fresh token
+    // would let the same customer submit a second review for the same product through this
+    // request, and createReview has no duplicate-per-customer-per-product guard of its own.
+    // Resending from "cancelled" is left allowed: reviving a cancelled request is a legitimate
+    // merchant action, not a duplicate-review risk.
+    if (existing.status === "completed") {
+      throw new Error("This request was already completed — the customer has already submitted a review.");
+    }
+
     const nextDelay = existing.delayDays ?? 0;
     const nextStatus = nextDelay === 0 ? "sending" : "scheduled";
 
@@ -565,10 +680,23 @@ export const reviewRequestService = {
   },
 
   async cancelRequest(storeId: string, id: string) {
-    const existing = await prisma.reviewRequest.findFirst({ where: { id, storeId } });
+    const existing = await prisma.reviewRequest.findFirst({ where: { id, storeId }, include: REQUEST_INCLUDE });
 
     if (!existing) {
       throw new Error("Review request not found.");
+    }
+
+    // Idempotent no-op, not an error — a merchant clicking "Cancel" twice (e.g. a slow
+    // double-click) shouldn't see a failure toast for an action that already succeeded.
+    if (existing.status === "cancelled") {
+      return mapRequestRecord(existing);
+    }
+
+    // A completed request already has its review — there's nothing left to cancel, and
+    // silently "succeeding" here would misleadingly suggest the review submission itself
+    // was undone.
+    if (existing.status === "completed") {
+      throw new Error("This request was already completed and can't be cancelled.");
     }
 
     return prisma.reviewRequest.update({
@@ -631,6 +759,45 @@ export const reviewRequestService = {
       where: { id: existing.id },
       data: { status: "clicked", openedAt: existing.openedAt ?? new Date() },
     });
+  },
+
+  // The three functions below back webhooks.resend.tsx. Each is forward-only and idempotent
+  // by construction (see applyForwardOnlyStatus/LIFECYCLE_RANK above) — receiving the same
+  // Resend event twice, or events out of their usual order, never regresses or double-applies
+  // anything. None of them ever create a ReviewRequest or a Review; they only update a status
+  // string (and, for "opened", a timestamp) on a row that already exists.
+  async markRequestDelivered(token: string): Promise<boolean> {
+    return applyForwardOnlyStatus(token, "delivered");
+  },
+
+  async markRequestOpened(token: string): Promise<boolean> {
+    return applyForwardOnlyStatus(token, "opened");
+  },
+
+  // Bounce/complaint/send-failure signals from Resend. Moves the request to "failed" only if
+  // the customer hasn't already engaged (clicked through) and the request isn't already
+  // terminal — a bounce notification that arrives after a real click or completion is stale
+  // noise (e.g. a delayed soft-bounce report), not a more-authoritative signal than what
+  // actually happened. Returns whether it actually changed anything.
+  async markRequestDeliveryFailed(token: string): Promise<boolean> {
+    const existing = await prisma.reviewRequest.findUnique({ where: { requestToken: token } });
+
+    if (!existing) {
+      return false;
+    }
+
+    const currentStatus = existing.status as ReviewRequestStatus;
+
+    if (isTerminalForWebhooks(currentStatus) || currentStatus === "clicked") {
+      return false;
+    }
+
+    await prisma.reviewRequest.update({
+      where: { id: existing.id },
+      data: { status: "failed" },
+    });
+
+    return true;
   },
 
   async consumeRequestToken(id: string) {

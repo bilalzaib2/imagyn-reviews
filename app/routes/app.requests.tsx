@@ -10,6 +10,7 @@ import type { ActionFunctionArgs, HeadersFunction, LoaderFunctionArgs } from "re
 import { boundary } from "@shopify/shopify-app-react-router/server";
 import {
   ActionList,
+  Banner,
   BlockStack,
   Card,
   Frame,
@@ -58,6 +59,10 @@ type ActionData = {
   error?: string;
   message?: string;
   intent?: string;
+  // Set only on the create action's duplicate-context check (see the "create" intent handler
+  // below) — distinguishes "here's something worth confirming" from a hard failure, so the UI
+  // keeps the modal open with an inline banner instead of toasting an error and closing it.
+  warning?: boolean;
 };
 
 type RequestModalMode = "create" | "edit" | "reschedule";
@@ -188,10 +193,39 @@ export const action = async ({ request }: ActionFunctionArgs): Promise<ActionDat
       const orderNumber = String(formData.get("orderNumber") || "");
       const customMessage = String(formData.get("customMessage") || "");
       const delayDays = Number(formData.get("delayDays") || "0");
+      const confirmDuplicate = String(formData.get("confirmDuplicate") || "") === "true";
       const [name, email] = customerValue.split("||");
 
       if (!email || !productId || !Number.isFinite(delayDays)) {
         return { ok: false, error: "Customer, product, and delay are required.", intent };
+      }
+
+      // A one-time check, not a hard constraint — the merchant can always proceed by
+      // resubmitting with confirmDuplicate set (see the modal's "Send Anyway" action). This
+      // only runs on the first submit of a given (customer, product) pair; changing either
+      // field in the UI clears the confirmation so a genuinely different pair gets its own
+      // fresh check.
+      if (!confirmDuplicate) {
+        const context = await reviewRequestService.getExistingRequestContext(store.id, { email, productId });
+        const reasons: string[] = [];
+        if (context.hasExistingReview) {
+          reasons.push("this customer has already left a review for this product");
+        }
+        if (context.hasPendingRequest) {
+          reasons.push("a request for this customer and product is already pending or scheduled");
+        }
+        if (context.hasSentRequest) {
+          reasons.push("a request for this customer and product was already sent and hasn't been completed yet");
+        }
+
+        if (reasons.length > 0) {
+          return {
+            ok: false,
+            warning: true,
+            error: `${reasons.join("; ")}. Send this request anyway?`,
+            intent,
+          };
+        }
       }
 
       await reviewRequestService.createRequest(store.id, {
@@ -347,6 +381,10 @@ export default function RequestsPage() {
   const [formState, setFormState] = useState<RequestFormState>(emptyFormState);
   const [confirmationState, setConfirmationState] = useState<ConfirmationState | null>(null);
   const [actionsMenuOpen, setActionsMenuOpen] = useState(false);
+  // Set from the create action's duplicate-context check (see the "create" intent handler in
+  // the action above) — non-null keeps the modal open with an inline banner instead of
+  // toasting an error, and switches the primary action to an explicit "Send Anyway" resubmit.
+  const [duplicateWarning, setDuplicateWarning] = useState<string | null>(null);
 
   const [optimisticDeleted, setOptimisticDeleted] = useState<Record<string, true>>({});
   const [optimisticPatch, setOptimisticPatch] = useState<Partial<Record<string, Partial<ReviewRequestRecord>>> & Record<string, Partial<ReviewRequestRecord>>>({});
@@ -380,6 +418,14 @@ export default function RequestsPage() {
       return;
     }
 
+    if (!fetcher.data.ok && fetcher.data.warning) {
+      // Keep the modal open, no toast — this is a "confirm before proceeding" nudge, not a
+      // failure. handleModalSubmit resubmits with confirmDuplicate once the merchant clicks
+      // "Send Anyway".
+      setDuplicateWarning(fetcher.data.error || "This may be a duplicate request.");
+      return;
+    }
+
     if (!fetcher.data.ok) {
       setActionError(fetcher.data.error || "Action failed.");
       setToastState({ content: fetcher.data.error || "Action failed.", error: true });
@@ -389,6 +435,7 @@ export default function RequestsPage() {
     }
 
     setActionError(null);
+    setDuplicateWarning(null);
     setToastState({ content: fetcher.data.message || "Review request updated." });
     setOptimisticDeleted({});
     setOptimisticPatch({});
@@ -451,7 +498,18 @@ export default function RequestsPage() {
   const openCreateModal = () => {
     setRequestModalMode("create");
     setFormState(emptyFormState);
+    setDuplicateWarning(null);
     setRequestModalOpen(true);
+  };
+
+  // A pending warning is specific to the (customer, product) pair it was raised for —
+  // changing either one means the next submit needs its own fresh check, not a stale
+  // confirmation from a different pair.
+  const updateFormState = (patch: Partial<RequestFormState>) => {
+    setFormState((prev) => ({ ...prev, ...patch }));
+    if (duplicateWarning && ("customer" in patch || "productId" in patch)) {
+      setDuplicateWarning(null);
+    }
   };
 
   const openEditModal = (request: ReviewRequestRecord) => {
@@ -537,6 +595,9 @@ export default function RequestsPage() {
         orderNumber: formState.orderNumber,
         delayDays: formState.delayDays,
         customMessage: formState.customMessage,
+        // Set once a warning has already been shown for this exact (customer, product) pair —
+        // this resubmit is the merchant explicitly choosing "Send Anyway".
+        confirmDuplicate: duplicateWarning ? "true" : "false",
       });
       return;
     }
@@ -972,7 +1033,9 @@ export default function RequestsPage() {
             requestModalMode === "create"
               ? isMutating && activeIntent === "create"
                 ? "Scheduling..."
-                : "Schedule Request"
+                : duplicateWarning
+                  ? "Send Anyway"
+                  : "Schedule Request"
               : requestModalMode === "edit"
                 ? isMutating && activeIntent === "edit"
                   ? "Saving..."
@@ -996,6 +1059,12 @@ export default function RequestsPage() {
       >
         <Modal.Section>
           <div className={styles.modalFields}>
+            {duplicateWarning ? (
+              <Banner tone="warning" title="This might be a duplicate">
+                <p>{duplicateWarning}</p>
+              </Banner>
+            ) : null}
+
             {requestModalMode !== "reschedule" ? (
               <>
                 {customerOptions.length > 0 ? (
@@ -1003,27 +1072,27 @@ export default function RequestsPage() {
                     label="Fill from a previous customer"
                     options={[{ label: "Select a previous customer", value: "" }, ...customerOptions]}
                     value=""
-                    onChange={(value) => value && setFormState((prev) => ({ ...prev, customer: value }))}
+                    onChange={(value) => value && updateFormState({ customer: value })}
                   />
                 ) : null}
                 <TextField
                   label="Customer name"
                   autoComplete="off"
                   value={customerNameValue}
-                  onChange={(value) => setFormState((prev) => ({ ...prev, customer: buildCustomerValue(value, customerEmailValue) }))}
+                  onChange={(value) => updateFormState({ customer: buildCustomerValue(value, customerEmailValue) })}
                 />
                 <TextField
                   label="Customer email"
                   type="email"
                   autoComplete="off"
                   value={customerEmailValue}
-                  onChange={(value) => setFormState((prev) => ({ ...prev, customer: buildCustomerValue(customerNameValue, value) }))}
+                  onChange={(value) => updateFormState({ customer: buildCustomerValue(customerNameValue, value) })}
                 />
                 <Select
                   label="Product"
                   options={[{ label: "Select a product", value: "" }, ...productOptions]}
                   value={formState.productId}
-                  onChange={(value) => setFormState((prev) => ({ ...prev, productId: value }))}
+                  onChange={(value) => updateFormState({ productId: value })}
                 />
                 <TextField
                   label="Order Number"
