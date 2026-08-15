@@ -125,6 +125,35 @@ function resolveHomepageOnlyWidget(marker: string, home: FetchResult, homeUrl: s
   return { state: "unknown", checkedUrl: homeUrl, reason: CAROUSEL_NOT_ON_HOME_REASON };
 }
 
+// Manual-verification overrides — a general escape hatch for any store where live
+// detection is blocked by something outside the app's control (the leading case: a
+// development-plan store's storefront password, which Shopify itself won't let the
+// merchant turn off — see fetchStorefrontHtml's password-redirect handling above). An
+// entry here means a human independently confirmed the real state directly in that
+// store's own Shopify Theme Editor — never guessed — and takes precedence over whatever
+// the live HTML fetch would otherwise conclude. This is keyed by shop domain so it works
+// for any store that needs it, not special-cased detection logic for one merchant; remove
+// a store's entry once its storefront is reachable for automatic checks again (e.g. once
+// it's on a paid plan and password protection can be turned off).
+const MANUAL_VERIFICATION_OVERRIDES: Partial<Record<string, Partial<Record<WidgetInstallKey, WidgetInstallState>>>> = {
+  "verveonline.myshopify.com": {
+    // Verified 2026-08-16 via Shopify Theme Editor (Online Store > Themes > Dawn (Active)
+    // > Edit theme, theme id 150727819563): "Imagyn Reviews" and "Product Rating Badge"
+    // blocks both present under the Product information section on the Default product
+    // template; "Collection Ratings" app embed toggle is ON in the App Embeds panel;
+    // Review Carousel section is absent from the Home page template.
+    "product-reviews-widget": "installed",
+    "product-rating-badge": "installed",
+    "collection-rating-badge": "installed",
+    "review-carousel": "not-installed",
+  },
+};
+
+function applyManualOverride(shop: string, key: WidgetInstallKey, status: WidgetInstallStatus): WidgetInstallStatus {
+  const state = MANUAL_VERIFICATION_OVERRIDES[shop]?.[key];
+  return state ? { state } : status;
+}
+
 export async function detectWidgetInstallStatus(
   shop: string,
   storeId: string,
@@ -150,7 +179,7 @@ export async function detectWidgetInstallStatus(
     return resolveSectionWidget(marker, productFetch, productUrl);
   };
 
-  return {
+  const result: Record<WidgetInstallKey, WidgetInstallStatus> = {
     "product-reviews-widget": productStatus("data-imagyn-reviews"),
     "product-rating-badge": productStatus("data-imagyn-rating-badge"),
     "collection-rating-badge": resolveEmbedWidget(
@@ -162,4 +191,10 @@ export async function detectWidgetInstallStatus(
     ),
     "review-carousel": resolveHomepageOnlyWidget("data-imagyn-carousel", home, homeUrl),
   };
+
+  for (const key of Object.keys(result) as WidgetInstallKey[]) {
+    result[key] = applyManualOverride(shop, key, result[key]);
+  }
+
+  return result;
 }
