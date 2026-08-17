@@ -163,9 +163,31 @@ vi.mock("../db.server", () => ({
         );
         return row ? withInclude(row) : null;
       }),
-      findMany: vi.fn(async ({ where }: { where: { storeId: string } }) => {
-        return requests.filter((r) => r.storeId === where.storeId).map(withInclude);
-      }),
+      findMany: vi.fn(
+        async ({
+          where,
+          orderBy,
+        }: {
+          where: { storeId: string };
+          orderBy?: Array<Record<string, "asc" | "desc">>;
+        }) => {
+          const rows = requests.filter((r) => r.storeId === where.storeId);
+          if (orderBy && orderBy.length > 0) {
+            const [primary] = orderBy;
+            const [field, dir] = Object.entries(primary)[0];
+            rows.sort((a, b) => {
+              const aValue = (a as unknown as Record<string, unknown>)[field];
+              const bValue = (b as unknown as Record<string, unknown>)[field];
+              if (aValue === bValue) return 0;
+              if (aValue === null || aValue === undefined) return 1;
+              if (bValue === null || bValue === undefined) return -1;
+              const comparison = aValue > bValue ? 1 : -1;
+              return dir === "asc" ? comparison : -comparison;
+            });
+          }
+          return rows.map(withInclude);
+        },
+      ),
       count: vi.fn(async ({ where }: { where: { storeId: string } }) => {
         return requests.filter((r) => r.storeId === where.storeId).length;
       }),
@@ -187,7 +209,24 @@ vi.mock("../db.server", () => ({
         return {};
       }),
     },
+    // Only exercised by the sendNow test below (every other path here has nextDelay > 0, so
+    // dispatchRequestEmail is never actually invoked) — returns null so
+    // emailTemplateService.getActiveContent falls back to its hardcoded defaults, exactly like
+    // an un-configured store in production.
+    emailTemplate: {
+      findFirst: vi.fn(async () => null),
+    },
   },
+}));
+
+// Avoids a real Resend API call (and the ~2s of retry/sleep a genuine failure would take) for
+// the one test below that reaches dispatchRequestEmail — resolves instantly, like a
+// successfully-configured provider would.
+vi.mock("./notifications/provider.server", () => ({
+  getEmailProvider: () => ({
+    name: "fake",
+    sendEmail: vi.fn(async () => ({ id: "fake-message-id" })),
+  }),
 }));
 
 const { reviewRequestService } = await import("./review-request.server");
@@ -214,6 +253,37 @@ describe("listRequests — storeId scoping", () => {
 
     expect(result.totalCount).toBe(1);
     expect(result.requests.map((r) => r.id)).toEqual(["req_1"]);
+  });
+});
+
+describe("listRequests — sorting", () => {
+  it("defaults to createdAt descending when no sort is given", async () => {
+    seedRequest({ id: "req_1", storeId: "store_1", createdAt: new Date("2026-01-01") });
+    seedRequest({ id: "req_2", storeId: "store_1", createdAt: new Date("2026-03-01") });
+    seedRequest({ id: "req_3", storeId: "store_1", createdAt: new Date("2026-02-01") });
+
+    const result = await reviewRequestService.listRequests("store_1", {});
+
+    expect(result.requests.map((r) => r.id)).toEqual(["req_2", "req_3", "req_1"]);
+  });
+
+  it("sorts by name ascending when requested", async () => {
+    seedRequest({ id: "req_1", storeId: "store_1", name: "Charlie" });
+    seedRequest({ id: "req_2", storeId: "store_1", name: "Alice" });
+    seedRequest({ id: "req_3", storeId: "store_1", name: "Bob" });
+
+    const result = await reviewRequestService.listRequests("store_1", { sortBy: "name", sortDir: "asc" });
+
+    expect(result.requests.map((r) => r.name)).toEqual(["Alice", "Bob", "Charlie"]);
+  });
+
+  it("sorts by scheduledFor ascending (soonest first)", async () => {
+    seedRequest({ id: "req_1", storeId: "store_1", scheduledFor: new Date("2026-06-01") });
+    seedRequest({ id: "req_2", storeId: "store_1", scheduledFor: new Date("2026-01-01") });
+
+    const result = await reviewRequestService.listRequests("store_1", { sortBy: "scheduledFor", sortDir: "asc" });
+
+    expect(result.requests.map((r) => r.id)).toEqual(["req_2", "req_1"]);
   });
 });
 
@@ -301,6 +371,26 @@ describe("cross-tenant mutation isolation", () => {
 
     expect(updated.requestToken).not.toBe("original-token");
     expect(updated.status).toBe("scheduled");
+  });
+
+  it("resendRequest with sendNow bypasses delayDays and dispatches immediately", async () => {
+    seedRequest({ id: "req_1", storeId: "store_1", delayDays: 3, requestToken: "original-token" });
+
+    const updated = await reviewRequestService.resendRequest("store_1", "req_1", { sendNow: true });
+
+    // With the fake email provider (mocked above) resolving successfully, dispatchRequestEmail
+    // lands on "sent" — proving sendNow bypassed the stored 3-day delay entirely rather than
+    // just leaving it "scheduled" (what a plain resend of this same row would do).
+    expect(updated.status).toBe("sent");
+    expect(updated.delayDays).toBe(0);
+  });
+
+  it("resendRequest with sendNow still rejects an already-completed request", async () => {
+    seedRequest({ id: "req_1", storeId: "store_1", status: "completed", delayDays: 3, requestToken: "original-token" });
+
+    await expect(reviewRequestService.resendRequest("store_1", "req_1", { sendNow: true })).rejects.toThrow(
+      "already completed",
+    );
   });
 
   it("cancelRequest rejects a request belonging to a different store", async () => {

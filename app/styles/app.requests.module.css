@@ -73,6 +73,34 @@
   font-size: var(--text-sm);
 }
 
+/* Sits where the results count normally reads ("Showing X requests") — swaps to the bulk
+   action bar the instant 1+ rows are selected. Mirrors app.reviews.module.css's identical
+   pattern exactly (not shared via composes, so Reviews' own file stays untouched). */
+.resultsBar {
+  display: flex;
+  align-items: center;
+  min-height: 2.25rem;
+}
+
+.resultsCount {
+  margin: 0;
+  color: var(--color-text-muted);
+  font-size: var(--text-sm);
+}
+
+.bulkBar {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+}
+
+.bulkCount {
+  color: var(--color-text-muted);
+  font-size: var(--text-sm);
+  margin-right: var(--space-2);
+}
+
 .splitLayout {
   display: grid;
   grid-template-columns: minmax(0, 0.65fr) minmax(280px, 0.35fr);
@@ -87,89 +115,147 @@
   min-height: 30rem;
 }
 
-.listScroll {
+/* Judge.me-style merchant data table — replaces the old card/list row layout. Sticky header,
+   subtle row separators (no boxed cells), calm hover/selected treatment mirroring the old
+   .requestRow accent-bar-on-select language via an inset box-shadow on the leading cell
+   (a real border-left doesn't render reliably across adjoining <td>s in table layout). */
+.tableWrap {
   max-height: 40rem;
-  overflow-y: auto;
-  padding-right: var(--space-2);
+  overflow: auto;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
 }
 
-.list {
-  display: grid;
-  gap: var(--space-3);
+.table {
+  width: 100%;
+  min-width: 40rem;
+  border-collapse: collapse;
+  font-size: var(--text-sm);
 }
 
-/* No border-bottom between rows — separation comes from .list's own gap plus the
-   hover/selected treatment below, per the "whitespace instead of containers" direction. */
-.requestRow {
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: var(--space-4);
-  padding: var(--space-4);
-  border-left: 3px solid transparent;
-  border-radius: var(--radius-md);
-  transition: background-color var(--transition-base), border-color var(--transition-base), transform var(--transition-base);
+.table thead th {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  padding: var(--space-3);
+  text-align: left;
+  font-size: var(--text-xs);
+  font-weight: 500;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--color-text-muted);
+  background: var(--color-surface);
+  border-bottom: 1px solid var(--color-border);
+  white-space: nowrap;
 }
 
-.requestRow:hover {
-  background-color: color-mix(in srgb, var(--color-text) 2.5%, transparent);
+.thCheckbox,
+.tdCheckbox {
+  width: 2.75rem;
+  padding-right: 0;
+}
+
+.thActions,
+.tdActions {
+  width: 2.75rem;
+  text-align: right;
+}
+
+.table tbody td {
+  padding: var(--space-3);
+  vertical-align: middle;
+  border-bottom: 1px solid color-mix(in srgb, var(--color-text) 6%, transparent);
+  color: var(--color-text);
+}
+
+.table tbody tr:last-child td {
+  border-bottom: none;
+}
+
+.tr {
   cursor: pointer;
-  transform: translateX(1px);
+  transition: background-color var(--transition-base);
 }
 
-.requestRowSelected {
+.tr:hover td {
+  background-color: color-mix(in srgb, var(--color-text) 2.5%, transparent);
+}
+
+.trSelected td {
   background-color: color-mix(in srgb, var(--color-text) 4%, transparent);
-  border-left-color: var(--color-accent);
-  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--color-text) 4%, transparent);
+}
+
+.trSelected td:first-child {
+  box-shadow: inset 3px 0 0 var(--color-accent);
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .requestRow {
+  .tr {
     transition: none;
   }
-
-  .requestRow:hover {
-    transform: none;
-  }
 }
 
-.requestContent {
-  display: grid;
-  gap: var(--space-1);
-  min-width: 0;
-}
-
-.requestHeaderLine {
-  display: flex;
-  align-items: center;
-  gap: var(--space-2);
-  flex-wrap: wrap;
-}
-
-.requestTitle {
+.customerName {
   margin: 0;
-  font-size: var(--text-lg);
   font-weight: 600;
-  letter-spacing: -0.01em;
+  letter-spacing: -0.005em;
 }
 
-.requestMeta {
-  margin: 0;
+.customerEmail {
+  margin: 0.1rem 0 0;
   color: var(--color-text-muted);
-  opacity: 0.92;
-  font-size: var(--text-sm);
+  font-size: var(--text-xs);
+}
+
+.tdProduct {
+  max-width: 16rem;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
-.requestDate {
-  margin: 0;
+.tdMuted {
   color: var(--color-text-muted);
-  opacity: 0.92;
-  font-size: var(--text-sm);
+}
+
+.tdOrder,
+.tdDate {
+  color: var(--color-text-muted);
   white-space: nowrap;
-  padding-right: var(--space-3);
+}
+
+/* De-emphasized first (item 9 — "prioritize Customer, Product, Status" at narrow widths);
+   hidden entirely once the table can no longer breathe. See the max-width: 640px block below. */
+.colOrder,
+.colDate {
+  color: var(--color-text-muted);
+}
+
+.rowActionsButton {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 2rem;
+  height: 2rem;
+  border: 1px solid transparent;
+  border-radius: var(--radius-md);
+  background: transparent;
+  color: var(--color-text-muted);
+  font-size: var(--text-base);
+  line-height: 1;
+  cursor: pointer;
+  transition: background-color var(--transition-base), border-color var(--transition-base);
+}
+
+.rowActionsButton:hover {
+  background: var(--color-surface-strong);
+  border-color: var(--color-border);
+  color: var(--color-text);
+}
+
+.rowActionsButton:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
 }
 
 .pagination {
@@ -417,6 +503,75 @@
   gap: var(--space-4);
 }
 
+/* Groups the modal's fields into scannable sections (Customer / Product & order / Schedule)
+   without adding visual weight — same uppercase-tracking treatment as .filterLabel/.detailLabel
+   elsewhere on this page, so it reads as this page's established "quiet section marker"
+   convention rather than a new pattern. First one has no extra top margin (sits right under
+   the duplicate-warning banner or the modal's own top padding); the rest get breathing room
+   from the section above. */
+.modalSectionLabel {
+  margin: var(--space-2) 0 calc(-1 * var(--space-2));
+  font-size: var(--text-xs);
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--color-text-muted);
+}
+
+.modalSectionLabel:first-child {
+  margin-top: 0;
+}
+
+/* CustomerPicker's three states: search (Autocomplete, unstyled here — Polaris owns it),
+   selected (this), and manual entry (plain .modalFields + .customerManualActions). */
+.customerSelected {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  padding: var(--space-3) var(--space-4);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  background: var(--color-surface);
+}
+
+.customerSelectedText {
+  flex: 1;
+  min-width: 0;
+}
+
+.customerManualActions {
+  display: flex;
+  gap: var(--space-2);
+}
+
+.customerManualLink {
+  display: block;
+  margin: 0 0 var(--space-2);
+  border: none;
+  background: none;
+  padding: 0;
+  color: var(--color-accent);
+  font-size: var(--text-sm);
+  cursor: pointer;
+  text-align: left;
+}
+
+.customerManualLink:hover {
+  text-decoration: underline;
+}
+
+.customerEmptyState {
+  margin: 0;
+  padding: var(--space-3);
+  color: var(--color-text-muted);
+  font-size: var(--text-sm);
+}
+
+.fieldError {
+  margin: calc(-1 * var(--space-2)) 0 0;
+  color: var(--color-danger);
+  font-size: var(--text-xs);
+}
+
 @media (max-width: 980px) {
   .splitLayout {
     grid-template-columns: 1fr;
@@ -425,5 +580,30 @@
   .detailPanel {
     margin-top: var(--space-2);
     position: static;
+  }
+}
+
+@media (max-width: 640px) {
+  .toolbarControls {
+    width: 100%;
+  }
+
+  .filterGroup {
+    flex: 1 1 8rem;
+  }
+
+  /* Order/Scheduled are the two columns explicitly called out as de-emphasizable (item 9) —
+     dropped entirely rather than truncated, so Customer/Product/Status keep full room. */
+  .colOrder,
+  .colDate {
+    display: none;
+  }
+
+  .tdProduct {
+    max-width: 9rem;
+  }
+
+  .detailScheduleGrid {
+    gap: var(--space-3);
   }
 }

@@ -10,10 +10,12 @@ import type { ActionFunctionArgs, HeadersFunction, LoaderFunctionArgs } from "re
 import { boundary } from "@shopify/shopify-app-react-router/server";
 import {
   ActionList,
+  Autocomplete,
   Banner,
   BlockStack,
   Card,
   Frame,
+  Icon,
   Modal,
   Popover,
   Select,
@@ -21,6 +23,7 @@ import {
   TextField,
   Toast,
 } from "@shopify/polaris";
+import { PersonIcon, SearchIcon } from "@shopify/polaris-icons";
 
 import { Button } from "../components/ui/Button";
 import { Container } from "../components/ui/Container";
@@ -33,6 +36,8 @@ import {
   reviewRequestService,
   type ReviewRequestDateFilter,
   type ReviewRequestRecord,
+  type ReviewRequestSortBy,
+  type ReviewRequestSortDir,
   type ReviewRequestStatus,
 } from "../services/review-request.server";
 import shellStyles from "../styles/app.shell.module.css";
@@ -51,6 +56,8 @@ type LoaderData = {
   search: string;
   status: string;
   dateFilter: ReviewRequestDateFilter;
+  sortBy: ReviewRequestSortBy;
+  sortDir: ReviewRequestSortDir;
   error: string | null;
 };
 
@@ -113,6 +120,15 @@ const STATUS_FILTER_OPTIONS: Array<{ label: string; value: string }> = [
   { label: "Cancelled", value: "cancelled" },
 ];
 
+const SORT_OPTIONS: Array<{ label: string; value: `${ReviewRequestSortBy}:${ReviewRequestSortDir}` }> = [
+  { label: "Newest first", value: "createdAt:desc" },
+  { label: "Oldest first", value: "createdAt:asc" },
+  { label: "Schedule date (soonest)", value: "scheduledFor:asc" },
+  { label: "Schedule date (latest)", value: "scheduledFor:desc" },
+  { label: "Customer name (A–Z)", value: "name:asc" },
+  { label: "Status", value: "status:asc" },
+];
+
 const emptyFormState: RequestFormState = {
   customer: "",
   productId: "",
@@ -134,6 +150,12 @@ export const loader = async ({ request }: LoaderFunctionArgs): Promise<LoaderDat
     : "all";
   const pageValue = Number(url.searchParams.get("page") || "1");
   const page = Number.isFinite(pageValue) && pageValue > 0 ? pageValue : 1;
+  const sortParam = url.searchParams.get("sort") || "createdAt:desc";
+  const [sortByRaw, sortDirRaw] = sortParam.split(":");
+  const sortBy = SORT_OPTIONS.some((option) => option.value.startsWith(`${sortByRaw}:`))
+    ? (sortByRaw as ReviewRequestSortBy)
+    : "createdAt";
+  const sortDir: ReviewRequestSortDir = sortDirRaw === "asc" ? "asc" : "desc";
 
   try {
     const [result, customers, products] = await Promise.all([
@@ -143,6 +165,8 @@ export const loader = async ({ request }: LoaderFunctionArgs): Promise<LoaderDat
         dateFilter,
         page,
         pageSize: 10,
+        sortBy,
+        sortDir,
       }),
       reviewRequestService.listCustomers(store.id),
       reviewRequestService.listProducts(store.id),
@@ -161,6 +185,8 @@ export const loader = async ({ request }: LoaderFunctionArgs): Promise<LoaderDat
       search,
       status,
       dateFilter,
+      sortBy,
+      sortDir,
       error: null,
     };
   } catch (error) {
@@ -174,6 +200,8 @@ export const loader = async ({ request }: LoaderFunctionArgs): Promise<LoaderDat
       search,
       status,
       dateFilter,
+      sortBy,
+      sortDir,
       error: error instanceof Error ? error.message : "Unable to load review requests.",
     };
   }
@@ -307,6 +335,83 @@ export const action = async ({ request }: ActionFunctionArgs): Promise<ActionDat
       return { ok: true, message: "Review request deleted.", intent };
     }
 
+    if (intent === "bulkCancel") {
+      const requestIds = formData
+        .getAll("requestIds")
+        .map((entry) => String(entry))
+        .filter(Boolean);
+
+      if (requestIds.length === 0) {
+        return { ok: false, error: "No requests selected.", intent };
+      }
+
+      // Loops the existing single-item cancelRequest — deliberately not a batched updateMany,
+      // so every row still goes through its real guard (idempotent no-op if already cancelled,
+      // rejected if already completed) instead of a bulk write bypassing them. One failure
+      // (e.g. a completed request in the selection) doesn't abort the rest of the batch.
+      let cancelled = 0;
+      let skipped = 0;
+      for (const requestId of requestIds) {
+        try {
+          await reviewRequestService.cancelRequest(store.id, requestId);
+          cancelled += 1;
+        } catch {
+          skipped += 1;
+        }
+      }
+
+      if (cancelled === 0) {
+        return { ok: false, error: "None of the selected requests could be cancelled.", intent };
+      }
+
+      return {
+        ok: true,
+        message:
+          skipped > 0
+            ? `Cancelled ${cancelled} request${cancelled === 1 ? "" : "s"} (${skipped} already completed, skipped).`
+            : `Cancelled ${cancelled} request${cancelled === 1 ? "" : "s"}.`,
+        intent,
+      };
+    }
+
+    if (intent === "bulkSend") {
+      const requestIds = formData
+        .getAll("requestIds")
+        .map((entry) => String(entry))
+        .filter(Boolean);
+
+      if (requestIds.length === 0) {
+        return { ok: false, error: "No requests selected.", intent };
+      }
+
+      // Same loop-the-single-item-guard pattern as bulkCancel — resendRequest(sendNow: true)
+      // still rejects an already-completed request, so a completed row in the selection is
+      // skipped, not force-sent.
+      let sent = 0;
+      let skipped = 0;
+      for (const requestId of requestIds) {
+        try {
+          await reviewRequestService.resendRequest(store.id, requestId, { sendNow: true });
+          sent += 1;
+        } catch {
+          skipped += 1;
+        }
+      }
+
+      if (sent === 0) {
+        return { ok: false, error: "None of the selected requests could be sent.", intent };
+      }
+
+      return {
+        ok: true,
+        message:
+          skipped > 0
+            ? `Sent ${sent} request${sent === 1 ? "" : "s"} (${skipped} already completed, skipped).`
+            : `Sent ${sent} request${sent === 1 ? "" : "s"}.`,
+        intent,
+      };
+    }
+
     return { ok: false, error: "Unsupported action.", intent };
   } catch (error) {
     return {
@@ -331,6 +436,155 @@ const formatDateTime = (value: Date | null) => {
 
 const buildCustomerValue = (name: string | null, email: string | null) => `${name ?? ""}||${email ?? ""}`;
 
+type RequestAction = "edit" | "reschedule" | "resend" | "cancel" | "delete";
+
+// Mirrors review-request.server.ts's own guards exactly (resendRequest/cancelRequest reject
+// an already-completed request; cancelRequest is a no-op on an already-cancelled one) — the
+// backend is still the real enforcement, this just keeps the UI from ever offering an action
+// it already knows will be rejected or is meaningless. See "..." menus below (row-level and
+// detail panel), the only two callers.
+function getAvailableActions(status: ReviewRequestStatus): RequestAction[] {
+  if (status === "completed") {
+    // Already has its review — nothing to edit, reschedule, resend, or cancel.
+    return ["delete"];
+  }
+  if (status === "cancelled") {
+    // "cancel" itself is redundant here; everything else (including reviving via resend) is
+    // still a legitimate action.
+    return ["edit", "reschedule", "resend", "delete"];
+  }
+  return ["edit", "reschedule", "resend", "cancel", "delete"];
+}
+
+// bulkSend (app.requests.tsx's action) is resendRequest(sendNow: true) under the hood — the
+// exact same guard as a single-row "Resend", which getAvailableActions already encodes via its
+// "resend" entry. Deriving eligibility from that (instead of a second hardcoded status list)
+// is what keeps the bulk toolbar from ever drifting out of sync with the real backend rule.
+const isEligibleForSend = (status: ReviewRequestStatus) => getAvailableActions(status).includes("resend");
+
+// Top-level (not nested in RequestsPage) on purpose — an inline function component gets a new
+// identity every parent render, which would remount this on every keystroke elsewhere in the
+// page and drop whatever the merchant was typing into the search field. `key` (passed by the
+// caller, one per modal-open cycle) resets its local state fresh each time the modal opens,
+// standing in for whatever Polaris's Modal does or doesn't unmount on close.
+function CustomerPicker({
+  customers,
+  value,
+  onChange,
+  disabled,
+}: {
+  customers: CustomerOption[];
+  value: string;
+  onChange: (value: string) => void;
+  disabled?: boolean;
+}) {
+  const [query, setQuery] = useState("");
+  const [manualEntry, setManualEntry] = useState(false);
+  const [manualName, setManualName] = useState("");
+  const [manualEmail, setManualEmail] = useState("");
+
+  const [name, email] = value.split("||");
+  const hasSelection = Boolean(email);
+
+  // Existing reviewers only — Imagyn doesn't have read_customers/read_orders scope yet, so this
+  // can't browse the merchant's full Shopify customer list. Same data source and limitation as
+  // the native <select> this replaces; only the search/selection UX changes here.
+  const matches = useMemo(() => {
+    const withEmail = customers.filter((customer) => customer.email);
+    const trimmed = query.trim().toLowerCase();
+    const filtered = trimmed
+      ? withEmail.filter(
+          (customer) =>
+            customer.name?.toLowerCase().includes(trimmed) || customer.email?.toLowerCase().includes(trimmed),
+        )
+      : withEmail;
+    return filtered.slice(0, 20);
+  }, [customers, query]);
+
+  const options = matches.map((customer) => ({
+    value: buildCustomerValue(customer.name, customer.email),
+    label: customer.name ? `${customer.name} — ${customer.email}` : (customer.email as string),
+  }));
+
+  if (hasSelection) {
+    return (
+      <div className={styles.customerSelected}>
+        <Icon source={PersonIcon} tone="subdued" />
+        <div className={styles.customerSelectedText}>
+          <p className={styles.customerName}>{name || email}</p>
+          {name ? <p className={styles.customerEmail}>{email}</p> : null}
+        </div>
+        <Button type="button" variant="ghost" onClick={() => onChange("")} disabled={disabled}>
+          Change
+        </Button>
+      </div>
+    );
+  }
+
+  if (manualEntry) {
+    return (
+      <div className={styles.modalFields}>
+        <TextField label="Customer name" autoComplete="off" value={manualName} onChange={setManualName} disabled={disabled} />
+        <TextField
+          label="Customer email"
+          type="email"
+          autoComplete="off"
+          value={manualEmail}
+          onChange={setManualEmail}
+          disabled={disabled}
+        />
+        <div className={styles.customerManualActions}>
+          <Button
+            type="button"
+            variant="primary"
+            onClick={() => onChange(buildCustomerValue(manualName, manualEmail))}
+            disabled={disabled || !manualEmail}
+          >
+            Use this customer
+          </Button>
+          <Button type="button" variant="ghost" onClick={() => setManualEntry(false)} disabled={disabled}>
+            Back to search
+          </Button>
+        </div>
+      </div>
+    );
+  }
+
+  const textField = (
+    <Autocomplete.TextField
+      onChange={setQuery}
+      label="Customer"
+      labelHidden
+      value={query}
+      placeholder="Search customer by name or email"
+      autoComplete="off"
+      prefix={<Icon source={SearchIcon} tone="subdued" />}
+      disabled={disabled}
+    />
+  );
+
+  return (
+    <div>
+      {/* Above the field, not below — the Autocomplete's popover (matches, or "No matching
+          customers") always opens downward from the text field, so anything placed below it
+          gets covered and unclickable for as long as the popover is open. A button inside the
+          popover's own emptyState doesn't work either (confirmed live: Polaris's popover swallows
+          the click before React's handler runs), so this link has to live somewhere the popover
+          never reaches. */}
+      <button type="button" className={styles.customerManualLink} onClick={() => setManualEntry(true)} disabled={disabled}>
+        + Enter a new customer
+      </button>
+      <Autocomplete
+        options={options}
+        selected={[]}
+        onSelect={(selected) => selected[0] && onChange(selected[0])}
+        textField={textField}
+        emptyState={<p className={styles.customerEmptyState}>No matching customers.</p>}
+      />
+    </div>
+  );
+}
+
 export default function RequestsPage() {
   const initialData = useLoaderData<typeof loader>();
   const navigation = useNavigation();
@@ -345,7 +599,7 @@ export default function RequestsPage() {
   // without touching window.history, so there's nothing for the admin shell to fight with.
   const dataFetcher = useFetcher<typeof loader>();
   const data = dataFetcher.data ?? initialData;
-  const { requests, customers, products, totalCount, page, pageSize, search, status, dateFilter, error } = data;
+  const { requests, customers, products, totalCount, page, pageSize, search, status, dateFilter, sortBy, sortDir, error } = data;
 
   const isLoading = navigation.state !== "idle" || dataFetcher.state !== "idle";
   const isMutating = fetcher.state !== "idle";
@@ -356,17 +610,20 @@ export default function RequestsPage() {
     status?: string;
     dateFilter?: ReviewRequestDateFilter;
     page?: number;
+    sort?: string;
   }) => {
     const nextSearch = overrides.search !== undefined ? overrides.search : search;
     const nextStatus = overrides.status !== undefined ? overrides.status : status;
     const nextDateFilter = overrides.dateFilter !== undefined ? overrides.dateFilter : dateFilter;
     const nextPage = overrides.page !== undefined ? overrides.page : page;
+    const nextSort = overrides.sort !== undefined ? overrides.sort : `${sortBy}:${sortDir}`;
 
     const params = new URLSearchParams();
     if (nextSearch) params.set("search", nextSearch);
     if (nextStatus) params.set("status", nextStatus);
     if (nextDateFilter && nextDateFilter !== "all") params.set("dateFilter", nextDateFilter);
     if (nextPage > 1) params.set("page", String(nextPage));
+    if (nextSort && nextSort !== "createdAt:desc") params.set("sort", nextSort);
 
     const queryString = params.toString();
     return queryString ? `/app/requests?${queryString}` : "/app/requests";
@@ -385,6 +642,21 @@ export default function RequestsPage() {
   // the action above) — non-null keeps the modal open with an inline banner instead of
   // toasting an error, and switches the primary action to an explicit "Send Anyway" resubmit.
   const [duplicateWarning, setDuplicateWarning] = useState<string | null>(null);
+  // Flips true on the first submit attempt while required fields are missing — inline field
+  // errors only render after that, so an untouched fresh modal never opens already "in error".
+  const [attemptedSubmit, setAttemptedSubmit] = useState(false);
+  // Bulk selection (checkboxes) — separate from selectedRequestId, which drives the detail
+  // panel. A row can be both "selected" for bulk action and "selected" as the open detail at
+  // the same time; the two concepts don't interact.
+  const [selectedIds, setSelectedIds] = useState<string[]>([]);
+  // Which row's own "..." popover is open, if any — separate from actionsMenuOpen (the detail
+  // panel's popover), since a row-level and the detail-panel menu can never both be relevant to
+  // the same click.
+  const [rowActionsOpenId, setRowActionsOpenId] = useState<string | null>(null);
+  // Bumped on every modal open — used as CustomerPicker's key so its internal search/manual-
+  // entry state always starts fresh, regardless of whether Polaris keeps the Modal's children
+  // mounted across an open/close cycle.
+  const [modalInstanceKey, setModalInstanceKey] = useState(0);
 
   const [optimisticDeleted, setOptimisticDeleted] = useState<Record<string, true>>({});
   const [optimisticPatch, setOptimisticPatch] = useState<Partial<Record<string, Partial<ReviewRequestRecord>>> & Record<string, Partial<ReviewRequestRecord>>>({});
@@ -472,21 +744,38 @@ export default function RequestsPage() {
     [effectiveRequests, selectedRequestId],
   );
 
-  const customerOptions = customers
-    .filter((customer) => customer.email)
-    .map((customer) => ({
-      label: customer.name ? `${customer.name} (${customer.email})` : (customer.email as string),
-      value: buildCustomerValue(customer.name, customer.email),
-    }));
+  // Drives the bulk toolbar's "Send Now" button — see isEligibleForSend's comment for why this
+  // is derived from getAvailableActions rather than a second hardcoded status list. When every
+  // selected row is eligible, this is the shape the future one-button "All Done" workflow would
+  // reuse directly: an all-selected-eligible bulk action rendered as the toolbar's primary CTA.
+  const selectedSendEligibleCount = useMemo(
+    () => effectiveRequests.filter((request) => selectedIds.includes(request.id) && isEligibleForSend(request.status)).length,
+    [effectiveRequests, selectedIds],
+  );
+  const allSelectedSendEligible = selectedIds.length > 0 && selectedSendEligibleCount === selectedIds.length;
 
   const productOptions = products.map((product) => ({ label: product.name, value: product.id }));
 
   const totalPages = Math.max(1, Math.ceil(totalCount / pageSize));
 
-  const submitAction = (payload: Record<string, string>) => {
+  const submitAction = (payload: Record<string, string | string[]>) => {
     const formData = new FormData();
-    Object.entries(payload).forEach(([key, value]) => formData.append(key, value));
+    Object.entries(payload).forEach(([key, value]) => {
+      if (Array.isArray(value)) {
+        value.forEach((item) => formData.append(key, item));
+      } else {
+        formData.append(key, value);
+      }
+    });
     fetcher.submit(formData, { method: "post" });
+  };
+
+  const toggleSelection = (requestId: string, checked: boolean) => {
+    setSelectedIds((prev) => (checked ? [...prev, requestId] : prev.filter((id) => id !== requestId)));
+  };
+
+  const toggleSelectAllOnPage = (checked: boolean) => {
+    setSelectedIds(checked ? effectiveRequests.map((request) => request.id) : []);
   };
 
   const optimisticScheduleDate = (delayDays: number) => {
@@ -499,6 +788,8 @@ export default function RequestsPage() {
     setRequestModalMode("create");
     setFormState(emptyFormState);
     setDuplicateWarning(null);
+    setAttemptedSubmit(false);
+    setModalInstanceKey((key) => key + 1);
     setRequestModalOpen(true);
   };
 
@@ -522,6 +813,8 @@ export default function RequestsPage() {
       delayDays: String(request.delayDays ?? 0),
       customMessage: request.customMessage ?? "",
     });
+    setAttemptedSubmit(false);
+    setModalInstanceKey((key) => key + 1);
     setRequestModalOpen(true);
   };
 
@@ -535,6 +828,7 @@ export default function RequestsPage() {
       delayDays: String(request.delayDays ?? 0),
       customMessage: request.customMessage ?? "",
     });
+    setAttemptedSubmit(false);
     setRequestModalOpen(true);
   };
 
@@ -565,6 +859,72 @@ export default function RequestsPage() {
     submitAction({ _intent: "resend", requestId: request.id });
   };
 
+  // Shared by the row-level "..." popover and the detail panel's own — same available-actions
+  // set (getAvailableActions), same handlers, so the two never drift out of sync. `onDone`
+  // closes whichever popover (row-level or detail) actually triggered this.
+  const buildActionListSections = (request: ReviewRequestRecord, onDone: () => void) => {
+    const available = getAvailableActions(request.status);
+    // Not a backend-gated action (there's nothing to "allow" — it just opens the detail
+    // panel), so it's unconditional and lives in its own section ahead of the guarded ones.
+    const viewItems = [
+      {
+        content: "View details",
+        onAction: () => {
+          onDone();
+          setSelectedRequestId(request.id);
+        },
+      },
+    ];
+    const primaryItems = [
+      available.includes("edit") && {
+        content: "Edit",
+        onAction: () => {
+          onDone();
+          openEditModal(request);
+        },
+      },
+      available.includes("reschedule") && {
+        content: "Reschedule",
+        onAction: () => {
+          onDone();
+          openRescheduleModal(request);
+        },
+      },
+      available.includes("resend") && {
+        content: "Resend",
+        onAction: () => {
+          onDone();
+          handleResend(request);
+        },
+      },
+    ].filter(Boolean) as Array<{ content: string; onAction: () => void }>;
+
+    const destructiveItems = [
+      available.includes("cancel") && {
+        content: "Cancel request",
+        destructive: true,
+        onAction: () => {
+          onDone();
+          openConfirmation("cancel", request);
+        },
+      },
+      available.includes("delete") && {
+        content: "Delete",
+        destructive: true,
+        onAction: () => {
+          onDone();
+          openConfirmation("delete", request);
+        },
+      },
+    ].filter(Boolean) as Array<{ content: string; destructive: boolean; onAction: () => void }>;
+
+    return [
+      { items: viewItems },
+      ...(primaryItems.length > 0 ? [{ items: primaryItems }] : []),
+      ...(destructiveItems.length > 0 ? [{ items: destructiveItems }] : []),
+    ];
+  };
+
   const confirmDestructiveAction = () => {
     if (!confirmationState) {
       return;
@@ -587,6 +947,14 @@ export default function RequestsPage() {
   };
 
   const handleModalSubmit = () => {
+    if (requestModalMode !== "reschedule") {
+      const [, emailToValidate] = formState.customer.split("||");
+      if (!emailToValidate || !formState.productId) {
+        setAttemptedSubmit(true);
+        return;
+      }
+    }
+
     if (requestModalMode === "create") {
       submitAction({
         _intent: "create",
@@ -735,16 +1103,73 @@ export default function RequestsPage() {
                   ))}
                 </select>
               </label>
+
+              <label className={styles.filterGroup}>
+                <span className={styles.filterLabel}>Sort</span>
+                <select
+                  className={styles.filterSelect}
+                  value={`${sortBy}:${sortDir}`}
+                  onChange={(event) => {
+                    dataFetcher.load(buildRequestsUrl({ sort: event.target.value, page: 1 }));
+                  }}
+                >
+                  {SORT_OPTIONS.map((option) => (
+                    <option key={option.value} value={option.value}>
+                      {option.label}
+                    </option>
+                  ))}
+                </select>
+              </label>
             </div>
           </div>
 
           {actionError ? <p className={styles.feedbackError}>{actionError}</p> : null}
           {isLoading ? <p className={styles.feedbackMuted}>Refreshing request results...</p> : null}
 
-          <Section
-            title="Review requests"
-            description={`Showing ${totalCount} request${totalCount === 1 ? "" : "s"}.`}
-          >
+          <Section title="Review requests">
+            <div className={styles.resultsBar}>
+              {selectedIds.length > 0 ? (
+                <div className={styles.bulkBar}>
+                  <span className={styles.bulkCount}>{selectedIds.length} selected</span>
+                  {selectedSendEligibleCount > 0 ? (
+                    <Button
+                      type="button"
+                      variant={allSelectedSendEligible ? "primary" : "secondary"}
+                      onClick={() => {
+                        const eligibleIds = effectiveRequests
+                          .filter((request) => selectedIds.includes(request.id) && isEligibleForSend(request.status))
+                          .map((request) => request.id);
+                        submitAction({ _intent: "bulkSend", requestIds: eligibleIds });
+                        setSelectedIds([]);
+                      }}
+                      disabled={isMutating}
+                    >
+                      {allSelectedSendEligible
+                        ? `Send Now (${selectedSendEligibleCount})`
+                        : `Send Now (${selectedSendEligibleCount} eligible)`}
+                    </Button>
+                  ) : null}
+                  <Button
+                    type="button"
+                    onClick={() => {
+                      submitAction({ _intent: "bulkCancel", requestIds: selectedIds });
+                      setSelectedIds([]);
+                    }}
+                    disabled={isMutating}
+                  >
+                    Cancel selected
+                  </Button>
+                  <Button type="button" variant="ghost" onClick={() => setSelectedIds([])} disabled={isMutating}>
+                    Clear
+                  </Button>
+                </div>
+              ) : (
+                <p className={styles.resultsCount}>
+                  {totalCount === 0 ? "No requests yet." : `Showing ${totalCount} request${totalCount === 1 ? "" : "s"}.`}
+                </p>
+              )}
+            </div>
+
             <div className={styles.splitLayout}>
               {isLoading ? (
                 <>
@@ -797,45 +1222,100 @@ export default function RequestsPage() {
               ) : (
                 <>
                   <div className={styles.listColumn}>
-                    <div className={styles.listScroll}>
-                      <div className={styles.list}>
-                        {effectiveRequests.map((request) => {
-                          const isSelected = request.id === selectedRequestId;
-                          const customerName = request.name ?? "Unnamed customer";
-                          const productName = request.product?.name ?? "General request";
+                    <div className={styles.tableWrap}>
+                      <table className={styles.table}>
+                        <thead>
+                          <tr>
+                            <th className={styles.thCheckbox}>
+                              <input
+                                type="checkbox"
+                                aria-label="Select all requests on this page"
+                                checked={effectiveRequests.length > 0 && effectiveRequests.every((request) => selectedIds.includes(request.id))}
+                                onChange={(event) => toggleSelectAllOnPage(event.target.checked)}
+                                disabled={isLoading || isMutating || effectiveRequests.length === 0}
+                              />
+                            </th>
+                            <th>Customer</th>
+                            <th>Product</th>
+                            <th className={styles.colOrder}>Order</th>
+                            <th className={styles.colDate}>Scheduled</th>
+                            <th>Status</th>
+                            <th className={styles.thActions} aria-label="Actions" />
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {effectiveRequests.map((request) => {
+                            const isSelected = request.id === selectedRequestId;
+                            const isChecked = selectedIds.includes(request.id);
+                            const customerName = request.name ?? "Unnamed customer";
+                            const productName = request.product?.name ?? "General request";
+                            const rowActionsOpen = rowActionsOpenId === request.id;
 
-                          return (
-                            <div
-                              key={request.id}
-                              className={`${styles.requestRow} ${isSelected ? styles.requestRowSelected : ""}`}
-                              onClick={() => setSelectedRequestId(request.id)}
-                              onKeyDown={(event) => {
-                                if (event.key === "Enter" || event.key === " ") {
-                                  event.preventDefault();
-                                  setSelectedRequestId(request.id);
-                                }
-                              }}
-                              role="button"
-                              tabIndex={0}
-                              aria-pressed={isSelected}
-                            >
-                              <div className={styles.requestContent}>
-                                <div className={styles.requestHeaderLine}>
-                                  <h2 className={styles.requestTitle}>{customerName}</h2>
-                                  <RequestStatusBadge status={request.status} />
-                                </div>
-                                <p className={styles.requestMeta}>
+                            return (
+                              <tr
+                                key={request.id}
+                                className={`${styles.tr} ${isSelected ? styles.trSelected : ""}`}
+                                onClick={() => setSelectedRequestId(request.id)}
+                                onKeyDown={(event) => {
+                                  if (event.key === "Enter" || event.key === " ") {
+                                    event.preventDefault();
+                                    setSelectedRequestId(request.id);
+                                  }
+                                }}
+                                tabIndex={0}
+                                aria-selected={isSelected}
+                              >
+                                <td className={styles.tdCheckbox} onClick={(event) => event.stopPropagation()}>
+                                  <input
+                                    type="checkbox"
+                                    checked={isChecked}
+                                    aria-label={`Select request for ${customerName}`}
+                                    onChange={(event) => toggleSelection(request.id, event.target.checked)}
+                                  />
+                                </td>
+                                <td className={styles.tdCustomer}>
+                                  <p className={styles.customerName}>{customerName}</p>
+                                  {request.email ? <p className={styles.customerEmail}>{request.email}</p> : null}
+                                </td>
+                                <td className={styles.tdProduct}>
                                   {productName}
-                                  {request.orderNumber ? ` · #${request.orderNumber}` : ""}
-                                  {request.email ? ` · ${request.email}` : ""}
-                                  {request.source === "order" ? " · Automatic" : ""}
-                                </p>
-                              </div>
-                              <p className={styles.requestDate}>{formatDateTime(request.scheduledFor)}</p>
-                            </div>
-                          );
-                        })}
-                      </div>
+                                  {request.source === "order" ? <span className={styles.tdMuted}> · Automatic</span> : null}
+                                </td>
+                                <td className={`${styles.tdOrder} ${styles.colOrder}`}>
+                                  {request.orderNumber ? `#${request.orderNumber}` : "—"}
+                                </td>
+                                <td className={`${styles.tdDate} ${styles.colDate}`}>{formatDateTime(request.scheduledFor)}</td>
+                                <td className={styles.tdStatus}>
+                                  <RequestStatusBadge status={request.status} />
+                                </td>
+                                <td className={styles.tdActions} onClick={(event) => event.stopPropagation()}>
+                                  <Popover
+                                    active={rowActionsOpen}
+                                    onClose={() => setRowActionsOpenId(null)}
+                                    activator={
+                                      <button
+                                        type="button"
+                                        className={styles.rowActionsButton}
+                                        onClick={() => setRowActionsOpenId(rowActionsOpen ? null : request.id)}
+                                        disabled={isMutating}
+                                        aria-label={`Actions for request from ${customerName}`}
+                                        aria-haspopup="menu"
+                                        aria-expanded={rowActionsOpen}
+                                      >
+                                        &#8226;&#8226;&#8226;
+                                      </button>
+                                    }
+                                  >
+                                    <ActionList
+                                      sections={buildActionListSections(request, () => setRowActionsOpenId(null))}
+                                    />
+                                  </Popover>
+                                </td>
+                              </tr>
+                            );
+                          })}
+                        </tbody>
+                      </table>
                     </div>
 
                     <div className={styles.pagination}>
@@ -917,6 +1397,18 @@ export default function RequestsPage() {
                               <span className={styles.detailValue}>{formatDateTime(selectedRequest.sentAt)}</span>
                             </div>
                             <div className={styles.detailScheduleItem}>
+                              {/* Same column backs both signals (see review-request.server.ts's
+                                  markRequestOpened/markRequestClicked) — this store has no
+                                  separate clickedAt, so the label says both rather than
+                                  implying only one happened. */}
+                              <span className={styles.detailScheduleLabel}>Opened / Clicked</span>
+                              <span className={styles.detailValue}>{formatDateTime(selectedRequest.openedAt)}</span>
+                            </div>
+                            <div className={styles.detailScheduleItem}>
+                              <span className={styles.detailScheduleLabel}>Completed</span>
+                              <span className={styles.detailValue}>{formatDateTime(selectedRequest.reviewedAt)}</span>
+                            </div>
+                            <div className={styles.detailScheduleItem}>
                               <span className={styles.detailScheduleLabel}>Created</span>
                               <span className={styles.detailValue}>{formatDateTime(selectedRequest.createdAt)}</span>
                             </div>
@@ -965,53 +1457,7 @@ export default function RequestsPage() {
                           }
                         >
                           <ActionList
-                            sections={[
-                              {
-                                items: [
-                                  {
-                                    content: "Edit",
-                                    onAction: () => {
-                                      setActionsMenuOpen(false);
-                                      openEditModal(selectedRequest);
-                                    },
-                                  },
-                                  {
-                                    content: "Reschedule",
-                                    onAction: () => {
-                                      setActionsMenuOpen(false);
-                                      openRescheduleModal(selectedRequest);
-                                    },
-                                  },
-                                  {
-                                    content: "Resend",
-                                    onAction: () => {
-                                      setActionsMenuOpen(false);
-                                      handleResend(selectedRequest);
-                                    },
-                                  },
-                                ],
-                              },
-                              {
-                                items: [
-                                  {
-                                    content: "Cancel request",
-                                    destructive: true,
-                                    onAction: () => {
-                                      setActionsMenuOpen(false);
-                                      openConfirmation("cancel", selectedRequest);
-                                    },
-                                  },
-                                  {
-                                    content: "Delete",
-                                    destructive: true,
-                                    onAction: () => {
-                                      setActionsMenuOpen(false);
-                                      openConfirmation("delete", selectedRequest);
-                                    },
-                                  },
-                                ],
-                              },
-                            ]}
+                            sections={buildActionListSections(selectedRequest, () => setActionsMenuOpen(false))}
                           />
                         </Popover>
                       </div>
@@ -1067,70 +1513,74 @@ export default function RequestsPage() {
 
             {requestModalMode !== "reschedule" ? (
               <>
-                {customerOptions.length > 0 ? (
-                  <Select
-                    label="Fill from a previous customer"
-                    options={[{ label: "Select a previous customer", value: "" }, ...customerOptions]}
-                    value=""
-                    onChange={(value) => value && updateFormState({ customer: value })}
-                  />
+                <p className={styles.modalSectionLabel}>Customer</p>
+                <CustomerPicker
+                  key={modalInstanceKey}
+                  customers={customers}
+                  value={formState.customer}
+                  onChange={(value) => updateFormState({ customer: value })}
+                  disabled={isMutating}
+                />
+                {attemptedSubmit && !customerEmailValue ? (
+                  <p className={styles.fieldError}>Select or enter a customer to continue.</p>
                 ) : null}
-                <TextField
-                  label="Customer name"
-                  autoComplete="off"
-                  value={customerNameValue}
-                  onChange={(value) => updateFormState({ customer: buildCustomerValue(value, customerEmailValue) })}
-                />
-                <TextField
-                  label="Customer email"
-                  type="email"
-                  autoComplete="off"
-                  value={customerEmailValue}
-                  onChange={(value) => updateFormState({ customer: buildCustomerValue(customerNameValue, value) })}
-                />
-                <Select
-                  label="Product"
-                  options={[{ label: "Select a product", value: "" }, ...productOptions]}
-                  value={formState.productId}
-                  onChange={(value) => updateFormState({ productId: value })}
-                />
-                <TextField
-                  label="Order Number"
-                  autoComplete="off"
-                  value={formState.orderNumber}
-                  onChange={(value) => setFormState((prev) => ({ ...prev, orderNumber: value }))}
-                  placeholder="Optional"
-                />
+
+                {/* Progressive disclosure (create only) — edit keeps every field visible since
+                    the merchant is revising a request that already has all of this filled in. */}
+                {requestModalMode === "edit" || customerEmailValue ? (
+                  <>
+                    <p className={styles.modalSectionLabel}>Product &amp; order</p>
+                    <Select
+                      label="Product"
+                      options={[{ label: "Select a product", value: "" }, ...productOptions]}
+                      value={formState.productId}
+                      onChange={(value) => updateFormState({ productId: value })}
+                      error={attemptedSubmit && !formState.productId ? "Select a product." : undefined}
+                    />
+                    <TextField
+                      label="Order Number"
+                      autoComplete="off"
+                      value={formState.orderNumber}
+                      onChange={(value) => setFormState((prev) => ({ ...prev, orderNumber: value }))}
+                      placeholder="Optional"
+                    />
+                  </>
+                ) : null}
               </>
             ) : null}
 
-            <Select
-              label="Email delay"
-              options={DELAY_OPTIONS}
-              value={formState.delayDays}
-              onChange={(value) => setFormState((prev) => ({ ...prev, delayDays: value }))}
-            />
+            {requestModalMode === "edit" || requestModalMode === "reschedule" || (customerEmailValue && formState.productId) ? (
+              <>
+                <p className={styles.modalSectionLabel}>Schedule</p>
+                <Select
+                  label="Email delay"
+                  options={DELAY_OPTIONS}
+                  value={formState.delayDays}
+                  onChange={(value) => setFormState((prev) => ({ ...prev, delayDays: value }))}
+                />
 
-            {requestModalMode !== "reschedule" ? (
-              <TextField
-                label="Custom message"
-                value={formState.customMessage}
-                onChange={(value) => setFormState((prev) => ({ ...prev, customMessage: value }))}
-                autoComplete="off"
-                multiline={4}
-                placeholder="Optional note to include in the future email template"
-              />
+                {requestModalMode !== "reschedule" ? (
+                  <TextField
+                    label="Custom message"
+                    value={formState.customMessage}
+                    onChange={(value) => setFormState((prev) => ({ ...prev, customMessage: value }))}
+                    autoComplete="off"
+                    multiline={4}
+                    placeholder="Optional note to include in the future email template"
+                  />
+                ) : null}
+
+                <Card>
+                  <BlockStack gap="200">
+                    <Text as="h3" variant="headingSm">Recipient preview</Text>
+                    <Text as="p" variant="bodyMd">To: {selectedCustomerLabel}</Text>
+                    <Text as="p" variant="bodyMd">Product: {selectedProductLabel}</Text>
+                    <Text as="p" variant="bodyMd">Scheduled: {previewSendDate}</Text>
+                    {formState.orderNumber ? <Text as="p" variant="bodyMd">Order: {formState.orderNumber}</Text> : null}
+                  </BlockStack>
+                </Card>
+              </>
             ) : null}
-
-            <Card>
-              <BlockStack gap="200">
-                <Text as="h3" variant="headingSm">Recipient preview</Text>
-                <Text as="p" variant="bodyMd">To: {selectedCustomerLabel}</Text>
-                <Text as="p" variant="bodyMd">Product: {selectedProductLabel}</Text>
-                <Text as="p" variant="bodyMd">Scheduled: {previewSendDate}</Text>
-                {formState.orderNumber ? <Text as="p" variant="bodyMd">Order: {formState.orderNumber}</Text> : null}
-              </BlockStack>
-            </Card>
           </div>
         </Modal.Section>
       </Modal>

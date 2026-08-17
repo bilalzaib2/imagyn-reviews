@@ -85,3 +85,8 @@ App Store submission readiness (Shopify Billing shipped; hardening and polish ne
     label, custom email domain/SMTP, API access, webhooks, unlimited team members) —
     `permissions.ts` already grants every Scale store the entitlement; each just needs an
     enforcement point and its `comingSoon` tag removed
+10. Preserve verified-review provenance on Judge.me import and show a Verified Buyer /
+    Verified Review badge on the storefront for imported reviews that were originally
+    verified. Discovered during the Requests UX pass (2026-08-16): reviews imported from
+    Judge.me that were verified at the source currently render with no Verified badge on our
+    storefront — the importer isn't capturing/mapping that flag today.

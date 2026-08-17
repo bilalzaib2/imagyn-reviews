@@ -23,6 +23,8 @@ export type ReviewRequestStatus =
   | "cancelled";
 
 export type ReviewRequestDateFilter = "all" | "today" | "next7" | "next30" | "past30";
+export type ReviewRequestSortBy = "createdAt" | "scheduledFor" | "status" | "name";
+export type ReviewRequestSortDir = "asc" | "desc";
 
 export interface ReviewRequestListOptions {
   search?: string;
@@ -30,6 +32,10 @@ export interface ReviewRequestListOptions {
   dateFilter?: ReviewRequestDateFilter;
   page?: number;
   pageSize?: number;
+  // Defaults to createdAt/desc (unchanged from before this option existed) — the admin
+  // Requests page's new Sort control is the only caller that sets these explicitly.
+  sortBy?: ReviewRequestSortBy;
+  sortDir?: ReviewRequestSortDir;
 }
 
 export interface ReviewRequestRecord {
@@ -345,12 +351,18 @@ export const reviewRequestService = {
       ...buildDateWhere(options.dateFilter),
     };
 
+    const sortDir = options.sortDir ?? "desc";
+    const orderBy =
+      options.sortBy && options.sortBy !== "createdAt"
+        ? [{ [options.sortBy]: sortDir }, { id: sortDir }]
+        : [{ createdAt: sortDir }, { id: sortDir }];
+
     const [totalCount, requests] = await Promise.all([
       prisma.reviewRequest.count({ where }),
       prisma.reviewRequest.findMany({
         where,
         include: REQUEST_INCLUDE,
-        orderBy: [{ createdAt: "desc" }, { id: "desc" }],
+        orderBy,
         skip: (page - 1) * pageSize,
         take: pageSize,
       }),
@@ -643,7 +655,12 @@ export const reviewRequestService = {
 
   // The one operation here that sends a real email — ownership must be verified before any of
   // the token/dispatch side effects below, not just before the return value is built.
-  async resendRequest(storeId: string, id: string) {
+  // `sendNow`: bypasses the request's own delayDays and dispatches immediately regardless —
+  // backs the admin bulk "Send Now" action (app.requests.tsx), which needs to force-dispatch a
+  // still-scheduled request rather than just resetting its future schedule the way a plain
+  // resend does. Same guard, same dispatch path (dispatchRequestEmail) either way — this isn't
+  // a second send mechanism, just a different value for the same nextDelay computation below.
+  async resendRequest(storeId: string, id: string, options: { sendNow?: boolean } = {}) {
     const existing = await prisma.reviewRequest.findFirst({ where: { id, storeId } });
 
     if (!existing) {
@@ -659,7 +676,7 @@ export const reviewRequestService = {
       throw new Error("This request was already completed — the customer has already submitted a review.");
     }
 
-    const nextDelay = existing.delayDays ?? 0;
+    const nextDelay = options.sendNow ? 0 : (existing.delayDays ?? 0);
     const nextStatus = nextDelay === 0 ? "sending" : "scheduled";
 
     const updated = await prisma.reviewRequest.update({
