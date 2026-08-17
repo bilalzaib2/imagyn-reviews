@@ -126,9 +126,14 @@
   border-radius: var(--radius-lg);
 }
 
+/* table-layout: fixed (not a min-width + horizontal scroll) is what keeps Status and the
+   actions column from disappearing off-screen once the detail panel claims ~35% of the
+   width (see .splitLayout) — the table now adapts to whatever width the list column
+   actually has instead of demanding a minimum and forcing a scrollbar. .tableWrap keeps
+   overflow: auto only as a safety net for genuinely narrow windows. */
 .table {
+  table-layout: fixed;
   width: 100%;
-  min-width: 40rem;
   border-collapse: collapse;
   font-size: var(--text-sm);
 }
@@ -159,6 +164,28 @@
 .tdActions {
   width: 2.75rem;
   text-align: right;
+}
+
+/* Explicit widths on every other column so the fixed layout has a stable plan — Customer and
+   Product get the largest, fluid shares; Order/Scheduled/Status stay narrow and predictable. */
+.table thead th:nth-child(2) {
+  width: 27%;
+}
+
+.table thead th:nth-child(3) {
+  width: 28%;
+}
+
+.table thead th:nth-child(4) {
+  width: 12%;
+}
+
+.table thead th:nth-child(5) {
+  width: 13%;
+}
+
+.table thead th:nth-child(6) {
+  width: 6.5rem;
 }
 
 .table tbody td {
@@ -195,23 +222,36 @@
   }
 }
 
+.tdCustomer {
+  overflow: hidden;
+}
+
 .customerName {
   margin: 0;
   font-weight: 600;
   letter-spacing: -0.005em;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .customerEmail {
   margin: 0.1rem 0 0;
   color: var(--color-text-muted);
   font-size: var(--text-xs);
-}
-
-.tdProduct {
-  max-width: 16rem;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.tdProduct {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.tdStatus {
+  overflow: hidden;
 }
 
 .tdMuted {
@@ -593,14 +633,19 @@
   }
 
   /* Order/Scheduled are the two columns explicitly called out as de-emphasizable (item 9) —
-     dropped entirely rather than truncated, so Customer/Product/Status keep full room. */
+     dropped entirely rather than truncated, so Customer/Product/Status keep full room. Their
+     freed-up share goes to Customer/Product (fixed layout doesn't redistribute it on its own). */
   .colOrder,
   .colDate {
     display: none;
   }
 
-  .tdProduct {
-    max-width: 9rem;
+  .table thead th:nth-child(2) {
+    width: 44%;
+  }
+
+  .table thead th:nth-child(3) {
+    width: 44%;
   }
 
   .detailScheduleGrid {
