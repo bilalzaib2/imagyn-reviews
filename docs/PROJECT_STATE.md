@@ -51,6 +51,21 @@ App Store submission readiness (Shopify Billing shipped; hardening and polish ne
     list. CSV export includes `product_id`/`product_handle` alongside the display title, so
     a re-import always resolves at the top of the priority chain. See
     [DECISIONS.md](./DECISIONS.md).
+-   **Video Reviews** (2026-08-24) — one video per review (MP4/MOV, up to 100MB, up to 60
+    seconds) alongside existing photo uploads, generalizing the same Shopify Files storage
+    provider and review-media service rather than duplicating them
+    (`app/services/storage/shopifyFiles.server.ts`, `app/services/reviewMedia.server.ts`).
+    Server-side validation includes a dependency-free MP4/MOV box parser that reads real
+    duration before upload — avoids a wasted upload+poll round trip, since Shopify's own
+    `Video.duration` is null until processing completes; per-file upload failures are
+    isolated so one bad video never breaks the rest of a review submission. Gated behind
+    `canUseVideoReviews` (same permission system as everything else). Renders as a playable
+    media item — thumbnail with play-icon overlay, lightbox playback — in the storefront
+    review card/gallery and the admin review-detail panel. 33 unit tests
+    (`reviewMedia.server.test.ts`, `shopifyFiles.server.test.ts`). Live-verified end-to-end in
+    a fresh dev-preview session: real video upload through the storefront form, the Shopify
+    Files upload+processing round trip, storefront card and lightbox playback, admin-panel
+    rendering, and existing photo-review submission all confirmed working.
 
 ## Blocked
 
