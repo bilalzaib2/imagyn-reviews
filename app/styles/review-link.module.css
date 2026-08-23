@@ -109,7 +109,8 @@
   border: 1px solid var(--color-border);
 }
 
-.photoThumb img {
+.photoThumb img,
+.photoThumb video {
   width: 100%;
   height: 100%;
   object-fit: cover;

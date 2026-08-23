@@ -745,6 +745,20 @@
   object-fit: cover;
 }
 
+/* Overlay on a video thumbnail's muted preview frame — tells the merchant "this one plays"
+   before they click through to open it (see app.reviews.tsx: 48px is too small for usable
+   native <video controls>, so playback happens in a new tab instead). */
+.photoThumbPlay {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 14px;
+  color: #fff;
+  background: rgba(0, 0, 0, 0.32);
+}
+
 .photoDeleteButton {
   position: absolute;
   top: 2px;

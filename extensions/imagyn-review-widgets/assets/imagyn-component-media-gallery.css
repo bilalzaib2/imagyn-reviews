@@ -33,6 +33,7 @@
 
 .imagyn-media-gallery__item,
 .imagyn-review-media__item {
+  position: relative;
   flex: 0 0 auto;
   width: 72px;
   height: 72px;
@@ -47,6 +48,25 @@
     opacity var(--imagyn-duration-fast, 120ms) var(--imagyn-easing, ease-out),
     transform var(--imagyn-duration-fast, 120ms) var(--imagyn-easing, ease-out),
     border-color var(--imagyn-duration-fast, 120ms) var(--imagyn-easing, ease-out);
+}
+
+/* Play-icon overlay on a video thumbnail — the thumbnail image itself is a real poster
+   frame (Video.preview.image.url), this is just what tells a merchant/customer "this one
+   plays" before they click through to the lightbox. */
+.imagyn-media-play {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #fff;
+  background: rgba(0, 0, 0, 0.28);
+  pointer-events: none;
+}
+
+.imagyn-media-play svg {
+  width: 22px;
+  height: 22px;
 }
 
 .imagyn-media-gallery__item:hover,

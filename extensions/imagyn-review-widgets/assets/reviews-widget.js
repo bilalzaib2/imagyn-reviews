@@ -8,6 +8,14 @@
   var MAX_IMAGE_SIZE_BYTES = 5 * 1024 * 1024;
   var ALLOWED_IMAGE_TYPES = ["image/jpeg", "image/png", "image/webp", "image/gif"];
 
+  // Mirrors reviewMedia.server.ts's MAX_VIDEOS_PER_REVIEW/MAX_VIDEO_SIZE_BYTES/
+  // MAX_VIDEO_DURATION_MS/ALLOWED_VIDEO_MIME_TYPES — client-side copies for instant feedback
+  // only; the server re-validates all of this regardless (see that file's own comment on why
+  // duration in particular can't be trusted from the client).
+  var MAX_VIDEO_SIZE_BYTES = 100 * 1024 * 1024;
+  var MAX_VIDEO_DURATION_SECONDS = 60;
+  var ALLOWED_VIDEO_TYPES = ["video/mp4", "video/quicktime"];
+
   // Shared with rating-badge.js / collection-rating-badges.js via imagyn-appearance.js,
   // which every block already loads before its own script.
   var renderStars = window.ImagynShared.renderStars;
@@ -481,25 +489,29 @@
   // Shared by the aggregated Media Gallery and every Review Card's inline photo row: one
   // overlay instance, lazily created and reused for the page, per STOREFRONT_DESIGN_SYSTEM.md
   // §16 — arrow-key navigation, Escape to close, focus trapped while open, native swipe on
-  // touch. `items` is a plain array of { url, alt }; the caller owns what "photo N of the
-  // review" vs "photo N of the gallery" means, this only ever renders whatever it's given.
+  // touch. `items` is a plain array of { url, type, alt }; the caller owns what "photo N of
+  // the review" vs "photo N of the gallery" means, this only ever renders whatever it's given.
+  // A video item shows the same overlay chrome (nav/close/counter) with a <video> element
+  // swapped in for the <img> — see show() below.
   function createLightbox() {
     var overlay = document.createElement("div");
     overlay.className = "imagyn-lightbox-overlay";
     overlay.setAttribute("role", "dialog");
     overlay.setAttribute("aria-modal", "true");
-    overlay.setAttribute("aria-label", "Photo viewer");
+    overlay.setAttribute("aria-label", "Media viewer");
     overlay.innerHTML =
       '<div class="imagyn-lightbox">' +
       '<img class="imagyn-lightbox__image" alt="">' +
-      '<button type="button" class="imagyn-lightbox__nav imagyn-lightbox__nav--prev" aria-label="Previous photo">‹</button>' +
-      '<button type="button" class="imagyn-lightbox__nav imagyn-lightbox__nav--next" aria-label="Next photo">›</button>' +
+      '<video class="imagyn-lightbox__video" controls playsinline hidden></video>' +
+      '<button type="button" class="imagyn-lightbox__nav imagyn-lightbox__nav--prev" aria-label="Previous item">‹</button>' +
+      '<button type="button" class="imagyn-lightbox__nav imagyn-lightbox__nav--next" aria-label="Next item">›</button>' +
       '<button type="button" class="imagyn-lightbox__close" aria-label="Close">×</button>' +
       '<span class="imagyn-lightbox__counter" data-imagyn-lightbox-counter></span>' +
       "</div>";
     document.body.appendChild(overlay);
 
     var imageEl = overlay.querySelector(".imagyn-lightbox__image");
+    var videoEl = overlay.querySelector(".imagyn-lightbox__video");
     var prevBtn = overlay.querySelector(".imagyn-lightbox__nav--prev");
     var nextBtn = overlay.querySelector(".imagyn-lightbox__nav--next");
     var closeBtn = overlay.querySelector(".imagyn-lightbox__close");
@@ -513,6 +525,7 @@
     // A quiet cross-fade between photos rather than an abrupt swap — the loading class is
     // added right before the src changes (see show()) and removed once the new image has
     // actually decoded, so the fade-in always reflects real load state, not a fixed timer.
+    // Video items skip the fade (playback controls are the point, not a transition).
     imageEl.addEventListener("load", function () {
       imageEl.classList.remove("imagyn-lightbox__image--loading");
     });
@@ -521,9 +534,26 @@
       if (items.length === 0) return;
       currentIndex = (index + items.length) % items.length;
       var item = items[currentIndex];
-      imageEl.classList.add("imagyn-lightbox__image--loading");
-      imageEl.src = item.url;
-      imageEl.alt = item.alt || "Customer photo";
+      var isVideo = item.type === "VIDEO";
+
+      // Always pause/clear the video element when it's not the item being shown — otherwise
+      // audio keeps playing in the background after navigating away or closing.
+      videoEl.pause();
+      videoEl.removeAttribute("src");
+      videoEl.load();
+
+      if (isVideo) {
+        imageEl.hidden = true;
+        videoEl.hidden = false;
+        videoEl.src = item.url;
+      } else {
+        videoEl.hidden = true;
+        imageEl.hidden = false;
+        imageEl.classList.add("imagyn-lightbox__image--loading");
+        imageEl.src = item.url;
+        imageEl.alt = item.alt || "Customer photo";
+      }
+
       var multiple = items.length > 1;
       prevBtn.style.display = multiple ? "" : "none";
       nextBtn.style.display = multiple ? "" : "none";
@@ -589,6 +619,9 @@
       overlay.classList.remove("imagyn-lightbox-overlay--open");
       document.removeEventListener("keydown", onKeyDown);
       imageEl.src = "";
+      videoEl.pause();
+      videoEl.removeAttribute("src");
+      videoEl.load();
       if (lastFocusedElement && lastFocusedElement.focus) {
         lastFocusedElement.focus();
       }
@@ -619,25 +652,37 @@
   }
 
   // Single place that turns one ReviewMedia item into a thumbnail button — both the
-  // aggregated Media Gallery and each Review Card's inline photo row call through here,
-  // so adding video support later (item.type is already IMAGE|VIDEO — see the Prisma
-  // schema) only means branching once, right here, rather than in every renderer that
-  // touches media. Today every item is an image, so there's nothing to branch on yet.
+  // aggregated Media Gallery and each Review Card's inline photo row call through here. A
+  // video item still renders as an <img> (its thumbnailUrl is a real poster-frame image —
+  // Video.preview.image.url, see shopifyFiles.server.ts), just with a play-icon overlay so
+  // it reads as "video" before the merchant/customer clicks through to the lightbox.
   function renderMediaThumb(item, index, total, itemClass, imageClass) {
+    var isVideo = item.type === "VIDEO";
+    var label = isVideo ? "video" : "photo";
+
     return (
       '<button type="button" class="' +
       itemClass +
       '" data-media-index="' +
       index +
-      '" aria-label="View photo ' + (index + 1) + " of " + total + '">' +
+      '" aria-label="View ' + label + " " + (index + 1) + " of " + total + '">' +
       '<img class="' + imageClass + '" src="' + escapeHtml(item.thumbnailUrl || item.url) + '" alt="" loading="lazy">' +
+      (isVideo
+        ? '<span class="imagyn-media-play" aria-hidden="true">' +
+          '<svg viewBox="0 0 24 24"><path d="M8 5v14l11-7-11-7z" fill="currentColor"></path></svg>' +
+          "</span>"
+        : "") +
       "</button>"
     );
   }
 
   function mediaToLightboxItems(items) {
     return items.map(function (item) {
-      return { url: item.url, alt: "Customer photo" };
+      return {
+        url: item.url,
+        type: item.type,
+        alt: item.type === "VIDEO" ? "Customer video" : "Customer photo",
+      };
     });
   }
 
@@ -1082,6 +1127,15 @@
       " images • 5 MB each</p>" +
       '<div class="imagyn-reviews__photo-previews" data-imagyn-photo-previews></div>' +
       "</div>" +
+      '<div class="imagyn-reviews__field">' +
+      '<label id="imagyn-reviews-video-label">Add a video (optional)</label>' +
+      '<input type="file" id="imagyn-reviews-video" class="imagyn-upload__input" data-imagyn-video-input ' +
+      'accept="' + ALLOWED_VIDEO_TYPES.join(",") + '" ' +
+      'aria-labelledby="imagyn-reviews-video-label" aria-describedby="imagyn-reviews-video-hint">' +
+      '<p class="imagyn-reviews__photo-hint" id="imagyn-reviews-video-hint">One video • MP4 or MOV • up to 100MB • up to 60 seconds</p>' +
+      '<p class="imagyn-reviews__form-error" data-imagyn-video-error hidden></p>' +
+      '<div class="imagyn-reviews__photo-previews" data-imagyn-video-preview></div>' +
+      "</div>" +
       '<div class="imagyn-reviews__upload-progress" data-imagyn-upload-progress hidden>' +
       '<div class="imagyn-reviews__upload-progress-bar" data-imagyn-upload-progress-bar></div>' +
       "</div>" +
@@ -1106,6 +1160,13 @@
     // the input is reset after every change event so the same file can be re-picked and so
     // rejected files never silently linger in the native selection.
     var selectedPhotos = [];
+
+    var videoInput = writeEl.querySelector("[data-imagyn-video-input]");
+    var videoErrorEl = writeEl.querySelector("[data-imagyn-video-error]");
+    var videoPreviewEl = writeEl.querySelector("[data-imagyn-video-preview]");
+    // { file, previewUrl } | null — one video max (MAX_VIDEOS_PER_REVIEW server-side), so
+    // this is a single slot rather than an array like selectedPhotos above.
+    var selectedVideo = null;
 
     var reduceMotion = window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
 
@@ -1259,6 +1320,91 @@
       renderPhotoPreviews();
     }
 
+    function renderVideoPreview() {
+      if (!selectedVideo) {
+        videoPreviewEl.innerHTML = "";
+        return;
+      }
+      videoPreviewEl.innerHTML =
+        '<div class="imagyn-reviews__photo-preview">' +
+        '<video src="' + selectedVideo.previewUrl + '" muted></video>' +
+        '<button type="button" class="imagyn-reviews__photo-remove" data-remove-video aria-label="Remove video">×</button>' +
+        "</div>";
+    }
+
+    function showVideoError(message) {
+      videoErrorEl.textContent = message;
+      videoErrorEl.removeAttribute("hidden");
+    }
+
+    function hideVideoError() {
+      videoErrorEl.setAttribute("hidden", "");
+      videoErrorEl.textContent = "";
+    }
+
+    // Client-side only — a UX convenience so a customer doesn't upload-then-get-rejected;
+    // validateVideoFile in reviewMedia.server.ts is the real, untrusted-client-safe check.
+    function readVideoDurationSeconds(file) {
+      return new Promise(function (resolve) {
+        var el = document.createElement("video");
+        el.preload = "metadata";
+        var url = URL.createObjectURL(file);
+        el.src = url;
+        el.onloadedmetadata = function () {
+          URL.revokeObjectURL(url);
+          resolve(isFinite(el.duration) ? el.duration : null);
+        };
+        el.onerror = function () {
+          URL.revokeObjectURL(url);
+          resolve(null);
+        };
+      });
+    }
+
+    function addVideoFile(file) {
+      hideVideoError();
+      if (!file) return;
+
+      if (ALLOWED_VIDEO_TYPES.indexOf(file.type) === -1) {
+        showVideoError(file.name + ": use MP4 or MOV.");
+        return;
+      }
+      if (file.size > MAX_VIDEO_SIZE_BYTES) {
+        showVideoError(file.name + ": file exceeds the 100MB limit.");
+        return;
+      }
+
+      readVideoDurationSeconds(file).then(function (durationSeconds) {
+        if (durationSeconds !== null && durationSeconds > MAX_VIDEO_DURATION_SECONDS) {
+          showVideoError(file.name + ": video exceeds the 60 second limit.");
+          return;
+        }
+        selectedVideo = { file: file, previewUrl: URL.createObjectURL(file) };
+        renderVideoPreview();
+      });
+    }
+
+    function resetVideo() {
+      if (selectedVideo) {
+        URL.revokeObjectURL(selectedVideo.previewUrl);
+      }
+      selectedVideo = null;
+      renderVideoPreview();
+    }
+
+    videoInput.addEventListener("change", function () {
+      addVideoFile(videoInput.files && videoInput.files[0]);
+      // Reset immediately, same reason as photoInput above — lets the same file be re-picked
+      // and never leaves a rejected file sitting in the native selection.
+      videoInput.value = "";
+    });
+
+    videoPreviewEl.addEventListener("click", function (event) {
+      var removeBtn = event.target.closest ? event.target.closest("[data-remove-video]") : null;
+      if (!removeBtn) return;
+      resetVideo();
+    });
+
     function showUploadProgress(percent) {
       progressEl.removeAttribute("hidden");
       progressBarEl.style.width = percent + "%";
@@ -1304,6 +1450,9 @@
       selectedPhotos.forEach(function (item) {
         formData.append("images", item.file, item.file.name);
       });
+      if (selectedVideo) {
+        formData.append("video", selectedVideo.file, selectedVideo.file.name);
+      }
 
       // XMLHttpRequest rather than fetch: fetch has no upload-progress event, and this is
       // the one submission in the widget large enough (multi-image uploads) to need one.
@@ -1332,11 +1481,12 @@
         selectedRating = 0;
         paintStars();
         resetPhotos();
+        resetVideo();
 
         var message = "Thanks! Your review has been submitted and is awaiting approval.";
         if (data.media && data.media.failed && data.media.failed.length > 0) {
           message +=
-            " " + data.media.failed.length + (data.media.failed.length === 1 ? " photo" : " photos") +
+            " " + data.media.failed.length + (data.media.failed.length === 1 ? " file" : " files") +
             " could not be uploaded.";
         }
         successEl.textContent = message;

@@ -11,7 +11,9 @@ import {
 import {
   getProductMediaGallery,
   readImageFilesFromFormData,
+  readVideoFilesFromFormData,
   uploadReviewImages,
+  uploadReviewVideos,
 } from "../services/reviewMedia.server";
 import { getOrSyncProductForStoreByShopifyId } from "../services/product.server";
 import { getStoreBySlug } from "../services/store.server";
@@ -164,6 +166,7 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
       thumbnailUrl: item.thumbnailUrl,
       width: item.width,
       height: item.height,
+      type: item.type,
     })),
     reviews: orderedReviews.map((review) => ({
       id: review.id,
@@ -224,6 +227,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
   const title = field("title");
   const content = field("content");
   const imageFiles = await readImageFilesFromFormData(formData, "images");
+  const videoFiles = await readVideoFilesFromFormData(formData, "video");
 
   const errors: string[] = [];
   if (!shop) errors.push("Shop is required.");
@@ -286,14 +290,31 @@ export const action = async ({ request }: ActionFunctionArgs) => {
 
     let media: { uploaded: number; failed: Array<{ filename: string; error: string }> } | null = null;
 
-    if (imageFiles.length > 0) {
+    // Images and video upload independently (different permission, different provider call,
+    // different validation) but are reported back as one combined summary — a customer
+    // submitting both in the same review shouldn't see two separate success/failure messages
+    // for what is, to them, one "add media" step.
+    if (imageFiles.length > 0 || videoFiles.length > 0) {
       if (admin) {
-        const result = await uploadReviewImages(review.id, imageFiles, admin);
-        media = { uploaded: result.uploaded.length, failed: result.failed };
+        const [imageResult, videoResult] = await Promise.all([
+          imageFiles.length > 0
+            ? uploadReviewImages(review.id, imageFiles, admin)
+            : Promise.resolve({ uploaded: [], failed: [] }),
+          videoFiles.length > 0
+            ? uploadReviewVideos(review.id, videoFiles, admin)
+            : Promise.resolve({ uploaded: [], failed: [] }),
+        ]);
+        media = {
+          uploaded: imageResult.uploaded.length + videoResult.uploaded.length,
+          failed: [...imageResult.failed, ...videoResult.failed],
+        };
       } else {
         media = {
           uploaded: 0,
-          failed: imageFiles.map((file) => ({ filename: file.filename, error: "Uploads are temporarily unavailable." })),
+          failed: [...imageFiles, ...videoFiles].map((file) => ({
+            filename: file.filename,
+            error: "Uploads are temporarily unavailable.",
+          })),
         };
       }
     }

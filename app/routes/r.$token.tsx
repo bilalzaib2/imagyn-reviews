@@ -5,7 +5,15 @@ import type { ActionFunctionArgs, LoaderFunctionArgs } from "react-router";
 import { reviewRequestService } from "../services/review-request.server";
 import { createReview } from "../services/review.server";
 import { evaluateReview, getModerationSettings, sendHeldReviewNotification } from "../services/moderationRules.server";
-import { MAX_IMAGES_PER_REVIEW, readImageFilesFromFormData, uploadReviewImages } from "../services/reviewMedia.server";
+import {
+  MAX_IMAGES_PER_REVIEW,
+  MAX_VIDEO_DURATION_MS,
+  MAX_VIDEO_SIZE_BYTES,
+  readImageFilesFromFormData,
+  readVideoFilesFromFormData,
+  uploadReviewImages,
+  uploadReviewVideos,
+} from "../services/reviewMedia.server";
 import { unauthenticated } from "../shopify.server";
 import { Button } from "../components/ui/Button";
 import { StarRating } from "../components/reviews/StarRating";
@@ -60,6 +68,12 @@ export const loader = async ({ params }: LoaderFunctionArgs) => {
     customerName: result.request.name ?? "",
     customMessage: result.request.customMessage,
     maxPhotos: MAX_IMAGES_PER_REVIEW,
+    // Passed through the loader (not imported directly by the client component) for the same
+    // reason maxPhotos already is — reviewMedia.server.ts is server-only, and referencing its
+    // exports from client-rendered code breaks the build (React Router can't tree-shake a
+    // server module out of the client bundle once client code depends on it too).
+    maxVideoSizeBytes: MAX_VIDEO_SIZE_BYTES,
+    maxVideoDurationSeconds: MAX_VIDEO_DURATION_MS / 1000,
   };
 };
 
@@ -92,6 +106,7 @@ export const action = async ({ request, params }: ActionFunctionArgs) => {
   const content = String(formData.get("content") || "").trim();
   const reviewerName = String(formData.get("reviewerName") || "").trim();
   const imageFiles = await readImageFilesFromFormData(formData, "photos");
+  const videoFiles = await readVideoFilesFromFormData(formData, "video");
 
   let reviewId: string;
 
@@ -138,32 +153,39 @@ export const action = async ({ request, params }: ActionFunctionArgs) => {
     );
   }
 
-  // Photos are best-effort: the review itself has already been created successfully above, so
-  // a storage/Admin API hiccup here only downgrades to a warning, never loses the review. This
-  // route has no live Shopify session (it's reached by a public link, not an embedded request),
-  // so it uses shopify.server.ts's `unauthenticated.admin(shop)` — the SDK's documented mechanism
-  // for Admin API access outside a request Shopify itself originated — to reach the same
-  // uploadReviewImages path api.reviews.tsx's storefront widget submissions use.
+  // Photos and video are both best-effort: the review itself has already been created
+  // successfully above, so a storage/Admin API hiccup here only downgrades to a warning,
+  // never loses the review. This route has no live Shopify session (it's reached by a public
+  // link, not an embedded request), so it uses shopify.server.ts's `unauthenticated.admin(shop)`
+  // — the SDK's documented mechanism for Admin API access outside a request Shopify itself
+  // originated — to reach the same uploadReviewImages/uploadReviewVideos path api.reviews.tsx's
+  // storefront widget submissions use.
   let mediaWarning: string | null = null;
 
-  if (imageFiles.length > 0) {
+  if (imageFiles.length > 0 || videoFiles.length > 0) {
     if (result.request.store.domain) {
       try {
         const { admin } = await unauthenticated.admin(result.request.store.domain);
-        const uploadResult = await uploadReviewImages(reviewId, imageFiles, admin);
+        const [imageResult, videoResult] = await Promise.all([
+          imageFiles.length > 0 ? uploadReviewImages(reviewId, imageFiles, admin) : Promise.resolve({ uploaded: [], failed: [] }),
+          videoFiles.length > 0 ? uploadReviewVideos(reviewId, videoFiles, admin) : Promise.resolve({ uploaded: [], failed: [] }),
+        ]);
 
-        if (uploadResult.failed.length > 0) {
+        const uploadedCount = imageResult.uploaded.length + videoResult.uploaded.length;
+        const failedCount = imageResult.failed.length + videoResult.failed.length;
+
+        if (failedCount > 0) {
           mediaWarning =
-            uploadResult.uploaded.length > 0
-              ? `${uploadResult.failed.length} photo${uploadResult.failed.length === 1 ? "" : "s"} couldn't be uploaded.`
-              : "Your review was submitted, but the photos couldn't be uploaded.";
+            uploadedCount > 0
+              ? `${failedCount} file${failedCount === 1 ? "" : "s"} couldn't be uploaded.`
+              : "Your review was submitted, but the media couldn't be uploaded.";
         }
       } catch (error) {
-        console.error(`Failed to get admin session for photo upload (store ${result.request.store.domain}):`, error);
-        mediaWarning = "Your review was submitted, but the photos couldn't be uploaded.";
+        console.error(`Failed to get admin session for media upload (store ${result.request.store.domain}):`, error);
+        mediaWarning = "Your review was submitted, but the media couldn't be uploaded.";
       }
     } else {
-      mediaWarning = "Your review was submitted, but the photos couldn't be uploaded.";
+      mediaWarning = "Your review was submitted, but the media couldn't be uploaded.";
     }
   }
 
@@ -186,7 +208,16 @@ export function shouldRevalidate() {
 }
 
 export default function ReviewLinkPage() {
-  const { productName, productImage, storeName, customerName, customMessage, maxPhotos } = useLoaderData<typeof loader>();
+  const {
+    productName,
+    productImage,
+    storeName,
+    customerName,
+    customMessage,
+    maxPhotos,
+    maxVideoSizeBytes,
+    maxVideoDurationSeconds,
+  } = useLoaderData<typeof loader>();
   const actionData = useActionData<typeof action>();
   const navigation = useNavigation();
   const isSubmitting = navigation.state === "submitting";
@@ -194,6 +225,10 @@ export default function ReviewLinkPage() {
   const [rating, setRating] = useState(5);
   const [photos, setPhotos] = useState<File[]>([]);
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const [video, setVideo] = useState<File | null>(null);
+  const [videoError, setVideoError] = useState<string | null>(null);
+  const videoInputRef = useRef<HTMLInputElement>(null);
 
   // Native file inputs expose an immutable FileList, so "add more" and "remove one" both work
   // by rebuilding the input's .files from our own File[] state via DataTransfer — the standard
@@ -216,6 +251,61 @@ export default function ReviewLinkPage() {
     const next = photos.filter((_, i) => i !== index);
     setPhotos(next);
     syncFileInput(next);
+  };
+
+  // Client-side only — a UX convenience that saves the customer an upload-then-rejection
+  // round trip, never the actual security boundary. validateVideoFile in reviewMedia.server.ts
+  // re-checks MIME/size/duration server-side regardless of what happens here.
+  const readVideoDurationSeconds = (file: File): Promise<number | null> => {
+    return new Promise((resolve) => {
+      const el = document.createElement("video");
+      el.preload = "metadata";
+      const url = URL.createObjectURL(file);
+      el.src = url;
+      el.onloadedmetadata = () => {
+        URL.revokeObjectURL(url);
+        resolve(Number.isFinite(el.duration) ? el.duration : null);
+      };
+      el.onerror = () => {
+        URL.revokeObjectURL(url);
+        resolve(null);
+      };
+    });
+  };
+
+  const handleVideoSelected = async (fileList: FileList | null) => {
+    const file = fileList?.[0] ?? null;
+    setVideoError(null);
+
+    if (!file) {
+      setVideo(null);
+      return;
+    }
+    if (!["video/mp4", "video/quicktime"].includes(file.type)) {
+      setVideoError("Use an MP4 or MOV video.");
+      if (videoInputRef.current) videoInputRef.current.value = "";
+      return;
+    }
+    if (file.size > maxVideoSizeBytes) {
+      setVideoError("Video exceeds the 100MB limit.");
+      if (videoInputRef.current) videoInputRef.current.value = "";
+      return;
+    }
+
+    const durationSeconds = await readVideoDurationSeconds(file);
+    if (durationSeconds !== null && durationSeconds > maxVideoDurationSeconds) {
+      setVideoError("Video exceeds the 60 second limit.");
+      if (videoInputRef.current) videoInputRef.current.value = "";
+      return;
+    }
+
+    setVideo(file);
+  };
+
+  const removeVideo = () => {
+    setVideo(null);
+    setVideoError(null);
+    if (videoInputRef.current) videoInputRef.current.value = "";
   };
 
   if (actionData?.ok) {
@@ -316,6 +406,40 @@ export default function ReviewLinkPage() {
                     </button>
                   </div>
                 ))}
+              </div>
+            ) : null}
+          </div>
+
+          <div className={styles.field}>
+            <label className={styles.label} htmlFor="video">
+              Video <span style={{ fontWeight: 400, color: "var(--color-text-muted)" }}>(optional)</span>
+            </label>
+            <input
+              ref={videoInputRef}
+              id="video"
+              name="video"
+              type="file"
+              accept="video/mp4,video/quicktime"
+              className={styles.photoInput}
+              disabled={Boolean(video)}
+              onChange={(event) => handleVideoSelected(event.target.files)}
+            />
+            <p className={styles.hint}>One video, up to 100MB, 60 seconds. MP4 or MOV.</p>
+            {videoError ? <p className={styles.error}>{videoError}</p> : null}
+
+            {video ? (
+              <div className={styles.photoPreviewGrid}>
+                <div className={styles.photoThumb}>
+                  <video src={URL.createObjectURL(video)} muted controls />
+                  <button
+                    type="button"
+                    className={styles.photoThumbRemove}
+                    onClick={removeVideo}
+                    aria-label={`Remove ${video.name}`}
+                  >
+                    ×
+                  </button>
+                </div>
               </div>
             ) : null}
           </div>

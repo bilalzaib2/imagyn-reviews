@@ -1277,14 +1277,14 @@ export default function ReviewsPage() {
                       </div>
 
                       <div className={styles.detailSection}>
-                        <p className={styles.detailLabel}>Photos</p>
+                        <p className={styles.detailLabel}>Photos &amp; Video</p>
                         {(() => {
                           const visibleMedia = selectedReview.media.filter(
                             (item) => !optimisticDeletedMediaIds[item.id],
                           );
 
                           if (visibleMedia.length === 0) {
-                            return <p className={styles.detailPlaceholder}>No photos have been uploaded for this review.</p>;
+                            return <p className={styles.detailPlaceholder}>No photos or video have been uploaded for this review.</p>;
                           }
 
                           const shownMedia = showAllPhotos ? visibleMedia : visibleMedia.slice(0, PHOTO_PREVIEW_COUNT);
@@ -1292,27 +1292,53 @@ export default function ReviewsPage() {
 
                           return (
                             <div className={styles.photoStrip}>
-                              {shownMedia.map((item) => (
-                                <div key={item.id} className={styles.photoThumb}>
-                                  <a href={item.url} target="_blank" rel="noreferrer" aria-label="View full size">
-                                    <img
-                                      className={styles.photoThumbImage}
-                                      src={item.thumbnailUrl ?? item.url}
-                                      alt="Review attachment"
-                                      loading="lazy"
-                                    />
-                                  </a>
-                                  <button
-                                    type="button"
-                                    className={styles.photoDeleteButton}
-                                    onClick={() => deleteMedia(item.id)}
-                                    disabled={isMutating}
-                                    aria-label="Delete photo"
-                                  >
-                                    ×
-                                  </button>
-                                </div>
-                              ))}
+                              {shownMedia.map((item) =>
+                                item.type === "VIDEO" ? (
+                                  // 48x48 is too small for usable native <video> controls, so
+                                  // the thumbnail is a muted, non-interactive preview frame
+                                  // (same play-icon-overlay treatment as the storefront widget)
+                                  // — clicking it opens the real video in a new tab, where the
+                                  // browser's own player takes over. Mirrors exactly how a
+                                  // photo thumbnail already opens its full-size image.
+                                  <div key={item.id} className={styles.photoThumb}>
+                                    <a href={item.url} target="_blank" rel="noreferrer" aria-label="Play video">
+                                      <video className={styles.photoThumbImage} src={item.url} muted preload="metadata" />
+                                      <span className={styles.photoThumbPlay} aria-hidden="true">
+                                        ▶
+                                      </span>
+                                    </a>
+                                    <button
+                                      type="button"
+                                      className={styles.photoDeleteButton}
+                                      onClick={() => deleteMedia(item.id)}
+                                      disabled={isMutating}
+                                      aria-label="Delete video"
+                                    >
+                                      ×
+                                    </button>
+                                  </div>
+                                ) : (
+                                  <div key={item.id} className={styles.photoThumb}>
+                                    <a href={item.url} target="_blank" rel="noreferrer" aria-label="View full size">
+                                      <img
+                                        className={styles.photoThumbImage}
+                                        src={item.thumbnailUrl ?? item.url}
+                                        alt="Review attachment"
+                                        loading="lazy"
+                                      />
+                                    </a>
+                                    <button
+                                      type="button"
+                                      className={styles.photoDeleteButton}
+                                      onClick={() => deleteMedia(item.id)}
+                                      disabled={isMutating}
+                                      aria-label="Delete photo"
+                                    >
+                                      ×
+                                    </button>
+                                  </div>
+                                ),
+                              )}
                               {hiddenCount > 0 ? (
                                 <button
                                   type="button"
