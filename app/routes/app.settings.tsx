@@ -7,7 +7,12 @@ import { Button } from "../components/ui/Button";
 import { Container } from "../components/ui/Container";
 import { Section } from "../components/ui/Section";
 import { authenticateAdminDeduped } from "../services/auth-dedupe.server";
-import { getOrCreateStore, updateAutoRequestSettings, updateModerationSettings } from "../services/store.server";
+import {
+  getOrCreateStore,
+  updateAutoRequestSettings,
+  updateModerationSettings,
+  updateReminderSettings,
+} from "../services/store.server";
 import { getModerationSettings } from "../services/moderationRules.server";
 import { sendTestReviewRequestEmail } from "../services/notifications/testEmail.server";
 import { getStorePermissions } from "../services/permissions";
@@ -20,6 +25,8 @@ type LoaderData = {
   autoRequestDelayDays: number;
   autoRequestTrigger: string;
   planIncludesAutomaticRequests: boolean;
+  reminderEmailsEnabled: boolean;
+  planIncludesEmailReminders: boolean;
   moderation: {
     enabled: boolean;
     minRating: number;
@@ -49,6 +56,8 @@ export const loader = async ({ request }: LoaderFunctionArgs): Promise<LoaderDat
     autoRequestDelayDays: store.autoRequestDelayDays,
     autoRequestTrigger: store.autoRequestTrigger,
     planIncludesAutomaticRequests: permissions.canUseAutomaticReviewRequests,
+    reminderEmailsEnabled: store.reminderEmailsEnabled,
+    planIncludesEmailReminders: permissions.canUseEmailReminders,
     moderation: {
       enabled: moderation.enabled,
       minRating: moderation.minRating,
@@ -117,6 +126,22 @@ export const action = async ({ request }: ActionFunctionArgs): Promise<ActionDat
     }
   }
 
+  if (intent === "save-reminders") {
+    const permissions = await getStorePermissions(store.id);
+    if (!permissions.canUseEmailReminders) {
+      return { ok: false, error: "Automatic Reminder Emails require the Pro plan." };
+    }
+
+    try {
+      await updateReminderSettings(store.id, {
+        reminderEmailsEnabled: formData.get("reminderEmailsEnabled") === "true",
+      });
+      return { ok: true, message: "Reminder Emails settings saved." };
+    } catch (error) {
+      return { ok: false, error: error instanceof Error ? error.message : "Unable to save Reminder Emails settings." };
+    }
+  }
+
   if (!ORDER_AUTOMATION_ENABLED) {
     return { ok: false, error: "Automatic review requests are not available yet." };
   }
@@ -156,8 +181,14 @@ const MIN_RATING_OPTIONS = [
 ];
 
 export default function SettingsPage() {
-  const { autoRequestEnabled, autoRequestDelayDays, planIncludesAutomaticRequests, moderation } =
-    useLoaderData<typeof loader>();
+  const {
+    autoRequestEnabled,
+    autoRequestDelayDays,
+    planIncludesAutomaticRequests,
+    reminderEmailsEnabled,
+    planIncludesEmailReminders,
+    moderation,
+  } = useLoaderData<typeof loader>();
   const navigation = useNavigation();
   const isLoading = navigation.state !== "idle";
   const saveFetcher = useFetcher<ActionData>();
@@ -172,6 +203,10 @@ export default function SettingsPage() {
   const testEmailFetcher = useFetcher<ActionData>();
   const isSendingTestEmail = testEmailFetcher.state !== "idle";
   const [testEmail, setTestEmail] = useState("");
+
+  const reminderFetcher = useFetcher<ActionData>();
+  const isSavingReminders = reminderFetcher.state !== "idle";
+  const [remindersEnabled, setRemindersEnabled] = useState(reminderEmailsEnabled);
 
   const moderationFetcher = useFetcher<ActionData>();
   const isSavingModeration = moderationFetcher.state !== "idle";
@@ -205,6 +240,16 @@ export default function SettingsPage() {
   }, [testEmailFetcher.data]);
 
   useEffect(() => {
+    if (!reminderFetcher.data) return;
+    if (!reminderFetcher.data.ok) {
+      setToast({ content: reminderFetcher.data.error || "Unable to save Reminder Emails settings.", error: true });
+      return;
+    }
+    setToast({ content: reminderFetcher.data.message || "Reminder Emails settings saved." });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [reminderFetcher.data]);
+
+  useEffect(() => {
     if (!moderationFetcher.data) return;
     if (!moderationFetcher.data.ok) {
       setToast({ content: moderationFetcher.data.error || "Unable to save Moderation Rules.", error: true });
@@ -227,6 +272,13 @@ export default function SettingsPage() {
     formData.set("_intent", "send-test-email");
     formData.set("testEmail", testEmail);
     testEmailFetcher.submit(formData, { method: "post" });
+  };
+
+  const handleSaveReminders = () => {
+    const formData = new FormData();
+    formData.set("_intent", "save-reminders");
+    formData.set("reminderEmailsEnabled", String(remindersEnabled));
+    reminderFetcher.submit(formData, { method: "post" });
   };
 
   const handleSaveModeration = () => {
@@ -375,6 +427,37 @@ export default function SettingsPage() {
             ) : null}
             <Button type="button" variant="primary" onClick={handleSave} disabled={isSaving || !isAutomationAvailable}>
               {isSaving ? "Saving…" : "Save"}
+            </Button>
+          </Section>
+
+          <Section
+            title="Reminder Emails"
+            description="Automatically follow up on a review request that hasn't converted yet — Reminder #1 after 3 days, a Final Reminder after 7 days. Stops immediately once a review is submitted."
+          >
+            {!planIncludesEmailReminders ? (
+              <Banner tone="info">
+                Reminder Emails require the Pro plan.{" "}
+                <a href="/app/billing">Upgrade to Pro</a> to turn this on.
+              </Banner>
+            ) : null}
+            <Checkbox
+              label="Automatically send reminder emails"
+              checked={planIncludesEmailReminders && remindersEnabled}
+              disabled={!planIncludesEmailReminders}
+              onChange={setRemindersEnabled}
+              helpText="Only requests sent after this is turned on are ever eligible — existing requests are never swept up retroactively."
+            />
+            <p className={styles.mutedText}>
+              Timing is fixed at 3 and 7 days for now. Edit the Reminder #1 and Final Reminder email content in{" "}
+              <a href="/app/email-studio">Email Studio</a>.
+            </p>
+            <Button
+              type="button"
+              variant="primary"
+              onClick={handleSaveReminders}
+              disabled={isSavingReminders || !planIncludesEmailReminders}
+            >
+              {isSavingReminders ? "Saving…" : "Save"}
             </Button>
           </Section>
 

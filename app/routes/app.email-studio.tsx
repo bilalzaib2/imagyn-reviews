@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { useFetcher, useLoaderData } from "react-router";
+import { Link, useFetcher, useLoaderData } from "react-router";
 import type { ActionFunctionArgs, LoaderFunctionArgs } from "react-router";
 import { Frame, Toast } from "@shopify/polaris";
 
@@ -18,14 +18,27 @@ import {
   getDefaultEmailTemplateContent,
   sanitizeEmailTemplateContentForPlan,
   type EmailTemplateContent,
+  type EmailTemplateType,
 } from "../services/email.shared";
 import shellStyles from "../styles/app.shell.module.css";
 import styles from "../styles/app.email-studio.module.css";
 
+// Review Request is available on every plan; the two reminder types are Pro-only
+// (canUseEmailReminders) — see the loader/action's own gating below.
+const TEMPLATE_TABS: Array<{ type: EmailTemplateType; label: string }> = [
+  { type: "review_request", label: "Review Request" },
+  { type: "reminder_1", label: "Reminder #1" },
+  { type: "reminder_final", label: "Final Reminder" },
+];
+const ALLOWED_TYPES: EmailTemplateType[] = TEMPLATE_TABS.map((tab) => tab.type);
+const isReminderType = (type: EmailTemplateType) => type === "reminder_1" || type === "reminder_final";
+
 type LoaderData = {
+  type: EmailTemplateType;
   content: EmailTemplateContent;
   storeName: string;
   canUseAdvancedEmailStudio: boolean;
+  canUseEmailReminders: boolean;
 };
 
 type ActionData =
@@ -43,6 +56,11 @@ const readContentFromForm = (formData: FormData): EmailTemplateContent => ({
   logoUrl: String(formData.get("logoUrl") || "").trim() || null,
 });
 
+const readTypeFromForm = (formData: FormData): EmailTemplateType => {
+  const raw = String(formData.get("type") || "review_request");
+  return (ALLOWED_TYPES as string[]).includes(raw) ? (raw as EmailTemplateType) : "review_request";
+};
+
 const validateContent = (content: EmailTemplateContent): string | null => {
   if (!content.subject) return "Subject can't be empty.";
   if (!content.heading) return "Heading can't be empty.";
@@ -55,15 +73,27 @@ const validateContent = (content: EmailTemplateContent): string | null => {
 export const loader = async ({ request }: LoaderFunctionArgs): Promise<LoaderData> => {
   const { session } = await authenticateAdminDeduped(request);
   const store = await getOrCreateStore(session.shop);
-  const [permissions, content] = await Promise.all([
-    getStorePermissions(store.id),
-    emailTemplateService.getActiveContent(store.id),
-  ]);
+  const permissions = await getStorePermissions(store.id);
+
+  // A Free store hitting ?type=reminder_1 directly (e.g. a stale bookmark after a downgrade)
+  // falls back to the Review Request template rather than editing content it can't use —
+  // mirrors the action's own server-side enforcement below.
+  const requestedType = new URL(request.url).searchParams.get("type");
+  const type: EmailTemplateType =
+    requestedType &&
+    (ALLOWED_TYPES as string[]).includes(requestedType) &&
+    (!isReminderType(requestedType as EmailTemplateType) || permissions.canUseEmailReminders)
+      ? (requestedType as EmailTemplateType)
+      : "review_request";
+
+  const content = await emailTemplateService.getActiveContent(store.id, type);
 
   return {
+    type,
     content,
     storeName: store.name,
     canUseAdvancedEmailStudio: permissions.canUseAdvancedEmailStudio,
+    canUseEmailReminders: permissions.canUseEmailReminders,
   };
 };
 
@@ -73,11 +103,20 @@ export const action = async ({ request }: ActionFunctionArgs): Promise<ActionDat
 
   const formData = await request.formData();
   const intent = String(formData.get("_intent") || "");
+  const type = readTypeFromForm(formData);
 
   try {
+    // Server-side enforcement — not just the UI hiding the Reminder #1 / Final Reminder tabs
+    // below — so a Free store can never save/reset/preview a reminder-type template by posting
+    // directly, same convention as canUseAdvancedEmailStudio's sanitize step further down.
+    const permissions = await getStorePermissions(store.id);
+    if (isReminderType(type) && !permissions.canUseEmailReminders) {
+      return { ok: false, intent, error: "Reminder email templates require the Pro plan." };
+    }
+
     if (intent === "reset") {
-      await emailTemplateService.resetToDefault(store.id);
-      return { ok: true, intent: "reset", content: getDefaultEmailTemplateContent() };
+      await emailTemplateService.resetToDefault(store.id, type);
+      return { ok: true, intent: "reset", content: getDefaultEmailTemplateContent(type) };
     }
 
     const content = readContentFromForm(formData);
@@ -109,10 +148,9 @@ export const action = async ({ request }: ActionFunctionArgs): Promise<ActionDat
 
       // Server-side enforcement of canUseAdvancedEmailStudio, not just the UI hiding the
       // "Coming to Pro" card below — see sanitizeEmailTemplateContentForPlan's own comment.
-      const permissions = await getStorePermissions(store.id);
       const safeContent = sanitizeEmailTemplateContentForPlan(content, permissions.canUseAdvancedEmailStudio);
 
-      await emailTemplateService.upsertActive(store.id, { content: safeContent });
+      await emailTemplateService.upsertActive(store.id, { content: safeContent, type });
       return { ok: true, intent: "save" };
     }
 
@@ -130,7 +168,13 @@ export const action = async ({ request }: ActionFunctionArgs): Promise<ActionDat
 type PreviewMode = "desktop" | "mobile";
 
 export default function EmailStudioPage() {
-  const { content: initialContent, storeName, canUseAdvancedEmailStudio } = useLoaderData<typeof loader>();
+  const {
+    type: activeType,
+    content: initialContent,
+    storeName,
+    canUseAdvancedEmailStudio,
+    canUseEmailReminders,
+  } = useLoaderData<typeof loader>();
 
   const saveFetcher = useFetcher<ActionData>();
   const resetFetcher = useFetcher<ActionData>();
@@ -145,6 +189,15 @@ export default function EmailStudioPage() {
   const isResetting = resetFetcher.state !== "idle";
   const isBusy = isSaving || isResetting;
 
+  // Switching tabs (a real navigation to ?type=...) re-runs the loader with new content, but
+  // doesn't remount this component — sync the draft to match whenever the active type changes,
+  // the same way a fresh page load would have initialized it.
+  useEffect(() => {
+    setDraft(initialContent);
+    setPreviewHtml(null);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeType]);
+
   const updateField = <K extends keyof EmailTemplateContent>(key: K, value: EmailTemplateContent[K]) => {
     setDraft((prev) => ({ ...prev, [key]: value }));
   };
@@ -156,6 +209,7 @@ export default function EmailStudioPage() {
   const handleSave = () => {
     const formData = new FormData();
     formData.set("_intent", "save");
+    formData.set("type", activeType);
     Object.entries(draft).forEach(([key, value]) => formData.set(key, value ?? ""));
     saveFetcher.submit(formData, { method: "post" });
   };
@@ -163,6 +217,7 @@ export default function EmailStudioPage() {
   const handleReset = () => {
     const formData = new FormData();
     formData.set("_intent", "reset");
+    formData.set("type", activeType);
     resetFetcher.submit(formData, { method: "post" });
   };
 
@@ -208,13 +263,14 @@ export default function EmailStudioPage() {
     const timeoutId = window.setTimeout(() => {
       const formData = new FormData();
       formData.set("_intent", "preview");
+      formData.set("type", activeType);
       Object.entries(draft).forEach(([key, value]) => formData.set(key, value ?? ""));
       previewFetcherRef.current.submit(formData, { method: "post" });
     }, 400);
 
     return () => window.clearTimeout(timeoutId);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [draftKey]);
+  }, [draftKey, activeType]);
 
   const hasUnsavedChanges = JSON.stringify(draft) !== JSON.stringify(initialContent);
 
@@ -227,11 +283,37 @@ export default function EmailStudioPage() {
               <p className={shellStyles.eyebrow}>Imagyn Reviews</p>
               <h1 className={shellStyles.title}>Email Studio</h1>
               <p className={shellStyles.subtitle}>
-                Customize the review-request email your customers receive — subject, message, branding, and the
-                review link.
+                Customize the emails your customers receive — subject, message, branding, and the review link.
               </p>
             </div>
           </header>
+
+          <div className={styles.previewToggle} role="tablist" aria-label="Email template">
+            {TEMPLATE_TABS.map((tab) => {
+              const locked = isReminderType(tab.type) && !canUseEmailReminders;
+              return (
+                <Link
+                  key={tab.type}
+                  to={tab.type === "review_request" ? "?" : `?type=${tab.type}`}
+                  role="tab"
+                  aria-selected={activeType === tab.type}
+                  className={`${styles.previewToggleButton} ${activeType === tab.type ? styles.previewToggleActive : ""}`}
+                  onClick={(event) => {
+                    if (locked) {
+                      event.preventDefault();
+                      return;
+                    }
+                    if (hasUnsavedChanges && !window.confirm("Discard unsaved changes to this template?")) {
+                      event.preventDefault();
+                    }
+                  }}
+                >
+                  {tab.label}
+                  {locked ? " 🔒" : ""}
+                </Link>
+              );
+            })}
+          </div>
 
           <div className={styles.layout}>
             <div className={styles.editorColumn}>
@@ -279,10 +361,12 @@ export default function EmailStudioPage() {
                     disabled={isBusy}
                   />
                   <VariableRow onInsert={(token) => insertVariable("bodyText", token)} disabled={isBusy} />
-                  <p className={styles.fieldHint}>
-                    A merchant note added to an individual request always overrides this default message for that
-                    one send.
-                  </p>
+                  {activeType === "review_request" ? (
+                    <p className={styles.fieldHint}>
+                      A merchant note added to an individual request always overrides this default message for that
+                      one send. Reminder emails always use this template's own message.
+                    </p>
+                  ) : null}
                 </div>
 
                 <div className={styles.fieldGroup}>
@@ -332,12 +416,20 @@ export default function EmailStudioPage() {
                 </Button>
               </div>
 
+              {canUseEmailReminders ? null : (
+                <Card className={styles.proCard}>
+                  <p className={styles.proEyebrow}>Upgrade to Pro</p>
+                  <ul className={styles.proList}>
+                    <li>Reminder #1 and Final Reminder emails (3 &amp; 7 days, automatic)</li>
+                    <li>Independent templates for each email</li>
+                  </ul>
+                </Card>
+              )}
+
               {canUseAdvancedEmailStudio ? null : (
                 <Card className={styles.proCard}>
                   <p className={styles.proEyebrow}>Coming to Pro</p>
                   <ul className={styles.proList}>
-                    <li>Multiple email templates &amp; themes</li>
-                    <li>A dedicated follow-up / reminder email</li>
                     <li>Advanced layout &amp; styling control</li>
                   </ul>
                 </Card>

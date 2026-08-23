@@ -54,6 +54,10 @@ export interface ReviewRequestRecord {
   source: string;
   shopifyOrderId: string | null;
   sendAttempts: number;
+  // Automatic Reminder Emails — see dispatchReminderEmail below. Independent of status/sentAt,
+  // which track only the original Day-0 request.
+  reminder1SentAt: Date | null;
+  reminderFinalSentAt: Date | null;
   createdAt: Date;
   updatedAt: Date;
   store: { id: string; name: string; domain: string | null };
@@ -97,6 +101,8 @@ const mapRequestRecord = (request: {
   source: string;
   shopifyOrderId: string | null;
   sendAttempts: number;
+  reminder1SentAt: Date | null;
+  reminderFinalSentAt: Date | null;
   createdAt: Date;
   updatedAt: Date;
   store: { id: string; name: string; domain: string | null };
@@ -117,6 +123,8 @@ const mapRequestRecord = (request: {
   source: request.source,
   shopifyOrderId: request.shopifyOrderId,
   sendAttempts: request.sendAttempts,
+  reminder1SentAt: request.reminder1SentAt,
+  reminderFinalSentAt: request.reminderFinalSentAt,
   createdAt: request.createdAt,
   updatedAt: request.updatedAt,
   store: request.store,
@@ -268,6 +276,67 @@ export const dispatchRequestEmail = async (request: ReviewRequestRecord): Promis
   });
 
   return mapRequestRecord(updated);
+};
+
+export type ReminderType = "reminder_1" | "reminder_final";
+
+const REMINDER_FIELD: Record<ReminderType, "reminder1SentAt" | "reminderFinalSentAt"> = {
+  reminder_1: "reminder1SentAt",
+  reminder_final: "reminderFinalSentAt",
+};
+
+// Sends a reminder email and records it on its own field (reminder1SentAt/reminderFinalSentAt),
+// deliberately never touching `status`/`sentAt`/`sendAttempts` — those track only the original
+// Day-0 request's lifecycle, which a reminder must never regress or reinterpret (e.g. a request
+// already at "opened" must stay "opened", not bounce back to "sent"). Reuses the same
+// request_token tag dispatchRequestEmail attaches, so webhooks.resend.tsx still correlates a
+// reminder's own delivered/opened events back to this row — safe under the existing
+// forward-only rank guard (LIFECYCLE_RANK), though it means reminder-specific delivery/open
+// visibility isn't tracked separately, an accepted limitation for this pass.
+//
+// Idempotency: the caller (reviewRequestScheduler.server.ts's runDueReminderSweep) only ever
+// selects rows where the relevant field is still null, and this function is the only writer of
+// that field — once set, the row can never be selected again, so the same reminder can never be
+// sent twice. On a send failure, the field is deliberately left unset (unlike
+// dispatchRequestEmail's bounded MAX_SEND_ATTEMPTS retry) — the next sweep tick (5 minutes
+// later) naturally retries, since nothing else about the row's eligibility changed. A reminder
+// has no customer-facing urgency the way the Day-0 send does, so this simpler, unbounded-retry-
+// by-next-tick approach is deliberate, not an oversight.
+export const dispatchReminderEmail = async (request: ReviewRequestRecord, reminderType: ReminderType): Promise<void> => {
+  if (!request.email || !request.requestToken) {
+    return;
+  }
+
+  const template = await emailTemplateService.getActiveContent(request.store.id, reminderType);
+
+  const { subject, html, text } = await buildReviewRequestEmail({
+    customerName: request.name || "there",
+    productName: request.product?.name || "your recent purchase",
+    storeName: request.store.name,
+    reviewUrl: buildReviewUrl(request.requestToken),
+    // The original request's per-request custom message (if any) was already delivered on
+    // Day 0 — a reminder is its own distinct email and shouldn't repeat it.
+    customMessage: null,
+    template,
+  });
+
+  try {
+    await getEmailProvider().sendEmail({
+      to: request.email,
+      subject,
+      html,
+      text,
+      tags: { request_token: request.requestToken, email_type: reminderType },
+    });
+  } catch (error) {
+    console.error(`Failed to send ${reminderType} email for request ${request.id}:`, error);
+    return;
+  }
+
+  await prisma.reviewRequest.update({
+    where: { id: request.id },
+    data: { [REMINDER_FIELD[reminderType]]: new Date() },
+  });
 };
 
 // Monotonic rank for the delivery-tracking portion of the lifecycle — used only by

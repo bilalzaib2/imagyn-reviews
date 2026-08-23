@@ -55,6 +55,17 @@ model Store {
   autoRequestDelayDays Int     @default(7)
   autoRequestTrigger   String  @default("fulfillment")
 
+  // Automatic Reminder Emails (see reviewRequestScheduler.server.ts's runDueReminderSweep).
+  // Off by default for every store, existing or new — turning this on never resurrects a
+  // backlog of old requests. remindersEnabledAt is the eligibility cutoff a sweep compares
+  // each ReviewRequest.sentAt against (only requests sent at/after this timestamp are ever
+  // considered); it's bumped forward only on an off->on transition (see
+  // store.server.ts's updateReminderSettings), never on a resave while already on, so
+  // re-enabling after a period of being off starts the cutoff fresh rather than resurrecting
+  // whatever accumulated while off.
+  reminderEmailsEnabled Boolean   @default(false)
+  remindersEnabledAt    DateTime?
+
   // Shopify Billing (see app/services/billing/). This is a local cache of Shopify's own
   // billing state — kept in sync by the app_subscriptions/update webhook and by the billing
   // page's own live syncBillingFromShopify() call (a raw GraphQL query, not the SDK's
@@ -336,6 +347,16 @@ model ReviewRequest {
   // review-request.server.ts. Never incremented past that constant.
   sendAttempts      Int       @default(0)
 
+  // Automatic Reminder Emails — set once each reminder actually sends (dispatchReminderEmail
+  // in review-request.server.ts), independently of `status`/`sentAt` above, which track only
+  // the original Day-0 request's own lifecycle. Both fixed-day reminders are computed from
+  // `sentAt` directly (Day 3 / Day 7), not chained off each other, matching the product spec.
+  // Null on every existing row by default — reminders were never sent for historical requests,
+  // which is the correct, safe starting state (see Store.remindersEnabledAt for why old
+  // requests are also never retroactively eligible).
+  reminder1SentAt     DateTime?
+  reminderFinalSentAt DateTime?
+
   createdAt    DateTime        @default(now())
   updatedAt    DateTime        @updatedAt
 
@@ -408,9 +429,10 @@ model EmailTemplate {
   store        Store           @relation(fields: [storeId], references: [id], onDelete: Cascade)
 
   name         String          @default("Default")
-  // "review_request" is the only type built/sent today. "reminder" is reserved for the
-  // Pro-only follow-up-email feature (not yet built) — same model, no migration needed when
-  // it ships, same "additive rows" pattern Appearance already established above.
+  // "review_request" (every plan), "reminder_1" / "reminder_final" (Pro-only, gated by
+  // canUseEmailReminders — see email.shared.ts's EmailTemplateType and
+  // reviewRequestScheduler.server.ts's runDueReminderSweep). Same "additive rows" pattern
+  // Appearance already established above — a new type is a new row, never a migration.
   type         String          @default("review_request")
   // Exactly one true per (store, type); enforced in emailTemplate.server.ts, not a DB
   // constraint — same application-level-enforcement convention as Appearance/Widget.

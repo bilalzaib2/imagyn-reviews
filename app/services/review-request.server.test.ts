@@ -28,6 +28,8 @@ interface FakeRequest {
   shopifyOrderId: string | null;
   shopifyLineItemId: string | null;
   sendAttempts: number;
+  reminder1SentAt: Date | null;
+  reminderFinalSentAt: Date | null;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -78,6 +80,8 @@ function seedRequest(overrides: Partial<FakeRequest> & { id: string; storeId: st
     shopifyOrderId: null,
     shopifyLineItemId: null,
     sendAttempts: 0,
+    reminder1SentAt: null,
+    reminderFinalSentAt: null,
     createdAt: new Date(),
     updatedAt: new Date(),
     ...overrides,
@@ -229,7 +233,7 @@ vi.mock("./notifications/provider.server", () => ({
   }),
 }));
 
-const { reviewRequestService } = await import("./review-request.server");
+const { reviewRequestService, dispatchReminderEmail } = await import("./review-request.server");
 
 beforeEach(() => {
   requests = [];
@@ -593,5 +597,59 @@ describe("webhook-driven status updates — forward-only and idempotent", () => 
     expect(await reviewRequestService.markRequestDelivered("no-such-token")).toBe(false);
     expect(await reviewRequestService.markRequestOpened("no-such-token")).toBe(false);
     expect(await reviewRequestService.markRequestDeliveryFailed("no-such-token")).toBe(false);
+  });
+});
+
+describe("dispatchReminderEmail", () => {
+  it("sends reminder_1 and records it on reminder1SentAt only", async () => {
+    const seeded = seedRequest({
+      id: "req_1",
+      storeId: "store_1",
+      status: "sent",
+      sentAt: new Date("2026-08-01"),
+      reminder1SentAt: null,
+      reminderFinalSentAt: null,
+    });
+    const request = await reviewRequestService.getRequest("req_1");
+
+    await dispatchReminderEmail(request!, "reminder_1");
+
+    const row = requests.find((r) => r.id === "req_1")!;
+    expect(row.reminder1SentAt).not.toBeNull();
+    expect(row.reminderFinalSentAt).toBeNull();
+    // The original request's own lifecycle fields are never touched by a reminder send.
+    expect(row.status).toBe("sent");
+    expect(row.sentAt).toEqual(seeded.sentAt);
+    expect(row.sendAttempts).toBe(0);
+  });
+
+  it("sends reminder_final and records it on reminderFinalSentAt only", async () => {
+    seedRequest({ id: "req_1", storeId: "store_1", status: "opened", sentAt: new Date("2026-08-01") });
+    const request = await reviewRequestService.getRequest("req_1");
+
+    await dispatchReminderEmail(request!, "reminder_final");
+
+    const row = requests.find((r) => r.id === "req_1")!;
+    expect(row.reminderFinalSentAt).not.toBeNull();
+    expect(row.reminder1SentAt).toBeNull();
+    expect(row.status).toBe("opened");
+  });
+
+  it("is a silent no-op when the request has no email on file", async () => {
+    seedRequest({ id: "req_1", storeId: "store_1", email: null, sentAt: new Date("2026-08-01") });
+    const request = await reviewRequestService.getRequest("req_1");
+
+    await dispatchReminderEmail(request!, "reminder_1");
+
+    expect(requests.find((r) => r.id === "req_1")?.reminder1SentAt).toBeNull();
+  });
+
+  it("is a silent no-op when the request has no token (already consumed/cleared)", async () => {
+    seedRequest({ id: "req_1", storeId: "store_1", requestToken: null, sentAt: new Date("2026-08-01") });
+    const request = await reviewRequestService.getRequest("req_1");
+
+    await dispatchReminderEmail(request!, "reminder_1");
+
+    expect(requests.find((r) => r.id === "req_1")?.reminder1SentAt).toBeNull();
   });
 });

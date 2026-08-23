@@ -2,17 +2,19 @@
 //
 // Same shape as appearance.server.ts (getActive/upsertActive over a JSON-string column, one
 // active row per scope) — this file reuses that pattern, not any appearance-specific logic.
-// Scope here is (storeId, type) rather than just storeId, since EmailTemplate.type reserves
-// room for a future "reminder" template type (Pro-only, not built yet) without a schema change.
+// Scope here is (storeId, type) rather than just storeId — EmailTemplateType (email.shared.ts)
+// has three values: "review_request" (every plan) and "reminder_1"/"reminder_final" (Pro-only,
+// gated by canUseEmailReminders — see app.email-studio.tsx), all sharing this same model.
 
 import prisma from "../db.server";
 import {
   getDefaultEmailTemplateContent,
   mergeEmailTemplateContent,
   type EmailTemplateContent,
+  type EmailTemplateType,
 } from "./email.shared";
 
-export type EmailTemplateType = "review_request";
+export type { EmailTemplateType };
 
 export interface EmailTemplateRecord {
   id: string;
@@ -25,15 +27,15 @@ export interface EmailTemplateRecord {
   updatedAt: Date;
 }
 
-const parseContent = (raw: string | null): EmailTemplateContent => {
+const parseContent = (raw: string | null, type: EmailTemplateType): EmailTemplateContent => {
   if (!raw) {
-    return getDefaultEmailTemplateContent();
+    return getDefaultEmailTemplateContent(type);
   }
 
   try {
-    return mergeEmailTemplateContent(JSON.parse(raw) as Partial<EmailTemplateContent>);
+    return mergeEmailTemplateContent(JSON.parse(raw) as Partial<EmailTemplateContent>, type);
   } catch {
-    return getDefaultEmailTemplateContent();
+    return getDefaultEmailTemplateContent(type);
   }
 };
 
@@ -46,16 +48,19 @@ const toEmailTemplateRecord = (row: {
   content: string;
   createdAt: Date;
   updatedAt: Date;
-}): EmailTemplateRecord => ({
-  id: row.id,
-  storeId: row.storeId,
-  name: row.name,
-  type: row.type as EmailTemplateType,
-  isActive: row.isActive,
-  content: parseContent(row.content),
-  createdAt: row.createdAt,
-  updatedAt: row.updatedAt,
-});
+}): EmailTemplateRecord => {
+  const type = row.type as EmailTemplateType;
+  return {
+    id: row.id,
+    storeId: row.storeId,
+    name: row.name,
+    type,
+    isActive: row.isActive,
+    content: parseContent(row.content, type),
+    createdAt: row.createdAt,
+    updatedAt: row.updatedAt,
+  };
+};
 
 export const emailTemplateService = {
   async getActive(storeId: string, type: EmailTemplateType = "review_request"): Promise<EmailTemplateRecord | null> {
@@ -72,7 +77,7 @@ export const emailTemplateService = {
   // customized anything, so every existing/unconfigured store's emails are unaffected.
   async getActiveContent(storeId: string, type: EmailTemplateType = "review_request"): Promise<EmailTemplateContent> {
     const active = await this.getActive(storeId, type);
-    return active?.content ?? getDefaultEmailTemplateContent();
+    return active?.content ?? getDefaultEmailTemplateContent(type);
   },
 
   async upsertActive(

@@ -82,6 +82,30 @@ export async function updateAutoRequestSettings(
   });
 }
 
+// Automatic Reminder Emails (app.settings.tsx). remindersEnabledAt is bumped forward only on
+// an off->on transition — never on a resave while already on — so re-enabling after a period
+// of being off starts the eligibility cutoff fresh rather than resurrecting whatever backlog
+// accumulated while off (see reviewRequestScheduler.server.ts's runDueReminderSweep and
+// Store.remindersEnabledAt's own schema comment for the safety rule this implements).
+export async function updateReminderSettings(id: string, data: { reminderEmailsEnabled: boolean }) {
+  const current = await prisma.store.findUnique({
+    where: { id },
+    select: { reminderEmailsEnabled: true },
+  });
+
+  const isNewlyEnabled = data.reminderEmailsEnabled && !current?.reminderEmailsEnabled;
+
+  return prisma.store.update({
+    where: {
+      id,
+    },
+    data: {
+      reminderEmailsEnabled: data.reminderEmailsEnabled,
+      ...(isNewlyEnabled ? { remindersEnabledAt: new Date() } : {}),
+    },
+  });
+}
+
 // Shopify Billing state (app/services/billing/billing.server.ts) — this is the only place
 // that writes these columns, so the cache's write path stays in one function regardless of
 // which billing flow (plan selection, webhook, live reconciliation) triggered the update.

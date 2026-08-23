@@ -34,6 +34,38 @@ describe("mergeEmailTemplateContent", () => {
   it("an empty partial reproduces the full default set", () => {
     expect(mergeEmailTemplateContent({})).toEqual(getDefaultEmailTemplateContent());
   });
+
+  it("fills in missing fields from the given type's own defaults, not review_request's", () => {
+    const merged = mergeEmailTemplateContent({ subject: "Custom reminder subject" }, "reminder_1");
+
+    expect(merged.subject).toBe("Custom reminder subject");
+    expect(merged.heading).toBe(getDefaultEmailTemplateContent("reminder_1").heading);
+    expect(merged.heading).not.toBe(getDefaultEmailTemplateContent("review_request").heading);
+  });
+});
+
+describe("getDefaultEmailTemplateContent — per type", () => {
+  it("reminder_1 and reminder_final each have their own distinct copy", () => {
+    const reminder1 = getDefaultEmailTemplateContent("reminder_1");
+    const reminderFinal = getDefaultEmailTemplateContent("reminder_final");
+    const reviewRequest = getDefaultEmailTemplateContent("review_request");
+
+    expect(reminder1.subject).not.toBe(reviewRequest.subject);
+    expect(reminderFinal.subject).not.toBe(reviewRequest.subject);
+    expect(reminder1.subject).not.toBe(reminderFinal.subject);
+  });
+
+  it("every type's defaults use the same shared accent color and no logo", () => {
+    for (const type of ["review_request", "reminder_1", "reminder_final"] as const) {
+      const defaults = getDefaultEmailTemplateContent(type);
+      expect(defaults.accentColor).toBe("#111111");
+      expect(defaults.logoUrl).toBeNull();
+    }
+  });
+
+  it("defaults with no type argument reproduce review_request's defaults, unchanged", () => {
+    expect(getDefaultEmailTemplateContent()).toEqual(getDefaultEmailTemplateContent("review_request"));
+  });
 });
 
 describe("renderTemplateVariables", () => {

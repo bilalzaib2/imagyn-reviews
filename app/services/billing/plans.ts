@@ -77,8 +77,8 @@ export const PLANS: Record<PlanId, Plan> = {
     features: [
       { label: "Everything in Starter" },
       { label: "AI review summaries" },
-      { label: "Automatic email reminders", comingSoon: true },
-      { label: "Multiple email templates & reminder emails", comingSoon: true },
+      { label: "Automatic email reminders (3 & 7 days)" },
+      { label: "Multiple email templates & reminder emails" },
       { label: "Advanced email styling", comingSoon: true },
       // No differentiated analytics beyond the dashboard every plan already sees.
       { label: "Advanced analytics", comingSoon: true },

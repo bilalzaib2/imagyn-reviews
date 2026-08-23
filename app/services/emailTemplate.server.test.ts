@@ -125,3 +125,83 @@ describe("emailTemplateService", () => {
     await expect(emailTemplateService.resetToDefault("store_never_customized")).resolves.toBeUndefined();
   });
 });
+
+describe("emailTemplateService — multiple types per store", () => {
+  beforeEach(() => {
+    rows = [];
+    nextId = 1;
+    vi.clearAllMocks();
+  });
+
+  it("getActiveContent falls back to that type's own defaults, not review_request's", async () => {
+    const reminder1Content = await emailTemplateService.getActiveContent("store_1", "reminder_1");
+    const reviewRequestContent = await emailTemplateService.getActiveContent("store_1", "review_request");
+
+    expect(reminder1Content).toEqual(getDefaultEmailTemplateContent("reminder_1"));
+    expect(reminder1Content.subject).not.toBe(reviewRequestContent.subject);
+  });
+
+  it("saving one type never affects another type on the same store", async () => {
+    await emailTemplateService.upsertActive("store_1", {
+      type: "review_request",
+      content: { ...getDefaultEmailTemplateContent("review_request"), subject: "Review request subject" },
+    });
+    await emailTemplateService.upsertActive("store_1", {
+      type: "reminder_1",
+      content: { ...getDefaultEmailTemplateContent("reminder_1"), subject: "Reminder 1 subject" },
+    });
+
+    expect((await emailTemplateService.getActiveContent("store_1", "review_request")).subject).toBe(
+      "Review request subject",
+    );
+    expect((await emailTemplateService.getActiveContent("store_1", "reminder_1")).subject).toBe("Reminder 1 subject");
+    expect(rows).toHaveLength(2);
+  });
+
+  it("all three types can be independently saved and read back for the same store", async () => {
+    await emailTemplateService.upsertActive("store_1", {
+      type: "reminder_1",
+      content: { ...getDefaultEmailTemplateContent("reminder_1"), subject: "R1" },
+    });
+    await emailTemplateService.upsertActive("store_1", {
+      type: "reminder_final",
+      content: { ...getDefaultEmailTemplateContent("reminder_final"), subject: "Final" },
+    });
+
+    expect((await emailTemplateService.getActiveContent("store_1", "reminder_1")).subject).toBe("R1");
+    expect((await emailTemplateService.getActiveContent("store_1", "reminder_final")).subject).toBe("Final");
+    expect(rows).toHaveLength(2);
+  });
+
+  it("resetToDefault on one type never deletes another type's row", async () => {
+    await emailTemplateService.upsertActive("store_1", {
+      type: "review_request",
+      content: { ...getDefaultEmailTemplateContent("review_request"), subject: "Kept" },
+    });
+    await emailTemplateService.upsertActive("store_1", {
+      type: "reminder_1",
+      content: { ...getDefaultEmailTemplateContent("reminder_1"), subject: "Removed" },
+    });
+
+    await emailTemplateService.resetToDefault("store_1", "reminder_1");
+
+    expect((await emailTemplateService.getActiveContent("store_1", "review_request")).subject).toBe("Kept");
+    expect((await emailTemplateService.getActiveContent("store_1", "reminder_1")).subject).toBe(
+      getDefaultEmailTemplateContent("reminder_1").subject,
+    );
+  });
+
+  it("a second save to the same (store, type) updates in place rather than creating a duplicate row", async () => {
+    await emailTemplateService.upsertActive("store_1", {
+      type: "reminder_final",
+      content: { ...getDefaultEmailTemplateContent("reminder_final"), subject: "First" },
+    });
+    await emailTemplateService.upsertActive("store_1", {
+      type: "reminder_final",
+      content: { ...getDefaultEmailTemplateContent("reminder_final"), subject: "Second" },
+    });
+
+    expect(rows).toHaveLength(1);
+    expect(rows[0].content).toContain("Second");
+  });
+});
