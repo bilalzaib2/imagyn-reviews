@@ -2,6 +2,7 @@ import prisma from "../db.server";
 import { getEmailProvider } from "./notifications/provider.server";
 import { buildReviewRequestEmail } from "./notifications/templates.server";
 import { emailTemplateService } from "./emailTemplate.server";
+import { buildUnsubscribeUrl, emailSuppressionService } from "./emailSuppression.server";
 
 // Full lifecycle: pending -> scheduled -> sending -> sent -> delivered -> opened -> clicked
 // -> completed, with failed/cancelled as terminal branches off any pre-completed state.
@@ -214,6 +215,16 @@ export const dispatchRequestEmail = async (request: ReviewRequestRecord): Promis
     return request;
   }
 
+  // Suppression blocks every automated send this function makes — the Day-0 request itself,
+  // regardless of whether this call came from immediate creation, the scheduler sweep, or a
+  // merchant's manual Send Now/Resend action (resendRequest below calls this same function).
+  // Returns the request unchanged, same as the missing-email/token guard above — a suppressed,
+  // still-"scheduled" request simply never resolves to sent/failed on its own; a merchant can
+  // still cancel it explicitly from the admin UI.
+  if (await emailSuppressionService.isSuppressed(request.store.id, request.email)) {
+    return request;
+  }
+
   // Falls back to today's hardcoded defaults (getDefaultEmailTemplateContent) when the store
   // hasn't customized anything in Email Studio — see templates.server.tsx's `template` param.
   const template = await emailTemplateService.getActiveContent(request.store.id);
@@ -223,6 +234,7 @@ export const dispatchRequestEmail = async (request: ReviewRequestRecord): Promis
     productName: request.product?.name || "your recent purchase",
     storeName: request.store.name,
     reviewUrl: buildReviewUrl(request.requestToken),
+    unsubscribeUrl: buildUnsubscribeUrl(request.store.id, request.email),
     customMessage: request.customMessage,
     template,
   });
@@ -307,6 +319,12 @@ export const dispatchReminderEmail = async (request: ReviewRequestRecord, remind
     return;
   }
 
+  // Same suppression guard as dispatchRequestEmail — a suppressed recipient never receives a
+  // reminder, whether this call came from the scheduler sweep or a manual admin action.
+  if (await emailSuppressionService.isSuppressed(request.store.id, request.email)) {
+    return;
+  }
+
   const template = await emailTemplateService.getActiveContent(request.store.id, reminderType);
 
   const { subject, html, text } = await buildReviewRequestEmail({
@@ -314,6 +332,7 @@ export const dispatchReminderEmail = async (request: ReviewRequestRecord, remind
     productName: request.product?.name || "your recent purchase",
     storeName: request.store.name,
     reviewUrl: buildReviewUrl(request.requestToken),
+    unsubscribeUrl: buildUnsubscribeUrl(request.store.id, request.email),
     // The original request's per-request custom message (if any) was already delivered on
     // Day 0 — a reminder is its own distinct email and shouldn't repeat it.
     customMessage: null,

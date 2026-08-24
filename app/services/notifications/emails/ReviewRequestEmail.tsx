@@ -15,6 +15,9 @@ export interface ReviewRequestEmailProps {
   logoUrl: string | null;
   storeName: string;
   reviewUrl: string;
+  // Omitted for the Email Studio preview/test-email paths (sample data) — the footer line only
+  // renders when present. See templates.server.tsx's ReviewRequestEmailData.
+  unsubscribeUrl?: string;
 }
 
 const FONT_FAMILY = "Helvetica, Arial, sans-serif";
@@ -35,6 +38,7 @@ export function ReviewRequestEmail({
   logoUrl,
   storeName,
   reviewUrl,
+  unsubscribeUrl,
 }: ReviewRequestEmailProps) {
   return (
     <Html lang="en">
@@ -108,6 +112,17 @@ export function ReviewRequestEmail({
               </a>
             </Text>
           </Section>
+
+          {unsubscribeUrl ? (
+            <Section style={{ paddingTop: "12px" }}>
+              <Text style={{ margin: 0, fontSize: "12px", lineHeight: "1.6", color: "#a0a0a0" }}>
+                <a href={unsubscribeUrl} style={{ color: "#a0a0a0" }}>
+                  Unsubscribe
+                </a>{" "}
+                from future emails like this.
+              </Text>
+            </Section>
+          ) : null}
         </Container>
       </Body>
     </Html>

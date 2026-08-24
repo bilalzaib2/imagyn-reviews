@@ -21,6 +21,10 @@ export interface ReviewRequestEmailData {
   // getDefaultEmailTemplateContent(), which reproduces this template's original hardcoded
   // copy/colors exactly, so an unconfigured store's emails are unaffected by this feature.
   template?: EmailTemplateContent;
+  // Omitted by the Email Studio preview/test-email paths (sample data, no real recipient to
+  // unsubscribe) — the footer link only renders when this is present. Real sends
+  // (dispatchRequestEmail/dispatchReminderEmail in review-request.server.ts) always pass one.
+  unsubscribeUrl?: string;
 }
 
 export type ReviewHeldEmailData = ReviewHeldEmailProps;
@@ -57,6 +61,7 @@ export async function buildReviewRequestEmail(data: ReviewRequestEmailData): Pro
       logoUrl={content.logoUrl}
       storeName={data.storeName}
       reviewUrl={data.reviewUrl}
+      unsubscribeUrl={data.unsubscribeUrl}
     />
   );
 

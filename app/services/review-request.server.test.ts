@@ -58,6 +58,7 @@ let requests: FakeRequest[];
 let products: FakeProduct[];
 let reviews: FakeReview[];
 let stores: FakeStoreRow[];
+let suppressions: Array<{ storeId: string; email: string }>;
 let nextId: number;
 
 function seedRequest(overrides: Partial<FakeRequest> & { id: string; storeId: string }): FakeRequest {
@@ -220,6 +221,17 @@ vi.mock("../db.server", () => ({
     emailTemplate: {
       findFirst: vi.fn(async () => null),
     },
+    // Backs emailSuppressionService.isSuppressed — real integration (not a mocked service),
+    // same convention as emailTemplate above. Empty by default; individual tests seed
+    // `suppressions` to exercise the suppressed path.
+    emailSuppression: {
+      findUnique: vi.fn(
+        async ({ where }: { where: { storeId_email: { storeId: string; email: string } } }) => {
+          const { storeId, email } = where.storeId_email;
+          return suppressions.find((s) => s.storeId === storeId && s.email === email) ?? null;
+        },
+      ),
+    },
   },
 }));
 
@@ -233,10 +245,13 @@ vi.mock("./notifications/provider.server", () => ({
   }),
 }));
 
-const { reviewRequestService, dispatchReminderEmail } = await import("./review-request.server");
+process.env.SHOPIFY_API_SECRET ||= "test-secret-for-unsubscribe-hmac";
+
+const { reviewRequestService, dispatchRequestEmail, dispatchReminderEmail } = await import("./review-request.server");
 
 beforeEach(() => {
   requests = [];
+  suppressions = [];
   products = [];
   reviews = [];
   stores = [
@@ -651,5 +666,63 @@ describe("dispatchReminderEmail", () => {
     await dispatchReminderEmail(request!, "reminder_1");
 
     expect(requests.find((r) => r.id === "req_1")?.reminder1SentAt).toBeNull();
+  });
+
+  it("never sends and never sets reminder1SentAt for a suppressed recipient", async () => {
+    seedRequest({ id: "req_1", storeId: "store_1", email: "jordan@example.com", sentAt: new Date("2026-08-01") });
+    suppressions.push({ storeId: "store_1", email: "jordan@example.com" });
+    const request = await reviewRequestService.getRequest("req_1");
+
+    await dispatchReminderEmail(request!, "reminder_1");
+
+    expect(requests.find((r) => r.id === "req_1")?.reminder1SentAt).toBeNull();
+  });
+
+  it("suppression is store-scoped — a suppression on another store never blocks this one", async () => {
+    seedRequest({ id: "req_1", storeId: "store_1", email: "jordan@example.com", sentAt: new Date("2026-08-01") });
+    suppressions.push({ storeId: "store_2", email: "jordan@example.com" });
+    const request = await reviewRequestService.getRequest("req_1");
+
+    await dispatchReminderEmail(request!, "reminder_1");
+
+    expect(requests.find((r) => r.id === "req_1")?.reminder1SentAt).not.toBeNull();
+  });
+});
+
+describe("dispatchRequestEmail — suppression", () => {
+  it("never sends the Day-0 request email to a suppressed recipient — request lands unchanged, never 'failed'", async () => {
+    const seeded = seedRequest({
+      id: "req_1",
+      storeId: "store_1",
+      email: "jordan@example.com",
+      status: "sending",
+      sentAt: new Date("2026-08-01"),
+    });
+    suppressions.push({ storeId: "store_1", email: "jordan@example.com" });
+    const request = await reviewRequestService.getRequest("req_1");
+
+    const result = await dispatchRequestEmail(request!);
+
+    // Returned unchanged — same convention as the existing missing-email/token guard — not
+    // "failed" (which would imply a transient send error worth investigating/retrying).
+    expect(result.status).toBe("sending");
+    expect(requests.find((r) => r.id === "req_1")?.status).toBe(seeded.status);
+    expect(requests.find((r) => r.id === "req_1")?.sendAttempts).toBe(0);
+  });
+
+  it("a non-suppressed recipient's Day-0 send is completely unaffected (regression check)", async () => {
+    seedRequest({
+      id: "req_1",
+      storeId: "store_1",
+      email: "jordan@example.com",
+      status: "sending",
+      sentAt: new Date("2026-08-01"),
+    });
+    const request = await reviewRequestService.getRequest("req_1");
+
+    const result = await dispatchRequestEmail(request!);
+
+    expect(result.status).toBe("sent");
+    expect(requests.find((r) => r.id === "req_1")?.status).toBe("sent");
   });
 });

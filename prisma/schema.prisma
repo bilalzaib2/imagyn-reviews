@@ -47,6 +47,7 @@ model Store {
   appearances  Appearance[]
   emailTemplates EmailTemplate[]
   achievements Achievement[]
+  emailSuppressions EmailSuppression[]
 
   // Order-lifecycle automation settings (see review-request.server.ts's createFromOrder and
   // webhooks.fulfillments.create.tsx). autoRequestTrigger is a plain string, not an enum, so
@@ -480,4 +481,32 @@ model Achievement {
 
   @@unique([storeId, key])
   @@index([storeId])
+}
+
+// Email unsubscribe/suppression — one row per (store, email) that has opted out, checked by
+// dispatchRequestEmail/dispatchReminderEmail (review-request.server.ts) before every automated
+// send, including the Day-0 review request itself and both reminders, and enforced regardless
+// of trigger (scheduled sweep or a merchant's manual Send Now/Resend). Deliberately keyed by
+// (store, email) rather than by ReviewRequest — a customer can have multiple review requests
+// across different orders/products over time, and an unsubscribe must stop all of them, not
+// just the one whose email happened to carry the link (see emailSuppression.server.ts). No
+// admin UI reads this in V1 — it exists so the backend enforces suppression correctly and is
+// ready for a future admin/support view, not because one is being built now.
+model EmailSuppression {
+  id           String   @id @default(cuid())
+  storeId      String
+  store        Store    @relation(fields: [storeId], references: [id], onDelete: Cascade)
+
+  // Always lower-cased/trimmed before storage or lookup — see emailSuppression.server.ts's
+  // normalizeEmail — so a differently-cased resend of the same address can't bypass suppression.
+  email        String
+
+  suppressedAt DateTime @default(now())
+  // Extension seam (mirrors ReviewRequest.source's convention) — every row today is
+  // "unsubscribe_link"; a future suppression source (e.g. a hard bounce) is a new value here,
+  // not a schema change.
+  source       String   @default("unsubscribe_link")
+
+  @@unique([storeId, email])
+  @@index([storeId, email])
 }

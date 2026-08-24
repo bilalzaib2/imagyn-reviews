@@ -9,6 +9,7 @@ interface FakeRequestRow {
   scheduledFor: Date | null;
   // Reminder-sweep-only fields — unused by runDueReviewRequestSweep's own tests below.
   storeId?: string;
+  email?: string | null;
   sentAt?: Date | null;
   reviewedAt?: Date | null;
   reminder1SentAt?: Date | null;
@@ -26,6 +27,7 @@ let dispatchedIds: string[];
 let failingIds: Set<string>;
 let reminderDispatches: Array<{ id: string; type: string }>;
 let failingReminderIds: Set<string>;
+let suppressedPairs: Set<string>;
 
 vi.mock("../db.server", () => ({
   default: {
@@ -57,10 +59,14 @@ vi.mock("../db.server", () => ({
             .slice(0, args.take)
             .map((row) => ({
               id: row.id,
+              email: row.email ?? null,
               sentAt: row.sentAt ?? null,
               reminder1SentAt: row.reminder1SentAt ?? null,
               reminderFinalSentAt: row.reminderFinalSentAt ?? null,
-              store: { remindersEnabledAt: row.storeId ? fakeStores[row.storeId]?.remindersEnabledAt ?? null : null },
+              store: {
+                id: row.storeId ?? null,
+                remindersEnabledAt: row.storeId ? fakeStores[row.storeId]?.remindersEnabledAt ?? null : null,
+              },
             }));
         }
 
@@ -95,6 +101,15 @@ vi.mock("./reviewRequestDispatch.server", () => ({
   }),
 }));
 
+vi.mock("./emailSuppression.server", () => ({
+  emailSuppressionService: {
+    isSuppressed: vi.fn(async (storeId: string, email: string | null) => {
+      if (!email) return false;
+      return suppressedPairs.has(`${storeId}:${email}`);
+    }),
+  },
+}));
+
 const { runDueReviewRequestSweep, runDueReminderSweep } = await import("./reviewRequestScheduler.server");
 
 describe("runDueReviewRequestSweep", () => {
@@ -105,6 +120,7 @@ describe("runDueReviewRequestSweep", () => {
     failingIds = new Set();
     reminderDispatches = [];
     failingReminderIds = new Set();
+    suppressedPairs = new Set();
   });
 
   it("dispatches every scheduled request whose scheduledFor has arrived", async () => {
@@ -180,6 +196,7 @@ describe("runDueReminderSweep", () => {
     failingIds = new Set();
     reminderDispatches = [];
     failingReminderIds = new Set();
+    suppressedPairs = new Set();
   });
 
   it("dispatches reminder_1 for a request sent exactly 3 days ago with no reminder sent yet", async () => {
@@ -328,5 +345,29 @@ describe("runDueReminderSweep", () => {
 
     expect(result).toEqual({ due: 2, dispatched: 1 });
     expect(reminderDispatches).toEqual([{ id: "req_ok", type: "reminder_1" }]);
+  });
+
+  it("never dispatches a reminder to a suppressed recipient — excluded before the dispatch layer, not just no-op'd there", async () => {
+    fakeRequests = [
+      { id: "req_suppressed", storeId: "store_1", email: "jordan@example.com", status: "sent", scheduledFor: null, sentAt: day(3) },
+    ];
+    suppressedPairs.add("store_1:jordan@example.com");
+
+    const result = await runDueReminderSweep(now);
+
+    expect(result).toEqual({ due: 1, dispatched: 0 });
+    expect(reminderDispatches).toEqual([]);
+  });
+
+  it("a suppression on a different store never blocks this store's reminder", async () => {
+    fakeRequests = [
+      { id: "req_1", storeId: "store_1", email: "jordan@example.com", status: "sent", scheduledFor: null, sentAt: day(3) },
+    ];
+    suppressedPairs.add("store_2:jordan@example.com");
+
+    const result = await runDueReminderSweep(now);
+
+    expect(result).toEqual({ due: 1, dispatched: 1 });
+    expect(reminderDispatches).toEqual([{ id: "req_1", type: "reminder_1" }]);
   });
 });

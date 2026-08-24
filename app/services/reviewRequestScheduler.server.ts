@@ -1,6 +1,7 @@
 import prisma from "../db.server";
 import { enqueueReminderDispatch, enqueueReviewRequestDispatch } from "./reviewRequestDispatch.server";
 import type { ReminderType } from "./review-request.server";
+import { emailSuppressionService } from "./emailSuppression.server";
 
 // This process (react-router-serve) stays alive on Railway between requests — the same
 // assumption productSync.server.ts's fire-and-forget catalog sync already relies on — so a
@@ -84,10 +85,11 @@ export async function runDueReminderSweep(now: Date = new Date()): Promise<{ due
     },
     select: {
       id: true,
+      email: true,
       sentAt: true,
       reminder1SentAt: true,
       reminderFinalSentAt: true,
-      store: { select: { remindersEnabledAt: true } },
+      store: { select: { id: true, remindersEnabledAt: true } },
     },
     orderBy: { sentAt: "asc" },
     take: SWEEP_BATCH_SIZE,
@@ -97,6 +99,15 @@ export async function runDueReminderSweep(now: Date = new Date()): Promise<{ due
 
   for (const request of candidates) {
     if (!request.sentAt || !request.store.remindersEnabledAt || request.sentAt < request.store.remindersEnabledAt) {
+      continue;
+    }
+
+    // Same cross-table-comparison limitation as the remindersEnabledAt guard above — checked in
+    // JS rather than the Prisma `where`. Skipped without setting reminder1SentAt/
+    // reminderFinalSentAt (dispatchReminderEmail would no-op on this anyway, but checking here
+    // too keeps `dispatched` an accurate count of emails actually sent, and avoids an
+    // unnecessary dispatch-layer round trip for a row every sweep already knows is suppressed).
+    if (await emailSuppressionService.isSuppressed(request.store.id, request.email)) {
       continue;
     }
 
