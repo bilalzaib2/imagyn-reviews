@@ -114,4 +114,29 @@ export const emailTemplateService = {
   async resetToDefault(storeId: string, type: EmailTemplateType = "review_request"): Promise<void> {
     await prisma.emailTemplate.deleteMany({ where: { storeId, type, isActive: true } });
   },
+
+  // Backend for Brand Studio's "Apply to email templates" one-button action (see
+  // app.appearance.tsx's handleApplyEmailBranding / the applyEmailBranding action intent) —
+  // applies the same accent color + logo across all three email templates in one call, so a
+  // merchant doesn't have to separately repeat the same edit in Email Studio. Reuses
+  // getActiveContent/upsertActive per type, so each
+  // template's own subject/heading/bodyText/buttonText is read first and preserved exactly —
+  // only accentColor/logoUrl change. Never touches a type the merchant hasn't configured beyond
+  // giving it the same brand-derived starting color/logo every other type gets.
+  async applyBrandingToAllTemplates(
+    storeId: string,
+    branding: { accentColor: string; logoUrl: string | null },
+  ): Promise<void> {
+    const types: EmailTemplateType[] = ["review_request", "reminder_1", "reminder_final"];
+
+    await Promise.all(
+      types.map(async (type) => {
+        const current = await this.getActiveContent(storeId, type);
+        await this.upsertActive(storeId, {
+          type,
+          content: { ...current, accentColor: branding.accentColor, logoUrl: branding.logoUrl },
+        });
+      }),
+    );
+  },
 };

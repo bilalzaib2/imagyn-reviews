@@ -390,7 +390,7 @@ export default function SettingsPage() {
                 Pending Shopify approval: automatic review requests read order fulfillment details, which
                 requires Shopify&apos;s Protected Customer Data approval for this app. This section will
                 activate automatically once that&apos;s granted &mdash; manual review requests are unaffected
-                and fully available today.
+                and fully available today, including their full email schedule (see Reminder Emails below).
               </Banner>
             ) : !planIncludesAutomaticRequests ? (
               <Banner tone="info">
@@ -432,23 +432,29 @@ export default function SettingsPage() {
 
           <Section
             title="Reminder Emails"
-            description="Automatically follow up on a review request that hasn't converted yet — Reminder #1 after 3 days, a Final Reminder after 7 days. Stops immediately once a review is submitted."
+            description="The full automatic email schedule for every review request — sent whether the request was created manually or automatically above. Stops immediately once a review is submitted."
           >
+            <p className={styles.settingsGroupLabel}>Email schedule</p>
+            <p className={styles.mutedText}>Day 0 — Review request email, sent as soon as the request is created.</p>
+            <p className={styles.mutedText}>Day 3 — Reminder #1, only if no review has been submitted yet.</p>
+            <p className={styles.mutedText}>Day 7 — Final Reminder, only if no review has been submitted yet.</p>
+
             {!planIncludesEmailReminders ? (
               <Banner tone="info">
-                Reminder Emails require the Pro plan.{" "}
-                <a href="/app/billing">Upgrade to Pro</a> to turn this on.
+                Reminder Emails (Day 3 and Day 7) require the Pro plan.{" "}
+                <a href="/app/billing">Upgrade to Pro</a> to turn them on. The Day 0 review request email above
+                always sends regardless of plan.
               </Banner>
             ) : null}
             <Checkbox
-              label="Automatically send reminder emails"
+              label="Automatically send Day 3 and Day 7 reminder emails"
               checked={planIncludesEmailReminders && remindersEnabled}
               disabled={!planIncludesEmailReminders}
               onChange={setRemindersEnabled}
               helpText="Only requests sent after this is turned on are ever eligible — existing requests are never swept up retroactively."
             />
             <p className={styles.mutedText}>
-              Timing is fixed at 3 and 7 days for now. Edit the Reminder #1 and Final Reminder email content in{" "}
+              Edit the content of all three emails (Review Request, Reminder #1, Final Reminder) in{" "}
               <a href="/app/email-studio">Email Studio</a>.
             </p>
             <Button

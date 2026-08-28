@@ -1,4 +1,10 @@
-import { AiProviderError, type AiSummaryRequest, type AiSummaryResult } from "./types";
+import {
+  AiProviderError,
+  type AiBrandSuggestionRequest,
+  type AiBrandSuggestionResult,
+  type AiSummaryRequest,
+  type AiSummaryResult,
+} from "./types";
 
 const JSON_SHAPE_DESCRIPTION = `Respond with strict JSON only, matching exactly this shape (no markdown fences, no commentary outside the JSON):
 {
@@ -37,8 +43,9 @@ export function buildUserPrompt(request: AiSummaryRequest): string {
 
 // Some models wrap JSON in markdown fences or add stray text despite instructions not to
 // — this extracts the first {...} block rather than failing outright on otherwise-usable
-// output.
-function extractJsonObject(raw: string): string {
+// output. Exported for reuse by parseBrandSuggestionJson below (same defensive need, same
+// fix), not just parseAiSummaryJson.
+export function extractJsonObject(raw: string): string {
   const trimmed = raw.trim();
   const start = trimmed.indexOf("{");
   const end = trimmed.lastIndexOf("}");
@@ -75,4 +82,85 @@ export function parseAiSummaryJson(raw: string, providerName: string): Omit<AiSu
   }
 
   return { summary, positives, negatives, recommendation };
+}
+
+const BRAND_SUGGESTION_JSON_SHAPE = `Respond with strict JSON only, matching exactly this shape (no markdown fences, no commentary outside the JSON):
+{
+  "starColor": string,       // a 6-digit hex color, e.g. "#2B2B2B" — the one accent color used for star ratings
+  "scale": number,           // 0.9-1.15 — a font-size multiplier; 1 is the default/neutral size
+  "letterSpacing": string,   // exactly "tight" or "normal"
+  "rationale": string        // one short sentence explaining the choice, in plain language for a merchant
+}`;
+
+// Deliberately the narrowest possible brief — accent color + typography only, matching
+// exactly what this feature is scoped to (see AiBrandSuggestionRequest's own comment). The
+// model is explicitly told not to invent brand facts it wasn't given.
+export function buildBrandSuggestionSystemPrompt(): string {
+  return (
+    "You are a minimal, premium brand-design assistant for a Shopify reviews app. Given a " +
+    "merchant's shop name and, optionally, a brand color already detected from their Shopify " +
+    "brand settings, suggest ONE accent color (used only for star ratings) and a typography " +
+    "feel (font-size scale and letter spacing) for their review widgets. Favor calm, " +
+    "restrained, Apple-inspired choices — never a loud or saturated color, never an extreme " +
+    "scale or spacing value. If a brand color was given, your suggestion should complement or " +
+    "refine it, not replace it with something unrelated. Do not invent facts about the " +
+    "merchant or their products; base the suggestion only on the shop name and brand color " +
+    "provided. " +
+    BRAND_SUGGESTION_JSON_SHAPE
+  );
+}
+
+export function buildBrandSuggestionUserPrompt(request: AiBrandSuggestionRequest): string {
+  return (
+    `Shop name: ${request.shopName}\n` +
+    `Detected brand color: ${request.detectedColor ?? "none — no brand color configured in Shopify"}`
+  );
+}
+
+const HEX_COLOR_PATTERN = /^#[0-9a-fA-F]{6}$/;
+
+// Unlike parseAiSummaryJson, out-of-range/malformed individual fields are clamped or
+// rejected outright rather than silently substituted — a fabricated color or spacing value
+// would be worse than a clear error here (see AiProviderError usage below), matching this
+// feature's "no invented data" requirement.
+export function parseBrandSuggestionJson(
+  raw: string,
+  providerName: string,
+): Omit<AiBrandSuggestionResult, "modelUsed"> {
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(extractJsonObject(raw));
+  } catch {
+    throw new AiProviderError(`${providerName} returned a response that wasn't valid JSON.`, providerName);
+  }
+
+  if (!parsed || typeof parsed !== "object") {
+    throw new AiProviderError(`${providerName} returned an unexpected response shape.`, providerName);
+  }
+
+  const candidate = parsed as Record<string, unknown>;
+
+  const starColor = typeof candidate.starColor === "string" ? candidate.starColor.trim() : "";
+  if (!HEX_COLOR_PATTERN.test(starColor)) {
+    throw new AiProviderError(`${providerName} returned an invalid accent color.`, providerName);
+  }
+
+  const rawScale = typeof candidate.scale === "number" ? candidate.scale : Number(candidate.scale);
+  if (!Number.isFinite(rawScale)) {
+    throw new AiProviderError(`${providerName} returned an invalid typography scale.`, providerName);
+  }
+  // Clamped, not rejected — a model returning 0.87 or 1.2 is still a real, meaningful
+  // suggestion just outside the slider's bounds, not a fabrication.
+  const scale = Math.min(1.15, Math.max(0.9, rawScale));
+
+  const letterSpacing = candidate.letterSpacing === "tight" || candidate.letterSpacing === "normal"
+    ? candidate.letterSpacing
+    : null;
+  if (!letterSpacing) {
+    throw new AiProviderError(`${providerName} returned an invalid letter spacing value.`, providerName);
+  }
+
+  const rationale = typeof candidate.rationale === "string" ? candidate.rationale.trim() : "";
+
+  return { starColor, typography: { scale, letterSpacing }, rationale };
 }

@@ -225,6 +225,72 @@
 }
 
 
+/* Makes the "Apply my store branding" section read as the page's one prominent primary
+   action, not just another option in the list below it — a subtle wash of the same lime
+   accent already established for this one specific action (see the inline Button style in
+   app.appearance.tsx), not a new color or a restyle of anything else on the page. */
+.heroSection {
+  padding: var(--space-3);
+  border-radius: var(--radius-lg);
+  border: 1px solid #d8f0a0;
+  background: linear-gradient(180deg, rgba(234, 251, 178, 0.35), rgba(234, 251, 178, 0.08));
+  margin-bottom: var(--space-2);
+}
+
+.brandMatchCard {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-4);
+  flex-wrap: wrap;
+  padding: var(--space-3) var(--space-4);
+  border-radius: var(--radius-md);
+  /* Imagyn's own approved neutral surface (#F5F5F5) — this card is Imagyn admin chrome
+     around a merchant's data, not merchant-customizable storefront content. */
+  background: #f5f5f5;
+}
+
+.brandMatchPreview {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  flex-wrap: wrap;
+}
+
+.brandMatchSwatch {
+  width: 20px;
+  height: 20px;
+  border-radius: var(--radius-full);
+  border: 1px solid var(--color-border);
+  flex-shrink: 0;
+}
+
+.brandMatchLogo {
+  width: 20px;
+  height: 20px;
+  object-fit: contain;
+  border-radius: var(--radius-sm);
+  flex-shrink: 0;
+}
+
+.brandMatchDetectedTag {
+  font-size: var(--text-xs);
+  color: var(--color-text-muted);
+}
+
+.aiSuggestionActions {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  flex-wrap: wrap;
+}
+
+.aiSuggestionError {
+  margin: var(--space-2) 0 0;
+  font-size: var(--text-sm);
+  color: var(--color-danger);
+}
+
 .accentPreview {
   display: flex;
   align-items: center;

@@ -88,8 +88,8 @@ const STARTER: Permissions = {
   canUseEmailReminders: false,
   canUseAdvancedEmailStudio: false,
   canUsePhotoReviews: true,
-  // Entitlement true; video review upload itself isn't built yet (no enforcement point exists
-  // anywhere in the codebase) — plans.ts still marks this comingSoon on every tier until it is.
+  // Shipped and live-verified (2026-08-24) — reviewMedia.server.ts/shopifyFiles.server.ts.
+  // No longer "coming soon" on any plan; see plans.ts's Starter feature list.
   canUseVideoReviews: true,
   canUseAI: false,
   // Entitlement true; every plan already renders the same dashboard (app._index.tsx) — there is
@@ -121,9 +121,11 @@ const GROWTH: Permissions = {
 
 const SCALE: Permissions = {
   ...GROWTH,
-  // None of the four below have any enforcement point in the codebase yet — entitlement is
-  // true so Scale stores get them automatically the day each ships; plans.ts marks all four
-  // "Coming soon" on every pricing surface until then.
+  // canUseVideoReviews is already true via GROWTH/STARTER (shipped, not Scale-exclusive) —
+  // redundant here, kept only for readability. None of the four below it have any
+  // enforcement point in the codebase yet — entitlement is true so Scale stores get them
+  // automatically the day each ships; plans.ts marks all four "Coming soon" on every
+  // pricing surface until then.
   canUseVideoReviews: true,
   canUseWhiteLabel: true,
   canUseCustomEmailDomain: true,

@@ -205,3 +205,79 @@ describe("emailTemplateService — multiple types per store", () => {
     expect(rows[0].content).toContain("Second");
   });
 });
+
+describe("emailTemplateService.applyBrandingToAllTemplates", () => {
+  beforeEach(() => {
+    rows = [];
+    nextId = 1;
+    vi.clearAllMocks();
+  });
+
+  it("applies the same accent color and logo to all three template types", async () => {
+    await emailTemplateService.applyBrandingToAllTemplates("store_1", {
+      accentColor: "#ff6600",
+      logoUrl: "https://example.com/logo.png",
+    });
+
+    for (const type of ["review_request", "reminder_1", "reminder_final"] as const) {
+      const content = await emailTemplateService.getActiveContent("store_1", type);
+      expect(content.accentColor).toBe("#ff6600");
+      expect(content.logoUrl).toBe("https://example.com/logo.png");
+    }
+    expect(rows).toHaveLength(3);
+  });
+
+  it("preserves each template's own subject/heading/bodyText/buttonText — never overwrites copy", async () => {
+    await emailTemplateService.upsertActive("store_1", {
+      type: "review_request",
+      content: { ...getDefaultEmailTemplateContent("review_request"), subject: "Custom subject the merchant wrote" },
+    });
+
+    await emailTemplateService.applyBrandingToAllTemplates("store_1", {
+      accentColor: "#111111",
+      logoUrl: null,
+    });
+
+    const content = await emailTemplateService.getActiveContent("store_1", "review_request");
+    expect(content.subject).toBe("Custom subject the merchant wrote");
+    expect(content.accentColor).toBe("#111111");
+  });
+
+  it("applies branding to a type even if it was never customized before (uses that type's own defaults as the base)", async () => {
+    const before = await emailTemplateService.getActiveContent("store_1", "reminder_final");
+    expect(before).toEqual(getDefaultEmailTemplateContent("reminder_final"));
+
+    await emailTemplateService.applyBrandingToAllTemplates("store_1", {
+      accentColor: "#00ff00",
+      logoUrl: null,
+    });
+
+    const after = await emailTemplateService.getActiveContent("store_1", "reminder_final");
+    expect(after.accentColor).toBe("#00ff00");
+    expect(after.heading).toBe(getDefaultEmailTemplateContent("reminder_final").heading);
+  });
+
+  it("accepts a null logoUrl (clears the logo) without error", async () => {
+    await emailTemplateService.upsertActive("store_1", {
+      type: "review_request",
+      content: { ...getDefaultEmailTemplateContent("review_request"), logoUrl: "https://example.com/old-logo.png" },
+    });
+
+    await emailTemplateService.applyBrandingToAllTemplates("store_1", { accentColor: "#123456", logoUrl: null });
+
+    expect((await emailTemplateService.getActiveContent("store_1", "review_request")).logoUrl).toBeNull();
+  });
+
+  it("is store-scoped — applying branding for one store never touches another store's templates", async () => {
+    await emailTemplateService.upsertActive("store_2", {
+      type: "review_request",
+      content: { ...getDefaultEmailTemplateContent("review_request"), subject: "Store 2's own subject" },
+    });
+
+    await emailTemplateService.applyBrandingToAllTemplates("store_1", { accentColor: "#abcdef", logoUrl: null });
+
+    const store2Content = await emailTemplateService.getActiveContent("store_2", "review_request");
+    expect(store2Content.subject).toBe("Store 2's own subject");
+    expect(store2Content.accentColor).not.toBe("#abcdef");
+  });
+});

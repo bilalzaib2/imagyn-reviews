@@ -1,6 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
-  Link,
   useFetcher,
   useLoaderData,
   useLocation,
@@ -355,10 +354,22 @@ export default function ProductsPage() {
     setSearchParams(next);
   };
 
+  // A plain react-router <Link> here never navigates: its onClick always calls
+  // event.preventDefault() and performs its own client-side transition directly, bypassing
+  // the anchor's native click entirely. That's the problem — @shopify/shopify-app-react-
+  // router's own AppProvider (see AppProvider.mjs) mounts the real App Bridge script and
+  // wires up navigation through it: App Bridge intercepts the native click on an <a href>,
+  // then dispatches a "shopify:navigate" DOM event carrying that href, which AppProvider's
+  // own listener turns into the actual navigate() call. A `navigate()` called directly from
+  // a custom onClick (confirmed live, with or without preventDefault) never updates the URL
+  // — App Bridge owns navigation in this embedded context, so the fix is a genuine `<a href>`
+  // with no competing onClick, letting App Bridge's own click interception do its job
+  // unimpeded, exactly like every other embedded-app link in this codebase already relies on
+  // implicitly (this cell was the only place rendering a react-router <Link> instead).
   const rows = products.map((product: ProductListItem) => [
-    <Link
+    <a
       key={`${product.id}-image`}
-      to={`/app/products/${product.id}${location.search}`}
+      href={`/app/products/${product.id}${location.search}`}
       className={styles.productCell}
     >
       {product.featuredImage ? (
@@ -370,7 +381,7 @@ export default function ProductsPage() {
         <span className={styles.productName}>{product.name}</span>
         {product.vendor ? <span className={styles.productVendor}>{product.vendor}</span> : null}
       </div>
-    </Link>,
+    </a>,
     product.handle ?? "-",
     product.productType || "-",
     <Badge key={`${product.id}-status`} tone={statusToneFor(product.status)}>

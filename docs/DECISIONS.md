@@ -399,3 +399,35 @@
     `delimitedParser.server.ts` the way Judge.me does — it needs its own `Importer`
     implementation). Both are additive: neither requires touching `ProductMatcher`,
     `provider.server.ts`'s factory shape, or anything already shipped here.
+
+## One-Click Branding: Brand Match removed, no reliable Shopify detection source exists (2026-08-25)
+
+-   **Root cause:** `brandMatch.server.ts` queried `shop { brand { colors { primary { ... } }
+    logo { image { url } } } } }` on the Admin GraphQL API, expecting to read a merchant's
+    brand color/logo directly from Shopify. Confirmed via live schema introspection (Admin
+    API 2026-07) that **`Shop.brand` does not exist** — the query always threw
+    `GraphqlQueryError: Field 'brand' doesn't exist on type 'Shop'`, silently caught, and
+    always degraded to the empty state. Brand Match never worked, for any merchant, at any
+    point — its own unit tests never caught this because they mock `admin.graphql()`
+    directly rather than validating against Shopify's real schema.
+-   **Investigated and ruled out:** (1) No other `Shop` field exposes brand color/logo — the
+    full field list was inspected directly, nothing else is a candidate. (2) `read_themes` +
+    reading a theme's `settings_data.json` `Asset` could surface *a* color a merchant set in
+    their theme customizer, but the app holds no `read_themes` scope today (see
+    `widgetInstallDetection.server.ts` — same conclusion reached independently for widget
+    install detection), and even with the scope, extraction isn't reliable/universal: every
+    theme's settings schema is different, so this would be a guess dressed up as detection —
+    exactly what this feature must not do. Not adding the scope; not implementing this path.
+    (3) Scraping the live storefront's rendered HTML/CSS (the technique
+    `widgetInstallDetection.server.ts` legitimately uses for known DOM markers) does not
+    generalize to "infer this arbitrary theme's brand color" — valid for a yes/no marker
+    check, not for color/typography extraction.
+-   **Decision:** `brandMatch.server.ts` and its tests were deleted outright (nothing to
+    "fix" — the field it depends on doesn't exist). One-Click Branding's primary action
+    (`app.appearance.tsx`'s "Apply to email templates" / the `applyEmailBranding` action
+    intent) now sources from the merchant's own already-saved Imagyn brand settings (Accent
+    Color + Logo, the same fields the manual Colors/Branding sections below it write to) and
+    pushes them into all three email templates (`emailTemplateService
+    .applyBrandingToAllTemplates`, unchanged). This keeps the one-button action fully
+    functional without any invented or unreliable Shopify API, and without a fake
+    "detected" state.

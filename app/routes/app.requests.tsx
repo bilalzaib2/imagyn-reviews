@@ -1412,6 +1412,19 @@ export default function RequestsPage() {
                               <span className={styles.detailScheduleLabel}>Created</span>
                               <span className={styles.detailValue}>{formatDateTime(selectedRequest.createdAt)}</span>
                             </div>
+                            {/* reminder1SentAt/reminderFinalSentAt (see review-request.server.ts) —
+                                null until that specific reminder actually sends, independent of
+                                whether a review was ever submitted, so "-" here can mean either
+                                "not due yet" or "reminders are off for this store," not just
+                                "hasn't happened." */}
+                            <div className={styles.detailScheduleItem}>
+                              <span className={styles.detailScheduleLabel}>Reminder #1</span>
+                              <span className={styles.detailValue}>{formatDateTime(selectedRequest.reminder1SentAt)}</span>
+                            </div>
+                            <div className={styles.detailScheduleItem}>
+                              <span className={styles.detailScheduleLabel}>Final Reminder</span>
+                              <span className={styles.detailValue}>{formatDateTime(selectedRequest.reminderFinalSentAt)}</span>
+                            </div>
                           </div>
                         </div>
 

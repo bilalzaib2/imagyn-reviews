@@ -56,7 +56,7 @@ export const PLANS: Record<PlanId, Plan> = {
       { label: "Automated initial review-request emails" },
       { label: "Email Studio — customize your review-request email" },
       { label: "Photo reviews" },
-      { label: "Video reviews", comingSoon: true },
+      { label: "Video reviews" },
       { label: "Review widgets & rating badges" },
       { label: "Moderation & merchant replies" },
       { label: "Unlimited CSV imports" },

@@ -262,7 +262,7 @@ export async function syncAllProducts(
 }
 
 // Unbounded on purpose — every existing caller (the manual-review product picker on
-// app.reviews.new.tsx/app.reviews.$id.edit.tsx, and productMatcher.server.ts's Judge.me
+// app.reviews_.new.tsx/app.reviews_.$id.edit.tsx, and productMatcher.server.ts's Judge.me
 // import matching, which needs the *entire* catalog loaded once to build its in-memory
 // lookup maps) genuinely needs the full list, not a page of it. Do not add pagination here —
 // see getProductsPage below for the Products admin page's own, separate, paginated query.

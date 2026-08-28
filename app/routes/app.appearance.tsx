@@ -12,6 +12,8 @@ import { authenticateAdminDeduped } from "../services/auth-dedupe.server";
 import { getOrCreateStore } from "../services/store.server";
 import { appearanceService, type AppearanceRecord } from "../services/appearance.server";
 import { appearancePresets, type AppearancePresetDefinition } from "../services/appearance.presets";
+import { generateAiBrandSuggestion, type BrandSuggestion } from "../services/brandSuggestion.server";
+import { emailTemplateService } from "../services/emailTemplate.server";
 import { assertPermission, getStorePermissions } from "../services/permissions";
 import {
   getDefaultAppearanceTokens,
@@ -25,9 +27,9 @@ import styles from "../styles/app.appearance.module.css";
 type LoaderData = {
   tokens: AppearanceTokens;
   preset: AppearancePreset;
-  // Gates only the Advanced section and Saved Themes below — every other control on this
-  // page (presets, colors, typography, logo, layout basics, live preview, reset) is Free.
-  // See permissions.ts's canUseBrandStudio; unchanged flag, narrower meaning.
+  // Gates the Advanced section, Saved Themes, and One-Click Branding below — every other
+  // control on this page (presets, colors, typography, logo, layout basics, live preview,
+  // reset) is Free. See permissions.ts's canUseBrandStudio.
   canUseBrandStudio: boolean;
   savedThemes: AppearanceRecord[];
 };
@@ -37,6 +39,8 @@ type ActionData =
   | { ok: true; intent: "reset"; tokens: AppearanceTokens; preset: AppearancePreset }
   | { ok: true; intent: "createTheme" }
   | { ok: true; intent: "setActiveTheme"; tokens: AppearanceTokens; preset: AppearancePreset }
+  | { ok: true; intent: "aiSuggestBrand"; suggestion: BrandSuggestion }
+  | { ok: true; intent: "applyEmailBranding" }
   | { ok: false; intent: string; error: string };
 
 export const loader = async ({ request }: LoaderFunctionArgs): Promise<LoaderData> => {
@@ -84,6 +88,7 @@ export const action = async ({ request }: ActionFunctionArgs): Promise<ActionDat
           };
 
       await appearanceService.upsertActive(store.id, { tokens: safeTokens, preset });
+
       return { ok: true, intent: "save" };
     }
 
@@ -115,6 +120,42 @@ export const action = async ({ request }: ActionFunctionArgs): Promise<ActionDat
       }
       const activated = await appearanceService.setActive(store.id, themeId);
       return { ok: true, intent: "setActiveTheme", tokens: activated.tokens, preset: activated.preset };
+    }
+
+    if (intent === "aiSuggestBrand") {
+      // Same Brand Studio gate as Brand Match — this is a paid-tier capability, not core
+      // widget editing.
+      assertPermission(permissions, "canUseBrandStudio", "AI brand suggestions require the Pro plan.", "growth");
+
+      // Sent by the client rather than re-fetched here — the loader already fetched Brand
+      // Match once for the page; re-querying Shopify's Brand API on every suggestion click
+      // would be a duplicate GraphQL request for data the client already has.
+      const detectedColor = String(formData.get("detectedColor") || "").trim() || null;
+      const suggestion = await generateAiBrandSuggestion({ shopName: store.name, detectedColor });
+      return { ok: true, intent: "aiSuggestBrand", suggestion };
+    }
+
+    if (intent === "applyEmailBranding") {
+      // One-Click Branding: Shopify's Admin API exposes no reliable, universal way to detect
+      // a merchant's brand color/logo (there is no `Shop.brand` field — confirmed against the
+      // live schema; see docs/DECISIONS.md), so this reads the merchant's own already-saved
+      // Imagyn brand settings (Accent Color + Logo, configured further down this same page)
+      // and pushes them into Email Studio's three templates. Reads the ACTIVE record, not an
+      // unsaved draft, so this never applies a color/logo the merchant hasn't actually saved.
+      assertPermission(
+        permissions,
+        "canUseBrandStudio",
+        "Applying your brand to email templates requires the Pro plan.",
+        "growth",
+      );
+
+      const active = await appearanceService.getActive(store.id);
+      const tokens = active?.tokens ?? getDefaultAppearanceTokens();
+      await emailTemplateService.applyBrandingToAllTemplates(store.id, {
+        accentColor: tokens.colors.starColor,
+        logoUrl: tokens.images.logoUrl,
+      });
+      return { ok: true, intent: "applyEmailBranding" };
     }
 
     return { ok: false, intent, error: "Unsupported action." };
@@ -181,8 +222,12 @@ export default function AppearancePage() {
   const revalidator = useRevalidator();
   const fetcher = useFetcher<ActionData>();
   const themeFetcher = useFetcher<ActionData>();
+  const aiSuggestFetcher = useFetcher<ActionData>();
+  const emailBrandFetcher = useFetcher<ActionData>();
   const isSaving = fetcher.state !== "idle";
   const isThemeBusy = themeFetcher.state !== "idle";
+  const isAiSuggesting = aiSuggestFetcher.state !== "idle";
+  const isApplyingEmailBranding = emailBrandFetcher.state !== "idle";
 
   const [draftTokens, setDraftTokens] = useState<AppearanceTokens>(initialTokens);
   const [baselineTokens, setBaselineTokens] = useState<AppearanceTokens>(initialTokens);
@@ -190,6 +235,8 @@ export default function AppearancePage() {
   const [toastState, setToastState] = useState<{ content: string; error?: boolean } | null>(null);
   const [previewMode, setPreviewMode] = useState<PreviewMode>("desktop");
   const [newThemeName, setNewThemeName] = useState("");
+  const [aiSuggestion, setAiSuggestion] = useState<BrandSuggestion | null>(null);
+  const [aiSuggestError, setAiSuggestError] = useState<string | null>(null);
 
   const previewFrameRef = useRef<HTMLIFrameElement>(null);
 
@@ -246,6 +293,34 @@ export default function AppearancePage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [themeFetcher.data]);
 
+  useEffect(() => {
+    if (!aiSuggestFetcher.data) return;
+    if (!aiSuggestFetcher.data.ok) {
+      setAiSuggestError(aiSuggestFetcher.data.error);
+      return;
+    }
+    if (aiSuggestFetcher.data.intent === "aiSuggestBrand") {
+      setAiSuggestError(null);
+      setAiSuggestion(aiSuggestFetcher.data.suggestion);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [aiSuggestFetcher.data]);
+
+  useEffect(() => {
+    if (!emailBrandFetcher.data) return;
+    if (!emailBrandFetcher.data.ok) {
+      setToastState({ content: emailBrandFetcher.data.error, error: true });
+      return;
+    }
+    if (emailBrandFetcher.data.intent === "applyEmailBranding") {
+      setToastState({
+        content:
+          "Applied your current brand color and logo to all email templates (Review Request, Reminder #1, Final Reminder).",
+      });
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [emailBrandFetcher.data]);
+
   const update = <C extends keyof AppearanceTokens>(category: C, patch: Partial<AppearanceTokens[C]>) => {
     setPreset("custom");
     setDraftTokens((current) => ({ ...current, [category]: { ...current[category], ...patch } }));
@@ -260,6 +335,43 @@ export default function AppearancePage() {
     if (definition.tokens) {
       setDraftTokens((current) => mergeAppearanceTokens(definition.tokens, current));
     }
+  };
+
+  // One-Click Branding: no external "detected" source exists (Shopify's Admin API has no
+  // reliable, universal way to read a merchant's brand color/logo — see the action's
+  // applyEmailBranding intent), so this pushes the merchant's own already-saved Imagyn brand
+  // settings (Accent Color + Logo, configured further down this page) into Email Studio's
+  // three templates. Independent of the Save button/draft state on purpose — always a single
+  // click, and never applies an unsaved edit.
+  const handleApplyEmailBranding = () => {
+    const formData = new FormData();
+    formData.append("_intent", "applyEmailBranding");
+    emailBrandFetcher.submit(formData, { method: "post" });
+  };
+
+  const handleRequestAiSuggestion = () => {
+    setAiSuggestError(null);
+    const formData = new FormData();
+    formData.append("_intent", "aiSuggestBrand");
+    aiSuggestFetcher.submit(formData, { method: "post" });
+  };
+
+  // Same "instant local draft update, nothing persisted until Save" contract as
+  // handleApplyBrandMatch above — an AI suggestion is just a different source for a partial
+  // token update (colors.starColor + typography), never a different mechanism.
+  const handleApplyAiSuggestion = () => {
+    if (!aiSuggestion) return;
+    setPreset("custom");
+    setDraftTokens((current) => ({
+      ...current,
+      colors: { ...current.colors, starColor: aiSuggestion.starColor },
+      typography: {
+        ...current.typography,
+        scale: aiSuggestion.typography.scale,
+        letterSpacing: aiSuggestion.typography.letterSpacing,
+      },
+    }));
+    setToastState({ content: "Applied the AI suggestion — review the preview, then Save to publish." });
   };
 
   const handleSave = () => {
@@ -315,6 +427,115 @@ export default function AppearancePage() {
 
           <div className={styles.layout}>
             <div className={styles.settingsColumn}>
+              <GroupLabel>One-Click Branding</GroupLabel>
+
+              {canUseBrandStudio ? (
+                <>
+                <div className={styles.heroSection}>
+                <Section
+                  title="Apply my brand to my emails"
+                  description="Uses your current Imagyn brand settings below (Accent Color and Logo) — applies them to your Review Request, Reminder #1, and Final Reminder email templates in one click."
+                >
+                  <div className={styles.brandMatchCard}>
+                    <div className={styles.brandMatchPreview}>
+                      <span
+                        className={styles.brandMatchSwatch}
+                        style={{ background: toDisplayHex(draftTokens.colors.starColor) }}
+                        aria-hidden="true"
+                      />
+                      {draftTokens.images.logoUrl ? (
+                        <img
+                          className={styles.brandMatchLogo}
+                          src={draftTokens.images.logoUrl}
+                          alt=""
+                          aria-hidden="true"
+                        />
+                      ) : null}
+                      <span className={styles.brandMatchDetectedTag}>Your current brand settings</span>
+                    </div>
+                    <Button
+                      type="button"
+                      variant="primary"
+                      // Imagyn's own brand accent for this one specific moment (a genuinely
+                      // new capability's primary action) — inline, not a Button variant,
+                      // since every other primary action on this page and across the app
+                      // stays on the shared black `--color-accent` (see button.module.css);
+                      // this isn't a global restyle. Kept as the sole place lime appears in
+                      // Brand Studio, per "use selectively, don't force it everywhere."
+                      style={{ background: "#EAFBB2", color: "#000000", borderColor: "#EAFBB2" }}
+                      onClick={handleApplyEmailBranding}
+                      disabled={isApplyingEmailBranding}
+                    >
+                      {isApplyingEmailBranding ? "Applying…" : "Apply to email templates"}
+                    </Button>
+                    {hasUnsavedChanges ? (
+                      <p className={styles.mutedHint}>
+                        You have unsaved color/logo changes below — Save them first so your email templates match
+                        what you see here.
+                      </p>
+                    ) : null}
+                  </div>
+                </Section>
+                </div>
+
+                {/* A separate, optional action from Brand Match above — not a replacement for
+                    it. Deliberately narrow: only colors.starColor + typography, never card
+                    style/spacing/logo/full token generation (see brandSuggestion.server.ts). */}
+                <Section
+                  title="AI Suggestion"
+                  description="Let AI suggest an accent color and typography feel for your reviews."
+                >
+                  {aiSuggestion ? (
+                    <div className={styles.brandMatchCard}>
+                      <div className={styles.brandMatchPreview}>
+                        <span
+                          className={styles.brandMatchSwatch}
+                          style={{ background: aiSuggestion.starColor }}
+                          aria-hidden="true"
+                        />
+                        <span className={styles.brandMatchDetectedTag}>
+                          {aiSuggestion.rationale || "AI-suggested accent color and typography"}
+                        </span>
+                      </div>
+                      <div className={styles.aiSuggestionActions}>
+                        <Button
+                          type="button"
+                          variant="primary"
+                          style={{ background: "#EAFBB2", color: "#000000", borderColor: "#EAFBB2" }}
+                          onClick={handleApplyAiSuggestion}
+                        >
+                          Apply suggestion
+                        </Button>
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          onClick={handleRequestAiSuggestion}
+                          disabled={isAiSuggesting}
+                        >
+                          {isAiSuggesting ? "Thinking…" : "Try another"}
+                        </Button>
+                      </div>
+                    </div>
+                  ) : (
+                    <>
+                      <Button type="button" onClick={handleRequestAiSuggestion} disabled={isAiSuggesting}>
+                        {isAiSuggesting ? "Thinking…" : "Suggest with AI"}
+                      </Button>
+                      {aiSuggestError ? <p className={styles.aiSuggestionError}>{aiSuggestError}</p> : null}
+                    </>
+                  )}
+                </Section>
+                </>
+              ) : (
+                <UpgradePrompt
+                  feature="Brand Match"
+                  description="Pull your primary color and logo straight from Shopify's own Brand settings and apply them to your reviews in one click."
+                  benefit="Growth and above include Brand Match on top of everything in Free Brand Studio."
+                  requiredPlanName="Pro"
+                  billingHref={`/app/billing${location.search}`}
+                />
+              )}
+
               <GroupLabel>Style</GroupLabel>
 
               <Section title="Widget Style" description="Start from a look, then fine-tune anything below.">

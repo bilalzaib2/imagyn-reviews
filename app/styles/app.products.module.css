@@ -88,6 +88,12 @@
   text-decoration: none;
   color: inherit;
   border-radius: var(--radius-sm);
+  cursor: pointer;
+}
+
+.productCell:focus-visible {
+  outline: 2px solid var(--color-accent, #000);
+  outline-offset: 2px;
 }
 
 .productCell:hover .productName {

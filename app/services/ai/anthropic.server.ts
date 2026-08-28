@@ -1,5 +1,19 @@
-import { AiProviderError, type AiProvider, type AiSummaryRequest, type AiSummaryResult } from "./types";
-import { buildSystemPrompt, buildUserPrompt, parseAiSummaryJson } from "./shared";
+import {
+  AiProviderError,
+  type AiBrandSuggestionRequest,
+  type AiBrandSuggestionResult,
+  type AiProvider,
+  type AiSummaryRequest,
+  type AiSummaryResult,
+} from "./types";
+import {
+  buildBrandSuggestionSystemPrompt,
+  buildBrandSuggestionUserPrompt,
+  buildSystemPrompt,
+  buildUserPrompt,
+  parseAiSummaryJson,
+  parseBrandSuggestionJson,
+} from "./shared";
 
 // A real, current Anthropic model as of this integration — overridable via
 // ANTHROPIC_MODEL without a code change.
@@ -55,6 +69,55 @@ export function createAnthropicProvider(): AiProvider {
       }
 
       const parsed = parseAiSummaryJson(textBlock.text, "anthropic");
+      return { ...parsed, modelUsed: data.model || model };
+    },
+
+    async generateBrandSuggestion(request: AiBrandSuggestionRequest): Promise<AiBrandSuggestionResult> {
+      const apiKey = process.env.ANTHROPIC_API_KEY;
+      if (!apiKey) {
+        throw new AiProviderError(
+          "ANTHROPIC_API_KEY is not configured. Set it in the environment to enable AI brand suggestions.",
+          "anthropic",
+        );
+      }
+
+      const model = process.env.ANTHROPIC_MODEL || DEFAULT_MODEL;
+
+      const response = await fetch("https://api.anthropic.com/v1/messages", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "x-api-key": apiKey,
+          "anthropic-version": ANTHROPIC_VERSION,
+        },
+        body: JSON.stringify({
+          model,
+          max_tokens: 512,
+          temperature: 0.5,
+          system: buildBrandSuggestionSystemPrompt(),
+          messages: [{ role: "user", content: buildBrandSuggestionUserPrompt(request) }],
+        }),
+      });
+
+      if (!response.ok) {
+        const errorText = await response.text().catch(() => "");
+        throw new AiProviderError(
+          `Anthropic request failed (${response.status}): ${errorText.slice(0, 300)}`,
+          "anthropic",
+        );
+      }
+
+      const data = (await response.json()) as {
+        model?: string;
+        content?: Array<{ type: string; text?: string }>;
+      };
+
+      const textBlock = data.content?.find((block) => block.type === "text");
+      if (!textBlock?.text) {
+        throw new AiProviderError("Anthropic response did not include any text content.", "anthropic");
+      }
+
+      const parsed = parseBrandSuggestionJson(textBlock.text, "anthropic");
       return { ...parsed, modelUsed: data.model || model };
     },
   };
