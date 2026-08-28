@@ -375,7 +375,7 @@ describe("getEarnedMedalsForStorefront", () => {
 
     const medals = await getEarnedMedalsForStorefront("store_1");
 
-    expect(Object.keys(medals[0]).sort()).toEqual(["category", "description", "earnedAt", "key", "name"].sort());
+    expect(Object.keys(medals[0]).sort()).toEqual(["category", "description", "earnedAt", "key", "name", "tier"].sort());
   });
 
   it("never fabricates a medal for a key that no longer has a real definition", async () => {

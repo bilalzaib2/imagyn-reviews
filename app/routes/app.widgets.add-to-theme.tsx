@@ -29,6 +29,9 @@ const ALLOWED_BLOCKS: Record<string, { template: "product" | "collection" | "ind
   // Store-wide, not per-product — opens on the homepage template, matching this block's
   // own default placement ("homepage-featured" in widget.shared.ts's defaultSettingsByType).
   review_carousel: { template: "index", kind: "section" },
+  // Same reasoning as review_carousel above — store-wide, section-target, typically
+  // homepage-placed.
+  medals_showcase: { template: "index", kind: "section" },
 };
 
 export const loader = async ({ request }: LoaderFunctionArgs) => {

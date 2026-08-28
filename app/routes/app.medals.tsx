@@ -56,7 +56,7 @@ function MedalCard({ status }: { status: AchievementStatus }) {
 
   return (
     <Card className={`${styles.medalCard} ${status.unlocked ? styles.medalCardUnlocked : ""}`}>
-      <Medallion category={status.category} unlocked={status.unlocked} />
+      <Medallion category={status.category} unlocked={status.unlocked} tier={status.tier} size={64} />
       <div className={styles.medalBody}>
         <p className={styles.medalName}>{status.name}</p>
         <p className={styles.medalDescription}>{status.description}</p>

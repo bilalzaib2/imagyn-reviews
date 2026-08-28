@@ -354,6 +354,10 @@ export interface StorefrontMedal {
   name: string;
   description: string;
   category: AchievementDefinition["category"];
+  /** Drives which brushed-metal finish the storefront medallion renders (see
+   *  Medallion.tsx/medals-showcase.js's FINISH_BY_TIER) — purely presentational, not a new
+   *  field on the Achievement ledger itself. */
+  tier: number;
   earnedAt: string;
 }
 
@@ -397,6 +401,7 @@ export async function getEarnedMedalsForStorefront(storeId: string): Promise<Sto
       name: definition.name,
       description: definition.description,
       category: definition.category,
+      tier: definition.tier,
       earnedAt: earnedAt.toISOString(),
     }));
 }

@@ -681,3 +681,26 @@
   font-size: 0.65rem;
   opacity: 0.6;
 }
+
+/* Medals Showcase thumbnail — three real Medallion instances (one per finish tier), laid
+   out as a compact row rather than the full storefront grid, matching every other
+   "theme-editor" card's smaller single-row preview convention. */
+.medalsShowcasePreviewRow {
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+  gap: var(--space-5);
+}
+
+.medalsShowcasePreviewItem {
+  display: grid;
+  justify-items: center;
+  gap: var(--space-1);
+  max-width: 5.5rem;
+}
+
+.medalsShowcasePreviewName {
+  font-size: 0.65rem;
+  color: var(--color-text-muted);
+  text-align: center;
+}

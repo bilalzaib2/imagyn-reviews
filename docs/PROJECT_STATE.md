@@ -4,7 +4,9 @@
 
 Live in production, one real merchant on the app. Finishing sprint checkpoint committed and
 deployed (`d6231e4`). Premium UI/UX Redesign (all 10 core sections) is complete, passed a
-final production-safety review, and has been committed/pushed to `main`.
+final production-safety review, and is committed and live in production (`fec41f5`).
+Separately, the new "Medals Showcase" homepage widget block (not part of the redesign pass)
+is now also complete and ready to ship — see its own section below.
 
 ## Final Production Safety Review (2026-08-29)
 
@@ -34,6 +36,93 @@ live corroboration walkthrough (delegated to a fork) across the whole app + stor
   one local-state toggle click only — no form submissions, no vote clicks, nothing saved).
 - **Verdict: safe to commit.** Nothing found that blocks approval. Waiting on Bilal's
   explicit go-ahead before staging/committing/pushing.
+
+## Medals Showcase — new feature (DONE ✓, 2026-08-29)
+
+Not part of the redesign pass. Bilal asked for a new homepage-placeable widget block
+showing earned achievement medals as realistic brushed-metal medallions (reference:
+physical commemorative-medal photography — circular metal disc, engraved/embossed detail,
+edge bevel, material depth — explicitly NOT game-achievement/trophy-icon styling). Also
+applies to the admin Medals page for visual consistency, per Bilal's choice. Scope
+confirmed with Bilal via two decisions: (1) update the admin Medals page too, not just the
+new storefront widget: yes. (2) show all earned medals on the new widget (no
+merchant-configurable count/limit): yes.
+
+Explicitly preserved, unchanged: the Achievement database model/schema, the earning/
+evaluation logic (`achievements.server.ts`'s `evaluateAchievements`), and the existing
+small quiet-pill medal display already shown next to reviewer content inside the Product
+Reviews Widget (`imagyn-component-medals.css`) — that was a separate, deliberately
+restrained design decision and stays exactly as-is; this is an additional, more prominent
+surface, not a replacement.
+
+Design: four brushed-metal finishes (pewter/silver/graphite/onyx), one per achievement
+tier — a lightness progression standing in for a real medal's bronze/silver/gold ladder,
+kept strictly monochrome (no added hue anywhere) to match Imagyn's brand restraint. Tier 4
+("onyx") bottoms out at `#0d0e0f`, the exact near-black of the brand mark itself
+(`public/assets/imagyn-app-logo.svg`). Each medallion is a beveled disc (radial-gradient
+face + linear-gradient rim), an engraved groove near the rim, and a 3-layer emboss for the
+category glyph (dark multiply copy + light screen copy + true-position base) — flat SVG
+shapes only, no filters, so it stays crisp and cheap even very small. Implemented once in
+React (`app/components/medals/Medallion.tsx`, admin) and mirrored in vanilla JS
+(`extensions/imagyn-review-widgets/assets/medals-showcase.js`, storefront) since the two
+run in separate bundles — both files cross-reference each other in comments to stay in
+sync.
+
+Files so far: `app/components/medals/Medallion.tsx` (rewritten), `medallion.module.css`
+(rewritten), `app/routes/app.medals.tsx` (passes `tier` through), `achievements.server.ts`
+(+`tier` field on the already-existing `StorefrontMedal` read-only DTO — no schema/earning
+logic change), `achievements.server.test.ts` (updated field-shape assertion), new
+`app/routes/api.reviews.medals.tsx` (read-only store-wide proxy endpoint, mirrors
+`api.reviews.featured.tsx`'s exact pattern), new `extensions/imagyn-review-widgets/blocks/
+medals_showcase.liquid`, new `medals-showcase.js`, new
+`imagyn-component-medals-showcase.css`. Also registered the new block in the admin Widgets
+gallery (`app.widgets.tsx` — new card + `MedalsShowcaseThumbnailPreview` using the real
+`Medallion` component; `app.widgets.module.css`), install detection
+(`widgetInstallDetection.server.ts` — new `"medals-showcase"` key, `resolveHomepageOnlyWidget`
+generalized to take its "not on homepage" reason as a parameter instead of a hardcoded
+Review-Carousel-specific string), and the add-to-theme allow-list
+(`app.widgets.add-to-theme.tsx`).
+
+**A real bug was found and fixed during live verification** (not caught by typecheck/tests,
+only by looking at the actual rendered result): the per-finish CSS blocks in
+`medallion.module.css` set `.medallionGlyphBase, .medallionGlyphStrokeBase { fill: X; stroke:
+X; }` as one combined rule. `.medallionGlyphStrokeBase` is used on the Ranking category's
+hollow outer-ring circle (`fill="none"` in the JSX) — the CSS class's `fill: X` declaration,
+being more specific than the base rule's `fill: none`, silently overrode the JSX attribute
+and filled that "ring" solid, ballooning it into a giant filled blob that swallowed the small
+center dot. Confirmed live (inspecting the rendered circle's actual computed `fill`) before
+fixing — split into two separate rules per finish (`.medallionGlyphBase { fill: X }` and
+`.medallionGlyphStrokeBase { fill: none; stroke: X }`) so the hollow ring stays hollow. Also
+added `isolation: isolate` to `.medallion` as a defensive fix for the emboss effect's
+`mix-blend-mode` (multiply/screen) — confirmed via testing this wasn't actually the cause of
+the ring bug, but is still correct/necessary to keep each medallion's blend scoped to its own
+face when several render together (this gallery card, or the storefront showcase grid),
+mirrored in `medals-showcase.js` via inline `style="isolation:isolate"`. Also fixed a
+legibility issue from an earlier local-only check: initial glyph colors matched each finish's
+own face tone too closely (looked great large, nearly vanished at 24px, and made the Trust
+shield read as a solid blob) — changed to a deliberate contrast tone per finish (dark glyph on
+light finishes, light glyph on dark finishes, still strictly grayscale).
+
+Typecheck clean, 297/297 tests passing, build succeeds. Live-verified in the real embedded
+admin (verveonline.myshopify.com): admin Medals page shows a real unlocked pewter medal
+(clear checkmark, correct bevel/gradient) alongside correctly-unchanged locked medals; Widgets
+gallery shows the new "Medals Showcase" card with an honest "AVAILABLE" status (this store has
+storefront password protection on, so live detection correctly reports "can't be checked
+automatically" rather than guessing) and all three preview medallions (silver checkmark,
+graphite shield, pewter ring) rendering correctly and distinctly at real size after the fix.
+
+**Storefront route confirmed live, full visual placement still pending Bilal's go-ahead.**
+Hit the new `/apps/reviews/medals` endpoint directly through Shopify's real App Proxy
+(unauthenticated `curl`, no browser) — it returns the identical 302-to-`/password` response as
+the already-shipped, already-proven `/apps/reviews/featured` (Review Carousel) endpoint on this
+same store, confirming the new route is correctly wired into the App Proxy and behaves exactly
+like a working sibling endpoint under this store's real (password-protected) conditions — this
+password gate is a pre-existing property of this dev store, not something new to this feature.
+Actually placing the block on the theme to see it rendered pixel-for-pixel (via "Open Theme
+Editor") was attempted and correctly blocked by this environment's own safety guardrails: doing
+so — even unsaved, even on a test store — modifies the merchant's live theme configuration, which
+requires Bilal's explicit request, not just a verification instruction. Left for Bilal to do
+himself, or to explicitly authorize, rather than done autonomously.
 
 ## Premium UI/UX Redesign Roadmap
 

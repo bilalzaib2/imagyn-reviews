@@ -1,0 +1,33 @@
+{{ 'imagyn-tokens.css' | asset_url | stylesheet_tag }}
+{{ 'imagyn-typography.css' | asset_url | stylesheet_tag }}
+{{ 'imagyn-utilities.css' | asset_url | stylesheet_tag }}
+{{ 'imagyn-component-medals-showcase.css' | asset_url | stylesheet_tag }}
+
+{% comment %}
+  Store-wide (not per-product) — real, currently-earned achievements only, sourced from
+  app/routes/api.reviews.medals.tsx (never fabricated, never a placeholder/locked state on
+  the storefront — see achievements.server.ts's getEarnedMedalsForStorefront). Distinct from
+  the small quiet-pill medal row already shown inside the Product Reviews Widget next to
+  reviewer content (imagyn-component-medals.css) — this block is a deliberately more
+  prominent, homepage-scale showcase a merchant places on purpose, the same way Review
+  Carousel is. Colors/typography/spacing come from the same centralized Appearance System
+  (Brand Studio) every other Imagyn widget on this storefront already uses.
+{% endcomment %}
+<div
+  class="imagyn-medals-showcase"
+  data-imagyn-medals-showcase
+  data-heading="{{ block.settings.heading }}"
+></div>
+
+<script src="{{ 'imagyn-appearance.js' | asset_url }}" defer></script>
+<script src="{{ 'medals-showcase.js' | asset_url }}" defer></script>
+
+{% schema %}
+{
+  "name": "Medals Showcase",
+  "target": "section",
+  "settings": [
+    { "type": "text", "id": "heading", "label": "Heading", "default": "Achievements we've earned" }
+  ]
+}
+{% endschema %}

@@ -1,0 +1,100 @@
+/*
+ * Imagyn Reviews — Medals Showcase component.
+ *
+ * A store-wide (not per-product) homepage section showing a merchant's currently-earned
+ * achievements as realistic brushed-metal medallions — distinct from the small quiet-pill
+ * medal row already shown inside the Product Reviews Widget next to reviewer content
+ * (imagyn-component-medals.css), which stays untouched. This block is a deliberately more
+ * prominent showcase a merchant places on purpose, same as Review Carousel.
+ *
+ * Load imagyn-tokens.css, imagyn-typography.css, and imagyn-utilities.css before this file.
+ */
+
+.imagyn-medals-showcase {
+  display: grid;
+  gap: var(--imagyn-space-px-md, 16px);
+  font-family: var(--imagyn-font-family);
+  color: var(--imagyn-color-text, inherit);
+  width: 100%;
+  max-width: var(--imagyn-medals-showcase-max-width, 1080px);
+  margin-inline: auto;
+  padding-inline: var(--imagyn-space-px-md, 16px);
+  box-sizing: border-box;
+}
+
+.imagyn-medals-showcase__heading {
+  margin: 0;
+  text-align: center;
+  font-size: var(--imagyn-font-size-lg, 20px);
+  font-weight: var(--imagyn-font-weight-semibold, 600);
+}
+
+.imagyn-medals-showcase__list {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: var(--imagyn-space-px-md, 16px);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.imagyn-medals-showcase__item {
+  display: grid;
+  justify-items: center;
+  gap: var(--imagyn-space-xs, 0.4em);
+  padding: var(--imagyn-space-sm, 0.6em);
+  text-align: center;
+  border-radius: var(--imagyn-radius-md, 8px);
+  transition: transform 150ms ease-out;
+}
+
+.imagyn-medals-showcase__item:hover {
+  transform: translateY(-2px);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .imagyn-medals-showcase__item {
+    transition: none;
+  }
+
+  .imagyn-medals-showcase__item:hover {
+    transform: none;
+  }
+}
+
+.imagyn-medals-showcase__medallion {
+  flex-shrink: 0;
+  filter: drop-shadow(0 1.5px 2.5px rgba(13, 14, 15, 0.28));
+}
+
+.imagyn-medals-showcase__body {
+  display: grid;
+  gap: 0.2em;
+  max-width: 18rem;
+}
+
+.imagyn-medals-showcase__name {
+  margin: 0;
+  font-size: var(--imagyn-font-size-md, 15px);
+  font-weight: var(--imagyn-font-weight-semibold, 600);
+}
+
+.imagyn-medals-showcase__description {
+  margin: 0;
+  font-size: var(--imagyn-font-size-sm, 13px);
+  color: var(--imagyn-color-text-muted, rgba(0, 0, 0, 0.62));
+  line-height: 1.5;
+}
+
+.imagyn-medals-showcase__meta {
+  margin: 0;
+  font-size: var(--imagyn-font-size-xs, 12px);
+  color: var(--imagyn-color-text-muted, rgba(0, 0, 0, 0.62));
+  font-variant-numeric: tabular-nums;
+}
+
+@media (max-width: 480px) {
+  .imagyn-medals-showcase__list {
+    grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+  }
+}

@@ -6,6 +6,7 @@ import { ActionList, Checkbox, Frame, Popover, Text, Toast } from "@shopify/pola
 
 import { Button } from "../components/ui/Button";
 import { Container } from "../components/ui/Container";
+import { Medallion } from "../components/medals/Medallion";
 import { authenticateAdminDeduped } from "../services/auth-dedupe.server";
 import { getOrCreateStore } from "../services/store.server";
 import { getStorePermissions } from "../services/permissions";
@@ -42,18 +43,20 @@ const fallbackInstallStatus: Record<WidgetInstallKey, WidgetInstallStatus> = {
   "product-rating-badge": UNKNOWN_INSTALL_STATUS,
   "collection-rating-badge": UNKNOWN_INSTALL_STATUS,
   "review-carousel": UNKNOWN_INSTALL_STATUS,
+  "medals-showcase": UNKNOWN_INSTALL_STATUS,
 };
 
 type PageView = "gallery" | "customize";
 
-// The theme extension ships four real, installable blocks (see
+// The theme extension ships five real, installable blocks (see
 // extensions/imagyn-review-widgets/blocks/*.liquid — names below match their Shopify
 // block names exactly). Only "review-list" is wired to admin-editable settings today
 // (getStorefrontWidgetSettings always resolves that one type); Product Rating Badge,
-// Collection Rating Badge, and Review Carousel are configured entirely in the Shopify Theme
-// Editor and have no in-app settings to open, so their cards link out instead of pretending
-// to have a working Customize flow (Review Carousel's real settings — heading, review count —
-// live in review_carousel.liquid's own schema, editable there).
+// Collection Rating Badge, Review Carousel, and Medals Showcase are configured entirely in
+// the Shopify Theme Editor and have no in-app settings to open, so their cards link out
+// instead of pretending to have a working Customize flow (Review Carousel's/Medals
+// Showcase's real settings — heading, etc. — live in each block's own schema, editable
+// there).
 //
 // "Featured Collection Badge" and "Related Products Badge" were previously listed as
 // separate, unimplemented ("reserved") cards. They are not a distinct feature: Collection
@@ -116,6 +119,14 @@ const widgetCards: WidgetCardDef[] = [
     status: "theme-editor",
     blockName: "Review Carousel",
     blockHandle: "review_carousel",
+  },
+  {
+    key: "medals-showcase",
+    title: "Medals Showcase",
+    description: "A store-wide showcase of your earned achievement medals as realistic brushed-metal medallions — typically placed on the homepage.",
+    status: "theme-editor",
+    blockName: "Medals Showcase",
+    blockHandle: "medals_showcase",
   },
 ];
 
@@ -437,6 +448,29 @@ function CollectionBadgeThumbnailPreview({ tokens }: { tokens: AppearanceTokens 
   );
 }
 
+// Medals Showcase's gallery thumbnail — three representative medallions (one per finish
+// tier, not four, to keep the preview compact) using the real Medallion component so the
+// preview is pixel-for-pixel what a merchant actually gets, same reasoning as
+// CarouselThumbnailPreview reusing ReviewPreviewCard above.
+const MEDALS_PREVIEW_SAMPLES: Array<{ category: "verified" | "trust" | "ranking"; tier: number; name: string }> = [
+  { category: "verified", tier: 2, name: "Momentum" },
+  { category: "trust", tier: 3, name: "Highly Trusted" },
+  { category: "ranking", tier: 1, name: "Rising Tier" },
+];
+
+function MedalsShowcaseThumbnailPreview() {
+  return (
+    <div className={styles.medalsShowcasePreviewRow}>
+      {MEDALS_PREVIEW_SAMPLES.map((sample) => (
+        <div key={sample.name} className={styles.medalsShowcasePreviewItem}>
+          <Medallion category={sample.category} unlocked tier={sample.tier} size={44} />
+          <span className={styles.medalsShowcasePreviewName}>{sample.name}</span>
+        </div>
+      ))}
+    </div>
+  );
+}
+
 function WidgetPreview({ tokens, settings }: { tokens: AppearanceTokens; settings: WidgetSettings }) {
   const layoutReviews = settings.layout === "grid" ? sampleReviews : sampleReviews.slice(0, settings.layout === "carousel" ? 2 : 3);
 
@@ -749,6 +783,10 @@ export default function WidgetsPage() {
                       ) : card.key === "collection-rating-badge" ? (
                         <div className={styles.widgetCardThumbnailPlaceholder}>
                           <CollectionBadgeThumbnailPreview tokens={appearanceTokens} />
+                        </div>
+                      ) : card.key === "medals-showcase" ? (
+                        <div className={styles.widgetCardThumbnailPlaceholder}>
+                          <MedalsShowcaseThumbnailPreview />
                         </div>
                       ) : null}
                       <div className={styles.widgetCardMeta}>
