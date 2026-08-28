@@ -6,6 +6,11 @@
 
   var renderStars = window.ImagynShared.renderStars;
 
+  // Same reduced-motion guard rating-badge.js/reviews-widget.js apply to their own
+  // scroll-into-view calls — per STOREFRONT_DESIGN_SYSTEM.md §10, every transition in
+  // this system (including a nav-driven scroll) needs a reduced-motion variant.
+  var reduceMotion = window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+
   function escapeHtml(value) {
     var div = document.createElement("div");
     div.textContent = value === null || value === undefined ? "" : String(value);
@@ -153,10 +158,10 @@
           };
 
           controls.querySelector("[data-imagyn-carousel-prev]").addEventListener("click", function () {
-            track.scrollBy({ left: -scrollAmount(), behavior: "smooth" });
+            track.scrollBy({ left: -scrollAmount(), behavior: reduceMotion ? "auto" : "smooth" });
           });
           controls.querySelector("[data-imagyn-carousel-next]").addEventListener("click", function () {
-            track.scrollBy({ left: scrollAmount(), behavior: "smooth" });
+            track.scrollBy({ left: scrollAmount(), behavior: reduceMotion ? "auto" : "smooth" });
           });
         }
       })

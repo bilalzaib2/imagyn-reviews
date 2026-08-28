@@ -309,7 +309,7 @@ export default function EmailStudioPage() {
                   }}
                 >
                   {tab.label}
-                  {locked ? " 🔒" : ""}
+                  {locked ? <span className={styles.lockedTag}>Pro</span> : null}
                 </Link>
               );
             })}

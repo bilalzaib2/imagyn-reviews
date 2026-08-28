@@ -159,6 +159,19 @@
   box-shadow: var(--shadow-sm);
 }
 
+/* Matches the sitewide "Pro" indicator convention (a small muted text tag — see
+   app.appearance.module.css's .comingSoonTag / app.widgets.module.css's .comingSoonPill),
+   not a decorative icon, so a locked tab reads the same way a locked feature does anywhere
+   else in the app. */
+.lockedTag {
+  margin-left: var(--space-2);
+  font-size: 0.6875rem;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--color-text-muted);
+}
+
 /* Centers a fixed-width "device" frame inside the column rather than stretching the email to
    the full column width — the point of a desktop/mobile toggle is to see the two widths a
    real inbox actually renders, not a column-width-dependent size. */

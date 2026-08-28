@@ -170,25 +170,27 @@ export default function BillingPage() {
     <>
       <Container as="main">
         <div className={shellStyles.page}>
-          <header className={`${shellStyles.header} ${styles.header}`}>
-            <p className={shellStyles.eyebrow}>Imagyn Reviews</p>
-            <h1 className={shellStyles.title}>Continue using Imagyn Reviews</h1>
-            <p className={shellStyles.subtitle}>
-              Choose a plan to continue collecting reviews, sending review requests, and growing customer trust.
-            </p>
-            {snapshot.isDevelopmentStore ? (
-              <p className={styles.devNote}>Development store — billing is bypassed automatically.</p>
-            ) : null}
-            {snapshot.isTrialing && snapshot.trialEndsAt ? (
-              <p className={styles.trialBanner}>
-                Free trial active — ends {new Date(snapshot.trialEndsAt).toLocaleDateString()}.
+          <header className={shellStyles.header}>
+            <div className={shellStyles.headerContent}>
+              <p className={shellStyles.eyebrow}>Imagyn Reviews</p>
+              <h1 className={shellStyles.title}>Continue using Imagyn Reviews</h1>
+              <p className={shellStyles.subtitle}>
+                Choose a plan to continue collecting reviews, sending review requests, and growing customer trust.
               </p>
-            ) : null}
-            {snapshot.planStatus === "frozen" ? (
-              <p className={styles.frozenBanner}>
-                Your subscription is on hold. Update your billing details in Shopify to restore access.
-              </p>
-            ) : null}
+              {snapshot.isDevelopmentStore ? (
+                <p className={styles.devNote}>Development store — billing is bypassed automatically.</p>
+              ) : null}
+              {snapshot.isTrialing && snapshot.trialEndsAt ? (
+                <p className={styles.trialBanner}>
+                  Free trial active — ends {new Date(snapshot.trialEndsAt).toLocaleDateString()}.
+                </p>
+              ) : null}
+              {snapshot.planStatus === "frozen" ? (
+                <p className={styles.frozenBanner}>
+                  Your subscription is on hold. Update your billing details in Shopify to restore access.
+                </p>
+              ) : null}
+            </div>
           </header>
 
           <div className={styles.grid}>

@@ -91,11 +91,6 @@
   cursor: pointer;
 }
 
-.productCell:focus-visible {
-  outline: 2px solid var(--color-accent, #000);
-  outline-offset: 2px;
-}
-
 .productCell:hover .productName {
   text-decoration: underline;
 }

@@ -1,10 +1,8 @@
 /* .page/.eyebrow/.title/.subtitle intentionally not redeclared — see
-   app.products.module.css's header comment for why. Only .header stays local, to cap the
-   pricing intro's line length (40rem matches the same measure shellStyles.headerContent/
-   .subtitle already use elsewhere, not a one-off value). */
-.header {
-  max-width: 40rem;
-}
+   app.products.module.css's header comment for why. No local .header override: this
+   page's dev/trial/frozen banners now live inside shellStyles.headerContent alongside the
+   subtitle, so they already inherit its 40rem measure and gap — the same mechanism every
+   other page uses, rather than a parallel one-off max-width on the header itself. */
 
 .devNote,
 .trialBanner,

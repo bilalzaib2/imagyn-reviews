@@ -179,18 +179,6 @@
   font-size: var(--text-sm);
 }
 
-.errorDump {
-  margin: 0;
-  padding: var(--space-4);
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-md);
-  background: var(--color-surface-muted);
-  color: var(--color-text);
-  font-size: var(--text-xs);
-  line-height: 1.6;
-  overflow: auto;
-}
-
 /* The list is the scanning surface (Gmail/Linear-style), so it gets the majority of the
    width via the fr ratio — but neither column carries a large hard px floor, since two
    floors that sum past the container's actual width force the whole grid to overflow
@@ -658,10 +646,6 @@
   font-variant-numeric: tabular-nums;
 }
 
-.replyLabel {
-  display: grid;
-}
-
 .replyField {
   display: grid;
 }
@@ -688,18 +672,6 @@
 .replyMetaText {
   color: var(--color-text-muted);
   font-size: var(--text-sm);
-}
-
-.replyTextarea {
-  width: 100%;
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-md);
-  background: var(--color-surface);
-  color: var(--color-text);
-  padding: 0.75rem 0.8rem;
-  font: inherit;
-  resize: vertical;
-  min-height: 6rem;
 }
 
 .replyActions {
@@ -808,13 +780,6 @@
   letter-spacing: 0.16em;
   text-transform: uppercase;
   color: var(--color-text-muted);
-}
-
-.detailValue {
-  margin: 0;
-  font-size: var(--text-sm);
-  color: var(--color-text);
-  line-height: 1.6;
 }
 
 @media (max-width: 900px) {

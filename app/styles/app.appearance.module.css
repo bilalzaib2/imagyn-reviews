@@ -1,3 +1,6 @@
+/* Wider than the shared shell default — this page's two-column settings + live-preview
+   layout needs the extra room, a genuine intentional difference, not drift (see the same
+   single-property carve-out used by app.medals.module.css for its own page-scoped tweak). */
 .page {
   max-width: 1200px;
 }
@@ -187,6 +190,14 @@
   border: 1px solid var(--color-border);
   background: var(--color-surface);
   cursor: pointer;
+  transition: border-color var(--transition-base);
+}
+
+/* A real, clickable <button> needs its own hover feedback, same as every other selectable
+   card in the app (.attentionCard, .widgetCard) — skipped for the already-selected and
+   disabled states so it doesn't compete with .presetCardActive's accent border. */
+.presetCard:not(.presetCardActive):not(.presetCardDisabled):hover {
+  border-color: var(--color-border-strong);
 }
 
 .presetCardActive {

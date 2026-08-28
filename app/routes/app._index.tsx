@@ -74,16 +74,18 @@ export default function Index() {
   return (
     <Container as="main">
       <div className={`${shellStyles.page} ${styles.page}`}>
-        <header className={styles.header}>
-          <p className={shellStyles.eyebrow}>Imagyn Reviews</p>
-          <h1 className={shellStyles.title}>
-            {greeting}, {storeName}
-          </h1>
-          <p className={shellStyles.subtitle}>
-            {stats.pendingReviews > 0
-              ? `${stats.pendingReviews} review${stats.pendingReviews === 1 ? "" : "s"} waiting for you.`
-              : "You're all caught up — nothing needs your attention right now."}
-          </p>
+        <header className={shellStyles.header}>
+          <div className={shellStyles.headerContent}>
+            <p className={shellStyles.eyebrow}>Imagyn Reviews</p>
+            <h1 className={shellStyles.title}>
+              {greeting}, {storeName}
+            </h1>
+            <p className={shellStyles.subtitle}>
+              {stats.pendingReviews > 0
+                ? `${stats.pendingReviews} review${stats.pendingReviews === 1 ? "" : "s"} waiting for you.`
+                : "You're all caught up — nothing needs your attention right now."}
+            </p>
+          </div>
         </header>
 
         <nav className={styles.quickActions} aria-label="Quick actions">

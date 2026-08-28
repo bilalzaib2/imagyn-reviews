@@ -14,10 +14,16 @@
   // which every block already loads before its own script.
   var renderStars = window.ImagynShared.renderStars;
 
+  // Matches reviews-widget.js's own reduced-motion check for its equivalent
+  // scroll-into-view call — this badge's "scroll to reviews" action needs the same
+  // guard, per STOREFRONT_DESIGN_SYSTEM.md §10 ("every transition... must have a
+  // reduced-motion variant... enforced at the token level, not optional per component").
+  var reduceMotion = window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+
   function scrollToReviews() {
     var target = document.querySelector("[data-imagyn-reviews]");
     if (target) {
-      target.scrollIntoView({ behavior: "smooth", block: "start" });
+      target.scrollIntoView({ behavior: reduceMotion ? "auto" : "smooth", block: "start" });
     }
   }
 

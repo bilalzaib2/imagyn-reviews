@@ -69,17 +69,6 @@
   border-color: var(--color-border-strong);
 }
 
-.widgetCard[data-reserved="true"] {
-  border-style: dashed;
-  background: var(--color-surface-muted);
-  box-shadow: none;
-}
-
-.widgetCard[data-reserved="true"]:hover {
-  transform: none;
-  box-shadow: none;
-}
-
 @media (prefers-reduced-motion: reduce) {
   .widgetCard {
     transition: none;
@@ -230,13 +219,6 @@
   font-weight: 600;
   font-size: var(--text-sm);
   padding: 0.65rem 1rem;
-}
-
-.installReasonNote {
-  margin: 0;
-  color: var(--color-text-muted);
-  font-size: var(--text-xs);
-  line-height: 1.5;
 }
 
 .comingSoonPill {

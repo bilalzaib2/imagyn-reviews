@@ -835,6 +835,7 @@ export default function AppearancePage() {
                   type="button"
                   className={`${styles.previewToggleButton} ${previewMode === "desktop" ? styles.previewToggleActive : ""}`}
                   onClick={() => setPreviewMode("desktop")}
+                  aria-pressed={previewMode === "desktop"}
                 >
                   Desktop
                 </button>
@@ -842,6 +843,7 @@ export default function AppearancePage() {
                   type="button"
                   className={`${styles.previewToggleButton} ${previewMode === "mobile" ? styles.previewToggleActive : ""}`}
                   onClick={() => setPreviewMode("mobile")}
+                  aria-pressed={previewMode === "mobile"}
                 >
                   Mobile
                 </button>

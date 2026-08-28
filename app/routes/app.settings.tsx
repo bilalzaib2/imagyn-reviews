@@ -299,7 +299,7 @@ export default function SettingsPage() {
     <>
       <Container as="main">
         <div className={shellStyles.page}>
-          <header className={`${shellStyles.header} ${styles.header}`}>
+          <header className={shellStyles.header}>
             <div className={shellStyles.headerContent}>
               <p className={shellStyles.eyebrow}>Imagyn Reviews</p>
               <h1 className={shellStyles.title}>Settings</h1>

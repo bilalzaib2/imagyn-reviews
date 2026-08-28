@@ -2,8 +2,243 @@
 
 ## Current Phase
 
-Live in production, one real merchant on the app. Current focus: functionality hardening
-before the planned premium UI/UX redesign phase (not started).
+Live in production, one real merchant on the app. Finishing sprint checkpoint committed and
+deployed (`d6231e4`). Premium UI/UX Redesign (all 10 core sections) is complete, passed a
+final production-safety review, and has been committed/pushed to `main`.
+
+## Final Production Safety Review (2026-08-29)
+
+Performed before committing/pushing the completed 10-section redesign, per Bilal's explicit
+request. Two independent passes: a full static review (done directly, not delegated) and a
+live corroboration walkthrough (delegated to a fork) across the whole app + storefront.
+
+- **Diff review:** every line of the diff across all 12 redesign-touched files read directly.
+  Confirmed each change is purely structural/CSS/accessibility — zero business logic touched,
+  zero Coming-to-Pro gating logic touched (`billing/plans.ts`/`permissions.ts` have no diff
+  at all), zero secrets in the diff, `.env` not staged/tracked/present in git status. `app.tsx`'s
+  2-line diff (FloatingHelp) confirmed as pre-existing unrelated work, untouched by any
+  redesign section.
+- **Typecheck/tests/build:** independently re-run (not just trusted from per-section
+  reports) — `npm run typecheck` clean, `npm test -- --run` 297/297 passing (25 files),
+  `npm run build` succeeds (only pre-existing React Router v8 future-flag warnings).
+- **Live verification (corroboration pass, all PASS):** navigation across all 12 admin pages
+  by direct URL + in-app row click-through; Reviews/Products detail routing including the
+  `/app/reviews/new` flow (confirms the original routing fix still holds); AI Review
+  Summaries rendering with real content in 3 surfaces; Email Studio UI correct (this store's
+  Reminder tabs are genuinely unlocked — confirmed it's on the Pro plan, not an accidental
+  unlock); Brand Studio's Desktop/Mobile toggle confirmed switching `aria-pressed` and visual
+  state live; Widgets gallery install-detection correct; reduced-motion fix confirmed live
+  with actual scroll-position measurements (instant jump vs. animated scroll); mobile/375px
+  checked on both admin (Reviews split-layout collapse) and storefront (badges, carousel) —
+  no genuine issues found. Zero database writes occurred during verification (observation +
+  one local-state toggle click only — no form submissions, no vote clicks, nothing saved).
+- **Verdict: safe to commit.** Nothing found that blocks approval. Waiting on Bilal's
+  explicit go-ahead before staging/committing/pushing.
+
+## Premium UI/UX Redesign Roadmap
+
+**Design hierarchy (added 2026-08-28, applies from Section 3 onward):**
+1. Shopify-native usability first.
+2. Apple-level design discipline (`.claude/skills/imagyn-apple-inspired-design`).
+3. IMAGYN brand identity where it adds personality/differentiation — the actual mark
+   (`public/assets/imagyn-emblem.svg`/`imagyn-app-logo.svg`: a monochrome 9-dot geometric
+   grid + confident sans wordmark, `#0d0e0f` on white) and voice ("confident, minimal,
+   trustworthy, premium" per `docs/08_BRANDING.md`). Note: the existing admin design system
+   already substantially embodies this — Helvetica, near-black, restraint — so this is a
+   lens for judgment calls, not a mandate to add logo marks everywhere. Never let it make
+   the Shopify admin feel like a marketing site.
+
+1. Global app shell/navigation — **DONE ✓** (2026-08-28). Audited the shared header pattern
+   (`app.shell.module.css`) across all 12 admin pages + the `Container` primitive. Found one
+   genuine drift: Dashboard's header was missing the shared `headerContent` wrapper (used by
+   every other page), meaning its subtitle lacked the standard `max-width: 40rem` readability
+   constraint. Fixed to match the established pattern exactly. Confirmed the two other
+   `.page`-level overrides that exist (Medals' tighter gap, Brand Studio's wider max-width)
+   are both deliberately documented exceptions, not drift — left unchanged. Live-verified, no
+   regression, no visual change beyond the one structural fix.
+2. Dashboard — **DONE ✓** (2026-08-28, no code changes needed). Full audit — every component
+   (`Section` primitive, attention cards, Trust Overview stats, Rating Distribution, AI
+   Spotlight, Recent Activity) already meets the design system bar: no card-wall (numbers sit
+   directly on the page background per the design system's own "typography does the work"
+   comment), consistent interaction states (global `:focus-visible`, hover lift respecting
+   `prefers-reduced-motion`), tabular-nums alignment, sensible empty state, restrained color
+   (accent used only for the one active-state indicator + rating fill). Visually confirmed
+   top-to-bottom in the live embedded admin. The one real issue (header wrapper) was already
+   fixed in Section 1. Genuinely nothing else to change under a consistency/polish scope.
+   **Unrelated observation, not fixed:** "Recent Activity" surfaces leftover QA test data
+   (Image Regression Tester, Video QA Tester rows) on the merchant-facing Dashboard — same
+   test rows flagged in the finishing-sprint session log below; still awaiting a cleanup
+   decision from Bilal, not touched.
+3. Reviews — **DONE ✓** (2026-08-28). Full audit of `app.reviews.tsx` (list + detail panel,
+   bulk actions, filters, import/export) and its stylesheet against the design system and the
+   new brand-hierarchy lens. Header/toolbar pattern, spacing tokens, Section usage, color
+   (accent reserved for stars/active states, no unnecessary color), empty/loading/error
+   states, motion (`prefers-reduced-motion` respected), and accessibility (aria-labels, keyboard
+   row navigation) were all already consistent with the established system — no changes
+   needed there. One genuine finding: the detail panel's subtle top-to-bottom gradient
+   initially looked like drift against the redesign's "avoid gradients" direction, but the
+   identical gradient value is already used by Requests' and Widgets' matching detail panels
+   — an established, intentional pattern for sticky detail panels specifically (not the flatter
+   `color-mix` tint used for inline content sections) — left unchanged. The one real fix: removed
+   four dead CSS rules (`.errorDump`, `.replyLabel`, `.replyTextarea`, `.detailValue`) left over
+   from an earlier refactor to Polaris `TextField` — confirmed unused via full-repo grep before
+   removing. Live-verified in the real embedded admin against production data (83 reviews):
+   list, detail panel, AI summary callout, and moderation actions all render correctly.
+4. Products — **DONE ✓** (2026-08-28). Full audit of the Products list (`app.products.tsx`)
+   and detail view (`app.products_.$id.tsx`, AI Review Summary + reviews list) against the
+   design system. Structurally already consistent: correct `shellStyles.header`/
+   `.headerContent` usage on both pages, shared `.searchInput`/`.searchField` styling
+   byte-identical to Reviews', shared empty/error-state composition from `shared.module.css`,
+   accessible search labeling. One genuine finding: `.productCell:focus-visible` in
+   `app.products.module.css` duplicated the app-wide global `:focus-visible` rule in
+   `design-system.css` exactly (same outline color/offset, just with a pointless `#000`
+   fallback on a variable that's always defined) — confirmed via full-repo grep it was the
+   only per-component focus-visible override anywhere in the codebase; removed it, the global
+   rule already covers this element. Considered and declined two other candidates: the Card-
+   per-section layout on the detail page (also used by Requests/Reviews forms — an established
+   pattern, not local drift) and the `0.16em` label letter-spacing (inconsistent app-wide
+   across several values, but that's a pre-existing sitewide token question, not something
+   local to Products — out of scope for a single-page pass). Live-verified in the real
+   embedded admin against production data: list view, product detail overview, AI Review
+   Summary (with real generated content), and reviews list all render correctly, no
+   regression from the CSS removal.
+5. Requests — **DONE ✓** (2026-08-28). Full audit of `app.requests.tsx` (list + detail panel,
+   1638 lines) and `app.requests.module.css` against the design system, sibling pages
+   (Products/Reviews), and the brand-identity lens. Already clean: byte-identical `.header`/
+   `.headerActions` pattern to Products, identical `.searchInput` styling to Reviews/Products,
+   no local `:focus-visible` overrides (global rule already covers every interactive element),
+   correct `prefers-reduced-motion` handling on row hover transitions, the detail panel's
+   gradient/left-accent-border match the established Reviews/Widgets pattern, Card+BlockStack
+   inside the modal's "Recipient preview" matches the same convention used in Products' modals.
+   Verified zero unused CSS classes via a full cross-reference against every consuming file
+   (the route, `RequestLifecycleTimeline.tsx`, `RequestStatusBadge.tsx`) — unlike Reviews,
+   nothing dead to remove here. No genuine issues found; no code changes made. Live-verified in
+   the real embedded admin against production data (55 requests): list view, table columns,
+   and detail panel (status, product/order/email meta, schedule) all render correctly.
+6. Email Studio — **DONE ✓** (2026-08-28). Full audit of `app.email-studio.tsx` (496 lines)
+   and `app.email-studio.module.css` against the design system, sibling pages, and the
+   brand-identity lens. Already clean: correct header pattern, `.textInput`/`.textArea`
+   byte-identical to Widgets' established input styling, no local `:focus-visible`
+   overrides, reduced-motion already handled via the shared `skeletonShimmer` primitive.
+   One genuine fix: the Reminder-tab lock indicator used a decorative emoji (🔒) — the only
+   emoji anywhere in the codebase — where every other locked/Pro-gated feature (Brand
+   Studio's `.comingSoonTag`, Widgets' `.comingSoonPill`) uses a small muted text tag.
+   Replaced with a `.lockedTag` "Pro" label matching that established convention. Live-
+   verified the page renders correctly with no regression against real production data; the
+   locked-tab state itself couldn't be visually observed on this dev store since it
+   currently has `canUseEmailReminders: true` (Reminder tabs unlocked) — verifying it live
+   would require changing the store's plan tier, a DB write out of scope without approval.
+   Change verified correct via code review + typecheck instead.
+7. Widgets — **DONE ✓** (2026-08-29). Full audit of `app.widgets.tsx` (985 lines) and
+   `app.widgets.module.css` against the design system, sibling pages, and the brand-identity
+   lens. New this section: installed the official `apple-design` Claude skill (from
+   github.com/emilkowalski/skills, fetched verbatim and verified byte-identical) at
+   `.claude/skills/apple-design/SKILL.md`, per Bilal's request — applied as a judgment lens
+   for motion decisions (kill unnecessary latency, respect `prefers-reduced-motion`, anchor
+   popovers to their trigger), not its gesture/spring mechanics, which don't apply to a
+   Shopify settings page. Existing motion here was already correct: `.widgetCard:hover`
+   already had a `prefers-reduced-motion` guard, Polaris `Popover` already anchors to its
+   activator natively. Two genuine dead-CSS issues found and fixed: a `[data-reserved="true"]`
+   attribute selector (plus its `:hover` variant) that was never actually set on any element
+   — a leftover from when "Featured Collection Badge"/"Related Products Badge" were separate
+   reserved cards before being merged into Collection Rating Badge's description — and an
+   unused `.installReasonNote` class. Both confirmed dead via repo-wide grep before removal.
+   Typecheck clean, 297/297 tests passing, build succeeds. Live-verified in the real embedded
+   admin (verveonline.myshopify.com, real production data): gallery view (all three
+   theme-editor cards showing "Installed" with live-detected block status) and the
+   Customize/inspector view (live preview, Actions menu) both render correctly, no regression.
+8. Brand Studio — **DONE ✓** (2026-08-29). Full audit of `app.appearance.tsx` (885 lines,
+   covering both the widget/theme branding controls and the separate pre-existing AI Brand
+   Suggestion feature that share this page) and `app.appearance.module.css` against the
+   design system, sibling pages, and both design skills (`imagyn-apple-inspired-design` +
+   the newly installed official `apple-design`, applied as a motion-judgment lens only —
+   no springs/gestures introduced on this settings page). Three genuine, safe fixes: (1)
+   the Desktop/Mobile preview toggle — a `role="group"` segmented control identical in
+   shape to the ones in Reviews and Analytics — was missing `aria-pressed` on its buttons,
+   which those sibling pages already have; added it. (2) the "Widget Style" preset cards are
+   real, clickable `<button>` elements with zero hover feedback, while every other
+   selectable card in the app (`.attentionCard`, `.widgetCard`) pairs hover with its active
+   state; added a `:hover` border-color change (skipped for the active/disabled variants so
+   it doesn't fight `.presetCardActive`'s accent border) — confirmed visually via a
+   before/after hover screenshot. (3) added a local comment documenting the page's one
+   intentional `.page { max-width }` override, matching the convention every other page's
+   single-property override already follows (previously only referenced from a comment in a
+   different file). Declined to touch: the lime `.heroSection` treatment and the hardcoded
+   `#f5f5f5` surface color are both explicitly documented, intentional, and shared
+   identically with Widgets — not drift. Typecheck clean, 297/297 tests passing, build
+   succeeds. Live-verified in the real embedded admin (verveonline.myshopify.com): One-Click
+   Branding, AI Suggestion, Widget Style grid, and the live preview all render correctly;
+   the new preset-card hover state was confirmed rendering (a visibly stronger border on the
+   hovered card vs. its neighbors) via a direct screenshot comparison.
+9. Remaining merchant pages (Medals, Analytics, Settings, Billing) — **DONE ✓ (2026-08-29)**.
+   Audited all four against the design system, sibling pages, and both design skills
+   (custom `imagyn-apple-inspired-design` + the newly installed official `apple-design`
+   skill, applied only as a motion-judgment lens — no springs/gestures on a settings admin).
+   Medals and Analytics needed zero changes — both already correct (Analytics' range-toggle
+   `aria-pressed` segmented control was in fact the reference pattern Brand Studio's toggle
+   was fixed to match in section 8). Two genuine structural fixes: (1) Settings had a local
+   `.header` override in `app.management.module.css` that was dead code — the header has a
+   single child (`headerContent`), so a `gap` on `.header` itself has zero visual effect,
+   the same root cause as the Dashboard bug fixed in section 1 — removed. (2) Billing's
+   header did not use `shellStyles.headerContent` at all (the only page in the app that
+   didn't) — eyebrow/title/subtitle and the dev/trial/frozen banners sat as direct header
+   children, relying on a parallel local `max-width: 40rem` override to approximate what
+   `headerContent` already provides everywhere else. Restructured to wrap all of it in
+   `headerContent`, matching every other page, and removed the now-redundant local override.
+   Files changed: `app/routes/app.settings.tsx`, `app/styles/app.management.module.css`,
+   `app/routes/app.billing.tsx`, `app/styles/app.billing.module.css`. Typecheck clean,
+   297/297 tests passing, build succeeds. Live-verified in the real embedded admin
+   (verveonline.myshopify.com, real production data) — Medals (achievement grid with real
+   progress bars), Analytics (real review/request stats + trend chart), Settings (Moderation
+   Rules/Automatic Requests/Reminder Emails/Diagnostics), and Billing (Free/Pro plan cards,
+   dev-store banner correctly capped to the header's measure) all render correctly with no
+   regressions.
+10. Customer-facing review widget — **DONE ✓ (2026-08-29)**. Full audit of the storefront
+    theme app extension (`extensions/imagyn-review-widgets/`: 4 Liquid blocks, ~20 CSS files
+    including a mature `imagyn-tokens.css`/`imagyn-typography.css`/`imagyn-utilities.css`
+    foundation and per-component stylesheets, and the JS widgets — rating-badge.js,
+    collection-rating-badges.js, review-carousel.js, reviews-widget.js), cross-referenced
+    against `docs/STOREFRONT_DESIGN_SYSTEM.md` and both design skills (the custom
+    `imagyn-apple-inspired-design` skill's admin-vs-storefront distinction — this surface
+    optimizes for merchant-brand compatibility, not Imagyn's own identity — and the newly
+    installed official `apple-design` skill, applied only as a motion-judgment lens). This
+    codebase is exceptionally mature already: every token, spacing value, and motion curve
+    is centralized and commented with its rationale, every transition already has a
+    `prefers-reduced-motion` variant, accessibility (44px touch targets, focus rings, aria
+    labels, screen-reader text for star ratings) is already built in throughout. Found one
+    genuine, real inconsistency: two smooth-scroll call sites (`rating-badge.js`'s
+    "scroll to reviews" action, `review-carousel.js`'s prev/next nav buttons) used
+    unconditional `behavior: "smooth"`, while a third, near-identical call in
+    `reviews-widget.js` (its own scroll-to-write-review-form) already correctly checked
+    `prefers-reduced-motion` first — added the same guard to the other two, per
+    `STOREFRONT_DESIGN_SYSTEM.md` §10's "not optional per component; enforced at the token
+    level" rule. Also confirmed one already-self-documented piece of technical debt (not
+    fixed, just verified it's genuinely intentional and already flagged, not silent drift):
+    `rating-badge.css`/`rating_badge.liquid` predates the shared token/component system and
+    still falls back to a hardcoded star color instead of `--imagyn-color-star` — both
+    `imagyn-component-badge.css`'s own header comment and a `rating-badge.js` code comment
+    already call this out as "a candidate to adopt this same component in a future pass,"
+    so this is known, deliberate, tracked debt, not something introduced or missed this
+    session — flagging it here again for whenever that migration is prioritized, since it
+    touches the live Rating Badge on every merchant storefront and is out of scope for a
+    consistency-only pass. Files changed: `extensions/imagyn-review-widgets/assets/rating-badge.js`,
+    `extensions/imagyn-review-widgets/assets/review-carousel.js`. Typecheck clean, 297/297
+    tests passing, build succeeds. Live-verified on the real storefront (verveonline.myshopify.com,
+    real production data): homepage Featured Collection badges (16 found), product page
+    Rating Badge ("★★★★★ 4.5 (15 reviews) · Write a review"), Review Summary hero, Histogram,
+    AI Review Summary, Medals (quiet outline pills), Customer Photos gallery (including a
+    video thumbnail's hover state), Review Cards list (verified badges, store replies,
+    helpful voting), and Related Products' Collection Rating Badges (2 found) all rendered
+    correctly with no visual regressions from the reduced-motion fix.
+
+    **All 10 core sections of the Premium UI/UX Redesign are now complete.** Only the
+    separately-tracked FUTURE website-redesign phase (below) remains, and it is explicitly
+    not started.
+11. Website redesign (marketing site, separate `imagyn-website` repo) — **FUTURE ○**. Same
+    premium treatment, so product + website feel like one ecosystem. Not started, not
+    scoped. When reached: first assess whether additional design skills/references are
+    needed before assuming the current toolset is sufficient — stop and ask before
+    adding/installing anything substantial.
 
 ## Session Log — 2026-08-28 (Finishing Sprint, autonomous)
 

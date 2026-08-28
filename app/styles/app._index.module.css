@@ -3,15 +3,12 @@
    six distinct zones that benefit from more breathing room than the shared default, a
    genuine intentional difference, not drift (see the same carve-out already used by
    app.billing.module.css/app.appearance.module.css for their own single-property tweaks).
-   .header stays local: this page has no header actions, so it keeps a tighter
-   title-to-subtitle gap. */
+   No local .header override: this page's header has a single child (headerContent) — a
+   gap between grid children has no visual effect with only one, so shellStyles.header's
+   default is sufficient. Every other page's shellStyles.header/.headerContent pairing is
+   now used identically here, matching the shared header pattern used everywhere else. */
 .page {
   gap: var(--space-10);
-}
-
-.header {
-  display: grid;
-  gap: var(--space-2);
 }
 
 .mutedText {
