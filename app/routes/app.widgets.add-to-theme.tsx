@@ -32,6 +32,7 @@ const ALLOWED_BLOCKS: Record<string, { template: "product" | "collection" | "ind
   // Same reasoning as review_carousel above — store-wide, section-target, typically
   // homepage-placed.
   medals_showcase: { template: "index", kind: "section" },
+  store_reviews: { template: "index", kind: "section" },
 };
 
 export const loader = async ({ request }: LoaderFunctionArgs) => {

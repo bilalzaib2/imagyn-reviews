@@ -24,7 +24,8 @@ export type WidgetInstallKey =
   | "product-rating-badge"
   | "collection-rating-badge"
   | "review-carousel"
-  | "medals-showcase";
+  | "medals-showcase"
+  | "store-reviews";
 
 const FETCH_TIMEOUT_MS = 6000;
 const UNREACHABLE_REASON = "Couldn't reach your storefront to verify this automatically.";
@@ -35,6 +36,8 @@ const CAROUSEL_NOT_ON_HOME_REASON =
   "Not detected on your homepage. Review Carousel can be added to any page, so this can't be fully confirmed automatically — check your Theme Editor.";
 const MEDALS_SHOWCASE_NOT_ON_HOME_REASON =
   "Not detected on your homepage. Medals Showcase can be added to any page, so this can't be fully confirmed automatically — check your Theme Editor.";
+const STORE_REVIEWS_NOT_ON_HOME_REASON =
+  "Not detected on your homepage. Store Reviews can be added to any page, so this can't be fully confirmed automatically — check your Theme Editor.";
 
 interface FetchResult {
   html: string | null;
@@ -195,6 +198,7 @@ export async function detectWidgetInstallStatus(
     ),
     "review-carousel": resolveHomepageOnlyWidget("data-imagyn-carousel", home, homeUrl, CAROUSEL_NOT_ON_HOME_REASON),
     "medals-showcase": resolveHomepageOnlyWidget("data-imagyn-medals-showcase", home, homeUrl, MEDALS_SHOWCASE_NOT_ON_HOME_REASON),
+    "store-reviews": resolveHomepageOnlyWidget("data-imagyn-store-reviews", home, homeUrl, STORE_REVIEWS_NOT_ON_HOME_REASON),
   };
 
   for (const key of Object.keys(result) as WidgetInstallKey[]) {

@@ -44,6 +44,7 @@ const fallbackInstallStatus: Record<WidgetInstallKey, WidgetInstallStatus> = {
   "collection-rating-badge": UNKNOWN_INSTALL_STATUS,
   "review-carousel": UNKNOWN_INSTALL_STATUS,
   "medals-showcase": UNKNOWN_INSTALL_STATUS,
+  "store-reviews": UNKNOWN_INSTALL_STATUS,
 };
 
 type PageView = "gallery" | "customize";
@@ -123,25 +124,20 @@ const widgetCards: WidgetCardDef[] = [
   {
     key: "medals-showcase",
     title: "Medals Showcase",
-    description: "A store-wide showcase of your earned achievement medals as realistic brushed-metal medallions — typically placed on the homepage.",
+    description: "A store-wide showcase of your earned achievement medals as small, compact badges — typically placed on the homepage.",
     status: "theme-editor",
     blockName: "Medals Showcase",
     blockHandle: "medals_showcase",
   },
-];
-
-// Genuinely not built anywhere yet — no enforcement point in reviews-widget.js for any of
-// these, on any plan. Shown as an honest "Coming to Pro" list rather than as editable
-// controls that would silently do nothing (see this file's previous version, and
-// docs/DESIGN_SYSTEM.md's "never show a feature as included unless it's genuinely built"
-// rule, already established for plans.ts's PlanFeature.comingSoon).
-const proRoadmapItems = [
-  "Multiple saved widget themes",
-  "Custom CSS injection",
-  "Numeral display alongside stars",
-  "Customer-photo toggle in the review list",
-  "Infinite scroll",
-  "Default sort & filter presets",
+  {
+    key: "store-reviews",
+    title: "Store Reviews",
+    description:
+      "A store-wide rating summary — overall rating, star distribution, and your earned achievements — typically placed on the homepage.",
+    status: "theme-editor",
+    blockName: "Store Reviews",
+    blockHandle: "store_reviews",
+  },
 ];
 
 const sampleReviews = [
@@ -297,15 +293,6 @@ function InspectorSection({ title, children }: { title: string; children: ReactN
     <div className={styles.inspectorSection}>
       <h3 className={styles.inspectorSectionTitle}>{title}</h3>
       <div className={styles.inspectorSectionBody}>{children}</div>
-    </div>
-  );
-}
-
-function ReservedRow({ label }: { label: string }) {
-  return (
-    <div className={styles.reservedRow}>
-      <span className={styles.reservedRowLabel}>{label}</span>
-      <span className={styles.comingSoonPill}>Coming to Pro</span>
     </div>
   );
 }
@@ -979,32 +966,9 @@ export default function WidgetsPage() {
                     </div>
                   )}
                 </InspectorSection>
-
-                <div className={styles.inspectorDivider} />
-
-                <InspectorSection title="Coming to Pro">
-                  <div className={styles.checkboxStack}>
-                    {proRoadmapItems.map((item) => (
-                      <ReservedRow key={item} label={item} />
-                    ))}
-                  </div>
-                </InspectorSection>
               </div>
             </div>
           )}
-
-          {view === "gallery" ? (
-            <div className={styles.roadmapSection}>
-              <p className={styles.detailEyebrow}>Coming to Pro</p>
-              <div className={styles.comingSoonRow}>
-                {proRoadmapItems.map((item) => (
-                  <span key={item} className={styles.comingSoonPill}>
-                    {item}
-                  </span>
-                ))}
-              </div>
-            </div>
-          ) : null}
         </div>
       </Container>
       <Frame>

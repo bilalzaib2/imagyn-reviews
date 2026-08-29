@@ -429,6 +429,40 @@ export async function getPublicReviewSummary(productId: string): Promise<PublicR
   };
 }
 
+// Store-wide counterpart of getPublicReviewSummary — same query shape (APPROVED + non-deleted
+// only), scoped by storeId instead of productId. Backs the Store Reviews storefront widget's
+// overall-rating hero and star distribution (see api.reviews.store.tsx) — a genuine rollup of
+// this store's real product reviews, not a separate "store review" entity (no such concept
+// exists in the schema, and none is introduced here).
+export async function getPublicStoreReviewSummary(storeId: string): Promise<PublicReviewSummary> {
+  const [totalReviews, aggregate, ratingGroups] = await Promise.all([
+    prisma.review.count({ where: { storeId, deletedAt: null, status: ReviewStatus.APPROVED } }),
+    prisma.review.aggregate({
+      where: { storeId, deletedAt: null, status: ReviewStatus.APPROVED },
+      _avg: { rating: true },
+    }),
+    prisma.review.groupBy({
+      by: ["rating"],
+      where: { storeId, deletedAt: null, status: ReviewStatus.APPROVED },
+      _count: { rating: true },
+    }),
+  ]);
+
+  const countByRating = new Map(ratingGroups.map((group) => [group.rating, group._count.rating]));
+
+  return {
+    averageRating: Number((aggregate._avg.rating ?? 0).toFixed(1)),
+    totalReviews,
+    ratingCounts: {
+      5: countByRating.get(5) ?? 0,
+      4: countByRating.get(4) ?? 0,
+      3: countByRating.get(3) ?? 0,
+      2: countByRating.get(2) ?? 0,
+      1: countByRating.get(1) ?? 0,
+    },
+  };
+}
+
 // Batched counterpart of getPublicReviewSummary — one groupBy query for many products
 // instead of N queries, for rendering rating badges across a collection/search grid.
 export async function getPublicReviewSummaryBatch(

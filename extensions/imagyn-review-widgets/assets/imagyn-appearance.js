@@ -3,11 +3,11 @@
  *
  * The one place that turns a store's resolved AppearanceTokens (app/services/
  * appearance.shared.ts) into real --imagyn-* CSS custom properties. Loaded once, before
- * each widget's own script tag (see the three blocks/*.liquid files), and applied at
+ * each widget's own script tag (see the blocks/*.liquid files), and applied at
  * document.documentElement (:root) — not a per-widget root — so every current widget
- * (Reviews, Rating Badge, Collection Badges) and every future one inherits it for free,
- * with zero widget-specific plumbing. Scale/density/radius math lives here, once, rather
- * than being duplicated per widget script.
+ * (Reviews, Rating Badge, Collection Badges, Review Carousel, Medals Showcase, Store
+ * Reviews) and every future one inherits it for free, with zero widget-specific plumbing.
+ * Scale/density/radius math lives here, once, rather than being duplicated per widget script.
  *
  * Two current widgets need one extra step beyond this file: their own CSS has a
  * hardcoded fallback that doesn't chain through --imagyn-color-star (rating-badge.css's
@@ -159,10 +159,10 @@
 
   function applyButtons(style, buttons) {
     if (!buttons) return;
-    // Applies to the reserved .imagyn-btn primitive only (imagyn-component-button.css) —
-    // not yet wired into any currently-shipped reviews-widget.css button, same as before
-    // this control existed. Real, live in the admin preview; zero effect on production
-    // storefronts today.
+    // Consumed by the reserved .imagyn-btn primitive (imagyn-component-button.css) and by
+    // the real, shipped primary CTAs: reviews-widget.css's .imagyn-reviews__submit (Write a
+    // Review form) and imagyn-component-store-reviews.css's .imagyn-store-reviews__write
+    // (Store Reviews widget) both consume these same three variables.
     var preset = BUTTON_STYLE[buttons.style] || BUTTON_STYLE.solid;
     setVar(style, "--imagyn-btn-background", preset.background);
     setVar(style, "--imagyn-btn-color", preset.color);
@@ -233,6 +233,12 @@
   // collection-rating-badges.js — all three already load this file before their own
   // script (see the blocks/*.liquid files), so this rides along on that existing load
   // rather than needing a fourth shared script file.
+  function escapeHtml(value) {
+    var div = document.createElement("div");
+    div.textContent = value === null || value === undefined ? "" : String(value);
+    return div.innerHTML;
+  }
+
   window.ImagynShared = {
     renderStars: function (rating) {
       var full = Math.round(rating);
@@ -242,5 +248,57 @@
       }
       return stars;
     },
+    // Five-row rating breakdown (imagyn-component-histogram.css) — bars start at 0% and are
+    // animated to their target width via the returned `animate` callback right after
+    // insertion (see reviews-widget.js's own animateHistogramFills, which this mirrors), so
+    // any new widget consuming this gets the same "skeleton-to-content" motion for free
+    // instead of reimplementing it. New consumers only (store-reviews.js) — the Product
+    // Reviews Widget keeps its own already-shipped, already-tested copy of this exact
+    // function untouched rather than risking a refactor of a mature, heavily-used file for
+    // zero behavioral change.
+    renderHistogram: function (ratingCounts) {
+      var maxCount = 0;
+      for (var star = 1; star <= 5; star++) {
+        if (ratingCounts[star] > maxCount) maxCount = ratingCounts[star];
+      }
+
+      var rows = "";
+      for (var value = 5; value >= 1; value--) {
+        var count = ratingCounts[value] || 0;
+        var fillPercent = maxCount > 0 ? Math.round((count / maxCount) * 100) : 0;
+
+        rows +=
+          '<div class="imagyn-histogram__row">' +
+          '<span class="imagyn-histogram__label" aria-hidden="true">' + value + "</span>" +
+          '<span class="imagyn-histogram__track">' +
+          '<span class="imagyn-histogram__fill" aria-hidden="true" data-target-fill="' + fillPercent +
+          '" style="--imagyn-histogram-fill: 0%"></span>' +
+          "</span>" +
+          '<span class="imagyn-histogram__count" aria-hidden="true">' + count + "</span>" +
+          '<span class="imagyn-visually-hidden">' +
+          value + (value === 1 ? " star" : " stars") + ": " + count + (count === 1 ? " review" : " reviews") +
+          "</span>" +
+          "</div>";
+      }
+
+      return '<div class="imagyn-histogram">' + rows + "</div>";
+    },
+    // Pairs with renderHistogram — call once, right after the returned markup is inserted
+    // into the document. Same double-rAF technique as reviews-widget.js's
+    // animateHistogramFills, and a no-op under prefers-reduced-motion (the transition itself
+    // is disabled via CSS there, so this just jumps straight to the final width).
+    animateHistogramFills: function (root) {
+      var fills = root.querySelectorAll("[data-target-fill]");
+      if (fills.length === 0) return;
+
+      requestAnimationFrame(function () {
+        requestAnimationFrame(function () {
+          for (var i = 0; i < fills.length; i++) {
+            fills[i].style.setProperty("--imagyn-histogram-fill", fills[i].getAttribute("data-target-fill") + "%");
+          }
+        });
+      });
+    },
+    escapeHtml: escapeHtml,
   };
 })();

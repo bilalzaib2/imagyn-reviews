@@ -1,24 +1,9 @@
 .medallion {
   flex-shrink: 0;
-  /* The glyph's emboss effect uses mix-blend-mode (multiply/screen — see
-     .medallionGlyphShadow/.medallionGlyphHighlight below). Without isolation, a handful of
-     medallions rendered together on one page (this gallery card, or a future storefront
-     grid) blend across SVG instances instead of just within each one's own face — one
-     medallion's shadow/highlight layer visibly washing out a sibling's face gradient into
-     near-white or near-black. isolation: isolate scopes the blending to this element's own
-     subtree, exactly where it belongs. */
-  isolation: isolate;
-}
-
-/* A real object's drop shadow, not a decorative glow — stronger than a flat icon's hairline
-   would need, since this now renders as a beveled, gradient-shaded disc that's meant to read
-   as sitting slightly above the page. Still restrained: one soft shadow, no glow, no ring. */
-.medallionUnlocked {
-  filter: drop-shadow(0 1.5px 2.5px rgba(13, 14, 15, 0.32));
 }
 
 .medallionUnlocked .medallionRing {
-  stroke-width: 1.4;
+  stroke-width: 1.5;
 }
 
 /* Deliberately no opacity reduction here — a flat, semi-transparent medal reads as
@@ -44,167 +29,95 @@
   stroke-width: 1.25;
 }
 
-/* --- Unlocked: brushed-metal finish system ---------------------------------------------
-   Four finishes, one per tier (pewter -> silver -> graphite -> onyx), each just a lightness
-   step in the same strictly monochrome palette — no hue anywhere, matching Imagyn's brand
-   restraint. Every finish defines the same four tokens (face gradient light/dark, rim
-   gradient light/dark) plus an engrave-groove color and a glyph base tone; the emboss
-   shadow/highlight duplicates below are finish-agnostic (multiply/screen blending handles
-   the contrast automatically against whatever base tone is active). */
-
-.faceStopLight,
-.faceStopDark,
-.rimStopLight,
-.rimStopDark {
-  transition: none;
-}
-
-.medallionEngraveRing {
-  stroke-width: 0.6;
-}
-
-.medallionGlyphShadow,
-.medallionGlyphStrokeShadow {
-  fill: #000000;
-  opacity: 0.4;
-  mix-blend-mode: multiply;
-}
-
-.medallionGlyphHighlight,
-.medallionGlyphStrokeHighlight {
-  fill: #ffffff;
-  opacity: 0.32;
-  mix-blend-mode: screen;
-}
-
-.medallionGlyphStrokeShadow,
-.medallionGlyphStrokeHighlight,
-.medallionGlyphStrokeBase {
+.medallionGlyphStroke {
   stroke: currentColor;
   stroke-width: 1.25;
-  fill: none;
 }
 
-.medallionGlyphStrokeShadow {
-  stroke: #000000;
-  fill: none;
+/* A tiny signature, not a decoration — quiet enough to disappear unless someone looks. */
+.medallionMark {
+  fill: currentColor;
+  opacity: 0.55;
 }
 
-.medallionGlyphStrokeHighlight {
-  stroke: #ffffff;
-  fill: none;
-}
+/* --- Unlocked: flat tone system ---------------------------------------------------------
+   Four tones, one per tier (pewter -> silver -> graphite -> onyx), each a lightness step in
+   the same strictly monochrome palette — no hue anywhere, matching Imagyn's brand restraint.
+   Flat ring + flat fill + flat glyph, deliberately restrained (no gradient, no bevel, no
+   emboss, no drop shadow) — a small, calm badge, not a rendered 3D object. */
 
-/* Pewter — tier 1. The lightest, most muted finish; the "just getting started" tone. */
-.medallionPewter .faceStopLight {
-  stop-color: #d6d7da;
+/* Pewter — tier 1. The lightest, most muted tone; the "just getting started" tier. */
+.medallionPewter .medallionRing {
+  stroke: #a7a8ad;
 }
-.medallionPewter .faceStopDark {
-  stop-color: #a7a8ad;
+.medallionPewter .medallionFill {
+  fill: color-mix(in srgb, #a7a8ad 14%, #ffffff);
 }
-.medallionPewter .rimStopLight {
-  stop-color: #c7c8cc;
-}
-.medallionPewter .rimStopDark {
-  stop-color: #87888d;
-}
-.medallionPewter .medallionEngraveRing {
-  stroke: rgba(13, 14, 15, 0.22);
-}
-/* Glyph base is a deliberate contrast tone, not the same-as-face metal-only look a first
-   pass tried — that read beautifully at 96px but nearly vanished at 24px (the checkmark
-   disappeared into the face gradient) and the shield glyph, being a large filled shape
-   rather than a thin line, turned into a solid blob with almost no emboss visible at any
-   size. A dark charcoal against this finish's light face is what actually keeps every
-   category (including large filled shapes like the shield) legible small — still strictly
-   grayscale, no hue, so it reads as "this medal's engraved detail," not an unrelated color
-   accent. */
-.medallionPewter .medallionGlyphBase {
+.medallionPewter .medallionGlyph,
+.medallionPewter .medallionGlyphStroke,
+.medallionPewter .medallionMark {
   fill: #4c4d52;
+  color: #4c4d52;
 }
-.medallionPewter .medallionGlyphStrokeBase {
-  /* fill: none (not the finish color) — this is the Ranking glyph's outer ring, a hollow
-     stroke-only circle. A previous pass set `fill` here alongside `stroke`, which (being
-     more specific than the base .medallionGlyphStrokeBase rule above) silently overrode
-     that rule's `fill: none` and filled the "ring" solid, ballooning it into a giant filled
-     blob that swallowed the small center dot entirely — confirmed live by inspecting the
-     rendered circle's own fill before this fix. */
-  fill: none;
+.medallionPewter .medallionGlyphStroke {
   stroke: #4c4d52;
+  fill: none;
 }
 
-/* Silver — tier 2. Brighter and slightly more reflective than pewter. */
-.medallionSilver .faceStopLight {
-  stop-color: #f1f2f4;
+/* Silver — tier 2. A touch brighter than pewter. */
+.medallionSilver .medallionRing {
+  stroke: #9a9ca0;
 }
-.medallionSilver .faceStopDark {
-  stop-color: #c1c2c6;
+.medallionSilver .medallionFill {
+  fill: color-mix(in srgb, #9a9ca0 10%, #ffffff);
 }
-.medallionSilver .rimStopLight {
-  stop-color: #e2e3e6;
-}
-.medallionSilver .rimStopDark {
-  stop-color: #9a9ca0;
-}
-.medallionSilver .medallionEngraveRing {
-  stroke: rgba(13, 14, 15, 0.18);
-}
-.medallionSilver .medallionGlyphBase {
+.medallionSilver .medallionGlyph,
+.medallionSilver .medallionGlyphStroke,
+.medallionSilver .medallionMark {
   fill: #3a3b3f;
+  color: #3a3b3f;
 }
-.medallionSilver .medallionGlyphStrokeBase {
-  fill: none;
+.medallionSilver .medallionGlyphStroke {
   stroke: #3a3b3f;
+  fill: none;
 }
 
-/* Graphite — tier 3. Deep charcoal; the bevel/emboss contrast reads more dramatically here,
-   which is the point — a tier-3 medal should feel more substantial than tier 1-2. */
-.medallionGraphite .faceStopLight {
-  stop-color: #6f7075;
+/* Graphite — tier 3. A dark, flat tone — a tier-3 medal should feel more substantial than
+   tier 1-2 through contrast alone, not through added decoration. */
+.medallionGraphite .medallionRing {
+  stroke: #3d3e42;
 }
-.medallionGraphite .faceStopDark {
-  stop-color: #3d3e42;
+.medallionGraphite .medallionFill {
+  fill: #3d3e42;
 }
-.medallionGraphite .rimStopLight {
-  stop-color: #5b5c60;
-}
-.medallionGraphite .rimStopDark {
-  stop-color: #28292c;
-}
-.medallionGraphite .medallionEngraveRing {
-  stroke: rgba(255, 255, 255, 0.14);
-}
-.medallionGraphite .medallionGlyphBase {
+.medallionGraphite .medallionGlyph,
+.medallionGraphite .medallionGlyphStroke,
+.medallionGraphite .medallionMark {
   fill: #dcdde0;
+  color: #dcdde0;
 }
-.medallionGraphite .medallionGlyphStrokeBase {
-  fill: none;
+.medallionGraphite .medallionGlyphStroke {
   stroke: #dcdde0;
+  fill: none;
 }
 
 /* Onyx — tier 4, the top of the ladder. Bottoms out at #0d0e0f, the exact near-black used
    by the brand mark itself (public/assets/imagyn-app-logo.svg) — a shade darker than the
    app's own --color-text (#111111) and the one place this component intentionally echoes
    the brand mark's own tone rather than inventing a new one. */
-.medallionOnyx .faceStopLight {
-  stop-color: #35363a;
+.medallionOnyx .medallionRing {
+  stroke: #0d0e0f;
 }
-.medallionOnyx .faceStopDark {
-  stop-color: #0d0e0f;
+.medallionOnyx .medallionFill {
+  fill: #0d0e0f;
 }
-.medallionOnyx .rimStopLight {
-  stop-color: #232427;
-}
-.medallionOnyx .rimStopDark {
-  stop-color: #000000;
-}
-.medallionOnyx .medallionEngraveRing {
-  stroke: rgba(255, 255, 255, 0.16);
-}
-.medallionOnyx .medallionGlyphBase {
+.medallionOnyx .medallionGlyph,
+.medallionOnyx .medallionGlyphStroke,
+.medallionOnyx .medallionMark {
   fill: #e9eaec;
+  color: #e9eaec;
 }
-.medallionOnyx .medallionGlyphStrokeBase {
-  fill: none;
+.medallionOnyx .medallionGlyphStroke {
   stroke: #e9eaec;
+  fill: none;
 }

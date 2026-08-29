@@ -1,0 +1,71 @@
+/*
+ * Imagyn Reviews — Store Reviews component.
+ *
+ * A store-wide rating summary + achievements section, distinct from the existing
+ * per-product Review Summary (imagyn-component-summary.css) — this rolls up every approved
+ * review across the whole store, not one product. Reuses .imagyn-summary/.imagyn-histogram
+ * for the rating hero and .imagyn-medals-showcase for the achievements row rather than
+ * duplicating either — this file only supplies what's genuinely new: the section heading
+ * and the empty state. Deliberately no CTA — see store_reviews.liquid's own comment on why.
+ *
+ * Load imagyn-tokens.css, imagyn-typography.css, imagyn-utilities.css,
+ * imagyn-component-summary.css, imagyn-component-histogram.css,
+ * imagyn-component-medals-showcase.css, and imagyn-component-ratings-section.css (for
+ * .imagyn-ratings-section__label) before this file.
+ */
+
+[data-imagyn-store-reviews] {
+  display: grid;
+  gap: var(--imagyn-space-px-lg, 24px);
+  font-family: var(--imagyn-font-family);
+  color: var(--imagyn-color-text, inherit);
+  width: 100%;
+  max-width: var(--imagyn-medals-showcase-max-width, 1080px);
+  margin-inline: auto;
+  padding-inline: var(--imagyn-space-px-md, 16px);
+  box-sizing: border-box;
+  text-align: center;
+}
+
+.imagyn-store-reviews__heading {
+  margin: 0;
+  font-size: var(--imagyn-font-size-lg, 20px);
+  font-weight: var(--imagyn-font-weight-semibold, 600);
+}
+
+/* Reuses .imagyn-summary's own hero layout, just centered (the product widget's summary is
+   left-aligned inline content; this is a standalone, centered section). */
+.imagyn-store-reviews__summary {
+  margin: 0;
+  align-items: center;
+  text-align: center;
+}
+
+.imagyn-store-reviews__summary .imagyn-summary__hero {
+  align-items: center;
+  max-width: 22rem;
+  margin-inline: auto;
+}
+
+.imagyn-store-reviews__summary .imagyn-summary__headline {
+  justify-content: center;
+}
+
+.imagyn-store-reviews__empty {
+  margin: 0;
+  font-size: var(--imagyn-font-size-base, 15px);
+  color: var(--imagyn-color-text, inherit);
+  opacity: var(--imagyn-color-text-muted-opacity, 0.6);
+}
+
+.imagyn-store-reviews__medals {
+  display: grid;
+  justify-items: center;
+  gap: var(--imagyn-space-sm, 0.6em);
+  padding-top: var(--imagyn-space-px-lg, 24px);
+  border-top: var(--imagyn-border-width, 1px) solid var(--imagyn-color-border, rgba(0, 0, 0, 0.08));
+}
+
+.imagyn-store-reviews__medals .imagyn-medals-showcase__list {
+  padding: 0;
+}
