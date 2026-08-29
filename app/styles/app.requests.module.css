@@ -19,6 +19,48 @@
   gap: var(--space-4);
 }
 
+/* Plan-aware, not decorative — only rendered when canUseEmailReminders is actually false
+   (see the loader), so this never appears for a store that already has the capability. A
+   quiet tint on a hairline border, matching every other "here's something worth noticing"
+   surface in the app (AI Summary callout, etc.) rather than a bright marketing banner. */
+.upgradeBanner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-4);
+  padding: var(--space-4) var(--space-5);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  background: color-mix(in srgb, var(--color-accent) 4%, var(--color-surface));
+}
+
+.upgradeBannerText {
+  display: grid;
+  gap: 0.2rem;
+  min-width: 0;
+}
+
+.upgradeBannerTitle {
+  margin: 0;
+  font-size: var(--text-sm);
+  font-weight: 600;
+  color: var(--color-text);
+}
+
+.upgradeBannerSubtitle {
+  margin: 0;
+  font-size: var(--text-sm);
+  color: var(--color-text-muted);
+  line-height: 1.5;
+}
+
+@media (max-width: 640px) {
+  .upgradeBanner {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+}
+
 .searchField {
   width: min(100%, 28rem);
 }
@@ -108,11 +150,15 @@
   align-items: start;
 }
 
+/* No min-height here on purpose — .listColumn is a grid container with a single auto-sized
+   row, so any min-height on it forces that row (and its stretch-by-default child,
+   .tableWrap) to fill the extra space even when the real table content is much shorter,
+   leaving a tall blank rectangle above the pagination. Let it size to its actual content;
+   .tableWrap's own max-height + overflow already caps it on the tall end. */
 .listColumn {
   display: grid;
   gap: var(--space-4);
   min-width: 0;
-  min-height: 30rem;
 }
 
 /* Judge.me-style merchant data table — replaces the old card/list row layout. Sticky header,
@@ -373,7 +419,6 @@
   gap: var(--space-5);
   padding: var(--space-6);
   border: 1px solid var(--color-border);
-  border-left: 3px solid var(--color-accent);
   border-radius: var(--radius-lg);
   background: linear-gradient(180deg, var(--color-surface) 0%, color-mix(in srgb, var(--color-text) 1.5%, var(--color-surface)) 100%);
   box-shadow: var(--shadow-sm);
@@ -651,4 +696,15 @@
   .detailScheduleGrid {
     gap: var(--space-3);
   }
+}
+
+/* <Frame> here exists only so <Toast> has the ancestor context it requires to render —
+   it's not page chrome. Polaris's own Frame.css unconditionally sets min-height:100vh/100svh
+   and width:100% on .Polaris-Frame, which — with no real chrome inside it — left a full extra
+   viewport-height blank area scrollable below the real page content on every load. Toast
+   itself renders via .Polaris-Frame-ToastManager, which is position:fixed and anchored to the
+   viewport regardless of this box, so collapsing Frame's own box with display:contents is
+   safe and keeps Toast fully functional while removing the phantom blank space. */
+.toastFrame :global(.Polaris-Frame) {
+  display: contents;
 }

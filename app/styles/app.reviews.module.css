@@ -192,20 +192,13 @@
   align-items: start;
 }
 
+/* No min-height here on purpose — .listColumn is a grid container with a single auto-sized
+   row, so any min-height on it forces that row (and its stretch-by-default child,
+   .tableWrap) to fill the extra space even when the real table content is much shorter,
+   leaving a tall blank rectangle above the pagination. Let it size to its actual content;
+   .tableWrap's own max-height + overflow already caps it on the tall end. */
 .listColumn {
   display: grid;
-  min-height: 36rem;
-}
-
-.listScroll {
-  max-height: 40rem;
-  overflow-y: auto;
-  padding-right: var(--space-2);
-}
-
-.list {
-  display: grid;
-  gap: var(--space-3);
 }
 
 .skeletonList {
@@ -215,7 +208,7 @@
 
 .skeletonRow {
   composes: skeletonShimmer from "./shared.module.css";
-  height: 7.5rem;
+  height: 2.75rem;
   border-radius: var(--radius-md);
 }
 
@@ -241,52 +234,92 @@
   width: 100%;
 }
 
-/* No border-bottom between rows — separation comes from .list's own gap plus the
-   hover/selected treatment below, per the "whitespace instead of containers" direction. */
-.reviewRow {
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: var(--space-6);
-  padding: var(--space-4);
-  border-left: 3px solid transparent;
-  border-radius: var(--radius-md);
-  transition: background-color var(--transition-base), border-color var(--transition-base), transform var(--transition-base);
+/* Real merchant data table — same convention as app.requests.module.css's .tableWrap/.table
+   (a merchant using both pages should feel one product, not two different list languages).
+   Sticky header, subtle row separators, calm hover/selected treatment via an inset box-shadow
+   on the leading cell — replaces the old flex "review card" row, which spent ~176px of
+   vertical height per review (2-line title + 2-line preview + generous padding) on content
+   already available in full the moment a row is selected, in the detail panel to the right. */
+.tableWrap {
+  max-height: 40rem;
+  overflow: auto;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
 }
 
-.reviewRow:hover {
-  background-color: color-mix(in srgb, var(--color-text) 2.5%, transparent);
+.table {
+  table-layout: fixed;
+  width: 100%;
+  border-collapse: collapse;
+  font-size: var(--text-sm);
+}
+
+.table thead th {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  padding: var(--space-3);
+  text-align: left;
+  font-size: var(--text-xs);
+  font-weight: 500;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--color-text-muted);
+  background: var(--color-surface);
+  border-bottom: 1px solid var(--color-border);
+  white-space: nowrap;
+}
+
+.thCheckbox,
+.tdCheckbox {
+  width: 2.75rem;
+  padding-right: 0;
+}
+
+.colRating {
+  width: 5.5rem;
+}
+
+.colStatus {
+  width: 8rem;
+}
+
+.colDate {
+  width: 5.5rem;
+}
+
+.table tbody td {
+  padding: var(--space-3);
+  vertical-align: middle;
+  border-bottom: 1px solid color-mix(in srgb, var(--color-text) 6%, transparent);
+  color: var(--color-text);
+}
+
+.table tbody tr:last-child td {
+  border-bottom: none;
+}
+
+.tr {
   cursor: pointer;
-  transform: translateX(1px);
+  transition: background-color var(--transition-base);
 }
 
-.reviewRowSelected {
+.tr:hover td {
+  background-color: color-mix(in srgb, var(--color-text) 2.5%, transparent);
+}
+
+.trSelected td {
   background-color: color-mix(in srgb, var(--color-text) 4%, transparent);
-  border-left-color: var(--color-accent);
-  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--color-text) 4%, transparent);
+}
+
+.trSelected td:first-child {
+  box-shadow: inset 3px 0 0 var(--color-accent);
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .reviewRow {
+  .tr {
     transition: none;
   }
-
-  .reviewRow:hover {
-    transform: none;
-  }
-}
-
-.reviewMain {
-  display: flex;
-  align-items: flex-start;
-  gap: var(--space-4);
-  min-width: 0;
-  flex: 1;
-}
-
-.rowCheckbox {
-  display: inline-flex;
-  padding-top: 0.05rem;
 }
 
 .rating {
@@ -297,99 +330,63 @@
   white-space: nowrap;
 }
 
-.reviewContent {
-  display: grid;
-  gap: var(--space-1);
-  min-width: 0;
-}
-
-/* Rating + status lead every row — the fastest scan signal, so it sits above the title
-   instead of the status badge being buried in the customer/product meta line below. */
-.reviewTopLine {
-  display: flex;
-  align-items: center;
-  gap: var(--space-2);
-  margin-bottom: var(--space-1);
-}
-
-/* Clamped to 2 lines and given a matching min-height, so a one-word title and a
-   full-sentence title occupy exactly the same vertical space — row height stays
-   predictable no matter what a merchant or customer typed. */
-.reviewTitle {
-  margin: 0 0 var(--space-2);
-  font-size: var(--text-lg);
-  font-weight: 600;
-  letter-spacing: -0.01em;
-  line-height: 1.35;
-  min-height: calc(1.35em * 2);
-  display: -webkit-box;
-  -webkit-line-clamp: 2;
-  -webkit-box-orient: vertical;
+.tdReview {
   overflow: hidden;
 }
 
-/* One colored element per row (the status Badge); customer and product each get their own
-   single-line, ellipsis-truncated slot instead of one long flowing string — that's what let
-   a long product name silently wrap the whole row onto extra lines before. Optimized for
-   scanning 50+ rows at a glance, not for showing every character of every field. */
-.reviewMetaRow {
+/* Title truncates to one line, not two — the full text is one click away in the detail
+   panel, so the row's job is to be scannable, not to be a preview card. */
+.reviewTitle {
+  margin: 0;
+  font-weight: 600;
+  letter-spacing: -0.005em;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.reviewMetaLine {
+  margin: 0.1rem 0 0;
   display: flex;
   align-items: center;
-  gap: var(--space-2);
-  margin-bottom: var(--space-1);
+  gap: 0.3rem;
   min-width: 0;
+  color: var(--color-text-muted);
+  font-size: var(--text-xs);
 }
 
 /* flex: none — the customer name is never the thing that should shrink; it's short and a
-   merchant needs the whole name. A generous ch-based cap is a safety net for a pathological
-   input only, not something normal names ever hit. .metaProduct absorbs 100% of whatever
-   space is left and does the actual truncating (product names are the long, variable one). */
+   merchant needs the whole name. .metaProduct absorbs whatever space is left and does the
+   actual truncating (product names are the long, variable one). */
 .metaCustomer {
   flex: none;
-  max-width: 12rem;
-  color: var(--color-text-muted);
-  font-size: var(--text-sm);
-  white-space: nowrap;
+  max-width: 10rem;
   overflow: hidden;
   text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .metaSeparator {
   flex: none;
-  color: var(--color-text-muted);
-  font-size: var(--text-sm);
 }
 
 .metaProduct {
   flex: 1 1 0%;
   min-width: 0;
-  color: var(--color-text-muted);
-  font-size: var(--text-sm);
-  white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
-}
-
-.reviewPreview {
-  margin: 0;
-  color: var(--color-text-muted);
-  font-size: var(--text-sm);
-  line-height: 1.55;
-  overflow: hidden;
-  display: -webkit-box;
-  -webkit-line-clamp: 2;
-  -webkit-box-orient: vertical;
-}
-
-.reviewDate {
-  margin: 0;
-  color: var(--color-text-muted);
-  opacity: 0.92;
-  font-size: var(--text-sm);
   white-space: nowrap;
-  padding-right: var(--space-3);
 }
 
+.tdStatus,
+.tdRating {
+  overflow: hidden;
+}
+
+.tdDate {
+  color: var(--color-text-muted);
+  white-space: nowrap;
+}
 
 .autoApprovedBadge {
   display: inline-flex;
@@ -458,7 +455,6 @@
   gap: var(--space-3);
   padding: var(--space-4) var(--space-5);
   border: 1px solid var(--color-border);
-  border-left: 3px solid var(--color-accent);
   border-radius: var(--radius-lg);
   background: linear-gradient(180deg, var(--color-surface) 0%, color-mix(in srgb, var(--color-text) 1.5%, var(--color-surface)) 100%);
   box-shadow: var(--shadow-sm);
@@ -650,12 +646,12 @@
   display: grid;
 }
 
-/* A quoted reply, not a form box — left accent bar + tint instead of a full border, so it
-   reads as "here's what you said" rather than another bordered container. */
+/* A quoted reply, not a form box — a soft tonal tint alone signals "here's what you said"
+   without a border of any kind, so it never reads as another bordered container nested
+   inside the detail panel. */
 .replyDisplay {
   padding: var(--space-3) var(--space-4);
-  border-left: 3px solid var(--color-accent);
-  border-radius: 0 var(--radius-md) var(--radius-md) 0;
+  border-radius: var(--radius-md);
   background: color-mix(in srgb, var(--color-text) 3%, transparent);
   color: var(--color-text);
   line-height: 1.7;
@@ -854,4 +850,15 @@
   color: var(--color-text-muted);
   max-height: 12rem;
   overflow-y: auto;
+}
+
+/* <Frame> here exists only so <Toast> has the ancestor context it requires to render —
+   it's not page chrome. Polaris's own Frame.css unconditionally sets min-height:100vh/100svh
+   and width:100% on .Polaris-Frame, which — with no real chrome inside it — left a full extra
+   viewport-height blank area scrollable below the real page content on every load. Toast
+   itself renders via .Polaris-Frame-ToastManager, which is position:fixed and anchored to the
+   viewport regardless of this box, so collapsing Frame's own box with display:contents is
+   safe and keeps Toast fully functional while removing the phantom blank space. */
+.toastFrame :global(.Polaris-Frame) {
+  display: contents;
 }

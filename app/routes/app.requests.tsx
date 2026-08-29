@@ -26,12 +26,14 @@ import {
 import { PersonIcon, SearchIcon } from "@shopify/polaris-icons";
 
 import { Button } from "../components/ui/Button";
+import { LinkButton } from "../components/ui/LinkButton";
 import { Container } from "../components/ui/Container";
 import { Section } from "../components/ui/Section";
 import { RequestStatusBadge } from "../components/requests/RequestStatusBadge";
 import { RequestLifecycleTimeline } from "../components/requests/RequestLifecycleTimeline";
 import { authenticateAdminDeduped } from "../services/auth-dedupe.server";
 import { getOrCreateStore } from "../services/store.server";
+import { getStorePermissions } from "../services/permissions";
 import {
   reviewRequestService,
   type ReviewRequestDateFilter,
@@ -59,6 +61,11 @@ type LoaderData = {
   sortBy: ReviewRequestSortBy;
   sortDir: ReviewRequestSortDir;
   error: string | null;
+  // Drives the Pro-upgrade callout below the header — a genuinely gated capability
+  // (see permissions.ts), not a UI-only claim: Free stores never get the Day 3/Day 7
+  // automatic reminder sweep, so a request sitting without a reminder isn't a bug on
+  // their plan, and this is the one page a merchant would actually notice that.
+  canUseEmailReminders: boolean;
 };
 
 type ActionData = {
@@ -158,7 +165,7 @@ export const loader = async ({ request }: LoaderFunctionArgs): Promise<LoaderDat
   const sortDir: ReviewRequestSortDir = sortDirRaw === "asc" ? "asc" : "desc";
 
   try {
-    const [result, customers, products] = await Promise.all([
+    const [result, customers, products, permissions] = await Promise.all([
       reviewRequestService.listRequests(store.id, {
         search: search || undefined,
         status: status ? (status as ReviewRequestStatus) : undefined,
@@ -170,6 +177,7 @@ export const loader = async ({ request }: LoaderFunctionArgs): Promise<LoaderDat
       }),
       reviewRequestService.listCustomers(store.id),
       reviewRequestService.listProducts(store.id),
+      getStorePermissions(store.id),
     ]);
 
     return {
@@ -188,6 +196,7 @@ export const loader = async ({ request }: LoaderFunctionArgs): Promise<LoaderDat
       sortBy,
       sortDir,
       error: null,
+      canUseEmailReminders: permissions.canUseEmailReminders,
     };
   } catch (error) {
     return {
@@ -203,6 +212,7 @@ export const loader = async ({ request }: LoaderFunctionArgs): Promise<LoaderDat
       sortBy,
       sortDir,
       error: error instanceof Error ? error.message : "Unable to load review requests.",
+      canUseEmailReminders: false,
     };
   }
 };
@@ -599,7 +609,21 @@ export default function RequestsPage() {
   // without touching window.history, so there's nothing for the admin shell to fight with.
   const dataFetcher = useFetcher<typeof loader>();
   const data = dataFetcher.data ?? initialData;
-  const { requests, customers, products, totalCount, page, pageSize, search, status, dateFilter, sortBy, sortDir, error } = data;
+  const {
+    requests,
+    customers,
+    products,
+    totalCount,
+    page,
+    pageSize,
+    search,
+    status,
+    dateFilter,
+    sortBy,
+    sortDir,
+    error,
+    canUseEmailReminders,
+  } = data;
 
   const isLoading = navigation.state !== "idle" || dataFetcher.state !== "idle";
   const isMutating = fetcher.state !== "idle";
@@ -1054,6 +1078,21 @@ export default function RequestsPage() {
               </Button>
             </div>
           </header>
+
+          {!canUseEmailReminders ? (
+            <div className={styles.upgradeBanner}>
+              <div className={styles.upgradeBannerText}>
+                <p className={styles.upgradeBannerTitle}>Automatic reminders are a Pro feature</p>
+                <p className={styles.upgradeBannerSubtitle}>
+                  Requests on this plan send once and stop — upgrade to automatically follow up on Day 3 and Day 7
+                  for anyone who hasn&apos;t reviewed yet.
+                </p>
+              </div>
+              <LinkButton to="/app/billing" variant="secondary">
+                Upgrade to Pro
+              </LinkButton>
+            </div>
+          ) : null}
 
           <div className={styles.toolbar}>
             <label className={styles.searchField}>
@@ -1621,11 +1660,15 @@ export default function RequestsPage() {
         </Modal.Section>
       </Modal>
 
-      <Frame>
-        {toastState ? (
-          <Toast content={toastState.content} error={toastState.error} onDismiss={() => setToastState(null)} />
-        ) : null}
-      </Frame>
+      {/* Frame exists solely to satisfy Toast's required-ancestor context — see
+          .toastFrame in app.requests.module.css for why it needs a layout override. */}
+      <div className={styles.toastFrame}>
+        <Frame>
+          {toastState ? (
+            <Toast content={toastState.content} error={toastState.error} onDismiss={() => setToastState(null)} />
+          ) : null}
+        </Frame>
+      </div>
     </>
   );
 }

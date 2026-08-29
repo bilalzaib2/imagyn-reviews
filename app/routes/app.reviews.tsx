@@ -1126,74 +1126,80 @@ export default function ReviewsPage() {
             ) : (
               <>
                 {/* eslint-disable-next-line jsx-a11y/no-static-element-interactions -- delegates
-                    ArrowUp/ArrowDown from the already-focusable review rows below; this
+                    ArrowUp/ArrowDown from the already-focusable table rows below; this
                     container itself is never a focus target. */}
                 <div className={styles.listColumn} onKeyDown={onListKeyDown}>
-                  <label className={styles.bulkSelectAll}>
-                    <input
-                      type="checkbox"
-                      checked={allPageSelected}
-                      onChange={(event) => toggleSelectAllOnPage(event.target.checked)}
-                      disabled={isLoading || isMutating || effectiveReviews.length === 0}
-                    />
-                    <span>Select page</span>
-                  </label>
-                  <div className={styles.listScroll}>
-                    <div className={styles.list}>
-                      {effectiveReviews.map((review) => {
-                        const isSelected = review.id === selectedReviewId;
-                        const reviewTitle = review.title ?? "Untitled review";
-                        const customerName = review.reviewerName;
-                        const productName = review.productTitle ?? review.product?.name ?? "Unassigned product";
-                        const previewText = review.content.trim() || "No review text captured yet.";
-                        const checked = selectedIds.includes(review.id);
+                  <div className={styles.tableWrap}>
+                    <table className={styles.table}>
+                      <thead>
+                        <tr>
+                          <th className={styles.thCheckbox}>
+                            <input
+                              type="checkbox"
+                              aria-label="Select all reviews on this page"
+                              checked={allPageSelected}
+                              onChange={(event) => toggleSelectAllOnPage(event.target.checked)}
+                              disabled={isLoading || isMutating || effectiveReviews.length === 0}
+                            />
+                          </th>
+                          <th className={styles.colRating}>Rating</th>
+                          <th>Review</th>
+                          <th className={styles.colStatus}>Status</th>
+                          <th className={styles.colDate}>Date</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {effectiveReviews.map((review) => {
+                          const isSelected = review.id === selectedReviewId;
+                          const reviewTitle = review.title ?? "Untitled review";
+                          const customerName = review.reviewerName;
+                          const productName = review.productTitle ?? review.product?.name ?? "Unassigned product";
+                          const checked = selectedIds.includes(review.id);
 
-                        return (
-                          <div
-                            key={review.id}
-                            className={`${styles.reviewRow} ${isSelected ? styles.reviewRowSelected : ""}`}
-                            onClick={() => setSelectedReviewId(review.id)}
-                            onKeyDown={(event) => {
-                              if (event.key === "Enter" || event.key === " ") {
-                                event.preventDefault();
-                                setSelectedReviewId(review.id);
-                              }
-                            }}
-                            role="button"
-                            tabIndex={0}
-                            aria-pressed={isSelected}
-                          >
-                            <div className={styles.reviewMain}>
-                              <label className={styles.rowCheckbox}>
+                          return (
+                            <tr
+                              key={review.id}
+                              className={`${styles.tr} ${isSelected ? styles.trSelected : ""}`}
+                              onClick={() => setSelectedReviewId(review.id)}
+                              onKeyDown={(event) => {
+                                if (event.key === "Enter" || event.key === " ") {
+                                  event.preventDefault();
+                                  setSelectedReviewId(review.id);
+                                }
+                              }}
+                              tabIndex={0}
+                              aria-selected={isSelected}
+                            >
+                              <td className={styles.tdCheckbox} onClick={(event) => event.stopPropagation()}>
                                 <input
                                   type="checkbox"
                                   checked={checked}
                                   aria-label={`Select review from ${review.reviewerName}`}
-                                  onClick={(event) => event.stopPropagation()}
                                   onChange={(event) => toggleSelection(review.id, event.target.checked)}
                                 />
-                              </label>
-                              <div className={styles.reviewContent}>
-                                <div className={styles.reviewTopLine}>
-                                  <div className={styles.rating} aria-label={`${review.rating} out of 5 stars`}>
-                                    <StarRating value={review.rating} />
-                                  </div>
-                                  <ReviewStatusBadge status={review.status} />
+                              </td>
+                              <td className={styles.tdRating}>
+                                <div className={styles.rating} aria-label={`${review.rating} out of 5 stars`}>
+                                  <StarRating value={review.rating} size={13} />
                                 </div>
-                                <h2 className={styles.reviewTitle}>{reviewTitle}</h2>
-                                <div className={styles.reviewMetaRow}>
+                              </td>
+                              <td className={styles.tdReview}>
+                                <p className={styles.reviewTitle}>{reviewTitle}</p>
+                                <p className={styles.reviewMetaLine}>
                                   <span className={styles.metaCustomer}>{customerName}</span>
                                   <span className={styles.metaSeparator} aria-hidden="true">·</span>
                                   <span className={styles.metaProduct}>{productName}</span>
-                                </div>
-                                <p className={styles.reviewPreview}>{previewText}</p>
-                              </div>
-                            </div>
-                            <p className={styles.reviewDate}>{formatShortDate(review.createdAt)}</p>
-                          </div>
-                        );
-                      })}
-                    </div>
+                                </p>
+                              </td>
+                              <td className={styles.tdStatus}>
+                                <ReviewStatusBadge status={review.status} />
+                              </td>
+                              <td className={styles.tdDate}>{formatShortDate(review.createdAt)}</td>
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                    </table>
                   </div>
                 </div>
 
@@ -1691,11 +1697,15 @@ export default function ReviewsPage() {
         </Modal.Section>
       </Modal>
 
-      <Frame>
-        {toastState ? (
-          <Toast content={toastState.content} error={toastState.error} onDismiss={() => setToastState(null)} />
-        ) : null}
-      </Frame>
+      {/* Frame exists solely to satisfy Toast's required-ancestor context — see
+          .toastFrame in app.reviews.module.css for why it needs a layout override. */}
+      <div className={styles.toastFrame}>
+        <Frame>
+          {toastState ? (
+            <Toast content={toastState.content} error={toastState.error} onDismiss={() => setToastState(null)} />
+          ) : null}
+        </Frame>
+      </div>
     </>
   );
 }
