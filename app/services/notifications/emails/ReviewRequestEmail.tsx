@@ -50,22 +50,18 @@ export function ReviewRequestEmail({
       <Preview>{previewText}</Preview>
       <Body style={{ margin: 0, padding: 0, backgroundColor: "#ffffff", fontFamily: FONT_FAMILY }}>
         <Container style={{ maxWidth: "480px", padding: "56px 24px" }}>
-          <Section style={{ paddingBottom: "24px" }}>
-            {logoUrl ? (
-              // Merchant-uploaded logo: capped to a max width, no fixed height, so a
-              // non-square logo (most wordmarks aren't) never gets stretched into a square —
-              // the one hard rule from a first pass that hardcoded width=height=28.
+          {logoUrl ? (
+            // Merchant-uploaded logo: capped to a max width, no fixed height, so a
+            // non-square logo (most wordmarks aren't) never gets stretched into a square —
+            // the one hard rule from a first pass that hardcoded width=height=28. No fallback
+            // mark is rendered here when a merchant hasn't uploaded one (see the footer
+            // instead) — this slot is the email's primary, above-the-fold branding position,
+            // and showing Imagyn's own icon there made a customer's first impression of an
+            // unbranded email read as "sent by Imagyn," not "sent by the store."
+            <Section style={{ paddingBottom: "24px" }}>
               <Img src={logoUrl} width="40" alt={storeName} style={{ maxHeight: "40px", height: "auto" }} />
-            ) : (
-              <Img
-                src="https://app.imagyn.co/apple-touch-icon.png"
-                width="28"
-                height="28"
-                alt="Imagyn Reviews"
-                style={{ borderRadius: "6px" }}
-              />
-            )}
-          </Section>
+            </Section>
+          ) : null}
 
           {showStoreName ? (
             <Section style={{ paddingBottom: "32px" }}>
@@ -134,10 +130,18 @@ export function ReviewRequestEmail({
           ) : null}
 
           {/* One small, quiet line — the merchant's own branding above does all the real
-              work; this is attribution, not a second ad. Deliberately plain text (no logo
-              image here) so it never competes with a merchant's own logo higher up. */}
+              work; this is attribution, not a second ad. The mark here is tiny (14px) and
+              sits only in this footer, never in the header's primary branding position, so
+              it can never read as "this email is from Imagyn" — see the logo Section above. */}
           <Section style={{ paddingTop: "20px" }}>
             <Text style={{ margin: 0, fontSize: "11px", lineHeight: "1.5", color: "#c2c2c2" }}>
+              <Img
+                src="https://app.imagyn.co/apple-touch-icon.png"
+                width="14"
+                height="14"
+                alt=""
+                style={{ borderRadius: "3px", verticalAlign: "middle", marginRight: "5px" }}
+              />
               Powered by Imagyn Reviews
             </Text>
           </Section>

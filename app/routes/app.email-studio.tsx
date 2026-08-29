@@ -450,6 +450,12 @@ export default function EmailStudioPage() {
               </Section>
 
               <Section title="Branding" description="Store logo, name, and accent color.">
+                <p className={styles.senderIdentityNote}>
+                  Emails send as <strong>&ldquo;{storeName}&rdquo;</strong> — customers see your store name as the
+                  sender, not Imagyn Reviews. They&apos;re delivered through Imagyn&apos;s email infrastructure;
+                  sending from your own domain isn&apos;t available yet.
+                </p>
+
                 <div className={styles.fieldGroup}>
                   <label className={styles.fieldLabel} htmlFor="logoUpload">
                     Logo
@@ -482,7 +488,7 @@ export default function EmailStudioPage() {
                   <p className={styles.fieldHint}>
                     {isUploadingLogo
                       ? "Uploading…"
-                      : "JPEG, PNG, or WebP, under 1MB. Shown at a fixed height with its original aspect ratio preserved. Leave empty to use the default Imagyn mark."}
+                      : "JPEG, PNG, or WebP, under 1MB. Shown at a fixed height with its original aspect ratio preserved. Leave empty to show no logo — the store name below still identifies you."}
                   </p>
                 </div>
 
@@ -580,9 +586,13 @@ export default function EmailStudioPage() {
         </div>
       </Container>
 
-      <Frame>
-        {toast ? <Toast content={toast.content} error={toast.error} onDismiss={() => setToast(null)} /> : null}
-      </Frame>
+      {/* Frame exists solely to satisfy Toast's required-ancestor context — see .toastFrame
+          in app.email-studio.module.css for why it needs a layout override. */}
+      <div className={styles.toastFrame}>
+        <Frame>
+          {toast ? <Toast content={toast.content} error={toast.error} onDismiss={() => setToast(null)} /> : null}
+        </Frame>
+      </div>
     </>
   );
 }

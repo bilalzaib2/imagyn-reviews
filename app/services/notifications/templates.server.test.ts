@@ -36,7 +36,7 @@ describe("buildReviewRequestEmail — no template (backward compatibility)", () 
     expect(html).not.toContain("Your feedback helps other shoppers decide with confidence");
   });
 
-  it("falls back to the store's own icon when no logoUrl is set", async () => {
+  it("renders no header logo when no logoUrl is set — only the small footer attribution mark", async () => {
     const { html } = await buildReviewRequestEmail({
       customerName: "Jordan Avery",
       productName: "Embroidered Lawn Dress",
@@ -45,7 +45,12 @@ describe("buildReviewRequestEmail — no template (backward compatibility)", () 
       customMessage: null,
     });
 
-    expect(html).toContain("apple-touch-icon.png");
+    // The Imagyn mark still appears exactly once, in the small "Powered by" footer line — never
+    // in the header's primary branding position, so an unbranded email never reads as
+    // "sent by Imagyn" to the customer.
+    const occurrences = html.split("apple-touch-icon.png").length - 1;
+    expect(occurrences).toBe(1);
+    expect(html).toContain("Powered by Imagyn Reviews");
   });
 });
 
@@ -75,7 +80,10 @@ describe("buildReviewRequestEmail — with a saved Email Studio template", () =>
     expect(html).toContain("Leave feedback");
     expect(html).toContain("#ff6600");
     expect(html).toContain("merchant-logo.png");
-    expect(html).not.toContain("apple-touch-icon.png");
+    // The merchant's own logo is the only image in the header — Imagyn's mark still appears
+    // exactly once, but only in the small footer attribution line, never competing with it.
+    expect(html.split("apple-touch-icon.png").length - 1).toBe(1);
+    expect(html).toContain("Powered by Imagyn Reviews");
   });
 
   it("a per-request customMessage still overrides the template's own default body text", async () => {

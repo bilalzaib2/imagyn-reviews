@@ -19,5 +19,14 @@ export async function sendTestReviewRequestEmail(to: string, storeId: string, st
     template,
   });
 
-  return getEmailProvider().sendEmail({ to, subject, html, text });
+  return getEmailProvider().sendEmail({
+    to,
+    subject,
+    html,
+    text,
+    // Matches dispatchRequestEmail/dispatchReminderEmail's sender identity exactly, so this
+    // "here's exactly what your customers will see" test send is honest about the From header
+    // too, not just the body content.
+    fromName: storeName,
+  });
 }

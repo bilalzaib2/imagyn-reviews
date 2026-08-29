@@ -56,6 +56,15 @@
   line-height: 1.5;
 }
 
+/* Honest disclosure of how sender identity actually works (see resend.server.ts's fromName) —
+   a quiet note, not a warning banner, since this is expected/correct behavior, not a problem. */
+.senderIdentityNote {
+  margin: 0 0 var(--space-5);
+  font-size: var(--text-xs);
+  line-height: 1.5;
+  color: var(--color-text-muted);
+}
+
 .logoUploadRow {
   display: flex;
   align-items: center;
@@ -256,4 +265,16 @@
   margin: 0;
   font-size: var(--text-xs);
   color: var(--color-text-muted);
+}
+
+/* <Frame> here exists only so <Toast> has the ancestor context it requires to render —
+   it's not page chrome. Polaris's own Frame.css unconditionally sets min-height:100vh/100svh
+   and width:100% on .Polaris-Frame, which — with no real chrome inside it — left a full extra
+   viewport-height blank area scrollable below the real page content on every load. Toast
+   itself renders via .Polaris-Frame-ToastManager, which is position:fixed and anchored to the
+   viewport regardless of this box, so collapsing Frame's own box with display:contents is
+   safe and keeps Toast fully functional while removing the phantom blank space. Same fix
+   already applied to app.reviews.module.css/app.requests.module.css. */
+.toastFrame :global(.Polaris-Frame) {
+  display: contents;
 }
