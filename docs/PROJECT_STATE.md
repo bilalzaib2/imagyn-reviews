@@ -2,11 +2,69 @@
 
 ## Current Phase
 
-Live in production, one real merchant on the app. Finishing sprint checkpoint committed and
-deployed (`d6231e4`). Premium UI/UX Redesign (all 10 core sections) is complete, passed a
-final production-safety review, and is committed and live in production (`fec41f5`).
-Separately, the new "Medals Showcase" homepage widget block (not part of the redesign pass)
-is now also complete and ready to ship — see its own section below.
+Live in production, one real merchant on the app. Reviews + Requests table redesign and two
+real layout/border fixes are committed and deployed (`565f8db`). Email system production-
+hardening pass is committed and deployed (`2b81a22`) — see its own section below. Premium
+UI/UX Redesign (all 10 core sections) is complete, passed a final production-safety review,
+and is committed and live in production (`fec41f5`). Separately, the "Medals Showcase"
+homepage widget block is also complete and ready to ship — see its own section below.
+
+## Email System — Production Hardening (2026-08-29, DONE ✓, deployed `2b81a22`)
+
+Audited the full review-request email system against a detailed production-readiness brief
+(branding, unsubscribe/compliance, sample-token safety, Day 0/3/7 scheduling, Protected
+Customer Data gating, sender identity) before changing anything. Finding: nearly everything
+asked for was already built, mostly in the immediately preceding session (`0ea925b` —
+sender identity via `fromName`, real logo upload through the Shopify Files pipeline,
+store-name override/hide, unsubscribe token HMAC + suppression enforcement, Day 0/3/7
+scheduler with idempotency and a historical-safety cutoff, and the `ORDER_AUTOMATION_ENABLED`
+gate on the Protected-Customer-Data-blocked auto-creation webhook). This pass verified all of
+that against the actual code (not assumed from the UI) and fixed the two genuine gaps found:
+
+-   **The no-logo email fallback showed Imagyn's own icon in the header** — the email's
+    primary, above-the-fold branding position — which directly contradicted the "must not
+    read as sent by Imagyn" goal `0ea925b` had already established for the From header.
+    Removed the header fallback entirely (the store-name eyebrow line already identifies the
+    sender when no logo is set); added a tiny (14px) Imagyn icon to the existing "Powered by
+    Imagyn Reviews" footer line instead, so the mark now only ever appears in the small,
+    subtle attribution slot it was always meant for.
+-   **The Settings "Send test email" diagnostic didn't pass `fromName`** — the one send
+    explicitly described as "exactly what your customers will see" was showing the wrong
+    sender identity. Now matches the real send path exactly.
+-   **Email Studio's `<Frame>`** (used only to host `<Toast>`) had the identical
+    `min-height: 100vh` Polaris `Frame.css` bug just found and fixed on Reviews/Requests in
+    the prior session — same `display: contents` fix applied here.
+-   **Added an honest sender-identity disclosure** in Email Studio's Branding section:
+    emails send as the store's name through Imagyn's shared delivery infrastructure; full
+    custom-domain sending isn't available yet. `canUseCustomEmailDomain` exists as a defined
+    permission (true only for the internal `owner` plan) with zero enforcement point anywhere
+    in the codebase — this is flagged honestly here and in the UI copy, not built or implied.
+
+**Confirmed already correct, unchanged:** unsubscribe token generation/verification (HMAC,
+constant-time compare, GET-validates/POST-mutates split so mail-security scanners can't
+false-trigger it), suppression enforcement on every automated send path (Day 0 + both
+reminders), a submitted review or an unsubscribe both stopping future reminders (`reviewedAt`/
+`status` checks in the scheduler query), reminder idempotency (each reminder field is set
+exactly once and gates re-selection), duplicate-order protection (unique `(shopifyOrderId,
+productId)` index), review-link token TTL + single-use, and the sample-token/preview path
+(`https://example.com/r/sample-token` — a literal string, never a real `ReviewRequest` row,
+never a real send).
+
+**Shopify approval dependency (unchanged, still pending):** automatic, order-triggered review
+requests remain built and gated behind `ORDER_AUTOMATION_ENABLED = false`
+(`app/config/features.ts`) because Shopify rejected the `fulfillments/create` webhook
+subscription pending Protected Customer Data approval. Manual review requests — and their
+full Day 0/3/7 email schedule — are fully live today regardless of plan/approval status.
+Once approval is granted: restore the webhook subscription + `read_fulfillments` scope in
+`shopify.app.toml`, flip the flag, and the feature activates with no other code changes —
+already disclosed exactly this way in Settings' "Automatic review requests" section.
+
+**Remaining, out of scope for this pass:** per-merchant custom-domain sending
+(`canUseCustomEmailDomain`) has no enforcement path built yet — flagged, not built, matching
+the "don't fake a sender identity the provider doesn't support" instruction. `dispatchRequestEmail`/
+`dispatchReminderEmail`'s own `fromName` plumbing (added in `0ea925b`) still has no direct unit
+test asserting the value passed to `sendEmail` — verified correct by direct code read this
+pass, but worth a small test addition in a future pass.
 
 ## Final Production Safety Review (2026-08-29)
 
