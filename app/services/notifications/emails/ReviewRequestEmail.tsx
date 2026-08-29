@@ -136,7 +136,7 @@ export function ReviewRequestEmail({
           <Section style={{ paddingTop: "20px" }}>
             <Text style={{ margin: 0, fontSize: "11px", lineHeight: "1.5", color: "#c2c2c2" }}>
               <Img
-                src="https://app.imagyn.co/apple-touch-icon.png"
+                src="https://app.imagyn.co/apple-touch-icon.png?v=3"
                 width="14"
                 height="14"
                 alt=""

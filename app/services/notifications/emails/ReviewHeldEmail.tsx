@@ -23,7 +23,7 @@ export function ReviewHeldEmail({ storeName, reviewerName, productName, rating, 
         <Container style={{ maxWidth: "480px", padding: "56px 24px" }}>
           <Section style={{ paddingBottom: "24px" }}>
             <Img
-              src="https://app.imagyn.co/apple-touch-icon.png"
+              src="https://app.imagyn.co/apple-touch-icon.png?v=3"
               width="28"
               height="28"
               alt="Imagyn Reviews"

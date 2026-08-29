@@ -14,7 +14,7 @@ export default function App() {
             "?v=2" query strings force every icon to be treated as a new resource. */}
         <link rel="icon" href="/favicon.svg?v=2" type="image/svg+xml" />
         <link rel="alternate icon" href="/favicon.ico?v=2" />
-        <link rel="apple-touch-icon" href="/apple-touch-icon.png?v=2" />
+        <link rel="apple-touch-icon" href="/apple-touch-icon.png?v=3" />
         <link rel="preconnect" href="https://cdn.shopify.com/" />
         <Meta />
         <Links />
