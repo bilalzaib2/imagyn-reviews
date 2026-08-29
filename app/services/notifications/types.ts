@@ -3,6 +3,13 @@ export interface EmailSendRequest {
   subject: string;
   html: string;
   text: string;
+  // Display name shown alongside the verified From address (e.g. "Coastal Threads
+  // <reviews@notifications.imagyn.co>") — lets a customer-facing send (review requests,
+  // reminders) read as coming from the merchant's own store, not a generic "Imagyn Reviews"
+  // identity, without requiring per-merchant domain verification (a real Resend/provider
+  // constraint — see resend.server.ts). Omitted entirely for Imagyn's own merchant-facing
+  // notifications (e.g. ReviewHeldEmail), which should keep the Imagyn identity as-is.
+  fromName?: string;
   // Provider-level metadata echoed back on delivery webhooks (see resend.server.ts and
   // webhooks.resend.tsx) — optional and provider-specific (a provider without tag support
   // just ignores it), so this stays here rather than forcing every EmailProvider

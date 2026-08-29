@@ -56,6 +56,48 @@
   line-height: 1.5;
 }
 
+.logoUploadRow {
+  display: flex;
+  align-items: center;
+  gap: var(--space-4);
+}
+
+/* object-fit: contain, not cover — a logo must never be cropped; letterboxing inside a fixed
+   box is the correct tradeoff for previewing arbitrary aspect ratios here. */
+.logoPreview {
+  width: 48px;
+  height: 48px;
+  object-fit: contain;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  background: var(--color-surface);
+  flex-shrink: 0;
+}
+
+.logoPreviewEmpty {
+  width: 48px;
+  height: 48px;
+  border: 1px dashed var(--color-border);
+  border-radius: var(--radius-md);
+  background: var(--color-surface-muted);
+  flex-shrink: 0;
+}
+
+.logoUploadControls {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+}
+
+.checkboxRow {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  font-size: var(--text-sm);
+  color: var(--color-text);
+  margin-bottom: var(--space-5);
+}
+
 .variableRow {
   display: flex;
   flex-wrap: wrap;

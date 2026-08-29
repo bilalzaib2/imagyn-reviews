@@ -13,6 +13,7 @@ import { getOrCreateStore } from "../services/store.server";
 import { getStorePermissions } from "../services/permissions";
 import { emailTemplateService } from "../services/emailTemplate.server";
 import { buildReviewRequestEmail } from "../services/notifications/templates.server";
+import { getStorageProvider } from "../services/storage/provider.server";
 import {
   EMAIL_TEMPLATE_VARIABLES,
   getDefaultEmailTemplateContent,
@@ -33,6 +34,14 @@ const TEMPLATE_TABS: Array<{ type: EmailTemplateType; label: string }> = [
 const ALLOWED_TYPES: EmailTemplateType[] = TEMPLATE_TABS.map((tab) => tab.type);
 const isReminderType = (type: EmailTemplateType) => type === "reminder_1" || type === "reminder_final";
 
+// A logo renders tiny (see ReviewRequestEmail.tsx — capped at 40px tall in the actual email),
+// so there's no reason to accept anything large; keeping this well under
+// reviewMedia.server.ts's 5MB review-photo limit is deliberate, not copied from it.
+const MAX_LOGO_SIZE_BYTES = 1 * 1024 * 1024;
+// No SVG — email clients have famously inconsistent/poor inline-SVG support, so accepting one
+// here would just produce logos that silently fail to render in a real inbox.
+const ALLOWED_LOGO_MIME_TYPES = ["image/jpeg", "image/png", "image/webp"];
+
 type LoaderData = {
   type: EmailTemplateType;
   content: EmailTemplateContent;
@@ -45,6 +54,7 @@ type ActionData =
   | { ok: true; intent: "save" }
   | { ok: true; intent: "reset"; content: EmailTemplateContent }
   | { ok: true; intent: "preview"; html: string }
+  | { ok: true; intent: "upload-logo"; url: string }
   | { ok: false; intent: string; error: string };
 
 const readContentFromForm = (formData: FormData): EmailTemplateContent => ({
@@ -54,6 +64,10 @@ const readContentFromForm = (formData: FormData): EmailTemplateContent => ({
   buttonText: String(formData.get("buttonText") || "").trim(),
   accentColor: String(formData.get("accentColor") || "").trim(),
   logoUrl: String(formData.get("logoUrl") || "").trim() || null,
+  displayName: String(formData.get("displayName") || "").trim() || null,
+  // Absent/anything-but-"false" defaults true — matches every other boolean form field this
+  // app already serializes this way (e.g. app.settings.tsx's reminderEmailsEnabled).
+  showStoreName: formData.get("showStoreName") !== "false",
 });
 
 const readTypeFromForm = (formData: FormData): EmailTemplateType => {
@@ -98,7 +112,7 @@ export const loader = async ({ request }: LoaderFunctionArgs): Promise<LoaderDat
 };
 
 export const action = async ({ request }: ActionFunctionArgs): Promise<ActionData> => {
-  const { session } = await authenticateAdminDeduped(request);
+  const { session, admin } = await authenticateAdminDeduped(request);
   const store = await getOrCreateStore(session.shop);
 
   const formData = await request.formData();
@@ -112,6 +126,33 @@ export const action = async ({ request }: ActionFunctionArgs): Promise<ActionDat
     const permissions = await getStorePermissions(store.id);
     if (isReminderType(type) && !permissions.canUseEmailReminders) {
       return { ok: false, intent, error: "Reminder email templates require the Pro plan." };
+    }
+
+    if (intent === "upload-logo") {
+      // Not persisted here — mirrors "preview": this only uploads the file and hands back a
+      // URL, the same way the draft's other fields work. The merchant still has to hit Save
+      // for it to become the real template's logoUrl.
+      const file = formData.get("logo");
+      if (!(file instanceof File) || file.size === 0) {
+        return { ok: false, intent, error: "Choose an image file to upload." };
+      }
+      if (!ALLOWED_LOGO_MIME_TYPES.includes(file.type)) {
+        return { ok: false, intent, error: "Logo must be a JPEG, PNG, or WebP image." };
+      }
+      if (file.size > MAX_LOGO_SIZE_BYTES) {
+        return { ok: false, intent, error: "Logo must be under 1MB." };
+      }
+
+      const uploaded = await getStorageProvider().uploadImage(
+        {
+          buffer: Buffer.from(await file.arrayBuffer()),
+          filename: file.name || "logo",
+          mimeType: file.type,
+        },
+        { admin },
+      );
+
+      return { ok: true, intent: "upload-logo", url: uploaded.url };
     }
 
     if (intent === "reset") {
@@ -179,6 +220,7 @@ export default function EmailStudioPage() {
   const saveFetcher = useFetcher<ActionData>();
   const resetFetcher = useFetcher<ActionData>();
   const previewFetcher = useFetcher<ActionData>();
+  const logoFetcher = useFetcher<ActionData>();
 
   const [draft, setDraft] = useState<EmailTemplateContent>(initialContent);
   const [previewMode, setPreviewMode] = useState<PreviewMode>("desktop");
@@ -187,7 +229,30 @@ export default function EmailStudioPage() {
 
   const isSaving = saveFetcher.state !== "idle";
   const isResetting = resetFetcher.state !== "idle";
+  const isUploadingLogo = logoFetcher.state !== "idle";
   const isBusy = isSaving || isResetting;
+
+  const handleLogoUpload = (file: File) => {
+    const formData = new FormData();
+    formData.set("_intent", "upload-logo");
+    formData.set("type", activeType);
+    formData.set("logo", file);
+    logoFetcher.submit(formData, { method: "post", encType: "multipart/form-data" });
+  };
+
+  useEffect(() => {
+    const result = logoFetcher.data;
+    if (!result) return;
+    if (!result.ok) {
+      setToast({ content: result.error, error: true });
+      return;
+    }
+    if (result.intent === "upload-logo") {
+      setDraft((prev) => ({ ...prev, logoUrl: result.url }));
+      setToast({ content: "Logo uploaded." });
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [logoFetcher.data]);
 
   // Switching tabs (a real navigation to ?type=...) re-runs the loader with new content, but
   // doesn't remount this component — sync the draft to match whenever the active type changes,
@@ -384,25 +449,71 @@ export default function EmailStudioPage() {
                 </div>
               </Section>
 
-              <Section title="Branding" description="Store logo and accent color basics.">
+              <Section title="Branding" description="Store logo, name, and accent color.">
                 <div className={styles.fieldGroup}>
-                  <label className={styles.fieldLabel} htmlFor="logoUrl">
-                    Logo URL
+                  <label className={styles.fieldLabel} htmlFor="logoUpload">
+                    Logo
                   </label>
-                  <input
-                    id="logoUrl"
-                    className={styles.textInput}
-                    type="text"
-                    placeholder="https://…"
-                    value={draft.logoUrl ?? ""}
-                    onChange={(event) => updateField("logoUrl", event.target.value || null)}
-                    disabled={isBusy}
-                  />
+                  <div className={styles.logoUploadRow}>
+                    {draft.logoUrl ? (
+                      <img src={draft.logoUrl} alt="" className={styles.logoPreview} />
+                    ) : (
+                      <div className={styles.logoPreviewEmpty} aria-hidden="true" />
+                    )}
+                    <div className={styles.logoUploadControls}>
+                      <input
+                        id="logoUpload"
+                        type="file"
+                        accept="image/jpeg,image/png,image/webp"
+                        disabled={isBusy || isUploadingLogo}
+                        onChange={(event) => {
+                          const file = event.target.files?.[0];
+                          if (file) handleLogoUpload(file);
+                          event.target.value = "";
+                        }}
+                      />
+                      {draft.logoUrl ? (
+                        <Button type="button" variant="ghost" onClick={() => updateField("logoUrl", null)} disabled={isBusy}>
+                          Remove
+                        </Button>
+                      ) : null}
+                    </div>
+                  </div>
                   <p className={styles.fieldHint}>
-                    Paste a link to a hosted image (e.g. from your Shopify files). Leave blank to use the default
-                    mark.
+                    {isUploadingLogo
+                      ? "Uploading…"
+                      : "JPEG, PNG, or WebP, under 1MB. Shown at a fixed height with its original aspect ratio preserved. Leave empty to use the default Imagyn mark."}
                   </p>
                 </div>
+
+                <div className={styles.fieldGroup}>
+                  <label className={styles.fieldLabel} htmlFor="displayName">
+                    Store name shown in email
+                  </label>
+                  <input
+                    id="displayName"
+                    className={styles.textInput}
+                    type="text"
+                    placeholder={storeName}
+                    value={draft.displayName ?? ""}
+                    onChange={(event) => updateField("displayName", event.target.value || null)}
+                    disabled={isBusy || !draft.showStoreName}
+                  />
+                  <p className={styles.fieldHint}>
+                    Optional — shows instead of &quot;{storeName}&quot; in the email itself. The email is still sent
+                    from your store&apos;s real identity either way.
+                  </p>
+                </div>
+
+                <label className={styles.checkboxRow}>
+                  <input
+                    type="checkbox"
+                    checked={draft.showStoreName}
+                    onChange={(event) => updateField("showStoreName", event.target.checked)}
+                    disabled={isBusy}
+                  />
+                  Show store name in the email
+                </label>
 
                 <ColorField label="Accent color" value={draft.accentColor} onChange={(value) => updateField("accentColor", value)} />
               </Section>

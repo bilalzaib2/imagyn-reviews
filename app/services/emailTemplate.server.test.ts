@@ -83,6 +83,8 @@ describe("emailTemplateService", () => {
       buttonText: "Leave a review",
       accentColor: "#ff6600",
       logoUrl: "https://example.com/logo.png",
+      displayName: null,
+      showStoreName: true,
     };
 
     await emailTemplateService.upsertActive("store_1", { content });

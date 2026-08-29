@@ -14,6 +14,9 @@ export interface ReviewRequestEmailProps {
   accentColor: string;
   logoUrl: string | null;
   storeName: string;
+  /** Hides the storeName eyebrow line entirely when false — see email.shared.ts's
+   *  EmailTemplateContent.showStoreName. */
+  showStoreName: boolean;
   reviewUrl: string;
   // Omitted for the Email Studio preview/test-email paths (sample data) — the footer line only
   // renders when present. See templates.server.tsx's ReviewRequestEmailData.
@@ -37,6 +40,7 @@ export function ReviewRequestEmail({
   accentColor,
   logoUrl,
   storeName,
+  showStoreName,
   reviewUrl,
   unsubscribeUrl,
 }: ReviewRequestEmailProps) {
@@ -48,7 +52,10 @@ export function ReviewRequestEmail({
         <Container style={{ maxWidth: "480px", padding: "56px 24px" }}>
           <Section style={{ paddingBottom: "24px" }}>
             {logoUrl ? (
-              <Img src={logoUrl} width="28" height="28" alt={storeName} style={{ borderRadius: "6px" }} />
+              // Merchant-uploaded logo: capped to a max width, no fixed height, so a
+              // non-square logo (most wordmarks aren't) never gets stretched into a square —
+              // the one hard rule from a first pass that hardcoded width=height=28.
+              <Img src={logoUrl} width="40" alt={storeName} style={{ maxHeight: "40px", height: "auto" }} />
             ) : (
               <Img
                 src="https://app.imagyn.co/apple-touch-icon.png"
@@ -60,19 +67,21 @@ export function ReviewRequestEmail({
             )}
           </Section>
 
-          <Section style={{ paddingBottom: "32px" }}>
-            <Text
-              style={{
-                margin: 0,
-                fontSize: "13px",
-                letterSpacing: "0.04em",
-                textTransform: "uppercase",
-                color: "#8a8a8a",
-              }}
-            >
-              {storeName}
-            </Text>
-          </Section>
+          {showStoreName ? (
+            <Section style={{ paddingBottom: "32px" }}>
+              <Text
+                style={{
+                  margin: 0,
+                  fontSize: "13px",
+                  letterSpacing: "0.04em",
+                  textTransform: "uppercase",
+                  color: "#8a8a8a",
+                }}
+              >
+                {storeName}
+              </Text>
+            </Section>
+          ) : null}
 
           <Section style={{ paddingBottom: "16px" }}>
             <Text style={{ margin: 0, fontSize: "24px", lineHeight: "1.35", fontWeight: 600, color: "#111111" }}>
@@ -123,6 +132,15 @@ export function ReviewRequestEmail({
               </Text>
             </Section>
           ) : null}
+
+          {/* One small, quiet line — the merchant's own branding above does all the real
+              work; this is attribution, not a second ad. Deliberately plain text (no logo
+              image here) so it never competes with a merchant's own logo higher up. */}
+          <Section style={{ paddingTop: "20px" }}>
+            <Text style={{ margin: 0, fontSize: "11px", lineHeight: "1.5", color: "#c2c2c2" }}>
+              Powered by Imagyn Reviews
+            </Text>
+          </Section>
         </Container>
       </Body>
     </Html>

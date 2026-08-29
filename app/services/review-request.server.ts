@@ -248,6 +248,9 @@ export const dispatchRequestEmail = async (request: ReviewRequestRecord): Promis
         subject,
         html,
         text,
+        // Customer-facing send — reads as coming from the store, not Imagyn (see
+        // resend.server.ts's fromName handling).
+        fromName: request.store.name,
         // Lets webhooks.resend.tsx correlate a delivery event back to this exact row via the
         // existing unique requestToken column — no new schema column needed for that lookup.
         tags: { request_token: request.requestToken },
@@ -345,6 +348,9 @@ export const dispatchReminderEmail = async (request: ReviewRequestRecord, remind
       subject,
       html,
       text,
+      // Same as dispatchRequestEmail — a reminder is still the store talking to its own
+      // customer, not Imagyn.
+      fromName: request.store.name,
       tags: { request_token: request.requestToken, email_type: reminderType },
     });
   } catch (error) {

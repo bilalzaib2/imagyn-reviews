@@ -24,9 +24,18 @@ export interface EmailTemplateContent {
   buttonText: string;
   /** Hex color for the CTA button background. */
   accentColor: string;
-  /** null = no logo shown. Set from Shopify's own shop.brand.logo by default (see
-   *  app.email-studio.tsx's loader) but always merchant-editable/clearable. */
+  /** null = no logo shown (falls back to the Imagyn mark) — merchant-uploaded via Email
+   *  Studio's own upload control (stored through Shopify's Files API, see
+   *  storage/shopifyFiles.server.ts), always clearable. */
   logoUrl: string | null;
+  /** null/empty = show the real Shopify store name. Lets a merchant show a friendlier or
+   *  shorter name inside the email body (the eyebrow line and the {{store_name}} variable)
+   *  without changing the actual sender identity — the From header always uses the real
+   *  store name regardless of this override (see resend.server.ts's fromName). */
+  displayName: string | null;
+  /** Hides the store-name eyebrow line entirely when false. Independent of displayName —
+   *  a merchant can keep {{store_name}} in their own copy while still removing the eyebrow. */
+  showStoreName: boolean;
 }
 
 export const DEFAULT_ACCENT_COLOR = "#111111";
@@ -47,6 +56,8 @@ export function getDefaultEmailTemplateContent(type: EmailTemplateType = "review
       buttonText: "Write a review",
       accentColor: DEFAULT_ACCENT_COLOR,
       logoUrl: null,
+      displayName: null,
+      showStoreName: true,
     };
   }
 
@@ -58,6 +69,8 @@ export function getDefaultEmailTemplateContent(type: EmailTemplateType = "review
       buttonText: "Write a review",
       accentColor: DEFAULT_ACCENT_COLOR,
       logoUrl: null,
+      displayName: null,
+      showStoreName: true,
     };
   }
 
@@ -68,6 +81,8 @@ export function getDefaultEmailTemplateContent(type: EmailTemplateType = "review
     buttonText: "Write a review",
     accentColor: DEFAULT_ACCENT_COLOR,
     logoUrl: null,
+    displayName: null,
+    showStoreName: true,
   };
 }
 
@@ -87,13 +102,13 @@ export function mergeEmailTemplateContent(
 // app.email-studio.tsx's save action must call this before persisting, exactly like
 // app.appearance.tsx's save action strips Pro-only Brand Studio fields for Free stores,
 // rather than trusting that the UI never sent them. Every field on EmailTemplateContent today
-// (subject/heading/bodyText/buttonText/accentColor/logoUrl) is base functionality available on
-// every plan for every template type — there is no Pro-only *field* to strip yet. (Whether a
-// merchant can save a reminder-type template at all is gated separately, by
-// canUseEmailReminders, in app.email-studio.tsx's own action — not here.) canUseAdvancedEmailStudio
-// is accepted now, ahead of having anything to gate, so this is the one place a future
-// deeper-styling field gets threaded in — the day one ships, it's added to the allow-list below
-// guarded by this flag, not left to a UI-only check.
+// (subject/heading/bodyText/buttonText/accentColor/logoUrl/displayName/showStoreName) is base
+// functionality available on every plan for every template type — there is no Pro-only
+// *field* to strip yet. (Whether a merchant can save a reminder-type template at all is gated
+// separately, by canUseEmailReminders, in app.email-studio.tsx's own action — not here.)
+// canUseAdvancedEmailStudio is accepted now, ahead of having anything to gate, so this is the
+// one place a future deeper-styling field gets threaded in — the day one ships, it's added to
+// the allow-list below guarded by this flag, not left to a UI-only check.
 export function sanitizeEmailTemplateContentForPlan(
   content: EmailTemplateContent,
   canUseAdvancedEmailStudio: boolean,
@@ -106,6 +121,8 @@ export function sanitizeEmailTemplateContentForPlan(
     buttonText: content.buttonText,
     accentColor: content.accentColor,
     logoUrl: content.logoUrl,
+    displayName: content.displayName,
+    showStoreName: content.showStoreName,
   };
 }
 

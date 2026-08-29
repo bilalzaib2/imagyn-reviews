@@ -101,6 +101,8 @@ describe("sanitizeEmailTemplateContentForPlan", () => {
     buttonText: "Rate it",
     accentColor: "#ff0000",
     logoUrl: "https://example.com/logo.png",
+    displayName: "Custom Display Name",
+    showStoreName: false,
   };
 
   it("preserves every base field for a Free (non-advanced) store — the base editor is free for everyone", () => {

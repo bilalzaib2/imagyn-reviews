@@ -41,9 +41,14 @@ export async function buildReviewRequestEmail(data: ReviewRequestEmailData): Pro
   text: string;
 }> {
   const content = data.template ?? getDefaultEmailTemplateContent();
+  // A merchant's displayName override affects only what's shown inside the email (this
+  // variable and the eyebrow line below) — the actual From address always uses the real
+  // store name regardless (see resend.server.ts's fromName), so sender identity stays
+  // accurate even if a merchant shows a friendlier name in the copy.
+  const effectiveStoreName = content.displayName?.trim() || data.storeName;
   const variables = {
     customerName: firstNameOf(data.customerName),
-    storeName: data.storeName,
+    storeName: effectiveStoreName,
     productName: data.productName,
   };
 
@@ -59,7 +64,8 @@ export async function buildReviewRequestEmail(data: ReviewRequestEmailData): Pro
       buttonText={content.buttonText}
       accentColor={content.accentColor}
       logoUrl={content.logoUrl}
-      storeName={data.storeName}
+      storeName={effectiveStoreName}
+      showStoreName={content.showStoreName}
       reviewUrl={data.reviewUrl}
       unsubscribeUrl={data.unsubscribeUrl}
     />

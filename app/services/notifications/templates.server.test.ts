@@ -64,6 +64,8 @@ describe("buildReviewRequestEmail — with a saved Email Studio template", () =>
         buttonText: "Leave feedback",
         accentColor: "#ff6600",
         logoUrl: "https://example.com/merchant-logo.png",
+        displayName: null,
+        showStoreName: true,
       },
     });
 
