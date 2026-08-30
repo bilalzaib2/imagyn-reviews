@@ -12,6 +12,10 @@ export interface ReviewRequestEmailData {
   customerName: string;
   productName: string;
   storeName: string;
+  // For a "reward" template send, this is the store's own storefront URL, not a review link
+  // — reused rather than adding a second near-identical CTA-button prop to
+  // ReviewRequestEmail.tsx, since the component only ever renders "a button + a copy-paste
+  // fallback link," which is equally correct for either destination.
   reviewUrl: string;
   // Per-request override (set on an individual review request, not the template) — takes
   // priority over the template's own default body text, same precedence this had before Email
@@ -25,6 +29,9 @@ export interface ReviewRequestEmailData {
   // unsubscribe) — the footer link only renders when this is present. Real sends
   // (dispatchRequestEmail/dispatchReminderEmail in review-request.server.ts) always pass one.
   unsubscribeUrl?: string;
+  // "reward" template sends only — the real, already-issued Shopify discount code (see
+  // rewards.server.ts). Never set for any other template type.
+  discountCode?: string;
 }
 
 export type ReviewHeldEmailData = ReviewHeldEmailProps;
@@ -50,6 +57,7 @@ export async function buildReviewRequestEmail(data: ReviewRequestEmailData): Pro
     customerName: firstNameOf(data.customerName),
     storeName: effectiveStoreName,
     productName: data.productName,
+    discountCode: data.discountCode,
   };
 
   const subject = renderTemplateVariables(content.subject, variables);
@@ -66,6 +74,7 @@ export async function buildReviewRequestEmail(data: ReviewRequestEmailData): Pro
       logoUrl={content.logoUrl}
       storeName={effectiveStoreName}
       showStoreName={content.showStoreName}
+      showPoweredBy={content.showPoweredBy}
       reviewUrl={data.reviewUrl}
       unsubscribeUrl={data.unsubscribeUrl}
     />

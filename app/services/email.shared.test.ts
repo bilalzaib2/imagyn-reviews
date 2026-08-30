@@ -103,19 +103,31 @@ describe("sanitizeEmailTemplateContentForPlan", () => {
     logoUrl: "https://example.com/logo.png",
     displayName: "Custom Display Name",
     showStoreName: false,
+    showPoweredBy: false,
   };
 
-  it("preserves every base field for a Free (non-advanced) store — the base editor is free for everyone", () => {
-    expect(sanitizeEmailTemplateContentForPlan(customContent, false)).toEqual(customContent);
+  const freePermissions = { canUseAdvancedEmailStudio: false, canUseCustomBranding: false };
+  const proPermissions = { canUseAdvancedEmailStudio: true, canUseCustomBranding: true };
+
+  it("preserves every base field for a Free store — the base editor is free for everyone", () => {
+    expect(sanitizeEmailTemplateContentForPlan(customContent, freePermissions)).toEqual({
+      ...customContent,
+      showPoweredBy: true,
+    });
   });
 
-  it("preserves every base field for a Pro (advanced) store identically", () => {
-    expect(sanitizeEmailTemplateContentForPlan(customContent, true)).toEqual(customContent);
+  it("preserves every base field for a Pro store identically, including showPoweredBy: false", () => {
+    expect(sanitizeEmailTemplateContentForPlan(customContent, proPermissions)).toEqual(customContent);
+  });
+
+  it("force-overwrites showPoweredBy to true for a Free store — a Free store can never remove the footer, regardless of what's persisted", () => {
+    const sanitized = sanitizeEmailTemplateContentForPlan(customContent, freePermissions);
+    expect(sanitized.showPoweredBy).toBe(true);
   });
 
   it("only ever returns the declared EmailTemplateContent fields, dropping anything else on the input object", () => {
     const withExtra = { ...customContent, someFutureProOnlyField: "smuggled" } as typeof customContent;
-    const sanitized = sanitizeEmailTemplateContentForPlan(withExtra, false);
+    const sanitized = sanitizeEmailTemplateContentForPlan(withExtra, proPermissions);
 
     expect(sanitized).toEqual(customContent);
     expect(sanitized).not.toHaveProperty("someFutureProOnlyField");

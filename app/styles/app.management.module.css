@@ -41,3 +41,16 @@
   border-radius: var(--radius-lg);
   background: var(--color-surface-muted);
 }
+
+/* <Frame> here exists only so <Toast> has the ancestor context it requires to render —
+   it's not page chrome. Polaris's own Frame.css unconditionally sets min-height:100vh/100svh
+   and width:100% on .Polaris-Frame, which — with no real chrome inside it — leaves a full
+   extra viewport-height blank area scrollable below the real page content. Toast itself
+   renders via .Polaris-Frame-ToastManager, which is position:fixed and anchored to the
+   viewport regardless of this box, so collapsing Frame's own box with display:contents is
+   safe and keeps Toast fully functional while removing the phantom blank space. Same fix
+   already applied across every other page in the app (app.reviews.module.css, etc.) —
+   shared here since every Settings sub-page needs it identically. */
+.toastFrame :global(.Polaris-Frame) {
+  display: contents;
+}

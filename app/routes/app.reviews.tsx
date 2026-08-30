@@ -57,6 +57,7 @@ import {
 } from "../services/cursorPagination.shared";
 import styles from "../styles/app.reviews.module.css";
 import shellStyles from "../styles/app.shell.module.css";
+import sharedStyles from "../styles/shared.module.css";
 
 type ActionData = {
   ok: boolean;
@@ -899,6 +900,18 @@ export default function ReviewsPage() {
             </LinkButton>
           </div>
         </header>
+
+        {/* Requests and Reviews are one workflow (collecting + moderating feedback) split
+            across two focused pages — no longer both in primary nav (see app.tsx), so this
+            is how a merchant moves between them. */}
+        <nav className={sharedStyles.workflowTabs} aria-label="Review workflow">
+          <RemixLink to="/app/reviews" className={`${sharedStyles.workflowTab} ${sharedStyles.workflowTabActive}`} aria-current="page">
+            Reviews
+          </RemixLink>
+          <RemixLink to="/app/requests" className={sharedStyles.workflowTab}>
+            Requests
+          </RemixLink>
+        </nav>
 
         <div className={styles.toolbar}>
           <label className={styles.searchField}>

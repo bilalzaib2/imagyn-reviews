@@ -107,6 +107,19 @@
   margin-bottom: var(--space-5);
 }
 
+/* Pairs a checkbox row with its "Pro" tag on the same line — the real Free/Pro entitlement
+   pattern used everywhere a control (not just a whole card) is what's gated, e.g. the
+   Reminder-tab lock indicator above. */
+.poweredByRow {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.poweredByRow .checkboxRow {
+  margin-bottom: 0;
+}
+
 .variableRow {
   display: flex;
   flex-wrap: wrap;

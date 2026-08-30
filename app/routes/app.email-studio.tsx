@@ -24,12 +24,14 @@ import {
 import shellStyles from "../styles/app.shell.module.css";
 import styles from "../styles/app.email-studio.module.css";
 
-// Review Request is available on every plan; the two reminder types are Pro-only
+// Review Request and Reward are available on every plan (Review Rewards' base functionality
+// is deliberately Free — see app.settings.rewards.tsx); the two reminder types are Pro-only
 // (canUseEmailReminders) — see the loader/action's own gating below.
 const TEMPLATE_TABS: Array<{ type: EmailTemplateType; label: string }> = [
   { type: "review_request", label: "Review Request" },
   { type: "reminder_1", label: "Reminder #1" },
   { type: "reminder_final", label: "Final Reminder" },
+  { type: "reward", label: "Review Reward" },
 ];
 const ALLOWED_TYPES: EmailTemplateType[] = TEMPLATE_TABS.map((tab) => tab.type);
 const isReminderType = (type: EmailTemplateType) => type === "reminder_1" || type === "reminder_final";
@@ -48,6 +50,7 @@ type LoaderData = {
   storeName: string;
   canUseAdvancedEmailStudio: boolean;
   canUseEmailReminders: boolean;
+  canUseCustomBranding: boolean;
 };
 
 type ActionData =
@@ -68,6 +71,7 @@ const readContentFromForm = (formData: FormData): EmailTemplateContent => ({
   // Absent/anything-but-"false" defaults true — matches every other boolean form field this
   // app already serializes this way (e.g. app.settings.tsx's reminderEmailsEnabled).
   showStoreName: formData.get("showStoreName") !== "false",
+  showPoweredBy: formData.get("showPoweredBy") !== "false",
 });
 
 const readTypeFromForm = (formData: FormData): EmailTemplateType => {
@@ -108,6 +112,7 @@ export const loader = async ({ request }: LoaderFunctionArgs): Promise<LoaderDat
     storeName: store.name,
     canUseAdvancedEmailStudio: permissions.canUseAdvancedEmailStudio,
     canUseEmailReminders: permissions.canUseEmailReminders,
+    canUseCustomBranding: permissions.canUseCustomBranding,
   };
 };
 
@@ -175,6 +180,10 @@ export const action = async ({ request }: ActionFunctionArgs): Promise<ActionDat
         productName: "Sample Product",
         storeName: store.name,
         reviewUrl: "https://example.com/r/sample-token",
+        // Sample-only, matching the sample-token URL's own "never real" convention — a
+        // reward preview needs *some* code to show {{discount_code}} substituted, but this
+        // string is never a real, redeemable Shopify discount.
+        discountCode: type === "reward" ? "SAMPLE-CODE" : undefined,
         customMessage: null,
         template: content,
       });
@@ -187,9 +196,10 @@ export const action = async ({ request }: ActionFunctionArgs): Promise<ActionDat
         return { ok: false, intent, error };
       }
 
-      // Server-side enforcement of canUseAdvancedEmailStudio, not just the UI hiding the
-      // "Coming to Pro" card below — see sanitizeEmailTemplateContentForPlan's own comment.
-      const safeContent = sanitizeEmailTemplateContentForPlan(content, permissions.canUseAdvancedEmailStudio);
+      // Server-side enforcement of canUseAdvancedEmailStudio/canUseCustomBranding, not just
+      // the UI hiding/disabling the corresponding controls below — see
+      // sanitizeEmailTemplateContentForPlan's own comment.
+      const safeContent = sanitizeEmailTemplateContentForPlan(content, permissions);
 
       await emailTemplateService.upsertActive(store.id, { content: safeContent, type });
       return { ok: true, intent: "save" };
@@ -215,6 +225,7 @@ export default function EmailStudioPage() {
     storeName,
     canUseAdvancedEmailStudio,
     canUseEmailReminders,
+    canUseCustomBranding,
   } = useLoaderData<typeof loader>();
 
   const saveFetcher = useFetcher<ActionData>();
@@ -520,6 +531,26 @@ export default function EmailStudioPage() {
                   />
                   Show store name in the email
                 </label>
+
+                <div className={styles.fieldGroup}>
+                  <div className={styles.poweredByRow}>
+                    <label className={styles.checkboxRow}>
+                      <input
+                        type="checkbox"
+                        checked={canUseCustomBranding ? !draft.showPoweredBy : false}
+                        onChange={(event) => updateField("showPoweredBy", !event.target.checked)}
+                        disabled={isBusy || !canUseCustomBranding}
+                      />
+                      Remove &quot;Powered by Imagyn Reviews&quot;
+                    </label>
+                    {!canUseCustomBranding ? <span className={styles.lockedTag}>Pro</span> : null}
+                  </div>
+                  <p className={styles.fieldHint}>
+                    {canUseCustomBranding
+                      ? "Off by default. When checked, the small footer attribution line is removed from this email."
+                      : 'Free stores always show the small "Powered by Imagyn Reviews" footer line. Upgrade to Pro to remove it.'}
+                  </p>
+                </div>
 
                 <ColorField label="Accent color" value={draft.accentColor} onChange={(value) => updateField("accentColor", value)} />
               </Section>

@@ -3,7 +3,7 @@ import { data, Form, isRouteErrorResponse, useActionData, useLoaderData, useNavi
 import type { ActionFunctionArgs, LoaderFunctionArgs } from "react-router";
 
 import { reviewRequestService } from "../services/review-request.server";
-import { createReview } from "../services/review.server";
+import { createReview, issueRewardIfEligible } from "../services/review.server";
 import { evaluateReview, getModerationSettings, sendHeldReviewNotification } from "../services/moderationRules.server";
 import {
   MAX_IMAGES_PER_REVIEW,
@@ -109,6 +109,7 @@ export const action = async ({ request, params }: ActionFunctionArgs) => {
   const videoFiles = await readVideoFilesFromFormData(formData, "video");
 
   let reviewId: string;
+  let approvedReview: Awaited<ReturnType<typeof createReview>> | null = null;
 
   try {
     const moderationSettings = await getModerationSettings(result.request.store.id);
@@ -135,6 +136,9 @@ export const action = async ({ request, params }: ActionFunctionArgs) => {
       moderationReason: decision.moderationReason,
     });
     reviewId = review.id;
+    if (decision.autoApprove) {
+      approvedReview = review;
+    }
 
     if (decision.moderationStatus === "held" && moderationSettings.notifyOnHold && moderationSettings.notifyEmail) {
       void sendHeldReviewNotification({
@@ -161,6 +165,8 @@ export const action = async ({ request, params }: ActionFunctionArgs) => {
   // originated — to reach the same uploadReviewImages/uploadReviewVideos path api.reviews.tsx's
   // storefront widget submissions use.
   let mediaWarning: string | null = null;
+  let hasPhoto = false;
+  let hasVideo = false;
 
   if (imageFiles.length > 0 || videoFiles.length > 0) {
     if (result.request.store.domain) {
@@ -170,6 +176,9 @@ export const action = async ({ request, params }: ActionFunctionArgs) => {
           imageFiles.length > 0 ? uploadReviewImages(reviewId, imageFiles, admin) : Promise.resolve({ uploaded: [], failed: [] }),
           videoFiles.length > 0 ? uploadReviewVideos(reviewId, videoFiles, admin) : Promise.resolve({ uploaded: [], failed: [] }),
         ]);
+
+        hasPhoto = imageResult.uploaded.length > 0;
+        hasVideo = videoResult.uploaded.length > 0;
 
         const uploadedCount = imageResult.uploaded.length + videoResult.uploaded.length;
         const failedCount = imageResult.failed.length + videoResult.failed.length;
@@ -187,6 +196,25 @@ export const action = async ({ request, params }: ActionFunctionArgs) => {
     } else {
       mediaWarning = "Your review was submitted, but the media couldn't be uploaded.";
     }
+  }
+
+  // Review Rewards evaluation — only for a review that was genuinely auto-approved right now
+  // (never for one still pending/held moderation), and only after the media upload above so
+  // a requirePhoto/requireVideo condition sees the real, just-uploaded attachment instead of
+  // the review's state at creation time (before any media existed). Fire-and-forget: never
+  // blocks or affects this response either way — see review.server.ts's issueRewardIfEligible.
+  if (approvedReview) {
+    void issueRewardIfEligible(result.request.store.id, {
+      id: approvedReview.id,
+      status: approvedReview.status,
+      rating: approvedReview.rating,
+      verifiedPurchase: approvedReview.verifiedPurchase,
+      reviewerName: approvedReview.reviewerName,
+      reviewerEmail: approvedReview.reviewerEmail,
+      product: approvedReview.product,
+      hasPhoto,
+      hasVideo,
+    });
   }
 
   // Token is only consumed after the review is successfully created — a failed submission

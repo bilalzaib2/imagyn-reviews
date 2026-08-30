@@ -122,6 +122,21 @@ model Store {
   productSyncStartedAt  DateTime?
   productSyncFinishedAt DateTime?
   productSyncError      String?
+
+  // Review Rewards (see app/services/rewards.server.ts) — conditions checked once a review
+  // is approved: rewardMinRating/rewardRequireVerified/rewardRequirePhoto/rewardRequireVideo
+  // are all evaluated against attributes the Review row already has, nothing new is inferred.
+  // valueType/value describe the Shopify discount created on issuance ("percentage" values
+  // are a whole-number percent, "fixed_amount" values are the store's currency amount).
+  rewardsEnabled        Boolean @default(false)
+  rewardValueType       String  @default("percentage")
+  rewardValue           Float   @default(10)
+  rewardMinRating       Int     @default(4)
+  rewardRequireVerified Boolean @default(true)
+  rewardRequirePhoto    Boolean @default(false)
+  rewardRequireVideo    Boolean @default(false)
+
+  rewards Reward[]
 }
 
 model Product {
@@ -220,6 +235,7 @@ model Review {
 
   helpfulVotes     ReviewHelpfulVote[]
   media            ReviewMedia[]
+  reward           Reward?
 
   @@index([deletedAt, createdAt])
   @@index([storeId, deletedAt, createdAt])
@@ -230,6 +246,43 @@ model Review {
   @@index([featured])
   @@index([helpfulCount])
   @@index([storeId, externalId])
+}
+
+// One row per review that was ever *evaluated* for a reward (not just the ones that
+// succeeded) — see app/services/rewards.server.ts's evaluateAndIssueReward. reviewId is
+// unique so the database itself enforces "at most one reward per review," the actual
+// duplicate-prevention mechanism (not just an application-level check-before-create).
+// status: "pending" (evaluated, not yet attempted — practically transient) | "issued" |
+// "failed" | "ineligible". A row is written even for "ineligible" reviews specifically so a
+// later re-evaluation (e.g. a merchant enabling Rewards after reviews already existed) never
+// re-issues for a review that was already correctly judged ineligible under the rules active
+// at the time.
+model Reward {
+  id       String @id @default(cuid())
+
+  storeId  String
+  store    Store  @relation(fields: [storeId], references: [id], onDelete: Cascade)
+
+  reviewId String @unique
+  review   Review @relation(fields: [reviewId], references: [id], onDelete: Cascade)
+
+  status String
+  reason String?
+
+  valueType String
+  value     Float
+
+  // Set only once status becomes "issued" — a real Shopify discount code (discountCodeBasicCreate),
+  // never fabricated or displayed before the mutation actually succeeds.
+  discountCode      String?
+  shopifyDiscountId String?
+
+  issuedAt  DateTime?
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+
+  @@index([storeId])
+  @@index([status])
 }
 
 enum ReviewMediaType {

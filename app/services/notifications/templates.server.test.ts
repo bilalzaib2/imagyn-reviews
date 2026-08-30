@@ -71,6 +71,7 @@ describe("buildReviewRequestEmail — with a saved Email Studio template", () =>
         logoUrl: "https://example.com/merchant-logo.png",
         displayName: null,
         showStoreName: true,
+        showPoweredBy: true,
       },
     });
 

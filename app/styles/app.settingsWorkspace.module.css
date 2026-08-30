@@ -1,0 +1,112 @@
+/* .page/.eyebrow/.title/.subtitle intentionally not redeclared — see
+   app.products.module.css's header comment for why. */
+
+.workspace {
+  display: grid;
+  grid-template-columns: 14rem minmax(0, 1fr);
+  gap: var(--space-8);
+  align-items: start;
+}
+
+@media (max-width: 900px) {
+  .workspace {
+    grid-template-columns: 1fr;
+  }
+}
+
+.sidebar {
+  display: grid;
+  gap: var(--space-6);
+  position: sticky;
+  top: var(--space-5);
+}
+
+.sidebarGroup {
+  display: grid;
+  gap: var(--space-1);
+}
+
+.sidebarGroupLabel {
+  margin: 0 0 var(--space-1);
+  padding-inline: var(--space-3);
+  font-size: var(--text-xs);
+  font-weight: 600;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--color-text-muted);
+}
+
+.sidebarLink {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2);
+  padding: 0.5rem var(--space-3);
+  border-radius: var(--radius-md);
+  font-size: var(--text-sm);
+  color: var(--color-text-muted);
+  transition: background-color var(--transition-base), color var(--transition-base);
+}
+
+.sidebarLink:hover {
+  color: var(--color-text);
+  background: var(--color-surface-muted);
+}
+
+.sidebarLinkActive {
+  color: var(--color-text);
+  background: var(--color-surface-strong);
+  font-weight: 600;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .sidebarLink {
+    transition: none;
+  }
+}
+
+.sidebarTag {
+  font-size: 0.6875rem;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--color-text-muted);
+}
+
+.content {
+  display: grid;
+  gap: var(--space-8);
+  min-width: 0;
+}
+
+/* Overview page — a real status readout, not decoration (see app.settings._index.tsx). */
+.statusList {
+  display: grid;
+  gap: var(--space-2);
+}
+
+.statusRow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+  padding: var(--space-2) var(--space-3);
+  border-radius: var(--radius-md);
+  background: var(--color-surface-muted);
+  font-size: var(--text-sm);
+}
+
+.statusValue {
+  font-size: 0.6875rem;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--color-text-muted);
+}
+
+.overviewLinks {
+  display: grid;
+  gap: var(--space-2);
+  margin-top: var(--space-5);
+  font-size: var(--text-sm);
+}

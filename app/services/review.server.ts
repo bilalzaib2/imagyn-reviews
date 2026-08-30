@@ -3,6 +3,8 @@ import prisma from "../db.server";
 import { maybeAutoRegenerateAiSummary } from "./aiSummary.server";
 import { HelpfulVoteValue, ReviewStatus } from "./review.shared";
 import { getStorePermissions, PermissionError } from "./permissions";
+import { getStoreById } from "./store.server";
+import { evaluateAndIssueReward } from "./rewards.server";
 
 export { HelpfulVoteValue, ReviewStatus };
 
@@ -669,9 +671,67 @@ async function setReviewStatus(
   // and only actually calls the AI provider when enough new approved reviews warrant it.
   if (status === ReviewStatus.APPROVED) {
     void maybeAutoRegenerateAiSummary(storeId, existing.productId);
+    void issueRewardIfEligible(storeId, {
+      ...review,
+      hasPhoto: review.media.some((item) => item.type === "IMAGE"),
+      hasVideo: review.media.some((item) => item.type === "VIDEO"),
+    });
   }
 
   return review;
+}
+
+// Shared by setReviewStatus (manual admin approve/reject) and r.$token.tsx (real-time
+// auto-approval on submission) — the two places a review can ever become APPROVED. Fire-and-
+// forget, same reasoning as maybeAutoRegenerateAiSummary above: reward issuance (a real
+// Shopify GraphQL mutation) must never block or fail the approval action that triggered it.
+// evaluateAndIssueReward itself never throws — every failure path is recorded on the Reward
+// row — but this wrapper still swallows a rejection defensively, since this is a fire-and-
+// forget call with no caller left to catch one.
+export async function issueRewardIfEligible(
+  storeId: string,
+  review: {
+    id: string;
+    status: string;
+    rating: number;
+    verifiedPurchase: boolean;
+    reviewerName: string;
+    reviewerEmail: string | null;
+    product: { name: string | null } | null;
+    // Callers compute these rather than passing a raw media relation: r.$token.tsx's
+    // auto-approval path evaluates a review before its media upload step has run (media
+    // rows don't exist yet at creation time), so it has real upload-result booleans on hand
+    // but no accurate ReviewMedia[] to derive them from; setReviewStatus's manual-approval
+    // path derives them from the review's real, already-populated `media` include instead.
+    hasPhoto: boolean;
+    hasVideo: boolean;
+  },
+): Promise<void> {
+  try {
+    const store = await getStoreById(storeId);
+    if (!store) return;
+
+    await evaluateAndIssueReward({
+      reviewId: review.id,
+      storeId,
+      // store.domain is always set by getOrCreateStore (store.server.ts) — this fallback
+      // only matters for a hypothetically stale row from before that field existed, and
+      // slug is deterministically domain-minus-".myshopify.com" (see getSlug), so
+      // reconstructing it back is exact, not a guess.
+      storeDomain: store.domain ?? `${store.slug}.myshopify.com`,
+      storeName: store.name,
+      customerName: review.reviewerName,
+      customerEmail: review.reviewerEmail,
+      productName: review.product?.name || "your recent purchase",
+      status: review.status,
+      rating: review.rating,
+      verifiedPurchase: review.verifiedPurchase,
+      hasPhoto: review.hasPhoto,
+      hasVideo: review.hasVideo,
+    });
+  } catch (error) {
+    console.error(`[rewards] issueRewardIfEligible failed for review ${review.id}:`, error);
+  }
 }
 
 export async function approveReview(storeId: string, id: string) {

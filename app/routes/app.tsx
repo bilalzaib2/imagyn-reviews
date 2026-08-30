@@ -10,6 +10,7 @@ import enTranslations from "@shopify/polaris/locales/en.json";
 import { authenticateAdminDeduped } from "../services/auth-dedupe.server";
 import { getOrCreateStore } from "../services/store.server";
 import { ensureDevelopmentStoreFlag, getBillingSnapshot } from "../services/billing/billing.server";
+import { FloatingHelp } from "../components/ui/FloatingHelp";
 import styles from "../styles/app.shell.module.css";
 
 // The billing page must stay reachable even for a store with no access — otherwise a
@@ -42,18 +43,16 @@ export default function App() {
   const navigation = useNavigation();
   const isNavigating = navigation.state !== "idle";
   const appContextQuery = location.search;
+  // Kept intentionally short — the day-to-day merchant workflows only. Everything else
+  // (Products, Requests, Email Studio, Widgets, Brand Studio, Medals, Billing) is real,
+  // unchanged, and still reachable at its existing URL — just relocated to the Settings
+  // workspace's own secondary navigation (app.settings.tsx) or, for Requests, a tab on the
+  // Reviews page itself — rather than permanently occupying primary nav.
   const navItems = [
     { label: "Dashboard", path: "/app" },
     { label: "Reviews", path: "/app/reviews" },
-    { label: "Products", path: "/app/products" },
-    { label: "Requests", path: "/app/requests" },
-    { label: "Email Studio", path: "/app/email-studio" },
-    { label: "Widgets", path: "/app/widgets" },
-    { label: "Brand Studio", path: "/app/appearance" },
-    { label: "Medals", path: "/app/medals" },
     { label: "Analytics", path: "/app/analytics" },
     { label: "Settings", path: "/app/settings" },
-    { label: "Billing", path: "/app/billing" },
   ];
 
   // NavMenu renders real <a> elements for Shopify Admin's own sidebar chrome. Left-clicking
@@ -80,6 +79,7 @@ export default function App() {
       <PolarisAppProvider i18n={enTranslations}>
         {isNavigating ? <div className={styles.navProgress} aria-hidden="true" /> : null}
         <Outlet />
+        <FloatingHelp />
       </PolarisAppProvider>
     </AppProvider>
   );

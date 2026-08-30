@@ -85,6 +85,7 @@ describe("emailTemplateService", () => {
       logoUrl: "https://example.com/logo.png",
       displayName: null,
       showStoreName: true,
+      showPoweredBy: true,
     };
 
     await emailTemplateService.upsertActive("store_1", { content });

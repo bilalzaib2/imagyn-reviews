@@ -1,0 +1,135 @@
+/* Fixed to our own app iframe's viewport, not Shopify Admin's outer chrome — this can never
+   overlap Shopify's own nav/top bar, which live in the parent frame. z-index only needs to
+   clear normal in-flow page content; Polaris's own overlays (Modal, Toast) use much higher
+   values, so this intentionally stays well below them. */
+.wrap {
+  position: fixed;
+  right: max(var(--space-6), env(safe-area-inset-right));
+  bottom: max(var(--space-6), env(safe-area-inset-bottom));
+  z-index: 400;
+}
+
+/* 44px is the minimum comfortable touch target (matches the HIG guidance already followed
+   elsewhere in this app, e.g. the review card's helpful-button). A restrained rounded-square
+   ("squircle") reads as a native utility control — the macOS Control Center / menu-bar style
+   this widget is meant to evoke — rather than an oversized circular chat bubble. */
+.trigger {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 44px;
+  height: 44px;
+  padding: 0;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  background: var(--color-surface);
+  color: var(--color-text-muted);
+  box-shadow: var(--shadow-sm);
+  cursor: pointer;
+  transition:
+    transform var(--transition-base),
+    box-shadow var(--transition-base),
+    border-color var(--transition-base),
+    background-color var(--transition-base),
+    color var(--transition-base);
+}
+
+.trigger:hover {
+  color: var(--color-text);
+  border-color: var(--color-border-strong);
+  box-shadow: var(--shadow-md);
+  transform: translateY(-1px);
+}
+
+.trigger:active {
+  transform: translateY(0);
+  transition-duration: 60ms;
+}
+
+/* No icon morph (bubble -> X) on open — a persistent glyph reads as a quiet utility toggle;
+   morphing into a close icon is the generic chat-widget cliché this is deliberately avoiding.
+   The open state instead gets the same quiet "pressed" treatment a native toolbar toggle would. */
+.triggerOpen {
+  color: var(--color-text);
+  border-color: var(--color-border-strong);
+  background: var(--color-surface-muted);
+}
+
+.trigger svg {
+  width: 20px;
+  height: 20px;
+}
+
+.panel {
+  position: absolute;
+  right: 0;
+  bottom: calc(100% + var(--space-3));
+  width: 216px;
+  display: grid;
+  gap: 2px;
+  padding: var(--space-2);
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-lg);
+  transform-origin: bottom right;
+  animation: floating-help-in 120ms ease-out;
+}
+
+@keyframes floating-help-in {
+  from {
+    opacity: 0;
+    transform: translateY(4px) scale(0.98);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+.item {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  padding: var(--space-2) var(--space-3);
+  border-radius: var(--radius-md);
+  color: var(--color-text);
+  font-size: var(--text-sm);
+  font-weight: 500;
+  text-decoration: none;
+  transition: background-color var(--transition-base);
+}
+
+.item:hover {
+  background: var(--color-surface-muted);
+}
+
+.itemIcon {
+  display: inline-flex;
+  flex-shrink: 0;
+  color: var(--color-text-muted);
+}
+
+.itemIcon svg {
+  width: 18px;
+  height: 18px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .trigger {
+    transition: none;
+  }
+
+  .trigger:hover,
+  .trigger:active {
+    transform: none;
+  }
+
+  .panel {
+    animation: none;
+  }
+
+  .item {
+    transition: none;
+  }
+}

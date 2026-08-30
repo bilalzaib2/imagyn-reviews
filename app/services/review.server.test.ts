@@ -26,6 +26,7 @@ interface FakeReview {
   repliedAt: Date | null;
   deletedAt: Date | null;
   createdAt: Date;
+  media: Array<{ type: string }>;
 }
 
 interface FakeProduct {
@@ -56,6 +57,9 @@ function seedReview(overrides: Partial<FakeReview> & { id: string; storeId: stri
     repliedAt: null,
     deletedAt: null,
     createdAt: new Date(),
+    // Mirrors review.server.ts's real reviewInclude (always includes media) — setReviewStatus
+    // reads review.media directly to derive hasPhoto/hasVideo for issueRewardIfEligible.
+    media: [],
     ...overrides,
   };
   reviews.push(review);
@@ -73,7 +77,11 @@ vi.mock("../db.server", () => ({
     store: {
       // "owner" => maxPublishedReviews is null (unlimited) — the published-review cap is
       // covered by review.server's own pre-existing tests/behavior, not this file's concern.
+      // rewardsEnabled: false means issueRewardIfEligible's fire-and-forget call always
+      // short-circuits on evaluateEligibility before touching Shopify or email — Rewards'
+      // own behavior is covered by rewards.server.test.ts, not this file's concern.
       findUnique: vi.fn(async () => ({ plan: "owner" })),
+      findUniqueOrThrow: vi.fn(async () => ({ rewardsEnabled: false, rewardValueType: "percentage", rewardValue: 10, rewardMinRating: 4, rewardRequireVerified: true, rewardRequirePhoto: false, rewardRequireVideo: false })),
     },
     product: {
       findFirst: vi.fn(async ({ where }: { where: { id: string; storeId: string } }) => {
@@ -83,6 +91,13 @@ vi.mock("../db.server", () => ({
       update: vi.fn(async () => ({})),
     },
     productAiSummary: {
+      findUnique: vi.fn(async () => null),
+    },
+    // issueRewardIfEligible (fired, not awaited, by setReviewStatus on APPROVED) calls
+    // evaluateAndIssueReward, which checks for an existing Reward row first — returning null
+    // here just means "not evaluated yet." See store.findUniqueOrThrow above for why nothing
+    // past this point ever calls Shopify or sends email in this file's tests.
+    reward: {
       findUnique: vi.fn(async () => null),
     },
     review: {

@@ -17,6 +17,11 @@ export interface ReviewRequestEmailProps {
   /** Hides the storeName eyebrow line entirely when false — see email.shared.ts's
    *  EmailTemplateContent.showStoreName. */
   showStoreName: boolean;
+  /** Hides the "Powered by Imagyn Reviews" footer line — a real Pro-only capability (see
+   *  email.shared.ts's EmailTemplateContent.showPoweredBy and
+   *  sanitizeEmailTemplateContentForPlan, the actual enforcement point; this prop only
+   *  renders whatever it's given). */
+  showPoweredBy: boolean;
   reviewUrl: string;
   // Omitted for the Email Studio preview/test-email paths (sample data) — the footer line only
   // renders when present. See templates.server.tsx's ReviewRequestEmailData.
@@ -41,6 +46,7 @@ export function ReviewRequestEmail({
   logoUrl,
   storeName,
   showStoreName,
+  showPoweredBy,
   reviewUrl,
   unsubscribeUrl,
 }: ReviewRequestEmailProps) {
@@ -132,19 +138,23 @@ export function ReviewRequestEmail({
           {/* One small, quiet line — the merchant's own branding above does all the real
               work; this is attribution, not a second ad. The mark here is tiny (14px) and
               sits only in this footer, never in the header's primary branding position, so
-              it can never read as "this email is from Imagyn" — see the logo Section above. */}
-          <Section style={{ paddingTop: "20px" }}>
-            <Text style={{ margin: 0, fontSize: "11px", lineHeight: "1.5", color: "#c2c2c2" }}>
-              <Img
-                src="https://app.imagyn.co/apple-touch-icon.png?v=3"
-                width="14"
-                height="14"
-                alt=""
-                style={{ borderRadius: "3px", verticalAlign: "middle", marginRight: "5px" }}
-              />
-              Powered by Imagyn Reviews
-            </Text>
-          </Section>
+              it can never read as "this email is from Imagyn" — see the logo Section above.
+              Real Pro-gated removal (email.shared.ts's showPoweredBy) — Free stores always
+              see this prop as true, enforced server-side, not just hidden in the editor UI. */}
+          {showPoweredBy ? (
+            <Section style={{ paddingTop: "20px" }}>
+              <Text style={{ margin: 0, fontSize: "11px", lineHeight: "1.5", color: "#c2c2c2" }}>
+                <Img
+                  src="https://app.imagyn.co/apple-touch-icon.png?v=3"
+                  width="14"
+                  height="14"
+                  alt=""
+                  style={{ borderRadius: "3px", verticalAlign: "middle", marginRight: "5px" }}
+                />
+                Powered by Imagyn Reviews
+              </Text>
+            </Section>
+          ) : null}
         </Container>
       </Body>
     </Html>
