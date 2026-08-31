@@ -85,6 +85,10 @@ export interface ShopifyOrderLineItem {
   // so a line item with no local match is shown but genuinely can't be requested yet.
   localProductId: string | null;
   localProductName: string | null;
+  // From the synced Product row's own featuredImage (product.server.ts's syncProducts) — reuses
+  // the catalog this app already mirrors rather than requesting Shopify's own line-item image
+  // field, avoiding a duplicate GraphQL read for data already on hand locally.
+  localProductImage: string | null;
 }
 
 export interface ShopifyOrderSummary {
@@ -245,7 +249,7 @@ export async function searchShopifyOrders(
   const localProducts = shopifyProductIds.size
     ? await prisma.product.findMany({
         where: { storeId, shopifyProductId: { in: Array.from(shopifyProductIds) } },
-        select: { id: true, name: true, shopifyProductId: true },
+        select: { id: true, name: true, shopifyProductId: true, featuredImage: true },
       })
     : [];
   const localProductByShopifyId = new Map(localProducts.map((product) => [product.shopifyProductId, product]));
@@ -275,6 +279,7 @@ export async function searchShopifyOrders(
           shopifyProductId: shopifyProductGid ? shopifyGidToLegacyId(shopifyProductGid) : null,
           localProductId: localProduct?.id ?? null,
           localProductName: localProduct?.name ?? null,
+          localProductImage: localProduct?.featuredImage ?? null,
         };
       }),
     };

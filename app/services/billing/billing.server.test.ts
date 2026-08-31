@@ -10,11 +10,11 @@ vi.mock("../../db.server", () => ({
   default: {},
 }));
 
-const setDevelopmentStoreFlag = vi.fn(async () => ({}));
+const setDevelopmentStoreFlag = vi.fn(async (_id: string, _isDevelopmentStore: boolean) => ({}));
 vi.mock("../store.server", () => ({
   getSlug: vi.fn(),
   updateBillingState: vi.fn(),
-  setDevelopmentStoreFlag: (...args: unknown[]) => setDevelopmentStoreFlag(...args),
+  setDevelopmentStoreFlag: (id: string, isDevelopmentStore: boolean) => setDevelopmentStoreFlag(id, isDevelopmentStore),
 }));
 
 import { ensureDevelopmentStoreFlag } from "./billing.server";

@@ -792,14 +792,45 @@
   min-width: 8rem;
 }
 
+.ordersToolbarRow {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  min-height: 1.25rem;
+}
+
 /* Real Shopify order table inside the "Shopify Orders" send tab — same visual language as
    .table above (border tokens, muted uppercase headers) but its own ruleset since the column
-   count/order differs from the main Requests list table. */
+   count/order differs from the main Requests list table. Taller than before now that the
+   surrounding Modal renders fullScreen (see app.requests.tsx) instead of a small popup. */
 .ordersTableWrap {
-  max-height: 22rem;
+  max-height: 60vh;
   overflow-y: auto;
   border: 1px solid var(--color-border);
   border-radius: var(--radius-md);
+}
+
+.ordersProductCell {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+}
+
+.ordersProductImage {
+  width: 2.25rem;
+  height: 2.25rem;
+  border-radius: var(--radius-sm);
+  object-fit: cover;
+  background: var(--color-surface-muted);
+  flex-shrink: 0;
+}
+
+.ordersProductImagePlaceholder {
+  width: 2.25rem;
+  height: 2.25rem;
+  border-radius: var(--radius-sm);
+  background: var(--color-surface-muted);
+  flex-shrink: 0;
 }
 
 .ordersTable {

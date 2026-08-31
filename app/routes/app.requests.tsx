@@ -12,6 +12,7 @@ import { boundary } from "@shopify/shopify-app-react-router/server";
 import {
   ActionList,
   Autocomplete,
+  Badge,
   Banner,
   BlockStack,
   Card,
@@ -60,6 +61,7 @@ type ShopifyOrderLineItemRow = {
   shopifyProductId: string | null;
   localProductId: string | null;
   localProductName: string | null;
+  localProductImage: string | null;
   hasExistingReview: boolean;
   hasPendingRequest: boolean;
   hasSentRequest: boolean;
@@ -778,8 +780,43 @@ function formatOrderDate(value: string): string {
 // matching synced local Product (createManyFromOrders needs a local productId, same
 // requirement webhooks.fulfillments.create.tsx's automatic path already has) and no existing
 // review/pending/sent request for that exact customer+product pair.
+// Real, honest eligibility/status read for one order line item — every branch reflects data
+// this app actually has (order.customerEmail, the synced Product catalog, and the same
+// getExistingRequestContextBulk booleans the automatic engine relies on), never a fabricated
+// state. Returns null for a genuinely eligible row.
+function getOrderLineItemStatus(
+  order: ShopifyOrderRow,
+  item: ShopifyOrderLineItemRow,
+): { label: string; tone: "success" | "info" | "warning" } | null {
+  if (!order.customerEmail) {
+    // Genuinely ambiguous from data alone: a null customerEmail could mean the order really has
+    // none on file, *or* Shopify is withholding it pending this app's Protected Customer Data
+    // approval (see the banner above this table) — the Admin GraphQL API doesn't distinguish the
+    // two for a nested Order.customer field the way it does for a direct customers() query.
+    return { label: "No customer email available", tone: "warning" };
+  }
+  if (!item.localProductId) {
+    return { label: "Not in synced catalog", tone: "warning" };
+  }
+  if (item.hasExistingReview) {
+    return { label: "Reviewed", tone: "success" };
+  }
+  if (item.hasPendingRequest) {
+    return { label: "Request pending", tone: "info" };
+  }
+  if (item.hasSentRequest) {
+    return { label: "Request sent", tone: "info" };
+  }
+  return null;
+}
+
 function ShopifyOrdersPicker({
-  fetcher,
+  orders,
+  isLoading,
+  loadError,
+  isProtectedDataLimitation,
+  hasNextPage,
+  onLoadMore,
   search,
   onSearchChange,
   filters,
@@ -787,13 +824,17 @@ function ShopifyOrdersPicker({
   products,
   selected,
   onToggle,
+  onToggleMany,
   delayDays,
   onDelayChange,
   disabled,
 }: {
-  fetcher: ReturnType<
-    typeof useFetcher<{ ok: boolean; error?: string; reason?: "protected_customer_data"; orders: ShopifyOrderRow[] }>
-  >;
+  orders: ShopifyOrderRow[];
+  isLoading: boolean;
+  loadError: string | null | undefined;
+  isProtectedDataLimitation: boolean;
+  hasNextPage: boolean;
+  onLoadMore: () => void;
   search: string;
   onSearchChange: (value: string) => void;
   filters: OrderFilters;
@@ -801,15 +842,41 @@ function ShopifyOrdersPicker({
   products: ProductOption[];
   selected: Record<string, ShopifyOrderSelection>;
   onToggle: (key: string, selection: ShopifyOrderSelection) => void;
+  onToggleMany: (entries: Array<{ key: string; selection: ShopifyOrderSelection }>, select: boolean) => void;
   delayDays: string;
   onDelayChange: (value: string) => void;
   disabled: boolean;
 }) {
-  const isLoading = fetcher.state !== "idle";
-  const orders = fetcher.data?.orders ?? [];
-  const loadError = fetcher.data && !fetcher.data.ok ? fetcher.data.error : null;
-  const isProtectedDataLimitation = fetcher.data && !fetcher.data.ok && fetcher.data.reason === "protected_customer_data";
   const productOptions = [{ label: "All products", value: "" }, ...products.map((product) => ({ label: product.name, value: product.id }))];
+
+  // Flattened once so "select all" and the empty/loading states share exactly one definition of
+  // "the eligible rows currently on screen" with the table body below.
+  const rows = orders.flatMap((order) =>
+    order.lineItems.map((item) => ({
+      order,
+      item,
+      key: `${order.shopifyOrderId}:${item.shopifyLineItemId}`,
+      status: getOrderLineItemStatus(order, item),
+    })),
+  );
+  const selectableRows = rows.filter((row) => !row.status);
+  const selectedCount = Object.keys(selected).length;
+  const allSelectableSelected = selectableRows.length > 0 && selectableRows.every((row) => Boolean(selected[row.key]));
+
+  const toggleSelectAll = () => {
+    const entries = selectableRows.map((row) => ({
+      key: row.key,
+      selection: {
+        productId: row.item.localProductId ?? "",
+        shopifyOrderId: row.order.shopifyOrderId,
+        shopifyLineItemId: row.item.shopifyLineItemId,
+        orderNumber: row.order.orderNumber,
+        email: row.order.customerEmail ?? "",
+        name: row.order.customerName ?? row.order.customerEmail ?? "",
+      },
+    }));
+    onToggleMany(entries, !allSelectableSelected);
+  };
 
   return (
     <div className={styles.modalFields}>
@@ -889,11 +956,25 @@ function ShopifyOrdersPicker({
         </Banner>
       ) : null}
 
+      <div className={styles.ordersToolbarRow}>
+        <p className={styles.feedbackMuted}>
+          {selectedCount > 0 ? `${selectedCount} selected` : rows.length > 0 ? `${rows.length} loaded` : null}
+        </p>
+      </div>
+
       <div className={styles.ordersTableWrap}>
         <table className={styles.ordersTable}>
           <thead>
             <tr>
-              <th className={styles.thCheckbox} aria-label="Select" />
+              <th className={styles.thCheckbox}>
+                <input
+                  type="checkbox"
+                  checked={allSelectableSelected}
+                  disabled={disabled || selectableRows.length === 0}
+                  onChange={toggleSelectAll}
+                  aria-label="Select all eligible orders"
+                />
+              </th>
               <th>Customer</th>
               <th>Order</th>
               <th>Product</th>
@@ -902,79 +983,74 @@ function ShopifyOrdersPicker({
             </tr>
           </thead>
           <tbody>
-            {isLoading && orders.length === 0 ? (
+            {isLoading && rows.length === 0 ? (
               <tr>
                 <td colSpan={6} className={styles.ordersTableEmpty}>Loading Shopify orders…</td>
               </tr>
-            ) : orders.length === 0 ? (
+            ) : rows.length === 0 ? (
               <tr>
                 <td colSpan={6} className={styles.ordersTableEmpty}>No matching orders.</td>
               </tr>
             ) : (
-              orders.flatMap((order) =>
-                order.lineItems.map((item) => {
-                  const key = `${order.shopifyOrderId}:${item.shopifyLineItemId}`;
-                  // Genuinely ambiguous from data alone: a null customerEmail here could mean
-                  // the order really has none on file, *or* Shopify is withholding it pending
-                  // this app's Protected Customer Data approval (see the banner above) — the
-                  // Admin GraphQL API doesn't distinguish the two for a nested Order.customer
-                  // field the way it does for a direct customers() query. Worded to cover both
-                  // honestly rather than asserting a specific cause this app can't verify.
-                  const ineligibleReason = !order.customerEmail
-                    ? "No customer email available"
-                    : !item.localProductId
-                      ? "Product not in your synced catalog yet"
-                      : item.hasExistingReview
-                        ? "Already reviewed"
-                        : item.hasPendingRequest
-                          ? "Request already pending"
-                          : item.hasSentRequest
-                            ? "Request already sent"
-                            : null;
-                  const isChecked = Boolean(selected[key]);
+              rows.map(({ order, item, key, status }) => {
+                const isChecked = Boolean(selected[key]);
 
-                  return (
-                    <tr key={key} className={ineligibleReason ? styles.ordersTableRowDisabled : undefined}>
-                      <td className={styles.thCheckbox}>
-                        <input
-                          type="checkbox"
-                          checked={isChecked}
-                          disabled={disabled || Boolean(ineligibleReason)}
-                          onChange={() =>
-                            onToggle(key, {
-                              productId: item.localProductId ?? "",
-                              shopifyOrderId: order.shopifyOrderId,
-                              shopifyLineItemId: item.shopifyLineItemId,
-                              orderNumber: order.orderNumber,
-                              email: order.customerEmail ?? "",
-                              name: order.customerName ?? order.customerEmail ?? "",
-                            })
-                          }
-                          aria-label={`Select ${item.title} from order ${order.orderNumber}`}
-                        />
-                      </td>
-                      <td>
-                        <p className={styles.customerName}>{order.customerName || "—"}</p>
-                        <p className={styles.customerEmail}>{order.customerEmail || "No email"}</p>
-                      </td>
-                      <td className={styles.colOrder}>{order.orderNumber}</td>
-                      <td>{item.localProductName ?? item.title}</td>
-                      <td className={styles.colDate}>{formatOrderDate(order.createdAt)}</td>
-                      <td>
-                        {ineligibleReason ? (
-                          <span className={styles.tdMuted}>{ineligibleReason}</span>
+                return (
+                  <tr key={key} className={status ? styles.ordersTableRowDisabled : undefined}>
+                    <td className={styles.thCheckbox}>
+                      <input
+                        type="checkbox"
+                        checked={isChecked}
+                        disabled={disabled || Boolean(status)}
+                        onChange={() =>
+                          onToggle(key, {
+                            productId: item.localProductId ?? "",
+                            shopifyOrderId: order.shopifyOrderId,
+                            shopifyLineItemId: item.shopifyLineItemId,
+                            orderNumber: order.orderNumber,
+                            email: order.customerEmail ?? "",
+                            name: order.customerName ?? order.customerEmail ?? "",
+                          })
+                        }
+                        aria-label={`Select ${item.title} from order ${order.orderNumber}`}
+                      />
+                    </td>
+                    <td>
+                      <p className={styles.customerName}>{order.customerName || "—"}</p>
+                      <p className={styles.customerEmail}>{order.customerEmail || "No email"}</p>
+                    </td>
+                    <td className={styles.colOrder}>{order.orderNumber}</td>
+                    <td>
+                      <div className={styles.ordersProductCell}>
+                        {item.localProductImage ? (
+                          <img src={item.localProductImage} alt="" className={styles.ordersProductImage} />
                         ) : (
-                          <span className={styles.tdMuted}>Eligible</span>
+                          <div className={styles.ordersProductImagePlaceholder} aria-hidden="true" />
                         )}
-                      </td>
-                    </tr>
-                  );
-                }),
-              )
+                        <span>{item.localProductName ?? item.title}</span>
+                      </div>
+                    </td>
+                    <td className={styles.colDate}>{formatOrderDate(order.createdAt)}</td>
+                    <td>
+                      {status ? (
+                        <Badge tone={status.tone}>{status.label}</Badge>
+                      ) : (
+                        <Badge tone="success">Eligible</Badge>
+                      )}
+                    </td>
+                  </tr>
+                );
+              })
             )}
           </tbody>
         </table>
       </div>
+
+      {hasNextPage ? (
+        <Button type="button" variant="ghost" onClick={onLoadMore} disabled={disabled || isLoading}>
+          {isLoading ? "Loading…" : "Load more orders"}
+        </Button>
+      ) : null}
 
       <Select
         label="Send delay"
@@ -1101,8 +1177,38 @@ export default function RequestsPage() {
   const ordersFetcher = useFetcher<{
     ok: boolean;
     error?: string;
+    reason?: "protected_customer_data";
     orders: ShopifyOrderRow[];
+    hasNextPage: boolean;
+    endCursor: string | null;
   }>();
+  // Accumulated across "Load more" pages — app.requests.orders.tsx's loader only ever returns
+  // one page (25 real orders) per call, same real Shopify cursor pagination every other list in
+  // this app already uses (see product.server.ts's syncAllProducts). lastOrderCursorRef tracks
+  // whether the in-flight fetch was a fresh search/filter (replace) or a "Load more" (append) —
+  // ordersFetcher.data alone can't tell the two apart once it resolves.
+  const [loadedOrders, setLoadedOrders] = useState<ShopifyOrderRow[]>([]);
+  const [orderPageInfo, setOrderPageInfo] = useState<{ hasNextPage: boolean; endCursor: string | null }>({
+    hasNextPage: false,
+    endCursor: null,
+  });
+  const lastOrderCursorRef = useRef<string | null>(null);
+  const buildOrdersUrl = (cursor?: string | null) => {
+    const params = new URLSearchParams();
+    if (orderSearch.trim()) params.set("search", orderSearch.trim());
+    if (orderFilters.reviewStatus) params.set("reviewStatus", orderFilters.reviewStatus);
+    if (orderFilters.fulfillmentStatus) params.set("fulfillmentStatus", orderFilters.fulfillmentStatus);
+    if (orderFilters.productId) params.set("productId", orderFilters.productId);
+    if (orderFilters.dateFrom) params.set("dateFrom", orderFilters.dateFrom);
+    if (orderFilters.dateTo) params.set("dateTo", orderFilters.dateTo);
+    if (cursor) params.set("cursor", cursor);
+    return `/app/requests/orders?${params.toString()}`;
+  };
+  const handleLoadMoreOrders = () => {
+    if (!orderPageInfo.hasNextPage || !orderPageInfo.endCursor || ordersFetcher.state !== "idle") return;
+    lastOrderCursorRef.current = orderPageInfo.endCursor;
+    ordersFetcher.load(buildOrdersUrl(orderPageInfo.endCursor));
+  };
 
   const [optimisticDeleted, setOptimisticDeleted] = useState<Record<string, true>>({});
   const [optimisticPatch, setOptimisticPatch] = useState<Partial<Record<string, Partial<ReviewRequestRecord>>> & Record<string, Partial<ReviewRequestRecord>>>({});
@@ -1143,19 +1249,31 @@ export default function RequestsPage() {
     if (!isShopifyOrdersTabActive) return;
 
     const timeoutId = window.setTimeout(() => {
-      const params = new URLSearchParams();
-      if (orderSearch.trim()) params.set("search", orderSearch.trim());
-      if (orderFilters.reviewStatus) params.set("reviewStatus", orderFilters.reviewStatus);
-      if (orderFilters.fulfillmentStatus) params.set("fulfillmentStatus", orderFilters.fulfillmentStatus);
-      if (orderFilters.productId) params.set("productId", orderFilters.productId);
-      if (orderFilters.dateFrom) params.set("dateFrom", orderFilters.dateFrom);
-      if (orderFilters.dateTo) params.set("dateTo", orderFilters.dateTo);
-      ordersFetcher.load(`/app/requests/orders?${params.toString()}`);
+      lastOrderCursorRef.current = null;
+      ordersFetcher.load(buildOrdersUrl());
     }, 250);
 
     return () => window.clearTimeout(timeoutId);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isShopifyOrdersTabActive, orderSearch, orderFilters]);
+
+  // Replaces the accumulated list on a fresh search/filter fetch, appends on a "Load more" one —
+  // see lastOrderCursorRef above for how those two cases are told apart.
+  useEffect(() => {
+    if (!ordersFetcher.data) return;
+
+    if (!ordersFetcher.data.ok) {
+      if (lastOrderCursorRef.current === null) setLoadedOrders([]);
+      setOrderPageInfo({ hasNextPage: false, endCursor: null });
+      return;
+    }
+
+    setLoadedOrders((prev) =>
+      lastOrderCursorRef.current === null ? ordersFetcher.data!.orders : [...prev, ...ordersFetcher.data!.orders],
+    );
+    setOrderPageInfo({ hasNextPage: ordersFetcher.data.hasNextPage, endCursor: ordersFetcher.data.endCursor });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [ordersFetcher.data]);
 
   useEffect(() => {
     if (!fetcher.data) {
@@ -1268,6 +1386,9 @@ export default function RequestsPage() {
     setCustomerSegment("");
     setSelectedOrderLineItems({});
     setOrderSendDelayDays("7");
+    setLoadedOrders([]);
+    setOrderPageInfo({ hasNextPage: false, endCursor: null });
+    lastOrderCursorRef.current = null;
     setRequestModalOpen(true);
   };
 
@@ -1425,7 +1546,7 @@ export default function RequestsPage() {
   };
 
   const handleModalSubmit = () => {
-    if (requestModalMode === "create" && sendSource === "shopify-orders") {
+    if (requestModalMode === "create" && (sendSource === "shopify-orders" || sendSource === "segment")) {
       const selections = Object.values(selectedOrderLineItems);
       if (selections.length === 0) {
         return;
@@ -2013,10 +2134,10 @@ export default function RequestsPage() {
       <Modal
         open={requestModalOpen}
         onClose={() => setRequestModalOpen(false)}
-        size={requestModalMode === "create" && sendSource === "shopify-orders" ? "large" : undefined}
+        size={requestModalMode === "create" && (sendSource === "shopify-orders" || sendSource === "segment") ? "fullScreen" : undefined}
         title={requestModalMode === "create" ? "Send Review Request" : requestModalMode === "edit" ? "Edit Review Request" : "Reschedule Review Request"}
         primaryAction={
-          requestModalMode === "create" && sendSource === "shopify-orders"
+          requestModalMode === "create" && (sendSource === "shopify-orders" || sendSource === "segment")
             ? {
                 content:
                   isMutating && activeIntent === "create-from-orders"
@@ -2088,7 +2209,14 @@ export default function RequestsPage() {
 
             {requestModalMode === "create" && (sendSource === "shopify-orders" || (sendSource === "segment" && customerSegment)) ? (
               <ShopifyOrdersPicker
-                fetcher={ordersFetcher}
+                orders={loadedOrders}
+                isLoading={ordersFetcher.state !== "idle"}
+                loadError={ordersFetcher.data && !ordersFetcher.data.ok ? ordersFetcher.data.error : null}
+                isProtectedDataLimitation={Boolean(
+                  ordersFetcher.data && !ordersFetcher.data.ok && ordersFetcher.data.reason === "protected_customer_data",
+                )}
+                hasNextPage={orderPageInfo.hasNextPage}
+                onLoadMore={handleLoadMoreOrders}
                 search={orderSearch}
                 onSearchChange={setOrderSearch}
                 filters={orderFilters}
@@ -2103,6 +2231,19 @@ export default function RequestsPage() {
                       return next;
                     }
                     return { ...prev, [key]: selection };
+                  })
+                }
+                onToggleMany={(entries, select) =>
+                  setSelectedOrderLineItems((prev) => {
+                    const next = { ...prev };
+                    for (const entry of entries) {
+                      if (select) {
+                        next[entry.key] = entry.selection;
+                      } else {
+                        delete next[entry.key];
+                      }
+                    }
+                    return next;
                   })
                 }
                 delayDays={orderSendDelayDays}
