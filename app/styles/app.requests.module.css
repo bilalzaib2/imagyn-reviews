@@ -212,26 +212,40 @@
   text-align: right;
 }
 
-/* Explicit widths on every other column so the fixed layout has a stable plan — Customer and
-   Product get the largest, fluid shares; Order/Scheduled/Status stay narrow and predictable. */
+/* Explicit widths on every column so the fixed layout has a stable plan — Customer and Product
+   get the largest, fluid shares; Order/Trigger/Scheduled/Status/Review stay narrow and
+   predictable. Column order: (1) checkbox (2) Customer (3) Email (4) Order (5) Product
+   (6) Trigger (7) Scheduled (8) Status (9) Review (10) actions. */
 .table thead th:nth-child(2) {
-  width: 27%;
+  width: 20%;
 }
 
 .table thead th:nth-child(3) {
-  width: 28%;
+  width: 16%;
 }
 
 .table thead th:nth-child(4) {
-  width: 12%;
+  width: 9%;
 }
 
 .table thead th:nth-child(5) {
-  width: 13%;
+  width: 19%;
 }
 
 .table thead th:nth-child(6) {
+  width: 6rem;
+}
+
+.table thead th:nth-child(7) {
+  width: 11%;
+}
+
+.table thead th:nth-child(8) {
   width: 6.5rem;
+}
+
+.table thead th:nth-child(9) {
+  width: 6rem;
 }
 
 .table tbody td {
@@ -677,20 +691,32 @@
     flex: 1 1 8rem;
   }
 
-  /* Order/Scheduled are the two columns explicitly called out as de-emphasizable (item 9) —
-     dropped entirely rather than truncated, so Customer/Product/Status keep full room. Their
-     freed-up share goes to Customer/Product (fixed layout doesn't redistribute it on its own). */
+  /* Email/Order/Trigger/Scheduled are dropped entirely rather than truncated, so
+     Customer/Product/Status/Review — the "who / what they bought / what happened" trio (plus
+     whether a review actually followed) — keep full room. The detail panel still has every
+     dropped field for a row the merchant opens. Freed-up share goes to Customer/Product
+     (fixed layout doesn't redistribute it on its own). */
+  .colEmail,
   .colOrder,
+  .colTrigger,
   .colDate {
     display: none;
   }
 
   .table thead th:nth-child(2) {
-    width: 44%;
+    width: 38%;
   }
 
-  .table thead th:nth-child(3) {
-    width: 44%;
+  .table thead th:nth-child(5) {
+    width: 36%;
+  }
+
+  .table thead th:nth-child(8) {
+    width: 16%;
+  }
+
+  .table thead th:nth-child(9) {
+    width: 10%;
   }
 
   .detailScheduleGrid {
@@ -750,6 +776,20 @@
   color: var(--color-text-muted);
   text-transform: uppercase;
   letter-spacing: 0.05em;
+}
+
+/* Filter row above the Shopify Orders/Customer Segment table — every field here is a real
+   server-side filter (see app.requests.orders.tsx), so it's laid out plainly as a wrapping row
+   of equal-ish controls rather than styled to look more significant than it is. */
+.ordersFilterRow {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-3);
+}
+
+.ordersFilterRow > * {
+  flex: 1 1 9rem;
+  min-width: 8rem;
 }
 
 /* Real Shopify order table inside the "Shopify Orders" send tab — same visual language as

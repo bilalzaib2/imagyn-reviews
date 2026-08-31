@@ -431,3 +431,58 @@
     .applyBrandingToAllTemplates`, unchanged). This keeps the one-button action fully
     functional without any invented or unreliable Shopify API, and without a fake
     "detected" state.
+
+## Protected Customer Data confirmed to block direct API reads too, not just the fulfillments webhook; Requests table/picker rebuilt with real filters and Customer Segments (2026-08-31)
+
+-   **Shopify's Protected Customer Data approval gates direct Admin GraphQL customer reads on
+    this app's real connected dev store — confirmed live, not assumed.** A direct
+    `customers(first: 10) { ... }` query against `verveonline.myshopify.com` returns a hard
+    `ACCESS_DENIED`: *"This app is not approved to access the Customer object."* This
+    corrects an earlier, wrong assumption in this codebase's own comments that development
+    stores bypass the restriction — they do not. `shopifyOrders.server.ts` now has a
+    dedicated `ProtectedCustomerDataError` class, detected via
+    `extensions.code === "ACCESS_DENIED"` + a message match, and both `app.requests.orders.tsx`
+    and the Shopify Orders picker in `app.requests.tsx` show this as an honest, specific
+    banner ("Customer name and email aren't available yet") instead of a misleading empty
+    "No matching orders." **What this means for approval status: this app has NOT completed
+    Shopify's Protected Customer Data review.** `read_orders`/`read_customers` scopes are
+    granted (merchant consent only grants the scope; it does not grant protected-field
+    access) and the automatic request engine (`ORDER_AUTOMATION_ENABLED`) remains gated on
+    approval, same as documented above. What works today without approval: order number,
+    line items, product, dates, fulfillment/financial status — anything not on the Customer
+    object itself. What's blocked: `customer.email`/`customer.firstName`/`customer.lastName`
+    on both a direct `customers()` query and (with high confidence, inferred from Shopify's
+    own wording naming "the Customer object" rather than a specific query) the nested
+    `Order.customer` field — this app cannot 100% empirically distinguish "order genuinely has
+    no customer email" from "Shopify is withholding it" for the nested field, so the picker's
+    ineligibility copy ("No customer email available") is worded to cover both honestly.
+    Submitting the Partner Dashboard protected-data request itself was not done as part of
+    this pass — it requires providing a privacy policy URL and data-handling justification
+    text, which is a business/legal decision, not an engineering one.
+-   **Requests table rebuilt to a real 9-column layout** (Customer, Email, Order, Product,
+    Trigger, Scheduled, Status, Review) so a merchant reads who/what/which
+    order/when/what-happened without opening every row's detail panel — `Review` reads
+    `reviewedAt` (the real, authoritative field `review-request.server.ts` sets alongside
+    `status: "completed"`), not a fabricated status. Mobile (`max-width: 640px`) drops
+    Email/Order/Trigger/Scheduled, keeping Customer/Product/Status/Review; the detail panel
+    still has every dropped field.
+-   **Shopify Orders picker gained real filters** (`app.requests.orders.tsx`): review status
+    (all/eligible/already requested/reviewed), fulfillment (fulfilled/unfulfilled), and date
+    range are pushed into Shopify's own order search query (`fulfillment_status:`,
+    `created_at:>=/<=`) — real Shopify filtering, not a client-side illusion over one fetched
+    page. Product filtering and the review-status filter's values are this app's own data
+    (local product sync + review-request eligibility), so they're applied in-memory after the
+    same `getExistingRequestContextBulk` eligibility check the automatic path and manual
+    picker already share, before the response is returned. **Product name has no field in
+    Shopify's order search index** (confirmed against Shopify's documented search syntax —
+    only `sku:` exists, and this app doesn't fetch SKUs), so "search by product name" is a
+    dedicated exact-match Product select against the synced catalog rather than a fake
+    substring match folded into the free-text box, which only searches customer/email/order
+    per Shopify's own default search fields.
+-   **Customer Segments implemented as presets over the same real filter engine**, not a
+    second data model: "All eligible customers," "Recent orders," "Fulfilled orders,"
+    "Customers with no review," and "Customers who haven't received a request" each just set
+    the Shopify Orders picker's own filter state and render the identical real table;
+    "Date range" and "Product" segments surface the picker's own date/product controls rather
+    than duplicating them. CSV upload remains an honestly disabled tab — no request-specific
+    CSV importer exists yet, unchanged from the prior pass.

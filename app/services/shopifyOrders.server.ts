@@ -13,7 +13,31 @@ const ORDERS_PAGE_SIZE = 25;
 
 interface GraphqlEnvelope<T> {
   data?: T;
-  errors?: Array<{ message: string }>;
+  errors?: Array<{ message: string; extensions?: { code?: string } }>;
+}
+
+// Thrown specifically when Shopify rejects access to the Customer object itself — confirmed
+// live against this app's real connected store (2026-08-31): a direct `customers()` query
+// returns `ACCESS_DENIED` with the message "This app is not approved to access the Customer
+// object," a hard rejection distinct from an ordinary GraphQL error. This is the exact,
+// already-known Protected Customer Data blocker (see docs/DECISIONS.md,
+// webhooks.fulfillments.create.tsx) confirmed to also apply to *direct API reads*, not only the
+// fulfillments/create webhook subscription. Callers use this to show the real reason instead of
+// a generic failure or a misleading empty result.
+export class ProtectedCustomerDataError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "ProtectedCustomerDataError";
+  }
+}
+
+function isProtectedCustomerDataError(errors: GraphqlEnvelope<unknown>["errors"]): boolean {
+  return Boolean(
+    errors?.some(
+      (error) =>
+        error.extensions?.code === "ACCESS_DENIED" && /customer object|protected customer data/i.test(error.message),
+    ),
+  );
 }
 
 // Deliberately simpler than product.server.ts's graphqlWithThrottleHandling — this queries a
@@ -29,6 +53,12 @@ async function adminGraphql<T>(admin: AdminApiContext, query: string, variables?
     if (json.errors?.some((error) => /throttle/i.test(error.message)) && attempt === 1) {
       await new Promise((resolve) => setTimeout(resolve, 1500));
       continue;
+    }
+
+    if (isProtectedCustomerDataError(json.errors)) {
+      throw new ProtectedCustomerDataError(
+        "This app hasn't completed Shopify's Protected Customer Data approval yet, so customer name and email aren't available from the Shopify API.",
+      );
     }
 
     if (json.errors && json.errors.length > 0) {
@@ -139,39 +169,65 @@ function shopifyGidToLegacyId(gid: string): string {
 }
 
 // Real Shopify search syntax (https://shopify.dev/docs/api/usage/search-syntax) — a customer
-// name/email/order-number search is delegated to Shopify's own index rather than reimplemented
-// locally, since Shopify's Order resource is the actual source of truth, not a local mirror.
-function buildOrderSearchQuery(search: string): string | undefined {
-  const trimmed = search.trim();
-  if (!trimmed) return undefined;
+// name/email/order-number search, plus the fulfillment-status and created-at filters, are all
+// delegated to Shopify's own index rather than reimplemented locally, since Shopify's Order
+// resource is the actual source of truth, not a local mirror. Shopify's order search does not
+// support a product-title field, so product filtering happens after the fact (see
+// app.requests.orders.tsx) against the real line items this query returns.
+function buildOrderSearchQuery(params: {
+  search?: string;
+  fulfillmentStatus?: "fulfilled" | "unfulfilled";
+  dateFrom?: string;
+  dateTo?: string;
+}): string | undefined {
+  const clauses: string[] = [];
 
-  if (trimmed.startsWith("#")) {
-    return `name:${trimmed}`;
+  const trimmed = (params.search ?? "").trim();
+  if (trimmed) {
+    if (trimmed.startsWith("#")) {
+      clauses.push(`name:${trimmed}`);
+    } else if (/^\d+$/.test(trimmed)) {
+      clauses.push(`name:#${trimmed}`);
+    } else if (trimmed.includes("@")) {
+      clauses.push(`email:${trimmed}`);
+    } else {
+      // Shopify's default (unscoped) search already matches against customer name, email, and
+      // order name — this is intentionally broad rather than guessing which field the merchant
+      // meant.
+      clauses.push(trimmed);
+    }
   }
 
-  if (/^\d+$/.test(trimmed)) {
-    return `name:#${trimmed}`;
+  if (params.fulfillmentStatus) {
+    clauses.push(`fulfillment_status:${params.fulfillmentStatus}`);
   }
 
-  if (trimmed.includes("@")) {
-    return `email:${trimmed}`;
+  if (params.dateFrom) {
+    clauses.push(`created_at:>=${params.dateFrom}`);
   }
 
-  // Shopify's default (unscoped) search already matches against customer name, email, and
-  // order name — this is intentionally broad rather than guessing which field the merchant
-  // meant.
-  return trimmed;
+  if (params.dateTo) {
+    clauses.push(`created_at:<=${params.dateTo}`);
+  }
+
+  return clauses.length > 0 ? clauses.join(" AND ") : undefined;
 }
 
 export async function searchShopifyOrders(
   admin: AdminApiContext,
   storeId: string,
-  params: { search?: string; cursor?: string | null } = {},
+  params: {
+    search?: string;
+    cursor?: string | null;
+    fulfillmentStatus?: "fulfilled" | "unfulfilled";
+    dateFrom?: string;
+    dateTo?: string;
+  } = {},
 ): Promise<{ orders: ShopifyOrderSummary[]; hasNextPage: boolean; endCursor: string | null }> {
   const data = await adminGraphql<OrdersQueryResponse>(admin, ORDERS_QUERY, {
     first: ORDERS_PAGE_SIZE,
     after: params.cursor ?? undefined,
-    query: buildOrderSearchQuery(params.search ?? ""),
+    query: buildOrderSearchQuery(params),
   });
 
   const shopifyProductIds = new Set<string>();

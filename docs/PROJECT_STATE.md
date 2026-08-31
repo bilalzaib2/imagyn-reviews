@@ -8,6 +8,10 @@ hardening pass is committed and deployed (`2b81a22`) — see its own section bel
 UI/UX Redesign (all 10 core sections) is complete, passed a final production-safety review,
 and is committed and live in production (`fec41f5`). Separately, the "Medals Showcase"
 homepage widget block is also complete and ready to ship — see its own section below.
+Real Shopify order/customer data layer for Send Request is committed (`3e3fa6f`). Requests
+table restructure, real filters on the Shopify Orders picker, and Customer Segments (as
+presets over that same real data) are implemented this pass — see DECISIONS.md's
+2026-08-31 entry — not yet committed as of this writing.
 
 ## Email System — Production Hardening (2026-08-29, DONE ✓, deployed `2b81a22`)
 
@@ -623,6 +627,14 @@ relabeled.** **Nothing was committed or pushed.**
     data." Requires completing Shopify's Protected Customer Data approval before the
     webhook/scope can be added back to `shopify.app.toml` and the flag flipped. See
     [DECISIONS.md](./DECISIONS.md).
+-   **Confirmed 2026-08-31: the same Protected Customer Data approval also blocks direct
+    Admin GraphQL customer reads**, not only the webhook subscription — a live `customers()`
+    query against the connected dev store returns `ACCESS_DENIED`. `read_orders`/
+    `read_customers` scopes are granted, but scope consent alone doesn't unlock protected
+    fields. This app has **not** submitted or completed Shopify's Protected Customer Data
+    Partner Dashboard review. See DECISIONS.md's 2026-08-31 entry for exactly what works
+    today without it (order/product/date/fulfillment data) vs. what's blocked (customer
+    name/email).
 
 ## Next
 

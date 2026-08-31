@@ -681,14 +681,15 @@ type SendSource = "shopify-orders" | "individual" | "segment" | "csv";
 const SEND_SOURCE_TABS: Array<{ value: SendSource; label: string; disabled?: boolean }> = [
   { value: "shopify-orders", label: "Shopify Orders" },
   { value: "individual", label: "Individual Customer" },
-  { value: "segment", label: "Customer Segment", disabled: true },
+  { value: "segment", label: "Customer Segment" },
   { value: "csv", label: "Upload CSV", disabled: true },
 ];
 
 // "Choose source" step of the redesigned Send Request flow — Shopify Orders (real data) is the
-// default, matching the brief's explicit "default to Shopify Orders" requirement. Segment/CSV
-// render as genuinely disabled tabs (not clickable-but-inert) since neither has a real
-// implementation behind it yet.
+// default, matching the brief's explicit "default to Shopify Orders" requirement. Customer
+// Segment reuses the same real Shopify Orders table under preset filters (see
+// CUSTOMER_SEGMENT_OPTIONS). CSV still renders as a genuinely disabled tab (not
+// clickable-but-inert) since no request-specific CSV importer exists yet.
 function SendSourceTabs({ value, onChange }: { value: SendSource; onChange: (value: SendSource) => void }) {
   return (
     <div className={styles.sendSourceTabs} role="tablist" aria-label="Send request from">
@@ -710,6 +711,59 @@ function SendSourceTabs({ value, onChange }: { value: SendSource; onChange: (val
   );
 }
 
+// The four review-status filter values point 1 of the brief calls for on the Shopify Orders
+// picker itself; "no-review" and "not-requested" are additional values the same server-side
+// filter (app.requests.orders.tsx) supports, used only by the Customer Segments presets below —
+// keeping one filter engine instead of a second copy of this logic for segments.
+const ORDER_REVIEW_STATUS_OPTIONS: Array<{ label: string; value: string }> = [
+  { label: "All", value: "" },
+  { label: "Eligible", value: "eligible" },
+  { label: "Already requested", value: "requested" },
+  { label: "Reviewed", value: "reviewed" },
+];
+
+const ORDER_FULFILLMENT_OPTIONS: Array<{ label: string; value: string }> = [
+  { label: "All", value: "" },
+  { label: "Fulfilled", value: "fulfilled" },
+  { label: "Unfulfilled", value: "unfulfilled" },
+];
+
+type OrderFilters = {
+  reviewStatus: string;
+  fulfillmentStatus: string;
+  productId: string;
+  dateFrom: string;
+  dateTo: string;
+};
+
+const emptyOrderFilters: OrderFilters = {
+  reviewStatus: "",
+  fulfillmentStatus: "",
+  productId: "",
+  dateFrom: "",
+  dateTo: "",
+};
+
+// One preset per segment the brief asks for (point 4) — each just sets the same real filters
+// the Shopify Orders tab exposes and reuses its exact table/fetch logic, rather than a second,
+// parallel "customer list" data model. "Date range" and "Product" presets simply surface the
+// matching control for the merchant to fill in themselves.
+const CUSTOMER_SEGMENT_OPTIONS: Array<{ label: string; value: string; filters: Partial<OrderFilters> }> = [
+  { label: "All eligible customers", value: "eligible", filters: { reviewStatus: "eligible" } },
+  { label: "Recent orders (last 30 days)", value: "recent", filters: {} },
+  { label: "Fulfilled orders", value: "fulfilled", filters: { fulfillmentStatus: "fulfilled" } },
+  { label: "Customers with no review", value: "no-review", filters: { reviewStatus: "no-review" } },
+  { label: "Customers who haven't received a request", value: "not-requested", filters: { reviewStatus: "not-requested" } },
+  { label: "Date range", value: "date-range", filters: {} },
+  { label: "Product", value: "product", filters: {} },
+];
+
+function isoDateDaysAgo(days: number): string {
+  const date = new Date();
+  date.setDate(date.getDate() - days);
+  return date.toISOString().slice(0, 10);
+}
+
 function formatOrderDate(value: string): string {
   try {
     return new Date(value).toLocaleDateString(undefined, { year: "numeric", month: "short", day: "numeric" });
@@ -728,15 +782,23 @@ function ShopifyOrdersPicker({
   fetcher,
   search,
   onSearchChange,
+  filters,
+  onFiltersChange,
+  products,
   selected,
   onToggle,
   delayDays,
   onDelayChange,
   disabled,
 }: {
-  fetcher: ReturnType<typeof useFetcher<{ ok: boolean; error?: string; orders: ShopifyOrderRow[] }>>;
+  fetcher: ReturnType<
+    typeof useFetcher<{ ok: boolean; error?: string; reason?: "protected_customer_data"; orders: ShopifyOrderRow[] }>
+  >;
   search: string;
   onSearchChange: (value: string) => void;
+  filters: OrderFilters;
+  onFiltersChange: (filters: Partial<OrderFilters>) => void;
+  products: ProductOption[];
   selected: Record<string, ShopifyOrderSelection>;
   onToggle: (key: string, selection: ShopifyOrderSelection) => void;
   delayDays: string;
@@ -746,6 +808,8 @@ function ShopifyOrdersPicker({
   const isLoading = fetcher.state !== "idle";
   const orders = fetcher.data?.orders ?? [];
   const loadError = fetcher.data && !fetcher.data.ok ? fetcher.data.error : null;
+  const isProtectedDataLimitation = fetcher.data && !fetcher.data.ok && fetcher.data.reason === "protected_customer_data";
+  const productOptions = [{ label: "All products", value: "" }, ...products.map((product) => ({ label: product.name, value: product.id }))];
 
   return (
     <div className={styles.modalFields}>
@@ -760,7 +824,66 @@ function ShopifyOrdersPicker({
         disabled={disabled}
       />
 
-      {loadError ? (
+      {/* Point 1's four required review-status values, plus fulfillment/product/date-range —
+          each maps to a real server-side filter (app.requests.orders.tsx), not a client-side
+          illusion over a fixed page of rows. Product name search has no equivalent field in
+          Shopify's order search index, so it's a dedicated exact-match select against the synced
+          catalog rather than a fake substring match folded into the free-text box above. */}
+      <div className={styles.ordersFilterRow}>
+        <Select
+          label="Review status"
+          options={ORDER_REVIEW_STATUS_OPTIONS}
+          value={filters.reviewStatus}
+          onChange={(value) => onFiltersChange({ reviewStatus: value })}
+          disabled={disabled}
+        />
+        <Select
+          label="Fulfillment"
+          options={ORDER_FULFILLMENT_OPTIONS}
+          value={filters.fulfillmentStatus}
+          onChange={(value) => onFiltersChange({ fulfillmentStatus: value })}
+          disabled={disabled}
+        />
+        <Select
+          label="Product"
+          options={productOptions}
+          value={filters.productId}
+          onChange={(value) => onFiltersChange({ productId: value })}
+          disabled={disabled}
+        />
+        <TextField
+          label="From"
+          type="date"
+          autoComplete="off"
+          value={filters.dateFrom}
+          onChange={(value) => onFiltersChange({ dateFrom: value })}
+          disabled={disabled}
+        />
+        <TextField
+          label="To"
+          type="date"
+          autoComplete="off"
+          value={filters.dateTo}
+          onChange={(value) => onFiltersChange({ dateTo: value })}
+          disabled={disabled}
+        />
+      </div>
+
+      {/* Confirmed live against this app's real connected store (2026-08-31): Shopify rejects
+          direct access to customer name/email until this app completes Protected Customer Data
+          approval (see shopifyOrders.server.ts's ProtectedCustomerDataError). Shown honestly
+          rather than as a silent "no matching orders" — this is a real, disclosed platform
+          limitation, not a bug in this picker. Order number, product, and date are unaffected. */}
+      {isProtectedDataLimitation ? (
+        <Banner tone="warning" title="Customer name and email aren't available yet">
+          <p>{loadError}</p>
+          <p>
+            Order number, product, and date still work normally. Sending a request needs a
+            customer email, so this will unblock automatically once Shopify grants approval — no
+            action needed here.
+          </p>
+        </Banner>
+      ) : loadError ? (
         <Banner tone="critical" title="Unable to load Shopify orders">
           <p>{loadError}</p>
         </Banner>
@@ -791,8 +914,14 @@ function ShopifyOrdersPicker({
               orders.flatMap((order) =>
                 order.lineItems.map((item) => {
                   const key = `${order.shopifyOrderId}:${item.shopifyLineItemId}`;
+                  // Genuinely ambiguous from data alone: a null customerEmail here could mean
+                  // the order really has none on file, *or* Shopify is withholding it pending
+                  // this app's Protected Customer Data approval (see the banner above) — the
+                  // Admin GraphQL API doesn't distinguish the two for a nested Order.customer
+                  // field the way it does for a direct customers() query. Worded to cover both
+                  // honestly rather than asserting a specific cause this app can't verify.
                   const ineligibleReason = !order.customerEmail
-                    ? "No customer email on this order"
+                    ? "No customer email available"
                     : !item.localProductId
                       ? "Product not in your synced catalog yet"
                       : item.hasExistingReview
@@ -952,6 +1081,21 @@ export default function RequestsPage() {
   // clickable-but-inert would be exactly the "decorative setting" this product avoids elsewhere.
   const [sendSource, setSendSource] = useState<"shopify-orders" | "individual" | "segment" | "csv">("shopify-orders");
   const [orderSearch, setOrderSearch] = useState("");
+  const [orderFilters, setOrderFilters] = useState<OrderFilters>(emptyOrderFilters);
+  const updateOrderFilters = (patch: Partial<OrderFilters>) => setOrderFilters((prev) => ({ ...prev, ...patch }));
+  // "Customer Segment" tab state — which preset is active, if any. Applying one just sets
+  // orderFilters to that preset's values, so the segment tab renders the exact same
+  // ShopifyOrdersPicker/table as the Shopify Orders tab rather than a second implementation.
+  const [customerSegment, setCustomerSegment] = useState("");
+  const applyCustomerSegment = (value: string) => {
+    setCustomerSegment(value);
+    if (value === "recent") {
+      setOrderFilters({ ...emptyOrderFilters, dateFrom: isoDateDaysAgo(30) });
+      return;
+    }
+    const preset = CUSTOMER_SEGMENT_OPTIONS.find((option) => option.value === value);
+    setOrderFilters({ ...emptyOrderFilters, ...(preset?.filters ?? {}) });
+  };
   const [selectedOrderLineItems, setSelectedOrderLineItems] = useState<Record<string, ShopifyOrderSelection>>({});
   const [orderSendDelayDays, setOrderSendDelayDays] = useState("7");
   const ordersFetcher = useFetcher<{
@@ -991,17 +1135,27 @@ export default function RequestsPage() {
   // the merchant types a search — same 250ms debounce convention as the request-list search
   // above. Skipped entirely while the modal/tab isn't visible, so opening "Edit" on an existing
   // request never triggers a Shopify Admin API call it doesn't need.
-  const isShopifyOrdersTabActive = requestModalOpen && requestModalMode === "create" && sendSource === "shopify-orders";
+  const isShopifyOrdersTabActive =
+    requestModalOpen &&
+    requestModalMode === "create" &&
+    (sendSource === "shopify-orders" || (sendSource === "segment" && Boolean(customerSegment)));
   useEffect(() => {
     if (!isShopifyOrdersTabActive) return;
 
     const timeoutId = window.setTimeout(() => {
-      ordersFetcher.load(`/app/requests/orders?search=${encodeURIComponent(orderSearch.trim())}`);
+      const params = new URLSearchParams();
+      if (orderSearch.trim()) params.set("search", orderSearch.trim());
+      if (orderFilters.reviewStatus) params.set("reviewStatus", orderFilters.reviewStatus);
+      if (orderFilters.fulfillmentStatus) params.set("fulfillmentStatus", orderFilters.fulfillmentStatus);
+      if (orderFilters.productId) params.set("productId", orderFilters.productId);
+      if (orderFilters.dateFrom) params.set("dateFrom", orderFilters.dateFrom);
+      if (orderFilters.dateTo) params.set("dateTo", orderFilters.dateTo);
+      ordersFetcher.load(`/app/requests/orders?${params.toString()}`);
     }, 250);
 
     return () => window.clearTimeout(timeoutId);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isShopifyOrdersTabActive, orderSearch]);
+  }, [isShopifyOrdersTabActive, orderSearch, orderFilters]);
 
   useEffect(() => {
     if (!fetcher.data) {
@@ -1110,6 +1264,8 @@ export default function RequestsPage() {
     setModalInstanceKey((key) => key + 1);
     setSendSource("shopify-orders");
     setOrderSearch("");
+    setOrderFilters(emptyOrderFilters);
+    setCustomerSegment("");
     setSelectedOrderLineItems({});
     setOrderSendDelayDays("7");
     setRequestModalOpen(true);
@@ -1600,10 +1756,13 @@ export default function RequestsPage() {
                               />
                             </th>
                             <th>Customer</th>
-                            <th>Product</th>
+                            <th className={styles.colEmail}>Email</th>
                             <th className={styles.colOrder}>Order</th>
+                            <th>Product</th>
+                            <th className={styles.colTrigger}>Trigger</th>
                             <th className={styles.colDate}>Scheduled</th>
                             <th>Status</th>
+                            <th className={styles.colReview}>Review</th>
                             <th className={styles.thActions} aria-label="Actions" />
                           </tr>
                         </thead>
@@ -1614,6 +1773,7 @@ export default function RequestsPage() {
                             const customerName = request.name ?? "Unnamed customer";
                             const productName = request.product?.name ?? "General request";
                             const rowActionsOpen = rowActionsOpenId === request.id;
+                            const isReviewed = Boolean(request.reviewedAt);
 
                             return (
                               <tr
@@ -1639,18 +1799,21 @@ export default function RequestsPage() {
                                 </td>
                                 <td className={styles.tdCustomer}>
                                   <p className={styles.customerName}>{customerName}</p>
-                                  {request.email ? <p className={styles.customerEmail}>{request.email}</p> : null}
                                 </td>
-                                <td className={styles.tdProduct}>
-                                  {productName}
-                                  {request.source === "order" ? <span className={styles.tdMuted}> · Automatic</span> : null}
-                                </td>
+                                <td className={`${styles.tdMuted} ${styles.colEmail}`}>{request.email ?? "—"}</td>
                                 <td className={`${styles.tdOrder} ${styles.colOrder}`}>
                                   {request.orderNumber ? `#${request.orderNumber}` : "—"}
+                                </td>
+                                <td className={styles.tdProduct}>{productName}</td>
+                                <td className={`${styles.tdMuted} ${styles.colTrigger}`}>
+                                  {request.source === "order" ? "Automatic" : "Manual"}
                                 </td>
                                 <td className={`${styles.tdDate} ${styles.colDate}`}>{formatDateTime(request.scheduledFor)}</td>
                                 <td className={styles.tdStatus}>
                                   <RequestStatusBadge status={request.status} />
+                                </td>
+                                <td className={`${styles.tdMuted} ${styles.colReview}`}>
+                                  {isReviewed ? "Reviewed" : "—"}
                                 </td>
                                 <td className={styles.tdActions} onClick={(event) => event.stopPropagation()}>
                                   <Popover
@@ -1904,13 +2067,6 @@ export default function RequestsPage() {
               <SendSourceTabs value={sendSource} onChange={setSendSource} />
             ) : null}
 
-            {requestModalMode === "create" && sendSource === "segment" ? (
-              <p className={styles.feedbackMuted}>
-                Customer Segments aren&apos;t built yet — no segment model exists in this app today. This tab will
-                become real functionality here, not a decorative option, once it is.
-              </p>
-            ) : null}
-
             {requestModalMode === "create" && sendSource === "csv" ? (
               <p className={styles.feedbackMuted}>
                 CSV upload for review requests isn&apos;t built yet (CSV import exists for reviews themselves — see
@@ -1919,11 +2075,25 @@ export default function RequestsPage() {
               </p>
             ) : null}
 
-            {requestModalMode === "create" && sendSource === "shopify-orders" ? (
+            {requestModalMode === "create" && sendSource === "segment" ? (
+              <Select
+                label="Segment"
+                options={CUSTOMER_SEGMENT_OPTIONS.map((option) => ({ label: option.label, value: option.value }))}
+                value={customerSegment}
+                onChange={applyCustomerSegment}
+                placeholder="Choose a segment"
+                disabled={isMutating}
+              />
+            ) : null}
+
+            {requestModalMode === "create" && (sendSource === "shopify-orders" || (sendSource === "segment" && customerSegment)) ? (
               <ShopifyOrdersPicker
                 fetcher={ordersFetcher}
                 search={orderSearch}
                 onSearchChange={setOrderSearch}
+                filters={orderFilters}
+                onFiltersChange={updateOrderFilters}
+                products={products}
                 selected={selectedOrderLineItems}
                 onToggle={(key, selection) =>
                   setSelectedOrderLineItems((prev) => {
