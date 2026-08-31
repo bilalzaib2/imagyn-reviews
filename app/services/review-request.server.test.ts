@@ -860,6 +860,40 @@ describe("createManyFromOrders — the Shopify Orders bulk send flow", () => {
     expect(requests.filter((r) => r.shopifyOrderId === "1001" && r.productId === "product_1")).toHaveLength(1);
   });
 
+  it("skips a selection whose customer already reviewed the product — even from a different order than any existing request row", async () => {
+    reviews.push({ storeId: "store_1", productId: "product_1", reviewerName: "Jordan", reviewerEmail: "jordan@example.com", deletedAt: null });
+
+    // Deliberately a different shopifyOrderId than any seeded request, so the DB's
+    // (shopifyOrderId, productId) unique constraint alone could never catch this — only the
+    // real eligibility check inside createFromOrder can.
+    const result = await reviewRequestService.createManyFromOrders("store_1", [
+      { ...baseSelection, shopifyOrderId: "9999", shopifyLineItemId: "1" },
+    ]);
+
+    expect(result).toEqual({ created: 0, skippedDuplicates: 1, failed: 0 });
+    expect(requests).toHaveLength(0);
+  });
+
+  it("skips a selection whose customer already has a sent request for the same product, from a different order", async () => {
+    seedRequest({
+      id: "req_sent",
+      storeId: "store_1",
+      productId: "product_1",
+      email: "jordan@example.com",
+      shopifyOrderId: "1000",
+      source: "order",
+      status: "sent",
+    });
+
+    const result = await reviewRequestService.createManyFromOrders("store_1", [
+      { ...baseSelection, shopifyOrderId: "9999", shopifyLineItemId: "1" },
+    ]);
+
+    expect(result).toEqual({ created: 0, skippedDuplicates: 1, failed: 0 });
+    // Only the one pre-seeded request exists — nothing new was created.
+    expect(requests).toHaveLength(1);
+  });
+
   it("one genuinely unexpected failure (not a duplicate) never aborts the rest of the batch", async () => {
     const dbServer = await import("../db.server");
     vi.mocked(dbServer.default.reviewRequest.create).mockRejectedValueOnce(new Error("Connection reset"));

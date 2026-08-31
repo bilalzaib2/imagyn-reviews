@@ -3,7 +3,7 @@ import { Prisma } from "@prisma/client";
 import { authenticate } from "../shopify.server";
 import { getOrCreateStore } from "../services/store.server";
 import { getProductForStoreByShopifyId } from "../services/product.server";
-import { reviewRequestService } from "../services/review-request.server";
+import { reviewRequestService, RequestNotEligibleError } from "../services/review-request.server";
 import { ORDER_AUTOMATION_ENABLED } from "../config/features";
 import { getStorePermissions } from "../services/permissions";
 
@@ -98,6 +98,13 @@ export const action = async ({ request }: ActionFunctionArgs) => {
         if (isUniqueConstraintViolation(error)) {
           // Shopify's webhook delivery is at-least-once — a request for this (order, product)
           // pair already exists, which is exactly the intended, idempotent outcome.
+          continue;
+        }
+
+        if (error instanceof RequestNotEligibleError) {
+          // Real eligibility check (already reviewed / already pending / already sent) — see
+          // createFromOrder's own doc comment. A genuinely expected skip, not a webhook failure.
+          console.log(`Skipping ${topic} line item for ${shop}: ${error.message}`);
           continue;
         }
 

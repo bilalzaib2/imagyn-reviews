@@ -4,6 +4,7 @@ import { Link, useLoaderData } from "react-router";
 
 import { Container } from "../components/ui/Container";
 import { Section } from "../components/ui/Section";
+import { AppReviewPrompt } from "../components/ui/AppReviewPrompt";
 import { StarRating } from "../components/reviews/StarRating";
 import { getStoreReviewStats } from "../services/review.server";
 import { reviewRequestService } from "../services/review-request.server";
@@ -117,6 +118,12 @@ export default function Index() {
             </Link>
           ))}
         </div>
+
+        {/* Real positive-moment gate, not a timer: at least 5 real published reviews means this
+            store has genuinely gotten value out of the app, not just installed it. See
+            AppReviewPrompt's own header comment for why "Leave a review" needs no App Store URL
+            here at all. */}
+        <AppReviewPrompt eligible={stats.publishedReviews >= 5} />
 
         <Section title="Trust Overview" description="How your store looks to shoppers right now.">
           <div className={styles.trustRow}>

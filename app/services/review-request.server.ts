@@ -24,6 +24,20 @@ export type ReviewRequestStatus =
   | "failed"
   | "cancelled";
 
+// Thrown by createFromOrder when the (email, productId) pair already has a real reason not to
+// send another request — same three checks getExistingRequestContext/Bulk already expose to the
+// UI, now enforced at the one place that actually creates order-triggered rows (the manual bulk
+// "Shopify Orders" flow and, once Shopify's Protected Customer Data approval lands, the
+// fulfillments/create webhook) instead of only being advisory in the picker's checkbox-disabling.
+// Callers treat this exactly like the existing (shopifyOrderId, productId) unique-constraint
+// violation: a soft, expected skip, never a hard failure.
+export class RequestNotEligibleError extends Error {
+  constructor(reason: string) {
+    super(reason);
+    this.name = "RequestNotEligibleError";
+  }
+}
+
 export type ReviewRequestDateFilter = "all" | "today" | "next7" | "next30" | "past30";
 export type ReviewRequestSortBy = "createdAt" | "scheduledFor" | "status" | "name";
 export type ReviewRequestSortDir = "asc" | "desc";
@@ -695,9 +709,15 @@ export const reviewRequestService = {
   // Order-triggered counterpart of createRequest — same status/dispatch rules (immediate
   // send when delayDays is 0, otherwise scheduled), but tags the row with the Shopify
   // order/line-item it came from and source: "order" so the admin UI can distinguish it.
-  // Duplicate-prevention is enforced by the DB's unique (shopifyOrderId, productId) index —
-  // callers (webhooks.fulfillments.create.tsx) are expected to catch a Prisma P2002 violation
-  // as an idempotent no-op, since Shopify's webhook delivery is at-least-once, not exactly-once.
+  // Two independent, complementary duplicate-prevention layers: (1) the same real eligibility
+  // check the manual picker uses (getExistingRequestContext) — already reviewed, already
+  // pending, or already sent all throw RequestNotEligibleError — enforced here rather than left
+  // to each caller/UI to re-derive, so the automatic webhook path and the manual bulk path can
+  // never disagree; (2) the DB's unique (shopifyOrderId, productId) index catches the specific
+  // case of the exact same order/product pair being submitted twice (Shopify's webhook delivery
+  // is at-least-once, not exactly-once). Callers (webhooks.fulfillments.create.tsx,
+  // createManyFromOrders below) are expected to catch both a RequestNotEligibleError and a
+  // Prisma P2002 violation as an idempotent no-op, never a hard failure.
   async createFromOrder(data: {
     storeId: string;
     productId: string;
@@ -708,6 +728,22 @@ export const reviewRequestService = {
     name: string;
     delayDays: number;
   }) {
+    const email = data.email.trim();
+    const context = await reviewRequestService.getExistingRequestContext(data.storeId, {
+      email,
+      productId: data.productId,
+    });
+
+    if (context.hasExistingReview) {
+      throw new RequestNotEligibleError("This customer has already reviewed this product.");
+    }
+    if (context.hasPendingRequest) {
+      throw new RequestNotEligibleError("A request for this customer and product is already pending or scheduled.");
+    }
+    if (context.hasSentRequest) {
+      throw new RequestNotEligibleError("A request for this customer and product was already sent.");
+    }
+
     const normalizedDelay = Math.max(data.delayDays, 0);
     const status: ReviewRequestStatus = normalizedDelay === 0 ? "sending" : "scheduled";
 
@@ -718,7 +754,7 @@ export const reviewRequestService = {
         shopifyOrderId: data.shopifyOrderId,
         shopifyLineItemId: data.shopifyLineItemId,
         source: "order",
-        email: data.email.trim(),
+        email,
         name: data.name.trim(),
         orderNumber: data.orderNumber.trim(),
         delayDays: normalizedDelay,
@@ -772,7 +808,7 @@ export const reviewRequestService = {
         await reviewRequestService.createFromOrder({ ...selection, storeId });
         created += 1;
       } catch (error) {
-        if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2002") {
+        if (error instanceof RequestNotEligibleError || (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2002")) {
           skippedDuplicates += 1;
           continue;
         }
