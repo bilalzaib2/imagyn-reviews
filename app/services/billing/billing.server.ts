@@ -77,6 +77,14 @@ async function detectDevelopmentStore(admin: AdminApiContext): Promise<boolean> 
 // is cached on Store.isDevelopmentStore permanently. A shop's development status doesn't
 // change during the app's lifetime in practice, so this keeps every subsequent page load free
 // of an extra Admin API round-trip.
+//
+// This is the one Shopify Admin API call on the embedded app's critical render path that runs
+// unconditionally on every merchant's very first-ever load (see app.tsx's loader) with no
+// try/catch above it — a transient throttle or network hiccup here previously took down the
+// entire embedded app: app.tsx's loader threw, and (see app.tsx's ErrorBoundary) any thrown
+// value that isn't itself a Response had nowhere graceful to land, rendering blank. On failure
+// here, `store.isDevelopmentStore` deliberately stays `null` (not persisted as `false`) so the
+// very next load just retries this same check rather than caching a wrong answer.
 export async function ensureDevelopmentStoreFlag(
   admin: AdminApiContext,
   store: { id: string; isDevelopmentStore: boolean | null },
@@ -85,7 +93,14 @@ export async function ensureDevelopmentStoreFlag(
     return store.isDevelopmentStore;
   }
 
-  const isDevelopmentStore = await detectDevelopmentStore(admin);
+  let isDevelopmentStore: boolean;
+  try {
+    isDevelopmentStore = await detectDevelopmentStore(admin);
+  } catch (error) {
+    console.error("[billing] Failed to detect development store status, will retry next load", error);
+    return false;
+  }
+
   await setDevelopmentStoreFlag(store.id, isDevelopmentStore);
   return isDevelopmentStore;
 }

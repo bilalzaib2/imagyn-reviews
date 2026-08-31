@@ -1,6 +1,15 @@
 import type { MouseEvent } from "react";
 import type { HeadersFunction, LoaderFunctionArgs } from "react-router";
-import { Outlet, redirect, useLoaderData, useLocation, useNavigate, useNavigation, useRouteError } from "react-router";
+import {
+  Outlet,
+  isRouteErrorResponse,
+  redirect,
+  useLoaderData,
+  useLocation,
+  useNavigate,
+  useNavigation,
+  useRouteError,
+} from "react-router";
 import { boundary } from "@shopify/shopify-app-react-router/server";
 import { AppProvider } from "@shopify/shopify-app-react-router/react";
 import { AppProvider as PolarisAppProvider } from "@shopify/polaris";
@@ -85,9 +94,34 @@ export default function App() {
   );
 }
 
-// Shopify needs React Router to catch some thrown responses, so that their headers are included in the response.
+// Shopify needs React Router to catch some thrown responses, so that their headers are included
+// in the response — boundary.error handles exactly that case (a thrown Response, e.g. Shopify's
+// own re-auth redirect) and nothing else: for any other thrown value it just re-throws
+// (@shopify/shopify-app-react-router's error.js), which — with no ErrorBoundary above this one in
+// the tree (root.tsx has none) — is indistinguishable from a blank/broken embedded app to a
+// merchant. A transient Shopify Admin API hiccup, a Prisma blip, or any bug in any /app/* loader
+// all take this second path today. This renders a real, honest fallback for that case instead —
+// no fake data, no hidden failure, just an accurate "something went wrong" with a working reload.
 export function ErrorBoundary() {
-  return boundary.error(useRouteError());
+  const error = useRouteError();
+
+  if (isRouteErrorResponse(error)) {
+    return boundary.error(error);
+  }
+
+  return (
+    <div className={styles.errorPage}>
+      <div className={styles.errorCard}>
+        <h1 className={styles.errorTitle}>Something went wrong</h1>
+        <p className={styles.errorMessage}>
+          Imagyn Reviews hit an unexpected error loading this page. This is usually temporary.
+        </p>
+        <button type="button" className={styles.errorReload} onClick={() => window.location.reload()}>
+          Reload
+        </button>
+      </div>
+    </div>
+  );
 }
 
 export const headers: HeadersFunction = (headersArgs) => {

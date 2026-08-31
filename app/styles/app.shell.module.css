@@ -73,3 +73,49 @@
     left: 100%;
   }
 }
+
+/* Deliberately dependency-free (no Polaris, no App Bridge) — this renders when something in the
+   /app/* loader tree threw an error Polaris/App Bridge context may not have finished setting up
+   yet, so it can't assume either is available. Mirrors review-link.module.css's ErrorBoundary
+   pattern (same tokens, same restraint) rather than inventing a third error-page style. */
+.errorPage {
+  min-height: 60vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: var(--space-8) var(--space-4);
+}
+
+.errorCard {
+  max-width: 26rem;
+  text-align: center;
+}
+
+.errorTitle {
+  margin: 0 0 var(--space-2);
+  font-size: var(--text-xl);
+  font-weight: 600;
+  color: var(--color-text);
+}
+
+.errorMessage {
+  margin: 0 0 var(--space-6);
+  font-size: var(--text-base);
+  line-height: 1.6;
+  color: var(--color-text-muted);
+}
+
+.errorReload {
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  background: var(--color-surface);
+  color: var(--color-text);
+  padding: 0.6rem 1.25rem;
+  font-size: var(--text-sm);
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.errorReload:hover {
+  background: var(--color-surface-muted);
+}
