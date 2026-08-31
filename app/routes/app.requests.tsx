@@ -579,9 +579,12 @@ function CustomerPicker({
   const [name, email] = value.split("||");
   const hasSelection = Boolean(email);
 
-  // Existing reviewers only — Imagyn doesn't have read_customers/read_orders scope yet, so this
-  // can't browse the merchant's full Shopify customer list. Same data source and limitation as
-  // the native <select> this replaces; only the search/selection UX changes here.
+  // Existing reviewers only, not a scope gap anymore — read_customers/read_orders are granted
+  // (see shopify.app.toml), but Shopify's Protected Customer Data approval (still pending; see
+  // docs/DECISIONS.md) blocks this app from reading real customer name/email regardless of
+  // scope, so browsing the merchant's full Shopify customer list isn't possible today even with
+  // the right permissions. The "Shopify Orders" tab is the one real-data path for that (it reads
+  // real orders, degrading honestly per line item when Shopify withholds the customer).
   const matches = useMemo(() => {
     const withEmail = customers.filter((customer) => customer.email);
     const trimmed = query.trim().toLowerCase();
