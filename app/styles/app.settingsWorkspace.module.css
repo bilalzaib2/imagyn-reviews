@@ -37,15 +37,19 @@
 }
 
 .sidebarLink {
+  position: relative;
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: var(--space-2);
-  padding: 0.5rem var(--space-3);
+  /* 3px extra on the left, matched by the active state's own left border below, so text
+     doesn't visibly shift 3px to the right the moment a link becomes active. */
+  padding: 0.5rem var(--space-3) 0.5rem calc(var(--space-3) + 3px);
+  border-left: 3px solid transparent;
   border-radius: var(--radius-md);
   font-size: var(--text-sm);
   color: var(--color-text-muted);
-  transition: background-color var(--transition-base), color var(--transition-base);
+  transition: background-color var(--transition-base), color var(--transition-base), border-color var(--transition-base);
 }
 
 .sidebarLink:hover {
@@ -53,9 +57,17 @@
   background: var(--color-surface-muted);
 }
 
+/* Previously a 5%-darker-than-white background (--color-surface-strong, #f2f2f2) with no
+   other signal — nearly invisible against the page's own white background, which was the
+   actual "too white, can't tell what's selected" bug. Now: a real accent-tinted background
+   (not the muted gray hover uses, so active and hover never look alike), a left accent bar
+   as the actual position-independent "you are here" indicator, and full-contrast text —
+   restrained (the accent tint is 8%, not a solid fill) rather than loud, per the "not ugly"
+   requirement. */
 .sidebarLinkActive {
   color: var(--color-text);
-  background: var(--color-surface-strong);
+  background: color-mix(in srgb, var(--color-accent) 8%, var(--color-surface));
+  border-left-color: var(--color-accent);
   font-weight: 600;
 }
 

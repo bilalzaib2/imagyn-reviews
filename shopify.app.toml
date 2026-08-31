@@ -61,10 +61,17 @@ api_version = "2026-07"
 
 [access_scopes]
 # Learn more at https://shopify.dev/docs/apps/tools/cli/configuration#access_scopes
-# read_fulfillments (required for the fulfillments/create webhook) is deliberately not
-# requested yet — see the comment above; add it back alongside the webhook subscription once
-# Protected Customer Data approval is granted.
-scopes = "write_products,write_metaobjects,write_metaobject_definitions,write_files,read_files"
+# read_orders/read_customers power the real Shopify order/customer data layer used by both
+# the manual Send Request picker and (once ORDER_AUTOMATION_ENABLED flips on) the automatic
+# request engine — see app/services/shopifyOrders.server.ts. On a live (non-development)
+# store, Shopify restricts the actual protected fields (customer name/email/address) these
+# scopes can return until Protected Customer Data approval is granted; every read through
+# that service handles a null/redacted field rather than assuming it's always present.
+# read_fulfillments (required specifically for the fulfillments/create WEBHOOK SUBSCRIPTION,
+# a separate approval-gated concern from the two scopes above) is still deliberately not
+# requested — see the comment above; add it back alongside the webhook subscription once that
+# approval is granted.
+scopes = "write_products,write_metaobjects,write_metaobject_definitions,write_files,read_files,read_orders,read_customers"
 
 [auth]
 redirect_urls = [

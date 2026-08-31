@@ -88,9 +88,12 @@ export const action = async ({ request }: ActionFunctionArgs): Promise<ActionDat
     return { ok: false, error: "Automatic review requests are not available yet." };
   }
 
+  // Automatic review requests are Free-tier (see permissions.ts) — this defensive check exists
+  // so a future plan/permission change can gate it without a second enforcement point, not
+  // because it's Pro-only today (every plan currently has canUseAutomaticReviewRequests: true).
   const permissions = await getStorePermissions(store.id);
   if (!permissions.canUseAutomaticReviewRequests) {
-    return { ok: false, error: "Automatic review requests require the Pro plan." };
+    return { ok: false, error: "Automatic review requests are disabled for this store's plan." };
   }
 
   const autoRequestEnabled = formData.get("autoRequestEnabled") === "true";
@@ -108,11 +111,23 @@ export const action = async ({ request }: ActionFunctionArgs): Promise<ActionDat
   }
 };
 
-// Only one real trigger type exists today ("fulfillment"). Modeled as a Select with a single
-// option — rather than hardcoding the concept away — because Store.autoRequestTrigger is
-// deliberately a plain string precisely so a future trigger (e.g. "delivery", once Shopify's
-// delivery-confirmation signal is wired in) is a config addition here, not a schema change.
-const TRIGGER_OPTIONS = [{ label: "After fulfillment", value: "fulfillment" }];
+// Only one real trigger type is wired today ("fulfillment" — webhooks.fulfillments.create.tsx).
+// The other four mirror Judge.me's information architecture as a roadmap signal, not a working
+// control — each would need its own webhook subscription (orders/create, orders/paid,
+// fulfillments/create is already the "Fulfilled" trigger, a delivery-confirmation signal, and
+// an archive/cancellation signal), and every one of those topics carries the same customer PII
+// that requires Shopify's Protected Customer Data approval "Fulfilled" is already waiting on.
+// The Select itself stays disabled (see below) so a merchant can never actually select one of
+// the "Coming soon" options — this is deliberately not a decorative-but-functional control.
+// Store.autoRequestTrigger is a plain string precisely so adding a real trigger later is a
+// config addition here, not a schema change.
+const TRIGGER_OPTIONS = [
+  { label: "After order created (Coming soon)", value: "created" },
+  { label: "After order paid (Coming soon)", value: "paid" },
+  { label: "After fulfillment", value: "fulfillment" },
+  { label: "After delivery (Coming soon)", value: "delivered" },
+  { label: "After order archived (Coming soon)", value: "archived" },
+];
 
 export default function SettingsRequestsPage() {
   const {
@@ -205,10 +220,7 @@ export default function SettingsRequestsPage() {
             and fully available today, including their full email schedule (see Reminder Emails below).
           </Banner>
         ) : !planIncludesAutomaticRequests ? (
-          <Banner tone="info">
-            Automatic review requests require the Pro plan. <a href="/app/billing">Upgrade to Pro</a> to
-            turn this on.
-          </Banner>
+          <Banner tone="info">Automatic review requests are disabled for this store&apos;s plan.</Banner>
         ) : null}
         <Checkbox
           label="Automatically request reviews after fulfillment"
@@ -223,7 +235,7 @@ export default function SettingsRequestsPage() {
               options={TRIGGER_OPTIONS}
               value="fulfillment"
               disabled
-              helpText="More trigger types (e.g. after delivery) are planned."
+              helpText="Only 'After fulfillment' is available today. The other triggers each need their own Shopify webhook approval — see Settings for the current status."
               onChange={() => {}}
             />
             <TextField

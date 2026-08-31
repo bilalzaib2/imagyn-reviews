@@ -50,9 +50,12 @@ export const action = async ({ request }: ActionFunctionArgs) => {
       return new Response();
     }
 
+    // Automatic review requests are a Free-tier capability (see permissions.ts) — this check
+    // exists so a future plan/permission change can gate it without a second enforcement
+    // point, not because it's Pro-only today.
     const permissions = await getStorePermissions(store.id);
     if (!permissions.canUseAutomaticReviewRequests) {
-      console.log(`Skipping ${topic} for ${shop}: automatic review requests require the Pro plan.`);
+      console.log(`Skipping ${topic} for ${shop}: automatic review requests are disabled for this store's plan.`);
       return new Response();
     }
 

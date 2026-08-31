@@ -5,6 +5,7 @@
 // belonging to a different store with the same generic "not found" a bogus id would produce.
 // Every fixture here uses a non-zero delayDays so no path ever reaches "sending" status and
 // calls the real email dispatch code — see resendRequest's own comment on why that matters.
+import { Prisma } from "@prisma/client";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 interface FakeRequest {
@@ -100,11 +101,19 @@ function seedProduct(overrides: Partial<FakeProduct> & { id: string; storeId: st
 // Generalized to match either lookup shape real callers use: {id, storeId} (ownership checks)
 // or {storeId, productId, email, status: {in: [...]}} (getExistingRequestContext's duplicate
 // check) — one implementation instead of branching per call site.
+function matchesInOrExact(value: unknown, clause: unknown): boolean {
+  if (clause === undefined) return true;
+  if (typeof clause === "object" && clause !== null && "in" in clause) {
+    return (clause as { in: unknown[] }).in.includes(value);
+  }
+  return value === clause;
+}
+
 function matchesRequestWhere(row: FakeRequest, where: Record<string, unknown>): boolean {
   if (where.id !== undefined && row.id !== where.id) return false;
   if (where.storeId !== undefined && row.storeId !== where.storeId) return false;
-  if (where.productId !== undefined && row.productId !== where.productId) return false;
-  if (where.email !== undefined && row.email !== where.email) return false;
+  if (!matchesInOrExact(row.productId, where.productId)) return false;
+  if (!matchesInOrExact(row.email, where.email)) return false;
   if (where.status !== undefined) {
     const status = where.status as string | { in?: string[] };
     if (typeof status === "string" && row.status !== status) return false;
@@ -137,10 +146,32 @@ vi.mock("../db.server", () => ({
       }),
     },
     review: {
-      findMany: vi.fn(async ({ where }: { where: { storeId: string; deletedAt: null; reviewerEmail: { not: null } } }) => {
+      // Two distinct callers, two distinct `where` shapes: listCustomers's
+      // reviewerEmail: {not: null} (no productId filter at all) vs.
+      // getExistingRequestContextBulk's productId: {in: [...]}, reviewerEmail: {in: [...]}.
+      // Branching on which shape was actually passed, rather than trying to force one matcher
+      // to cover both operators, keeps each branch exactly as narrow as its real caller.
+      findMany: vi.fn(async ({ where }: { where: Record<string, unknown> }) => {
+        const reviewerEmailClause = where.reviewerEmail as { not?: null; in?: string[] } | undefined;
+
+        if (reviewerEmailClause && "not" in reviewerEmailClause) {
+          return reviews
+            .filter((r) => r.storeId === where.storeId && r.deletedAt === null && r.reviewerEmail !== null)
+            .map((r) => ({ reviewerName: r.reviewerName, reviewerEmail: r.reviewerEmail }));
+        }
+
+        const productIds = (where.productId as { in?: string[] } | undefined)?.in;
+        const emails = reviewerEmailClause?.in;
+
         return reviews
-          .filter((r) => r.storeId === where.storeId && r.deletedAt === null && r.reviewerEmail !== null)
-          .map((r) => ({ reviewerName: r.reviewerName, reviewerEmail: r.reviewerEmail }));
+          .filter(
+            (r) =>
+              r.storeId === where.storeId &&
+              r.deletedAt === null &&
+              (!productIds || (r.productId !== undefined && productIds.includes(r.productId))) &&
+              (!emails || (r.reviewerEmail !== null && emails.includes(r.reviewerEmail))),
+          )
+          .map((r) => ({ reviewerEmail: r.reviewerEmail, productId: r.productId }));
       }),
       findFirst: vi.fn(async ({ where }: { where: Record<string, unknown> }) => {
         const row = reviews.find(
@@ -173,10 +204,10 @@ vi.mock("../db.server", () => ({
           where,
           orderBy,
         }: {
-          where: { storeId: string };
+          where: Record<string, unknown>;
           orderBy?: Array<Record<string, "asc" | "desc">>;
         }) => {
-          const rows = requests.filter((r) => r.storeId === where.storeId);
+          const rows = requests.filter((r) => matchesRequestWhere(r, where));
           if (orderBy && orderBy.length > 0) {
             const [primary] = orderBy;
             const [field, dir] = Object.entries(primary)[0];
@@ -203,6 +234,22 @@ vi.mock("../db.server", () => ({
         return withInclude(row);
       }),
       create: vi.fn(async ({ data }: { data: Partial<FakeRequest> & { storeId: string } }) => {
+        // Real Prisma's @@unique([shopifyOrderId, productId]) constraint, simulated — only
+        // fires for order-triggered rows (both fields non-null), matching the actual schema
+        // comment ("manual requests are exempt"). createManyFromOrders/createFromOrder's own
+        // duplicate handling depends on a genuine P2002 being thrown here, not just a plain
+        // Error, since that's the exact error shape their catch blocks check for.
+        if (
+          data.shopifyOrderId &&
+          data.productId &&
+          requests.some((r) => r.shopifyOrderId === data.shopifyOrderId && r.productId === data.productId)
+        ) {
+          throw new Prisma.PrismaClientKnownRequestError("Unique constraint failed", {
+            code: "P2002",
+            clientVersion: "test",
+          });
+        }
+
         const row = seedRequest({
           ...data,
           id: `req_${nextId++}`,
@@ -724,5 +771,106 @@ describe("dispatchRequestEmail — suppression", () => {
 
     expect(result.status).toBe("sent");
     expect(requests.find((r) => r.id === "req_1")?.status).toBe("sent");
+  });
+});
+
+describe("getExistingRequestContextBulk — Shopify Orders picker eligibility", () => {
+  it("matches the single-pair getExistingRequestContext result for the same (email, productId)", async () => {
+    seedRequest({ id: "req_1", storeId: "store_1", productId: "product_1", email: "jordan@example.com", status: "scheduled" });
+
+    const bulk = await reviewRequestService.getExistingRequestContextBulk("store_1", [
+      { email: "jordan@example.com", productId: "product_1" },
+    ]);
+
+    expect(bulk.get("jordan@example.com||product_1")).toEqual({
+      hasPendingRequest: true,
+      hasSentRequest: false,
+      hasExistingReview: false,
+    });
+  });
+
+  it("keeps every pair's result independent — no cross-contamination between rows in the same page", async () => {
+    seedRequest({ id: "req_1", storeId: "store_1", productId: "product_1", email: "jordan@example.com", status: "scheduled" });
+    reviews.push({ storeId: "store_1", productId: "product_1", reviewerName: "Morgan", reviewerEmail: "morgan@example.com", deletedAt: null });
+
+    const bulk = await reviewRequestService.getExistingRequestContextBulk("store_1", [
+      { email: "jordan@example.com", productId: "product_1" },
+      { email: "morgan@example.com", productId: "product_1" },
+      { email: "casey@example.com", productId: "product_1" },
+    ]);
+
+    expect(bulk.get("jordan@example.com||product_1")?.hasPendingRequest).toBe(true);
+    expect(bulk.get("morgan@example.com||product_1")?.hasExistingReview).toBe(true);
+    expect(bulk.get("casey@example.com||product_1")).toEqual({
+      hasPendingRequest: false,
+      hasSentRequest: false,
+      hasExistingReview: false,
+    });
+  });
+
+  it("never sees another store's requests or reviews", async () => {
+    seedRequest({ id: "req_1", storeId: "store_2", productId: "product_2", email: "jordan@example.com", status: "scheduled" });
+
+    const bulk = await reviewRequestService.getExistingRequestContextBulk("store_1", [
+      { email: "jordan@example.com", productId: "product_2" },
+    ]);
+
+    expect(bulk.get("jordan@example.com||product_2")).toEqual({
+      hasPendingRequest: false,
+      hasSentRequest: false,
+      hasExistingReview: false,
+    });
+  });
+
+  it("returns an empty map for empty input without querying anything", async () => {
+    const bulk = await reviewRequestService.getExistingRequestContextBulk("store_1", []);
+    expect(bulk.size).toBe(0);
+  });
+});
+
+describe("createManyFromOrders — the Shopify Orders bulk send flow", () => {
+  const baseSelection = {
+    productId: "product_1",
+    orderNumber: "#1001",
+    email: "jordan@example.com",
+    name: "Jordan Avery",
+    delayDays: 7,
+  };
+
+  it("creates one real, order-tagged request per selection", async () => {
+    const result = await reviewRequestService.createManyFromOrders("store_1", [
+      { ...baseSelection, shopifyOrderId: "1001", shopifyLineItemId: "1" },
+      { ...baseSelection, shopifyOrderId: "1002", shopifyLineItemId: "2", email: "morgan@example.com", name: "Morgan" },
+    ]);
+
+    expect(result).toEqual({ created: 2, skippedDuplicates: 0, failed: 0 });
+    expect(requests).toHaveLength(2);
+    expect(requests.every((r) => r.source === "order" && r.storeId === "store_1")).toBe(true);
+  });
+
+  it("skips (not fails) a selection that collides with an existing (shopifyOrderId, productId) pair — the same idempotency the automatic webhook relies on", async () => {
+    seedRequest({ id: "req_1", storeId: "store_1", productId: "product_1", shopifyOrderId: "1001", source: "order" });
+
+    const result = await reviewRequestService.createManyFromOrders("store_1", [
+      { ...baseSelection, shopifyOrderId: "1001", shopifyLineItemId: "1" },
+    ]);
+
+    expect(result).toEqual({ created: 0, skippedDuplicates: 1, failed: 0 });
+    // No second row was created for the same (order, product) pair.
+    expect(requests.filter((r) => r.shopifyOrderId === "1001" && r.productId === "product_1")).toHaveLength(1);
+  });
+
+  it("one genuinely unexpected failure (not a duplicate) never aborts the rest of the batch", async () => {
+    const dbServer = await import("../db.server");
+    vi.mocked(dbServer.default.reviewRequest.create).mockRejectedValueOnce(new Error("Connection reset"));
+
+    const result = await reviewRequestService.createManyFromOrders("store_1", [
+      { ...baseSelection, shopifyOrderId: "1001", shopifyLineItemId: "1" },
+      { ...baseSelection, shopifyOrderId: "1002", shopifyLineItemId: "2" },
+    ]);
+
+    expect(result).toEqual({ created: 1, skippedDuplicates: 0, failed: 1 });
+    expect(requests).toHaveLength(1);
+    expect(requests[0].shopifyOrderId).toBe("1002");
   });
 });

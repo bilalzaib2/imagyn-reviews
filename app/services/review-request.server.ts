@@ -1,3 +1,4 @@
+import { Prisma } from "@prisma/client";
 import prisma from "../db.server";
 import { getEmailProvider } from "./notifications/provider.server";
 import { buildReviewRequestEmail } from "./notifications/templates.server";
@@ -579,6 +580,65 @@ export const reviewRequestService = {
     };
   },
 
+  // Bulk counterpart of getExistingRequestContext above — same three checks, same duplicate-
+  // prevention meaning, but for an entire page of real Shopify orders at once (the "Shopify
+  // Orders" Send Request tab) instead of one (email, productId) pair. Three queries total
+  // regardless of how many pairs are requested, not three-per-pair, since this runs once per
+  // page render rather than once per confirm-click.
+  async getExistingRequestContextBulk(
+    storeId: string,
+    pairs: Array<{ email: string; productId: string }>,
+  ): Promise<Map<string, { hasPendingRequest: boolean; hasSentRequest: boolean; hasExistingReview: boolean }>> {
+    const normalized = pairs
+      .map((pair) => ({ email: pair.email.trim(), productId: pair.productId }))
+      .filter((pair) => pair.email && pair.productId);
+
+    const key = (email: string, productId: string) => `${email.toLowerCase()}||${productId}`;
+    const result = new Map<string, { hasPendingRequest: boolean; hasSentRequest: boolean; hasExistingReview: boolean }>();
+
+    if (normalized.length === 0) {
+      return result;
+    }
+
+    const productIds = Array.from(new Set(normalized.map((pair) => pair.productId)));
+    const emails = Array.from(new Set(normalized.map((pair) => pair.email)));
+    const pairKeys = new Set(normalized.map((pair) => key(pair.email, pair.productId)));
+
+    const [pending, sent, reviews] = await Promise.all([
+      prisma.reviewRequest.findMany({
+        where: { storeId, productId: { in: productIds }, email: { in: emails }, status: { in: ["pending", "scheduled", "sending"] } },
+        select: { email: true, productId: true },
+      }),
+      prisma.reviewRequest.findMany({
+        where: { storeId, productId: { in: productIds }, email: { in: emails }, status: { in: ["sent", "delivered", "opened", "clicked"] } },
+        select: { email: true, productId: true },
+      }),
+      prisma.review.findMany({
+        where: { storeId, productId: { in: productIds }, reviewerEmail: { in: emails }, deletedAt: null },
+        select: { reviewerEmail: true, productId: true },
+      }),
+    ]);
+
+    for (const pair of normalized) {
+      result.set(key(pair.email, pair.productId), { hasPendingRequest: false, hasSentRequest: false, hasExistingReview: false });
+    }
+
+    for (const row of pending) {
+      const rowKey = key(row.email ?? "", row.productId ?? "");
+      if (pairKeys.has(rowKey)) result.get(rowKey)!.hasPendingRequest = true;
+    }
+    for (const row of sent) {
+      const rowKey = key(row.email ?? "", row.productId ?? "");
+      if (pairKeys.has(rowKey)) result.get(rowKey)!.hasSentRequest = true;
+    }
+    for (const row of reviews) {
+      const rowKey = key(row.reviewerEmail ?? "", row.productId ?? "");
+      if (pairKeys.has(rowKey)) result.get(rowKey)!.hasExistingReview = true;
+    }
+
+    return result;
+  },
+
   // storeId is the caller's already-authenticated store, never derived from the client-supplied
   // productId — same "resolve the product through the trusted storeId, not the other way
   // around" pattern review.server.ts's createReview uses. Without this, a merchant could still
@@ -678,6 +738,50 @@ export const reviewRequestService = {
       request,
       delivery: buildDeliveryPayload(request),
     };
+  },
+
+  // Bulk counterpart of createFromOrder above, for the "Send Request → Shopify Orders" manual
+  // flow (app.requests.tsx) — a merchant selecting real Shopify orders/line-items to request
+  // reviews for right now, rather than waiting for the automatic webhook. Deliberately reuses
+  // createFromOrder itself (same idempotent unique-constraint-on-(shopifyOrderId, productId)
+  // path, same "source: order" tagging) rather than a second creation code path, so a request
+  // created this way and one the webhook would later create for the exact same order+product
+  // can never both exist — whichever happens first wins, the other is a harmless no-op. One bad
+  // row (e.g. a product that was un-synced between page load and submit) never aborts the rest
+  // of the batch.
+  async createManyFromOrders(
+    storeId: string,
+    selections: Array<{
+      productId: string;
+      shopifyOrderId: string;
+      shopifyLineItemId: string;
+      orderNumber: string;
+      email: string;
+      name: string;
+      delayDays: number;
+    }>,
+  ): Promise<{ created: number; skippedDuplicates: number; failed: number }> {
+    let created = 0;
+    let skippedDuplicates = 0;
+    let failed = 0;
+
+    for (const selection of selections) {
+      try {
+        // Safe forward reference: this function body only runs when called, by which point
+        // the reviewRequestService const below has already been fully assigned.
+        await reviewRequestService.createFromOrder({ ...selection, storeId });
+        created += 1;
+      } catch (error) {
+        if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2002") {
+          skippedDuplicates += 1;
+          continue;
+        }
+        console.error(`[review-request] Failed to create request from order ${selection.shopifyOrderId}:`, error);
+        failed += 1;
+      }
+    }
+
+    return { created, skippedDuplicates, failed };
   },
 
   // storeId is checked in the same lookup that resolves the target row, not as a follow-up

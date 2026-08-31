@@ -50,6 +50,42 @@ import styles from "../styles/app.requests.module.css";
 type CustomerOption = { name: string | null; email: string | null };
 type ProductOption = { id: string; name: string; storeId: string };
 
+// Mirrors app.requests.orders.tsx's loader response shape — real Shopify order/line-item data,
+// each line item annotated with the same duplicate-prevention checks the automatic webhook
+// and the existing "Individual Customer" flow both already use.
+type ShopifyOrderLineItemRow = {
+  shopifyLineItemId: string;
+  title: string;
+  quantity: number;
+  shopifyProductId: string | null;
+  localProductId: string | null;
+  localProductName: string | null;
+  hasExistingReview: boolean;
+  hasPendingRequest: boolean;
+  hasSentRequest: boolean;
+};
+type ShopifyOrderRow = {
+  shopifyOrderId: string;
+  orderNumber: string;
+  createdAt: string;
+  displayFulfillmentStatus: string;
+  displayFinancialStatus: string;
+  customerName: string | null;
+  customerEmail: string | null;
+  lineItems: ShopifyOrderLineItemRow[];
+};
+// One entry per selected (order, line item) checkbox — everything createManyFromOrders needs,
+// carried in client state between "select" and "send" so the send action never has to re-fetch
+// Shopify to reconstruct what was checked.
+type ShopifyOrderSelection = {
+  productId: string;
+  shopifyOrderId: string;
+  shopifyLineItemId: string;
+  orderNumber: string;
+  email: string;
+  name: string;
+};
+
 type LoaderData = {
   requests: ReviewRequestRecord[];
   customers: CustomerOption[];
@@ -278,6 +314,49 @@ export const action = async ({ request }: ActionFunctionArgs): Promise<ActionDat
       });
 
       return { ok: true, message: "Review request scheduled.", intent };
+    }
+
+    if (intent === "create-from-orders") {
+      const delayDays = Number(formData.get("delayDays") || "0");
+      const selectionsRaw = String(formData.get("selections") || "[]");
+
+      if (!Number.isFinite(delayDays) || delayDays < 0) {
+        return { ok: false, error: "Delay must be a positive number of days.", intent };
+      }
+
+      let selections: Array<{
+        productId: string;
+        shopifyOrderId: string;
+        shopifyLineItemId: string;
+        orderNumber: string;
+        email: string;
+        name: string;
+      }>;
+
+      try {
+        selections = JSON.parse(selectionsRaw);
+      } catch {
+        return { ok: false, error: "Invalid selection.", intent };
+      }
+
+      if (!Array.isArray(selections) || selections.length === 0) {
+        return { ok: false, error: "Select at least one order to send a request for.", intent };
+      }
+
+      const result = await reviewRequestService.createManyFromOrders(
+        store.id,
+        selections.map((selection) => ({ ...selection, delayDays })),
+      );
+
+      const parts = [`${result.created} request${result.created === 1 ? "" : "s"} scheduled`];
+      if (result.skippedDuplicates > 0) {
+        parts.push(`${result.skippedDuplicates} skipped (already requested or reviewed)`);
+      }
+      if (result.failed > 0) {
+        parts.push(`${result.failed} failed`);
+      }
+
+      return { ok: true, message: parts.join(", ") + ".", intent };
     }
 
     if (intent === "edit") {
@@ -597,6 +676,189 @@ function CustomerPicker({
   );
 }
 
+type SendSource = "shopify-orders" | "individual" | "segment" | "csv";
+
+const SEND_SOURCE_TABS: Array<{ value: SendSource; label: string; disabled?: boolean }> = [
+  { value: "shopify-orders", label: "Shopify Orders" },
+  { value: "individual", label: "Individual Customer" },
+  { value: "segment", label: "Customer Segment", disabled: true },
+  { value: "csv", label: "Upload CSV", disabled: true },
+];
+
+// "Choose source" step of the redesigned Send Request flow — Shopify Orders (real data) is the
+// default, matching the brief's explicit "default to Shopify Orders" requirement. Segment/CSV
+// render as genuinely disabled tabs (not clickable-but-inert) since neither has a real
+// implementation behind it yet.
+function SendSourceTabs({ value, onChange }: { value: SendSource; onChange: (value: SendSource) => void }) {
+  return (
+    <div className={styles.sendSourceTabs} role="tablist" aria-label="Send request from">
+      {SEND_SOURCE_TABS.map((tab) => (
+        <button
+          key={tab.value}
+          type="button"
+          role="tab"
+          aria-selected={value === tab.value}
+          className={value === tab.value ? styles.sendSourceTabActive : styles.sendSourceTab}
+          onClick={() => onChange(tab.value)}
+          disabled={tab.disabled}
+        >
+          {tab.label}
+          {tab.disabled ? <span className={styles.sendSourceTabBadge}>Coming soon</span> : null}
+        </button>
+      ))}
+    </div>
+  );
+}
+
+function formatOrderDate(value: string): string {
+  try {
+    return new Date(value).toLocaleDateString(undefined, { year: "numeric", month: "short", day: "numeric" });
+  } catch {
+    return value;
+  }
+}
+
+// The real "Shopify Orders" table — checkbox-select one or more (order, line item) pairs to
+// send review requests for. Backed by app.requests.orders.tsx (real Admin GraphQL data, see
+// shopifyOrders.server.ts), not a local mirror. A line item is only selectable when it has a
+// matching synced local Product (createManyFromOrders needs a local productId, same
+// requirement webhooks.fulfillments.create.tsx's automatic path already has) and no existing
+// review/pending/sent request for that exact customer+product pair.
+function ShopifyOrdersPicker({
+  fetcher,
+  search,
+  onSearchChange,
+  selected,
+  onToggle,
+  delayDays,
+  onDelayChange,
+  disabled,
+}: {
+  fetcher: ReturnType<typeof useFetcher<{ ok: boolean; error?: string; orders: ShopifyOrderRow[] }>>;
+  search: string;
+  onSearchChange: (value: string) => void;
+  selected: Record<string, ShopifyOrderSelection>;
+  onToggle: (key: string, selection: ShopifyOrderSelection) => void;
+  delayDays: string;
+  onDelayChange: (value: string) => void;
+  disabled: boolean;
+}) {
+  const isLoading = fetcher.state !== "idle";
+  const orders = fetcher.data?.orders ?? [];
+  const loadError = fetcher.data && !fetcher.data.ok ? fetcher.data.error : null;
+
+  return (
+    <div className={styles.modalFields}>
+      <TextField
+        label="Search"
+        labelHidden
+        placeholder="Search by customer name, email, or order number"
+        autoComplete="off"
+        value={search}
+        onChange={onSearchChange}
+        prefix={<Icon source={SearchIcon} tone="subdued" />}
+        disabled={disabled}
+      />
+
+      {loadError ? (
+        <Banner tone="critical" title="Unable to load Shopify orders">
+          <p>{loadError}</p>
+        </Banner>
+      ) : null}
+
+      <div className={styles.ordersTableWrap}>
+        <table className={styles.ordersTable}>
+          <thead>
+            <tr>
+              <th className={styles.thCheckbox} aria-label="Select" />
+              <th>Customer</th>
+              <th>Order</th>
+              <th>Product</th>
+              <th className={styles.colDate}>Date</th>
+              <th>Review status</th>
+            </tr>
+          </thead>
+          <tbody>
+            {isLoading && orders.length === 0 ? (
+              <tr>
+                <td colSpan={6} className={styles.ordersTableEmpty}>Loading Shopify orders…</td>
+              </tr>
+            ) : orders.length === 0 ? (
+              <tr>
+                <td colSpan={6} className={styles.ordersTableEmpty}>No matching orders.</td>
+              </tr>
+            ) : (
+              orders.flatMap((order) =>
+                order.lineItems.map((item) => {
+                  const key = `${order.shopifyOrderId}:${item.shopifyLineItemId}`;
+                  const ineligibleReason = !order.customerEmail
+                    ? "No customer email on this order"
+                    : !item.localProductId
+                      ? "Product not in your synced catalog yet"
+                      : item.hasExistingReview
+                        ? "Already reviewed"
+                        : item.hasPendingRequest
+                          ? "Request already pending"
+                          : item.hasSentRequest
+                            ? "Request already sent"
+                            : null;
+                  const isChecked = Boolean(selected[key]);
+
+                  return (
+                    <tr key={key} className={ineligibleReason ? styles.ordersTableRowDisabled : undefined}>
+                      <td className={styles.thCheckbox}>
+                        <input
+                          type="checkbox"
+                          checked={isChecked}
+                          disabled={disabled || Boolean(ineligibleReason)}
+                          onChange={() =>
+                            onToggle(key, {
+                              productId: item.localProductId ?? "",
+                              shopifyOrderId: order.shopifyOrderId,
+                              shopifyLineItemId: item.shopifyLineItemId,
+                              orderNumber: order.orderNumber,
+                              email: order.customerEmail ?? "",
+                              name: order.customerName ?? order.customerEmail ?? "",
+                            })
+                          }
+                          aria-label={`Select ${item.title} from order ${order.orderNumber}`}
+                        />
+                      </td>
+                      <td>
+                        <p className={styles.customerName}>{order.customerName || "—"}</p>
+                        <p className={styles.customerEmail}>{order.customerEmail || "No email"}</p>
+                      </td>
+                      <td className={styles.colOrder}>{order.orderNumber}</td>
+                      <td>{item.localProductName ?? item.title}</td>
+                      <td className={styles.colDate}>{formatOrderDate(order.createdAt)}</td>
+                      <td>
+                        {ineligibleReason ? (
+                          <span className={styles.tdMuted}>{ineligibleReason}</span>
+                        ) : (
+                          <span className={styles.tdMuted}>Eligible</span>
+                        )}
+                      </td>
+                    </tr>
+                  );
+                }),
+              )
+            )}
+          </tbody>
+        </table>
+      </div>
+
+      <Select
+        label="Send delay"
+        options={DELAY_OPTIONS}
+        value={delayDays}
+        onChange={onDelayChange}
+        disabled={disabled}
+        helpText="Applies to every request created from your selection above."
+      />
+    </div>
+  );
+}
+
 export default function RequestsPage() {
   const initialData = useLoaderData<typeof loader>();
   const navigation = useNavigation();
@@ -683,6 +945,20 @@ export default function RequestsPage() {
   // entry state always starts fresh, regardless of whether Polaris keeps the Modal's children
   // mounted across an open/close cycle.
   const [modalInstanceKey, setModalInstanceKey] = useState(0);
+  // "Create" mode only — which of the four sources the merchant is sending from. Individual
+  // Customer renders the exact same picker/fields that already existed before this source
+  // selector was added; Shopify Orders is the new real-data table below. Segment/CSV are
+  // honestly disabled — no schema, no CSV-to-request parser exists yet, so showing them as
+  // clickable-but-inert would be exactly the "decorative setting" this product avoids elsewhere.
+  const [sendSource, setSendSource] = useState<"shopify-orders" | "individual" | "segment" | "csv">("shopify-orders");
+  const [orderSearch, setOrderSearch] = useState("");
+  const [selectedOrderLineItems, setSelectedOrderLineItems] = useState<Record<string, ShopifyOrderSelection>>({});
+  const [orderSendDelayDays, setOrderSendDelayDays] = useState("7");
+  const ordersFetcher = useFetcher<{
+    ok: boolean;
+    error?: string;
+    orders: ShopifyOrderRow[];
+  }>();
 
   const [optimisticDeleted, setOptimisticDeleted] = useState<Record<string, true>>({});
   const [optimisticPatch, setOptimisticPatch] = useState<Partial<Record<string, Partial<ReviewRequestRecord>>> & Record<string, Partial<ReviewRequestRecord>>>({});
@@ -710,6 +986,22 @@ export default function RequestsPage() {
   useEffect(() => {
     setActionsMenuOpen(false);
   }, [selectedRequestId]);
+
+  // Loads real Shopify orders the moment the tab becomes active, then re-fetches (debounced) as
+  // the merchant types a search — same 250ms debounce convention as the request-list search
+  // above. Skipped entirely while the modal/tab isn't visible, so opening "Edit" on an existing
+  // request never triggers a Shopify Admin API call it doesn't need.
+  const isShopifyOrdersTabActive = requestModalOpen && requestModalMode === "create" && sendSource === "shopify-orders";
+  useEffect(() => {
+    if (!isShopifyOrdersTabActive) return;
+
+    const timeoutId = window.setTimeout(() => {
+      ordersFetcher.load(`/app/requests/orders?search=${encodeURIComponent(orderSearch.trim())}`);
+    }, 250);
+
+    return () => window.clearTimeout(timeoutId);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isShopifyOrdersTabActive, orderSearch]);
 
   useEffect(() => {
     if (!fetcher.data) {
@@ -816,6 +1108,10 @@ export default function RequestsPage() {
     setDuplicateWarning(null);
     setAttemptedSubmit(false);
     setModalInstanceKey((key) => key + 1);
+    setSendSource("shopify-orders");
+    setOrderSearch("");
+    setSelectedOrderLineItems({});
+    setOrderSendDelayDays("7");
     setRequestModalOpen(true);
   };
 
@@ -973,6 +1269,21 @@ export default function RequestsPage() {
   };
 
   const handleModalSubmit = () => {
+    if (requestModalMode === "create" && sendSource === "shopify-orders") {
+      const selections = Object.values(selectedOrderLineItems);
+      if (selections.length === 0) {
+        return;
+      }
+
+      submitAction({
+        _intent: "create-from-orders",
+        selections: JSON.stringify(selections),
+        delayDays: orderSendDelayDays,
+      });
+      setRequestModalOpen(false);
+      return;
+    }
+
     if (requestModalMode !== "reschedule") {
       const [, emailToValidate] = formState.customer.split("||");
       if (!emailToValidate || !formState.productId) {
@@ -1539,28 +1850,40 @@ export default function RequestsPage() {
       <Modal
         open={requestModalOpen}
         onClose={() => setRequestModalOpen(false)}
+        size={requestModalMode === "create" && sendSource === "shopify-orders" ? "large" : undefined}
         title={requestModalMode === "create" ? "Send Review Request" : requestModalMode === "edit" ? "Edit Review Request" : "Reschedule Review Request"}
-        primaryAction={{
-          content:
-            requestModalMode === "create"
-              ? isMutating && activeIntent === "create"
-                ? "Scheduling..."
-                : duplicateWarning
-                  ? "Send Anyway"
-                  : "Schedule Request"
-              : requestModalMode === "edit"
-                ? isMutating && activeIntent === "edit"
-                  ? "Saving..."
-                  : "Save Changes"
-                : isMutating && activeIntent === "reschedule"
-                  ? "Rescheduling..."
-                  : "Reschedule",
-          onAction: handleModalSubmit,
-          disabled:
-            isMutating ||
-            (requestModalMode !== "reschedule" && (!customerEmailValue || !formState.productId)) ||
-            !formState.delayDays,
-        }}
+        primaryAction={
+          requestModalMode === "create" && sendSource === "shopify-orders"
+            ? {
+                content:
+                  isMutating && activeIntent === "create-from-orders"
+                    ? "Sending..."
+                    : `Send ${Object.keys(selectedOrderLineItems).length || ""} request${Object.keys(selectedOrderLineItems).length === 1 ? "" : "s"}`.replace("  ", " "),
+                onAction: handleModalSubmit,
+                disabled: isMutating || Object.keys(selectedOrderLineItems).length === 0,
+              }
+            : {
+                content:
+                  requestModalMode === "create"
+                    ? isMutating && activeIntent === "create"
+                      ? "Scheduling..."
+                      : duplicateWarning
+                        ? "Send Anyway"
+                        : "Schedule Request"
+                    : requestModalMode === "edit"
+                      ? isMutating && activeIntent === "edit"
+                        ? "Saving..."
+                        : "Save Changes"
+                      : isMutating && activeIntent === "reschedule"
+                        ? "Rescheduling..."
+                        : "Reschedule",
+                onAction: handleModalSubmit,
+                disabled:
+                  isMutating ||
+                  (requestModalMode !== "reschedule" && (!customerEmailValue || !formState.productId)) ||
+                  !formState.delayDays,
+              }
+        }
         secondaryActions={[
           {
             content: "Cancel",
@@ -1577,7 +1900,48 @@ export default function RequestsPage() {
               </Banner>
             ) : null}
 
-            {requestModalMode !== "reschedule" ? (
+            {requestModalMode === "create" ? (
+              <SendSourceTabs value={sendSource} onChange={setSendSource} />
+            ) : null}
+
+            {requestModalMode === "create" && sendSource === "segment" ? (
+              <p className={styles.feedbackMuted}>
+                Customer Segments aren&apos;t built yet — no segment model exists in this app today. This tab will
+                become real functionality here, not a decorative option, once it is.
+              </p>
+            ) : null}
+
+            {requestModalMode === "create" && sendSource === "csv" ? (
+              <p className={styles.feedbackMuted}>
+                CSV upload for review requests isn&apos;t built yet (CSV import exists for reviews themselves — see
+                Reviews — but a request-specific importer is separate, unbuilt work). This tab will become real
+                functionality here, not a decorative option, once it is.
+              </p>
+            ) : null}
+
+            {requestModalMode === "create" && sendSource === "shopify-orders" ? (
+              <ShopifyOrdersPicker
+                fetcher={ordersFetcher}
+                search={orderSearch}
+                onSearchChange={setOrderSearch}
+                selected={selectedOrderLineItems}
+                onToggle={(key, selection) =>
+                  setSelectedOrderLineItems((prev) => {
+                    if (prev[key]) {
+                      const next = { ...prev };
+                      delete next[key];
+                      return next;
+                    }
+                    return { ...prev, [key]: selection };
+                  })
+                }
+                delayDays={orderSendDelayDays}
+                onDelayChange={setOrderSendDelayDays}
+                disabled={isMutating}
+              />
+            ) : null}
+
+            {!(requestModalMode === "create" && sendSource !== "individual") && requestModalMode !== "reschedule" ? (
               <>
                 <p className={styles.modalSectionLabel}>Customer</p>
                 <CustomerPicker
@@ -1615,7 +1979,8 @@ export default function RequestsPage() {
               </>
             ) : null}
 
-            {requestModalMode === "edit" || requestModalMode === "reschedule" || (customerEmailValue && formState.productId) ? (
+            {!(requestModalMode === "create" && sendSource !== "individual") &&
+            (requestModalMode === "edit" || requestModalMode === "reschedule" || (customerEmailValue && formState.productId)) ? (
               <>
                 <p className={styles.modalSectionLabel}>Schedule</p>
                 <Select
