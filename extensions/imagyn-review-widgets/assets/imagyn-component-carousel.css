@@ -48,6 +48,23 @@
   font-weight: var(--imagyn-font-weight-semibold, 600);
 }
 
+/* Text alignment is a Theme Editor setting on this block specifically (not a Brand Studio
+   token — Brand Studio owns color/typography/card-style globally; alignment is a
+   structural layout choice scoped to this one section, the same category heading/
+   review_count already are). Left (default) changes nothing from the original markup. */
+.imagyn-carousel--align-center .imagyn-review-card {
+  text-align: center;
+}
+
+.imagyn-carousel--align-center .imagyn-review-card__header {
+  justify-content: center;
+  flex-wrap: wrap;
+}
+
+.imagyn-carousel--align-center .imagyn-carousel__product {
+  justify-content: center;
+}
+
 /* The true clipping boundary (the "viewport" in viewport/track separation): the track's
    real, unclipped content width can be far wider than this box — that's expected and
    fine — but nothing wider than this element is ever allowed to escape it. min-width: 0
@@ -81,7 +98,11 @@
   align-items: stretch;
   width: 100%;
   min-width: 0;
-  gap: var(--imagyn-space-px-md, 16px);
+  /* --imagyn-carousel-gap is this block's own "Spacing between cards" Theme Editor
+     setting (set inline per-instance by review_carousel.liquid); falls back to Brand
+     Studio's global spacing scale when unset, exactly like every other measurement in
+     this file already does. */
+  gap: var(--imagyn-carousel-gap, var(--imagyn-space-px-md, 16px));
   /* This is what makes the carousel internally scrollable — the track's own real content
      width can exceed the viewport above; only *this* box's overflow is ever exposed, and
      only inside the hard clip .imagyn-carousel__viewport already establishes. Native
@@ -99,29 +120,58 @@
   scrollbar-width: thin;
 }
 
-/* Fixed desktop card width (matches the existing 260px precedent already reserved for
-   carousel-style layouts in imagyn-component-review-card.css) rather than a fluid
-   viewport-relative size — a compact, predictable ~4 cards visible on a full-width
-   desktop section, not a viewport-scaled guess. min-width: 0 stops this flex item's own
-   content (e.g. a long product name below) from forcing it wider than its flex-basis —
+/* Card width is derived from the block's own "Cards visible on desktop/tablet/mobile"
+   Theme Editor settings (--imagyn-carousel-cards-* custom properties, set inline per-
+   instance by review_carousel.liquid) rather than a fixed pixel width — an even division
+   of the track's own width, accounting for the real gap between cards, so exactly N whole
+   cards fit edge-to-edge at each breakpoint. Defaults (4/2/1) reproduce the previous fixed-
+   260px desktop card almost exactly (258px in a 1080px-max section) — a negligible, purely
+   visual rounding difference, not a behavior change. min-width: 0 stops this flex item's
+   own content (e.g. a long product name below) from forcing it wider than its flex-basis —
    the same class of fix .imagyn-carousel__viewport applies one level up; max-width: 100%
-   is a safety net for the mobile flex-basis below. */
+   is a safety net at very small widths. */
 .imagyn-carousel__slide {
-  flex: 0 0 260px;
+  flex: 0 0 auto;
+  flex-basis: calc(
+    (100% - (var(--imagyn-carousel-cards-desktop, 4) - 1) * var(--imagyn-carousel-gap, var(--imagyn-space-px-md, 16px))) /
+      var(--imagyn-carousel-cards-desktop, 4)
+  );
   min-width: 0;
   max-width: 100%;
   list-style: none;
   scroll-snap-align: start;
 }
 
-/* Mobile: one clearly dominant card with a visible peek of the next. A flat percentage alone
-   doesn't work across real phone widths — 80% is ~259px on a 324px viewport (fine) but ~344px
-   on a 430px viewport (a large phone), well past "not ~300px+" — so this caps at 280px while
-   staying percentage-driven (72%) on narrower phones, rather than picking one flat number that
-   is either too wide on large phones or too cramped on small ones. */
-@media (max-width: 640px) {
+/* No dedicated tablet treatment existed before this block gained per-breakpoint settings —
+   cards simply inherited the desktop fixed width down to 640px. This is the first
+   deliberate tablet layout, not a preservation of prior behavior (there was none to
+   preserve at this range). */
+@media (max-width: 900px) {
   .imagyn-carousel__slide {
+    flex-basis: calc(
+      (100% - (var(--imagyn-carousel-cards-tablet, 2) - 1) * var(--imagyn-carousel-gap, var(--imagyn-space-px-md, 16px))) /
+        var(--imagyn-carousel-cards-tablet, 2)
+    );
+  }
+}
+
+/* Mobile default (1 card) keeps the original, deliberately-designed "one clearly dominant
+   card with a visible peek of the next" treatment byte-for-byte — a flat percentage alone
+   doesn't work across real phone widths (80% is ~259px on a 324px viewport but ~344px on a
+   430px viewport), so this caps at 280px while staying percentage-driven (72%) on narrower
+   phones. A merchant who raises "Cards visible on mobile" to 2 gets the same even-division
+   formula desktop/tablet use instead — the peek treatment is specifically a 1-card default,
+   not a mobile-width default. */
+@media (max-width: 640px) {
+  .imagyn-carousel[data-cards-mobile="1"] .imagyn-carousel__slide {
     flex-basis: min(72%, 280px);
+  }
+
+  .imagyn-carousel:not([data-cards-mobile="1"]) .imagyn-carousel__slide {
+    flex-basis: calc(
+      (100% - (var(--imagyn-carousel-cards-mobile, 1) - 1) * var(--imagyn-carousel-gap, var(--imagyn-space-px-md, 16px))) /
+        var(--imagyn-carousel-cards-mobile, 1)
+    );
   }
 }
 
@@ -242,7 +292,13 @@
   gap: var(--imagyn-space-sm, 0.6em);
 }
 
+/* Visually unchanged (36px circle) — position: relative + the ::before below expand the
+   real hit/touch area to the 44x44px minimum STOREFRONT_DESIGN_SYSTEM.md §14 requires for
+   pagination controls, via generated content rather than by enlarging the visible button
+   itself, per that same section's explicit "expand the hit area via padding, not by making
+   the visible element itself larger" rule. */
 .imagyn-carousel__nav {
+  position: relative;
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -254,6 +310,12 @@
   color: var(--imagyn-color-text, inherit);
   cursor: pointer;
   transition: border-color var(--imagyn-duration-fast, 120ms) var(--imagyn-easing, ease-out);
+}
+
+.imagyn-carousel__nav::before {
+  content: "";
+  position: absolute;
+  inset: -4px;
 }
 
 .imagyn-carousel__nav:hover {
@@ -268,6 +330,44 @@
 .imagyn-carousel__nav svg {
   width: 16px;
   height: 16px;
+}
+
+/* Pagination dots — an alternative/companion to the arrows above, one dot per page of
+   currently-visible cards (see review-carousel.js's getVisibleCount), not one per review.
+   Same 44px real-hit-area-via-pseudo-element technique as .imagyn-carousel__nav: the
+   visible dot stays a small, quiet 8px circle: the button itself is the real touch target. */
+.imagyn-carousel__dots {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  gap: var(--imagyn-space-xs, 0.4em);
+}
+
+.imagyn-carousel__dot {
+  position: relative;
+  width: 8px;
+  height: 8px;
+  padding: 0;
+  border: 0;
+  border-radius: var(--imagyn-radius-full, 999px);
+  background: var(--imagyn-color-border, rgba(0, 0, 0, 0.2));
+  cursor: pointer;
+  transition: background-color var(--imagyn-duration-fast, 120ms) var(--imagyn-easing, ease-out);
+}
+
+.imagyn-carousel__dot::before {
+  content: "";
+  position: absolute;
+  inset: -18px;
+}
+
+.imagyn-carousel__dot--active {
+  background: var(--imagyn-color-text, currentColor);
+}
+
+.imagyn-carousel__dot:focus-visible {
+  outline: 2px solid var(--imagyn-color-focus, #0a0a0a);
+  outline-offset: 3px;
 }
 
 @media (prefers-reduced-motion: reduce) {
