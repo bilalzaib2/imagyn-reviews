@@ -12,13 +12,6 @@
   .workspace {
     grid-template-columns: 1fr;
   }
-
-  /* Full desktop sidebar (12+ links across 6 groups) never renders on mobile — squeezing it
-     above the content, even stacked, is exactly the "not properly mobile responsive" problem.
-     .mobileSectionSelect (a single real <select>, not a decorative one) replaces it below. */
-  .sidebar {
-    display: none;
-  }
 }
 
 .sidebar {
@@ -26,6 +19,18 @@
   gap: var(--space-6);
   position: sticky;
   top: var(--space-5);
+}
+
+/* Full desktop sidebar (12+ links across 6 groups) never renders on mobile — squeezing it
+   above the content, even stacked, is exactly the "not properly mobile responsive" problem.
+   .mobileSectionSelect (a single real <select>, not a decorative one) replaces it below. Must
+   come *after* the unconditional `.sidebar` rule above — same specificity, so source order
+   decides, and a media query block earlier in the file loses to a plain rule later in it
+   regardless of which viewport actually matches. */
+@media (max-width: 900px) {
+  .sidebar {
+    display: none;
+  }
 }
 
 /* Mobile-only section switcher — hidden on desktop via the media query below. One native
