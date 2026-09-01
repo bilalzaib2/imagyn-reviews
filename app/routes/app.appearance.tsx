@@ -8,6 +8,7 @@ import { ColorField, toDisplayHex } from "../components/ui/ColorField";
 import { Container } from "../components/ui/Container";
 import { Section } from "../components/ui/Section";
 import { UpgradePrompt } from "../components/ui/UpgradePrompt";
+import { SettingsBreadcrumb } from "../components/ui/SettingsBreadcrumb";
 import { authenticateAdminDeduped } from "../services/auth-dedupe.server";
 import { getOrCreateStore } from "../services/store.server";
 import { appearanceService, type AppearanceRecord } from "../services/appearance.server";
@@ -416,7 +417,7 @@ export default function AppearancePage() {
         <div className={`${shellStyles.page} ${styles.page}`}>
           <header className={shellStyles.header}>
             <div className={shellStyles.headerContent}>
-              <p className={shellStyles.eyebrow}>Imagyn Reviews</p>
+              <SettingsBreadcrumb current="Brand Studio" />
               <h1 className={shellStyles.title}>Brand Studio</h1>
               <p className={shellStyles.subtitle}>
                 Design how reviews look on your storefront — no code, no theme editing. Changes preview instantly

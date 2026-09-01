@@ -12,6 +12,13 @@
   .workspace {
     grid-template-columns: 1fr;
   }
+
+  /* Full desktop sidebar (12+ links across 6 groups) never renders on mobile — squeezing it
+     above the content, even stacked, is exactly the "not properly mobile responsive" problem.
+     .mobileSectionSelect (a single real <select>, not a decorative one) replaces it below. */
+  .sidebar {
+    display: none;
+  }
 }
 
 .sidebar {
@@ -19,6 +26,30 @@
   gap: var(--space-6);
   position: sticky;
   top: var(--space-5);
+}
+
+/* Mobile-only section switcher — hidden on desktop via the media query below. One native
+   <select> covering every real link the desktop sidebar has (built from the same `groups`
+   data in app.settings.tsx, so the two can never drift apart), grouped with real <optgroup>
+   the same way the sidebar groups its sections. Navigating is a real client-side transition,
+   not a page reload. */
+.mobileSectionSelect {
+  display: none;
+}
+
+@media (max-width: 900px) {
+  .mobileSectionSelect {
+    display: block;
+    width: 100%;
+    padding: 0.7rem var(--space-3);
+    margin-bottom: var(--space-6);
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-md);
+    background: var(--color-surface);
+    color: var(--color-text);
+    font-size: var(--text-sm);
+    font-weight: 500;
+  }
 }
 
 .sidebarGroup {
@@ -42,14 +73,11 @@
   align-items: center;
   justify-content: space-between;
   gap: var(--space-2);
-  /* 3px extra on the left, matched by the active state's own left border below, so text
-     doesn't visibly shift 3px to the right the moment a link becomes active. */
-  padding: 0.5rem var(--space-3) 0.5rem calc(var(--space-3) + 3px);
-  border-left: 3px solid transparent;
+  padding: 0.55rem var(--space-3);
   border-radius: var(--radius-md);
   font-size: var(--text-sm);
   color: var(--color-text-muted);
-  transition: background-color var(--transition-base), color var(--transition-base), border-color var(--transition-base);
+  transition: background-color var(--transition-base), color var(--transition-base), box-shadow var(--transition-base);
 }
 
 .sidebarLink:hover {
@@ -57,18 +85,28 @@
   background: var(--color-surface-muted);
 }
 
-/* Previously a 5%-darker-than-white background (--color-surface-strong, #f2f2f2) with no
-   other signal — nearly invisible against the page's own white background, which was the
-   actual "too white, can't tell what's selected" bug. Now: a real accent-tinted background
-   (not the muted gray hover uses, so active and hover never look alike), a left accent bar
-   as the actual position-independent "you are here" indicator, and full-contrast text —
-   restrained (the accent tint is 8%, not a solid fill) rather than loud, per the "not ugly"
-   requirement. */
+.sidebarLink:focus-visible {
+  outline: 2px solid var(--color-accent);
+  outline-offset: 2px;
+}
+
+/* A solid filled container, not a border stripe — --color-accent resolves to near-black
+   (#111111, see design-system.css), so the left-border version this replaced read as a plain
+   black tab indicator, not a deliberate selection state, no matter how it was described. This
+   is the same accent color already used for every primary button in the app, just at low
+   opacity as a fill instead of full-strength — a real background/container treatment (per the
+   "sophisticated active background/container treatment, not the old black border" brief),
+   with a matching inset ring for definition against the page's own white background instead of
+   a separate border line. */
 .sidebarLinkActive {
   color: var(--color-text);
-  background: color-mix(in srgb, var(--color-accent) 8%, var(--color-surface));
-  border-left-color: var(--color-accent);
+  background: color-mix(in srgb, var(--color-accent) 10%, var(--color-surface));
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--color-accent) 14%, transparent);
   font-weight: 600;
+}
+
+.sidebarLinkActive:hover {
+  background: color-mix(in srgb, var(--color-accent) 13%, var(--color-surface));
 }
 
 @media (prefers-reduced-motion: reduce) {

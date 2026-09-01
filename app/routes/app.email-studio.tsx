@@ -8,6 +8,7 @@ import { Card } from "../components/ui/Card";
 import { ColorField } from "../components/ui/ColorField";
 import { Container } from "../components/ui/Container";
 import { Section } from "../components/ui/Section";
+import { SettingsBreadcrumb } from "../components/ui/SettingsBreadcrumb";
 import { authenticateAdminDeduped } from "../services/auth-dedupe.server";
 import { getOrCreateStore } from "../services/store.server";
 import { getStorePermissions } from "../services/permissions";
@@ -356,7 +357,7 @@ export default function EmailStudioPage() {
         <div className={shellStyles.page}>
           <header className={shellStyles.header}>
             <div className={shellStyles.headerContent}>
-              <p className={shellStyles.eyebrow}>Imagyn Reviews</p>
+              <SettingsBreadcrumb current="Email Studio" />
               <h1 className={shellStyles.title}>Email Studio</h1>
               <p className={shellStyles.subtitle}>
                 Customize the emails your customers receive — subject, message, branding, and the review link.

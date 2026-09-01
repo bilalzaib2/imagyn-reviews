@@ -24,6 +24,7 @@ import {
 import { Button } from "../components/ui/Button";
 import { Container } from "../components/ui/Container";
 import { ProgressBar } from "../components/ui/ProgressBar";
+import { SettingsBreadcrumb } from "../components/ui/SettingsBreadcrumb";
 import { authenticateAdminDeduped } from "../services/auth-dedupe.server";
 import { getOrCreateStore, getProductSyncState, startProductSync, type ProductSyncState } from "../services/store.server";
 import { getProductsPage } from "../services/product.server";
@@ -396,7 +397,7 @@ export default function ProductsPage() {
         <div className={shellStyles.page}>
           <header className={`${shellStyles.header} ${styles.header}`}>
             <div className={shellStyles.headerContent}>
-              <p className={shellStyles.eyebrow}>Imagyn Reviews</p>
+              <SettingsBreadcrumb current="Product Management" />
               <h1 className={shellStyles.title}>Products</h1>
               <p className={shellStyles.subtitle}>
                 Sync your entire Shopify catalog to connect products with reviews and widgets.

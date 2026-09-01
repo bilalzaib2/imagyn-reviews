@@ -5,6 +5,7 @@ import { boundary } from "@shopify/shopify-app-react-router/server";
 import { Container } from "../components/ui/Container";
 import { Section } from "../components/ui/Section";
 import { Card } from "../components/ui/Card";
+import { SettingsBreadcrumb } from "../components/ui/SettingsBreadcrumb";
 import { ProgressBar } from "../components/ui/ProgressBar";
 import { Medallion } from "../components/medals/Medallion";
 import { authenticateAdminDeduped } from "../services/auth-dedupe.server";
@@ -94,7 +95,7 @@ export default function MedalsPage() {
       <div className={`${shellStyles.page} ${styles.page}`}>
         <header className={shellStyles.header}>
           <div className={shellStyles.headerContent}>
-            <p className={shellStyles.eyebrow}>Imagyn Reviews</p>
+            <SettingsBreadcrumb current="Medals" />
             <h1 className={shellStyles.title}>Medals</h1>
             <p className={shellStyles.subtitle}>
               Achievements earned automatically from your real review activity — {earnedCount} of {totalCount} earned so far.

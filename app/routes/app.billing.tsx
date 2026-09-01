@@ -4,6 +4,7 @@ import type { ActionFunctionArgs, HeadersFunction, LoaderFunctionArgs } from "re
 import { boundary } from "@shopify/shopify-app-react-router/server";
 import { Frame, Toast } from "@shopify/polaris";
 import { Container } from "../components/ui/Container";
+import { SettingsBreadcrumb } from "../components/ui/SettingsBreadcrumb";
 import { authenticateAdminDeduped } from "../services/auth-dedupe.server";
 import { getOrCreateStore } from "../services/store.server";
 import {
@@ -172,7 +173,7 @@ export default function BillingPage() {
         <div className={shellStyles.page}>
           <header className={shellStyles.header}>
             <div className={shellStyles.headerContent}>
-              <p className={shellStyles.eyebrow}>Imagyn Reviews</p>
+              <SettingsBreadcrumb current="Plan & Billing" />
               <h1 className={shellStyles.title}>Continue using Imagyn Reviews</h1>
               <p className={shellStyles.subtitle}>
                 Choose a plan to continue collecting reviews, sending review requests, and growing customer trust.

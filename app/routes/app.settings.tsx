@@ -1,4 +1,4 @@
-import { NavLink, Outlet, useLoaderData, useRouteError } from "react-router";
+import { NavLink, Outlet, useLoaderData, useLocation, useNavigate, useRouteError } from "react-router";
 import type { HeadersFunction, LoaderFunctionArgs } from "react-router";
 import { boundary } from "@shopify/shopify-app-react-router/server";
 import { authenticateAdminDeduped } from "../services/auth-dedupe.server";
@@ -49,6 +49,8 @@ type SettingsGroup = {
 
 export default function SettingsWorkspace() {
   const { canUseAI } = useLoaderData<typeof loader>();
+  const location = useLocation();
+  const navigate = useNavigate();
 
   const groups: SettingsGroup[] = [
     {
@@ -70,8 +72,8 @@ export default function SettingsWorkspace() {
       label: "Rewards & Engagement",
       items: [
         { label: "Review Rewards", href: "/app/settings/rewards", internal: true },
-        { label: "Coupons", href: "/app/settings/coupons", internal: true, tag: "Roadmap" },
-        { label: "Referrals", href: "/app/settings/referrals", internal: true, tag: "Roadmap" },
+        { label: "Coupons", href: "/app/settings/coupons", internal: true, tag: "Coming soon" },
+        { label: "Referrals", href: "/app/settings/referrals", internal: true, tag: "Coming soon" },
       ],
     },
     {
@@ -109,6 +111,27 @@ export default function SettingsWorkspace() {
         </header>
 
         <div className={styles.workspace}>
+          {/* Mobile-only — the full desktop <nav> below is hidden under 900px (see
+              app.settingsWorkspace.module.css). Built from the exact same `groups` array so
+              the two navigations can never list different things. */}
+          <select
+            className={styles.mobileSectionSelect}
+            aria-label="Settings sections"
+            value={location.pathname}
+            onChange={(event) => navigate(event.target.value)}
+          >
+            {groups.map((group) => (
+              <optgroup key={group.label} label={group.label}>
+                {group.items.map((item) => (
+                  <option key={item.href} value={item.href}>
+                    {item.label}
+                    {item.tag ? ` — ${item.tag}` : ""}
+                  </option>
+                ))}
+              </optgroup>
+            ))}
+          </select>
+
           <nav className={styles.sidebar} aria-label="Settings sections">
             {groups.map((group) => (
               <div key={group.label} className={styles.sidebarGroup}>

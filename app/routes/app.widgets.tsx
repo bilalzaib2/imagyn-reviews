@@ -6,6 +6,7 @@ import { ActionList, Checkbox, Frame, Popover, Text, Toast } from "@shopify/pola
 
 import { Button } from "../components/ui/Button";
 import { Container } from "../components/ui/Container";
+import { SettingsBreadcrumb } from "../components/ui/SettingsBreadcrumb";
 import { Medallion } from "../components/medals/Medallion";
 import { authenticateAdminDeduped } from "../services/auth-dedupe.server";
 import { getOrCreateStore } from "../services/store.server";
@@ -701,7 +702,7 @@ export default function WidgetsPage() {
         <div className={shellStyles.page}>
           <header className={`${shellStyles.header} ${styles.header}`}>
             <div className={shellStyles.headerContent}>
-              <p className={shellStyles.eyebrow}>Imagyn Reviews</p>
+              <SettingsBreadcrumb current="Widgets" />
               <h1 className={shellStyles.title}>Widgets</h1>
               <p className={shellStyles.subtitle}>
                 Customize how reviews present across your storefront.
