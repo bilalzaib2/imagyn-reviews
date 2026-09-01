@@ -1,6 +1,7 @@
 import { useLoaderData } from "react-router";
 import type { LoaderFunctionArgs } from "react-router";
 import { Section } from "../components/ui/Section";
+import { StatusBadge, type StatusBadgeTone } from "../components/ui/StatusBadge";
 import { authenticateAdminDeduped } from "../services/auth-dedupe.server";
 import { getOrCreateStore } from "../services/store.server";
 import { getStorePermissions } from "../services/permissions";
@@ -41,11 +42,11 @@ export const loader = async ({ request }: LoaderFunctionArgs): Promise<LoaderDat
   };
 };
 
-function StatusRow({ label, state }: { label: string; state: string }) {
+function StatusRow({ label, state, tone }: { label: string; state: string; tone: StatusBadgeTone }) {
   return (
     <div className={styles.statusRow}>
       <span>{label}</span>
-      <span className={styles.statusValue}>{state}</span>
+      <StatusBadge tone={tone}>{state}</StatusBadge>
     </div>
   );
 }
@@ -76,12 +77,20 @@ export default function SettingsOverviewPage() {
                   ? "On"
                   : "Off"
           }
+          tone={
+            !ORDER_AUTOMATION_ENABLED ? "warning" : !canUseAutomaticReviewRequests ? "pro" : autoRequestEnabled ? "success" : "neutral"
+          }
         />
         <StatusRow
           label={`Reminder emails (Day ${reminder1DelayDays} / Day ${reminderFinalDelayDays})`}
           state={!canUseEmailReminders ? "Requires Pro" : reminderEmailsEnabled ? "On" : "Off"}
+          tone={!canUseEmailReminders ? "pro" : reminderEmailsEnabled ? "success" : "neutral"}
         />
-        <StatusRow label='"Powered by Imagyn" removal' state={canUseCustomBranding ? "Available" : "Requires Pro"} />
+        <StatusRow
+          label='"Powered by Imagyn" removal'
+          state={canUseCustomBranding ? "Available" : "Requires Pro"}
+          tone={canUseCustomBranding ? "success" : "pro"}
+        />
       </div>
 
       {/* Real <a>, not <Link> — same reason app.settings.tsx's own sidebar uses real anchors:

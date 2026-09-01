@@ -6,6 +6,10 @@ import { Container } from "../components/ui/Container";
 import { Section } from "../components/ui/Section";
 import { Card } from "../components/ui/Card";
 import { LinkButton } from "../components/ui/LinkButton";
+import { PageHeader } from "../components/ui/PageHeader";
+import { Banner } from "../components/ui/Banner";
+import { EmptyState } from "../components/ui/EmptyState";
+import { StatusBadge } from "../components/ui/StatusBadge";
 import { AppReviewPrompt } from "../components/ui/AppReviewPrompt";
 import { StarRating } from "../components/reviews/StarRating";
 import { getStoreReviewStats } from "../services/review.server";
@@ -106,27 +110,24 @@ export default function Index() {
   return (
     <Container as="main">
       <div className={`${shellStyles.page} ${styles.page}`}>
-        <header className={shellStyles.header}>
-          <div className={shellStyles.headerContent}>
-            <p className={shellStyles.eyebrow}>Imagyn Reviews</p>
-            <h1 className={shellStyles.title}>
-              {greeting}, {storeName}
-            </h1>
-            <p className={shellStyles.subtitle}>
-              {stats.pendingReviews > 0
-                ? `${stats.pendingReviews} review${stats.pendingReviews === 1 ? "" : "s"} waiting for you.`
-                : "You're all caught up — nothing needs your attention right now."}
-            </p>
-          </div>
-          <div className={styles.headerActions}>
-            <LinkButton to="/app/requests" variant="primary">
-              Send a review request
-            </LinkButton>
-            <LinkButton to="/app/reviews" variant="secondary">
-              View reviews
-            </LinkButton>
-          </div>
-        </header>
+        <PageHeader
+          title={`${greeting}, ${storeName}`}
+          description={
+            stats.pendingReviews > 0
+              ? `${stats.pendingReviews} review${stats.pendingReviews === 1 ? "" : "s"} waiting for you.`
+              : "You're all caught up — nothing needs your attention right now."
+          }
+          actions={
+            <>
+              <LinkButton to="/app/requests" variant="primary">
+                Send a review request
+              </LinkButton>
+              <LinkButton to="/app/reviews" variant="secondary">
+                View reviews
+              </LinkButton>
+            </>
+          }
+        />
 
         <nav className={styles.quickActions} aria-label="Quick actions">
           {QUICK_ACTIONS.map((action) => (
@@ -169,46 +170,25 @@ export default function Index() {
             at once rather than picking one to suppress the other. */}
         <div className={styles.banners}>
           {stats.totalReviews === 0 ? (
-            <div className={styles.banner}>
-              <div className={styles.bannerText}>
-                <p className={styles.bannerTitle}>Collect your first review</p>
-                <p className={styles.bannerSubtitle}>
-                  Send a review request to a real customer to get your first review in — it&apos;s the fastest way
-                  to see how Imagyn Reviews works end to end.
-                </p>
-              </div>
-              <Link to="/app/requests" className={styles.bannerLink}>
-                Send a review request &rarr;
-              </Link>
-            </div>
+            <Banner
+              title="Collect your first review"
+              description="Send a review request to a real customer to get your first review in — it's the fastest way to see how Imagyn Reviews works end to end."
+              action={{ label: "Send a review request", href: "/app/requests" }}
+            />
           ) : null}
           {automation.isBlockedByShopify ? (
-            <div className={styles.banner}>
-              <div className={styles.bannerText}>
-                <p className={styles.bannerTitle}>Automatic review requests are pending Shopify approval</p>
-                <p className={styles.bannerSubtitle}>
-                  Reading order fulfillment details requires Shopify&apos;s Protected Customer Data approval for
-                  this app, which hasn&apos;t been granted yet. This activates automatically once it is — manual
-                  requests (including their full reminder schedule) are unaffected and fully available today.
-                </p>
-              </div>
-              <Link to="/app/settings/requests" className={styles.bannerLink}>
-                View request scheduling &rarr;
-              </Link>
-            </div>
+            <Banner
+              tone="warning"
+              title="Automatic review requests are pending Shopify approval"
+              description="Reading order fulfillment details requires Shopify's Protected Customer Data approval for this app, which hasn't been granted yet. This activates automatically once it is — manual requests (including their full reminder schedule) are unaffected and fully available today."
+              action={{ label: "View request scheduling", href: "/app/settings/requests" }}
+            />
           ) : automation.canUse && !automation.isEnabled ? (
-            <div className={styles.banner}>
-              <div className={styles.bannerText}>
-                <p className={styles.bannerTitle}>Automatic review requests are off</p>
-                <p className={styles.bannerSubtitle}>
-                  Turn this on to automatically request a review after every fulfilled order, on your own
-                  configured schedule.
-                </p>
-              </div>
-              <Link to="/app/settings/requests" className={styles.bannerLink}>
-                Turn on &rarr;
-              </Link>
-            </div>
+            <Banner
+              title="Automatic review requests are off"
+              description="Turn this on to automatically request a review after every fulfilled order, on your own configured schedule."
+              action={{ label: "Turn on", href: "/app/settings/requests" }}
+            />
           ) : null}
         </div>
 
@@ -241,7 +221,9 @@ export default function Index() {
           <Card className={styles.healthCard}>
             <p className={styles.healthCardTitle}>Automation &amp; reminders</p>
             <p className={styles.healthCardValue}>
-              {automation.isBlockedByShopify ? "Pending Shopify" : automation.isEnabled ? "On" : "Off"}
+              <StatusBadge tone={automation.isBlockedByShopify ? "warning" : automation.isEnabled ? "success" : "neutral"}>
+                {automation.isBlockedByShopify ? "Pending Shopify" : automation.isEnabled ? "On" : "Off"}
+              </StatusBadge>
             </p>
             <p className={styles.healthCardText}>
               {automation.isBlockedByShopify
@@ -368,14 +350,11 @@ export default function Index() {
         <Card>
           <Section title="Recent Activity" description="The latest review and request events for your store.">
             {stats.recentReviews.length === 0 ? (
-              <div className={styles.emptyState}>
-                <div className={styles.emptyStateContent}>
-                  <h2 className={styles.emptyStateTitle}>No activity yet</h2>
-                  <p className={styles.emptyStateText}>
-                    Review submissions, approvals, and requests will appear here as customers share their experience.
-                  </p>
-                </div>
-              </div>
+              <EmptyState
+                title="No activity yet"
+                description="Review submissions, approvals, and requests will appear here as customers share their experience."
+                action={{ label: "Send a review request", href: "/app/requests" }}
+              />
             ) : (
               <ul className={styles.activityList}>
                 {stats.recentReviews.map((review) => (

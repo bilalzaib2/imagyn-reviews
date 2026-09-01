@@ -15,6 +15,15 @@
   max-width: 40rem;
 }
 
+/* Was defined identically, standalone, in app._index.module.css and app.requests.module.css —
+   moved here (see components/ui/PageHeader) so a third page never has to copy it a third time. */
+.headerActions {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  flex-shrink: 0;
+}
+
 .eyebrow {
   margin: 0;
   color: var(--color-text-muted);
