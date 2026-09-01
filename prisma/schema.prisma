@@ -66,6 +66,12 @@ model Store {
   // whatever accumulated while off.
   reminderEmailsEnabled Boolean   @default(false)
   remindersEnabledAt    DateTime?
+  // Merchant-configurable reminder timing (see reviewRequestScheduler.server.ts's
+  // runDueReminderSweep, previously hardcoded 3/7). Defaults match that exact prior hardcoded
+  // behavior, so every existing store's real send timing is unchanged until a merchant actually
+  // edits these in Settings → Request Scheduling.
+  reminder1DelayDays     Int @default(3)
+  reminderFinalDelayDays Int @default(7)
 
   // Shopify Billing (see app/services/billing/). This is a local cache of Shopify's own
   // billing state — kept in sync by the app_subscriptions/update webhook and by the billing

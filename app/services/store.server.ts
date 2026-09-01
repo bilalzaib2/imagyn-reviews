@@ -87,7 +87,16 @@ export async function updateAutoRequestSettings(
 // of being off starts the eligibility cutoff fresh rather than resurrecting whatever backlog
 // accumulated while off (see reviewRequestScheduler.server.ts's runDueReminderSweep and
 // Store.remindersEnabledAt's own schema comment for the safety rule this implements).
-export async function updateReminderSettings(id: string, data: { reminderEmailsEnabled: boolean }) {
+export async function updateReminderSettings(
+  id: string,
+  data: {
+    reminderEmailsEnabled: boolean;
+    // Optional so callers that only toggle enabled/disabled (unlikely now, kept for safety)
+    // don't have to resend the current values — omitted fields are left untouched.
+    reminder1DelayDays?: number;
+    reminderFinalDelayDays?: number;
+  },
+) {
   const current = await prisma.store.findUnique({
     where: { id },
     select: { reminderEmailsEnabled: true },
@@ -102,6 +111,10 @@ export async function updateReminderSettings(id: string, data: { reminderEmailsE
     data: {
       reminderEmailsEnabled: data.reminderEmailsEnabled,
       ...(isNewlyEnabled ? { remindersEnabledAt: new Date() } : {}),
+      ...(data.reminder1DelayDays !== undefined ? { reminder1DelayDays: Math.max(data.reminder1DelayDays, 1) } : {}),
+      ...(data.reminderFinalDelayDays !== undefined
+        ? { reminderFinalDelayDays: Math.max(data.reminderFinalDelayDays, 1) }
+        : {}),
     },
   });
 }

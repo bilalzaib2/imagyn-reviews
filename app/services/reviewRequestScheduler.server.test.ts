@@ -19,6 +19,8 @@ interface FakeRequestRow {
 interface FakeStoreRow {
   reminderEmailsEnabled: boolean;
   remindersEnabledAt: Date | null;
+  reminder1DelayDays: number;
+  reminderFinalDelayDays: number;
 }
 
 let fakeRequests: FakeRequestRow[];
@@ -37,11 +39,7 @@ vi.mock("../db.server", () => ({
       findMany: vi.fn(async (args: { where: Record<string, unknown>; take: number }) => {
         if (args.where.store !== undefined) {
           const storeFilter = args.where.store as { reminderEmailsEnabled: boolean };
-          const or = args.where.OR as Array<{
-            reminder1SentAt?: null;
-            reminderFinalSentAt?: null;
-            sentAt: { lte: Date };
-          }>;
+          const or = args.where.OR as Array<{ reminder1SentAt?: null; reminderFinalSentAt?: null }>;
 
           return fakeRequests
             .filter((row) => row.reviewedAt == null)
@@ -52,7 +50,7 @@ vi.mock("../db.server", () => ({
               or.some((clause) => {
                 if ("reminder1SentAt" in clause && row.reminder1SentAt != null) return false;
                 if ("reminderFinalSentAt" in clause && row.reminderFinalSentAt != null) return false;
-                return row.sentAt!.getTime() <= clause.sentAt.lte.getTime();
+                return true;
               }),
             )
             .sort((a, b) => a.sentAt!.getTime() - b.sentAt!.getTime())
@@ -66,6 +64,8 @@ vi.mock("../db.server", () => ({
               store: {
                 id: row.storeId ?? null,
                 remindersEnabledAt: row.storeId ? fakeStores[row.storeId]?.remindersEnabledAt ?? null : null,
+                reminder1DelayDays: row.storeId ? fakeStores[row.storeId]?.reminder1DelayDays ?? 3 : 3,
+                reminderFinalDelayDays: row.storeId ? fakeStores[row.storeId]?.reminderFinalDelayDays ?? 7 : 7,
               },
             }));
         }
@@ -191,7 +191,9 @@ describe("runDueReminderSweep", () => {
 
   beforeEach(() => {
     fakeRequests = [];
-    fakeStores = { store_1: { reminderEmailsEnabled: true, remindersEnabledAt: day(30) } };
+    fakeStores = {
+      store_1: { reminderEmailsEnabled: true, remindersEnabledAt: day(30), reminder1DelayDays: 3, reminderFinalDelayDays: 7 },
+    };
     dispatchedIds = [];
     failingIds = new Set();
     reminderDispatches = [];
@@ -369,5 +371,67 @@ describe("runDueReminderSweep", () => {
 
     expect(result).toEqual({ due: 1, dispatched: 1 });
     expect(reminderDispatches).toEqual([{ id: "req_1", type: "reminder_1" }]);
+  });
+
+  describe("merchant-configurable reminder delays (Settings → Request Scheduling)", () => {
+    it("honors a store's own reminder1DelayDays instead of the old fixed 3-day default", async () => {
+      fakeStores.store_1.reminder1DelayDays = 5;
+      // Sent 3 days ago — due under the old fixed default, but not yet due under this store's
+      // own 5-day configuration.
+      fakeRequests = [{ id: "req_1", storeId: "store_1", status: "sent", scheduledFor: null, sentAt: day(3) }];
+
+      const result = await runDueReminderSweep(now);
+
+      expect(result).toEqual({ due: 0, dispatched: 0 });
+    });
+
+    it("dispatches reminder_1 once a request crosses this store's own configured delay", async () => {
+      fakeStores.store_1.reminder1DelayDays = 5;
+      fakeRequests = [{ id: "req_1", storeId: "store_1", status: "sent", scheduledFor: null, sentAt: day(5) }];
+
+      const result = await runDueReminderSweep(now);
+
+      expect(result).toEqual({ due: 1, dispatched: 1 });
+      expect(reminderDispatches).toEqual([{ id: "req_1", type: "reminder_1" }]);
+    });
+
+    it("honors a store's own reminderFinalDelayDays independently of reminder1DelayDays", async () => {
+      fakeStores.store_1.reminder1DelayDays = 2;
+      fakeStores.store_1.reminderFinalDelayDays = 10;
+      fakeRequests = [
+        {
+          id: "req_1",
+          storeId: "store_1",
+          status: "opened",
+          scheduledFor: null,
+          sentAt: day(9),
+          reminder1SentAt: day(7),
+        },
+      ];
+
+      // Final reminder configured for 10 days — 9 days in, not yet due.
+      const notYetDue = await runDueReminderSweep(now);
+      expect(notYetDue).toEqual({ due: 0, dispatched: 0 });
+
+      fakeRequests[0].sentAt = day(10);
+      const due = await runDueReminderSweep(now);
+      expect(due).toEqual({ due: 1, dispatched: 1 });
+      expect(reminderDispatches).toEqual([{ id: "req_1", type: "reminder_final" }]);
+    });
+
+    it("two stores with different configured delays are evaluated independently in the same sweep", async () => {
+      fakeStores.store_1.reminder1DelayDays = 2;
+      fakeStores.store_2 = { reminderEmailsEnabled: true, remindersEnabledAt: day(30), reminder1DelayDays: 8, reminderFinalDelayDays: 14 };
+      fakeRequests = [
+        { id: "req_fast_store", storeId: "store_1", status: "sent", scheduledFor: null, sentAt: day(2) },
+        { id: "req_slow_store", storeId: "store_2", status: "sent", scheduledFor: null, sentAt: day(2) },
+      ];
+
+      const result = await runDueReminderSweep(now);
+
+      // store_1's 2-day delay makes req_fast_store due; store_2's 8-day delay does not.
+      expect(result).toEqual({ due: 1, dispatched: 1 });
+      expect(reminderDispatches).toEqual([{ id: "req_fast_store", type: "reminder_1" }]);
+    });
   });
 });

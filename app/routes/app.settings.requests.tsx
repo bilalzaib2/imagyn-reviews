@@ -22,6 +22,8 @@ type LoaderData = {
   planIncludesAutomaticRequests: boolean;
   reminderEmailsEnabled: boolean;
   planIncludesEmailReminders: boolean;
+  reminder1DelayDays: number;
+  reminderFinalDelayDays: number;
 };
 
 type ActionData = {
@@ -41,6 +43,8 @@ export const loader = async ({ request }: LoaderFunctionArgs): Promise<LoaderDat
     planIncludesAutomaticRequests: permissions.canUseAutomaticReviewRequests,
     reminderEmailsEnabled: store.reminderEmailsEnabled,
     planIncludesEmailReminders: permissions.canUseEmailReminders,
+    reminder1DelayDays: store.reminder1DelayDays,
+    reminderFinalDelayDays: store.reminderFinalDelayDays,
   };
 };
 
@@ -74,9 +78,24 @@ export const action = async ({ request }: ActionFunctionArgs): Promise<ActionDat
       return { ok: false, error: "Automatic Reminder Emails require the Pro plan." };
     }
 
+    const reminder1DelayDays = Number(formData.get("reminder1DelayDays") || "3");
+    const reminderFinalDelayDays = Number(formData.get("reminderFinalDelayDays") || "7");
+
+    if (!Number.isInteger(reminder1DelayDays) || reminder1DelayDays < 1) {
+      return { ok: false, error: "Reminder #1 delay must be at least 1 day." };
+    }
+    if (!Number.isInteger(reminderFinalDelayDays) || reminderFinalDelayDays < 1) {
+      return { ok: false, error: "Final Reminder delay must be at least 1 day." };
+    }
+    if (reminderFinalDelayDays <= reminder1DelayDays) {
+      return { ok: false, error: "Final Reminder must be scheduled after Reminder #1." };
+    }
+
     try {
       await updateReminderSettings(store.id, {
         reminderEmailsEnabled: formData.get("reminderEmailsEnabled") === "true",
+        reminder1DelayDays,
+        reminderFinalDelayDays,
       });
       return { ok: true, message: "Reminder Emails settings saved." };
     } catch (error) {
@@ -136,6 +155,8 @@ export default function SettingsRequestsPage() {
     planIncludesAutomaticRequests,
     reminderEmailsEnabled,
     planIncludesEmailReminders,
+    reminder1DelayDays,
+    reminderFinalDelayDays,
   } = useLoaderData<typeof loader>();
 
   const saveFetcher = useFetcher<ActionData>();
@@ -153,6 +174,8 @@ export default function SettingsRequestsPage() {
   const reminderFetcher = useFetcher<ActionData>();
   const isSavingReminders = reminderFetcher.state !== "idle";
   const [remindersEnabled, setRemindersEnabled] = useState(reminderEmailsEnabled);
+  const [reminder1Days, setReminder1Days] = useState(String(reminder1DelayDays));
+  const [reminderFinalDays, setReminderFinalDays] = useState(String(reminderFinalDelayDays));
 
   useEffect(() => {
     if (!saveFetcher.data) return;
@@ -203,8 +226,20 @@ export default function SettingsRequestsPage() {
     const formData = new FormData();
     formData.set("_intent", "save-reminders");
     formData.set("reminderEmailsEnabled", String(remindersEnabled));
+    formData.set("reminder1DelayDays", reminder1Days || "3");
+    formData.set("reminderFinalDelayDays", reminderFinalDays || "7");
     reminderFetcher.submit(formData, { method: "post" });
   };
+
+  // Real summary of the exact configuration about to be saved — recomputed from the same state
+  // the form submits, never a separate hardcoded sentence that could drift from reality.
+  const scheduleSummary = isAutomationAvailable
+    ? `Customers receive their first review request ${delayDays || "0"} day${delayDays === "1" ? "" : "s"} after fulfillment${
+        planIncludesEmailReminders && remindersEnabled
+          ? `, followed by reminders ${reminder1Days || "0"} and ${reminderFinalDays || "0"} days after that request (if it hasn't been reviewed yet).`
+          : "."
+      }`
+    : null;
 
   return (
     <>
@@ -259,24 +294,53 @@ export default function SettingsRequestsPage() {
         description="The full automatic email schedule for every review request — sent whether the request was created manually or automatically above. Stops immediately once a review is submitted."
       >
         <p className={styles.settingsGroupLabel}>Email schedule</p>
-        <p className={styles.mutedText}>Day 0 — Review request email, sent as soon as the request is created.</p>
-        <p className={styles.mutedText}>Day 3 — Reminder #1, only if no review has been submitted yet.</p>
-        <p className={styles.mutedText}>Day 7 — Final Reminder, only if no review has been submitted yet.</p>
+        <p className={styles.mutedText}>Initial request — sent as soon as the review request is created (see delay above).</p>
 
         {!planIncludesEmailReminders ? (
           <Banner tone="info">
-            Reminder Emails (Day 3 and Day 7) require the Pro plan.{" "}
-            <a href="/app/billing">Upgrade to Pro</a> to turn them on. The Day 0 review request email
-            above always sends regardless of plan.
+            Reminder emails require the Pro plan. <a href="/app/billing">Upgrade to Pro</a> to turn
+            them on. The initial review request email above always sends regardless of plan.
           </Banner>
         ) : null}
         <Checkbox
-          label="Automatically send Day 3 and Day 7 reminder emails"
+          label="Automatically send reminder emails"
           checked={planIncludesEmailReminders && remindersEnabled}
           disabled={!planIncludesEmailReminders}
           onChange={setRemindersEnabled}
           helpText="Only requests sent after this is turned on are ever eligible — existing requests are never swept up retroactively."
         />
+        {planIncludesEmailReminders && remindersEnabled ? (
+          <>
+            <TextField
+              label="Reminder #1"
+              type="number"
+              min={1}
+              autoComplete="off"
+              value={reminder1Days}
+              onChange={setReminder1Days}
+              suffix="days after the initial request"
+            />
+            <TextField
+              label="Final Reminder"
+              type="number"
+              min={1}
+              autoComplete="off"
+              value={reminderFinalDays}
+              onChange={setReminderFinalDays}
+              suffix="days after the initial request"
+              error={
+                Number(reminderFinalDays) > 0 && Number(reminder1Days) > 0 && Number(reminderFinalDays) <= Number(reminder1Days)
+                  ? "Must be scheduled after Reminder #1."
+                  : undefined
+              }
+            />
+          </>
+        ) : null}
+        {/* Both reminders are computed from the initial request's own sentAt directly, not
+            chained off each other (see reviewRequestScheduler.server.ts) — worded this way
+            rather than "N days after Reminder #1" so the copy matches what actually happens: a
+            reminder still fires on schedule even if an earlier one failed or was suppressed. */}
+        {scheduleSummary ? <p className={styles.mutedText}>{scheduleSummary}</p> : null}
         <p className={styles.mutedText}>
           Edit the content of all three emails (Review Request, Reminder #1, Final Reminder) in{" "}
           <a href="/app/email-studio">Email Studio</a>.
@@ -285,7 +349,11 @@ export default function SettingsRequestsPage() {
           type="button"
           variant="primary"
           onClick={handleSaveReminders}
-          disabled={isSavingReminders || !planIncludesEmailReminders}
+          disabled={
+            isSavingReminders ||
+            !planIncludesEmailReminders ||
+            (remindersEnabled && Number(reminderFinalDays) > 0 && Number(reminder1Days) > 0 && Number(reminderFinalDays) <= Number(reminder1Days))
+          }
         >
           {isSavingReminders ? "Saving…" : "Save"}
         </Button>

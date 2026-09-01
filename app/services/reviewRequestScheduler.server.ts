@@ -46,13 +46,6 @@ export async function runDueReviewRequestSweep(now: Date = new Date()): Promise<
   return { due: due.length, dispatched };
 }
 
-// Automatic Reminder Emails — fixed at 3 days (Reminder #1) and 7 days (Final Reminder) after
-// the original request's own sentAt, per the product spec. Not chained off each other
-// (independent of whether reminder1 actually sent) and not configurable yet — see
-// PROJECT_STATE.md's reminder-timing decision. Both are computed from `sentAt` directly.
-const REMINDER_1_DELAY_DAYS = 3;
-const REMINDER_FINAL_DELAY_DAYS = 7;
-
 function daysBefore(now: Date, days: number): Date {
   const cutoff = new Date(now);
   cutoff.setDate(cutoff.getDate() - days);
@@ -60,28 +53,25 @@ function daysBefore(now: Date, days: number): Date {
 }
 
 // One pass: finds every non-terminal, unreviewed ReviewRequest belonging to a store with
-// reminders enabled, whose original sentAt has crossed the 3-day or 7-day mark and hasn't had
-// that specific reminder sent yet. Historical-safety guard: a request is only ever considered
-// if it was sent at/after the store's remindersEnabledAt (see Store.remindersEnabledAt) — this
-// is a plain JS filter, not part of the Prisma `where`, because Prisma can't compare one row's
-// column to a *related* row's column in a single query. At most one reminder is dispatched per
-// row per tick (reminder1 takes priority if both happen to be due at once, e.g. after extended
-// downtime) — the other becomes eligible on the very next tick, five minutes later, rather than
-// sending two reminder emails back-to-back in the same pass.
+// reminders enabled that still has at least one un-sent reminder, then applies each store's own
+// configured reminder1DelayDays/reminderFinalDelayDays (Settings → Request Scheduling) against
+// that request's sentAt. The day-based cutoff can't live in the Prisma `where` below — it's
+// merchant-configurable per store now, not a fixed constant, and Prisma can't compare a row's
+// own column against a value pulled from its *related* row in a single query — so it's computed
+// in JS per row instead, same pattern already used for the remindersEnabledAt guard just below
+// it. `due` counts every row whose date-based condition is actually met (regardless of whether
+// the remindersEnabledAt/suppression guards go on to block it) — that's what the historical-
+// safety and suppression tests below rely on to distinguish "was due" from "was sent". At most
+// one reminder is dispatched per row per tick (reminder1 takes priority if both happen to be due
+// at once, e.g. after extended downtime) — the other becomes eligible on the very next tick.
 export async function runDueReminderSweep(now: Date = new Date()): Promise<{ due: number; dispatched: number }> {
-  const reminder1Cutoff = daysBefore(now, REMINDER_1_DELAY_DAYS);
-  const reminderFinalCutoff = daysBefore(now, REMINDER_FINAL_DELAY_DAYS);
-
   const candidates = await prisma.reviewRequest.findMany({
     where: {
       reviewedAt: null,
       status: { notIn: ["completed", "cancelled", "failed"] },
       sentAt: { not: null },
       store: { reminderEmailsEnabled: true },
-      OR: [
-        { reminder1SentAt: null, sentAt: { lte: reminder1Cutoff } },
-        { reminderFinalSentAt: null, sentAt: { lte: reminderFinalCutoff } },
-      ],
+      OR: [{ reminder1SentAt: null }, { reminderFinalSentAt: null }],
     },
     select: {
       id: true,
@@ -89,27 +79,24 @@ export async function runDueReminderSweep(now: Date = new Date()): Promise<{ due
       sentAt: true,
       reminder1SentAt: true,
       reminderFinalSentAt: true,
-      store: { select: { id: true, remindersEnabledAt: true } },
+      store: {
+        select: { id: true, remindersEnabledAt: true, reminder1DelayDays: true, reminderFinalDelayDays: true },
+      },
     },
     orderBy: { sentAt: "asc" },
     take: SWEEP_BATCH_SIZE,
   });
 
+  let due = 0;
   let dispatched = 0;
 
   for (const request of candidates) {
-    if (!request.sentAt || !request.store.remindersEnabledAt || request.sentAt < request.store.remindersEnabledAt) {
+    if (!request.sentAt) {
       continue;
     }
 
-    // Same cross-table-comparison limitation as the remindersEnabledAt guard above — checked in
-    // JS rather than the Prisma `where`. Skipped without setting reminder1SentAt/
-    // reminderFinalSentAt (dispatchReminderEmail would no-op on this anyway, but checking here
-    // too keeps `dispatched` an accurate count of emails actually sent, and avoids an
-    // unnecessary dispatch-layer round trip for a row every sweep already knows is suppressed).
-    if (await emailSuppressionService.isSuppressed(request.store.id, request.email)) {
-      continue;
-    }
+    const reminder1Cutoff = daysBefore(now, request.store.reminder1DelayDays);
+    const reminderFinalCutoff = daysBefore(now, request.store.reminderFinalDelayDays);
 
     let reminderType: ReminderType | null = null;
     if (!request.reminder1SentAt && request.sentAt <= reminder1Cutoff) {
@@ -122,6 +109,21 @@ export async function runDueReminderSweep(now: Date = new Date()): Promise<{ due
       continue;
     }
 
+    due += 1;
+
+    if (!request.store.remindersEnabledAt || request.sentAt < request.store.remindersEnabledAt) {
+      continue;
+    }
+
+    // Same cross-table-comparison limitation as the remindersEnabledAt guard above — checked in
+    // JS rather than the Prisma `where`. Skipped without setting reminder1SentAt/
+    // reminderFinalSentAt (dispatchReminderEmail would no-op on this anyway, but checking here
+    // too keeps `dispatched` an accurate count of emails actually sent, and avoids an
+    // unnecessary dispatch-layer round trip for a row every sweep already knows is suppressed).
+    if (await emailSuppressionService.isSuppressed(request.store.id, request.email)) {
+      continue;
+    }
+
     try {
       await enqueueReminderDispatch(request.id, reminderType);
       dispatched += 1;
@@ -130,7 +132,7 @@ export async function runDueReminderSweep(now: Date = new Date()): Promise<{ due
     }
   }
 
-  return { due: candidates.length, dispatched };
+  return { due, dispatched };
 }
 
 declare global {
