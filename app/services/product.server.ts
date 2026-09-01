@@ -277,6 +277,19 @@ export async function getProducts(storeId: string) {
   });
 }
 
+// Dashboard's "Products needing attention" figure — two cheap indexed COUNTs against the
+// already-denormalized Product.totalReviews (recalculated by review.server.ts after every
+// review mutation, see that field's own schema comment), not a live Shopify call or an
+// aggregate over the Review table itself.
+export async function getProductReviewCoverage(storeId: string): Promise<{ totalProducts: number; withoutReviews: number }> {
+  const [totalProducts, withoutReviews] = await Promise.all([
+    prisma.product.count({ where: { storeId } }),
+    prisma.product.count({ where: { storeId, totalReviews: 0 } }),
+  ]);
+
+  return { totalProducts, withoutReviews };
+}
+
 export interface ProductQueryOptions {
   search?: string;
   cursor?: string;

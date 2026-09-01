@@ -17,6 +17,110 @@
   font-size: var(--text-sm);
 }
 
+.headerActions {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  flex-shrink: 0;
+}
+
+/* Real, state-driven banners (no reviews yet / automation pending Shopify approval) — same
+   quiet accent-tinted-hairline treatment as app.requests.module.css's .upgradeBanner, reused
+   rather than inventing a second banner style for the same kind of "worth noticing" surface. */
+.banners {
+  display: grid;
+  gap: var(--space-3);
+}
+
+.banner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-4);
+  padding: var(--space-4) var(--space-5);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  background: color-mix(in srgb, var(--color-accent) 4%, var(--color-surface));
+}
+
+.bannerText {
+  display: grid;
+  gap: 0.2rem;
+  min-width: 0;
+}
+
+.bannerTitle {
+  margin: 0;
+  font-size: var(--text-sm);
+  font-weight: 600;
+  color: var(--color-text);
+}
+
+.bannerSubtitle {
+  margin: 0;
+  font-size: var(--text-sm);
+  color: var(--color-text-muted);
+  line-height: 1.5;
+}
+
+.bannerLink {
+  flex-shrink: 0;
+  color: var(--color-text);
+  font-size: var(--text-sm);
+  font-weight: 600;
+  text-decoration: none;
+  white-space: nowrap;
+  border-bottom: 1px solid var(--color-border-strong);
+}
+
+.bannerLink:hover {
+  border-bottom-color: var(--color-text);
+}
+
+@media (max-width: 640px) {
+  .banner {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+}
+
+/* Compact status panels — Products/Automation/Rewards — the one place this page uses real
+   Card boxing, since these are dense little "state at a glance" blocks that genuinely benefit
+   from a contained panel, unlike the larger typographic stat displays below. */
+.healthGrid {
+  display: grid;
+  gap: var(--space-4);
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+}
+
+.healthCard {
+  display: grid;
+  gap: var(--space-2);
+  align-content: start;
+}
+
+.healthCardTitle {
+  margin: 0;
+  font-size: var(--text-sm);
+  font-weight: 600;
+  color: var(--color-text);
+}
+
+.healthCardValue {
+  margin: 0;
+  font-size: var(--text-2xl);
+  font-weight: 600;
+  letter-spacing: -0.02em;
+  font-variant-numeric: tabular-nums;
+}
+
+.healthCardText {
+  margin: 0;
+  color: var(--color-text-muted);
+  font-size: var(--text-sm);
+  line-height: 1.5;
+}
+
 /* The dashboard's one job: tell a merchant in under a second whether anything needs them.
    These two cards are the only interactive, emphasized surface here — everything below
    (.statsGrid) is deliberately quieter, informational-only. */

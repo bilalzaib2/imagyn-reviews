@@ -227,6 +227,14 @@ vi.mock("../db.server", () => ({
       count: vi.fn(async ({ where }: { where: { storeId: string } }) => {
         return requests.filter((r) => r.storeId === where.storeId).length;
       }),
+      groupBy: vi.fn(async ({ where }: { where: { storeId: string } }) => {
+        const counts = new Map<string, number>();
+        for (const row of requests) {
+          if (row.storeId !== where.storeId) continue;
+          counts.set(row.status, (counts.get(row.status) ?? 0) + 1);
+        }
+        return Array.from(counts.entries()).map(([status, count]) => ({ status, _count: { status: count } }));
+      }),
       update: vi.fn(async ({ where, data }: { where: { id: string }; data: Partial<FakeRequest> }) => {
         const row = requests.find((r) => r.id === where.id);
         if (!row) throw new Error("Row not found");
@@ -367,6 +375,41 @@ describe("listProducts / listCustomers — storeId scoping", () => {
 
     expect(customers).toHaveLength(1);
     expect(customers[0].reviewerEmail).toBe("own@example.com");
+  });
+});
+
+describe("getRequestStats — Dashboard's Review Requests figures", () => {
+  it("buckets every real status into sent/completed/scheduled/pending, scoped to the caller's own store", async () => {
+    seedRequest({ id: "req_scheduled", storeId: "store_1", status: "scheduled" });
+    seedRequest({ id: "req_pending", storeId: "store_1", status: "pending" });
+    seedRequest({ id: "req_sent", storeId: "store_1", status: "sent" });
+    seedRequest({ id: "req_completed", storeId: "store_1", status: "completed" });
+    // Different store — must never leak into store_1's counts.
+    seedRequest({ id: "req_other_store", storeId: "store_2", status: "scheduled" });
+
+    const stats = await reviewRequestService.getRequestStats("store_1");
+
+    expect(stats).toEqual({
+      totalCount: 4,
+      sent: 2, // "sent" and "completed" both count as genuinely sent
+      completed: 1,
+      completionRate: 0.5,
+      scheduled: 1,
+      pending: 1,
+    });
+  });
+
+  it("returns all zeros for a store with no requests yet, rather than throwing", async () => {
+    const stats = await reviewRequestService.getRequestStats("store_1");
+
+    expect(stats).toEqual({
+      totalCount: 0,
+      sent: 0,
+      completed: 0,
+      completionRate: 0,
+      scheduled: 0,
+      pending: 0,
+    });
   });
 });
 

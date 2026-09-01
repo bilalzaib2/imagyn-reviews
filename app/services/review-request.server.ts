@@ -502,7 +502,9 @@ export const reviewRequestService = {
   // many of those converted into a submitted review. "Sent" counts every status a request
   // reaches only after a successful send (sent/delivered/opened/clicked/completed);
   // pending/scheduled haven't gone out yet, and failed never went out at all.
-  async getRequestStats(storeId: string): Promise<{ totalCount: number; sent: number; completed: number; completionRate: number }> {
+  async getRequestStats(
+    storeId: string,
+  ): Promise<{ totalCount: number; sent: number; completed: number; completionRate: number; scheduled: number; pending: number }> {
     const groups = await prisma.reviewRequest.groupBy({
       by: ["status"],
       where: { storeId },
@@ -519,6 +521,10 @@ export const reviewRequestService = {
       sent,
       completed,
       completionRate: sent > 0 ? completed / sent : 0,
+      // Not yet sent — the Dashboard's "what's coming" figure, distinct from `sent` above.
+      // Both read off the same groupBy result already fetched, no extra query.
+      scheduled: countByStatus.get("scheduled") ?? 0,
+      pending: countByStatus.get("pending") ?? 0,
     };
   },
 
