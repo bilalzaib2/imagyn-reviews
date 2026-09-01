@@ -1,4 +1,4 @@
-import { Link, useLoaderData } from "react-router";
+import { useLoaderData } from "react-router";
 import type { LoaderFunctionArgs } from "react-router";
 import { Section } from "../components/ui/Section";
 import { authenticateAdminDeduped } from "../services/auth-dedupe.server";
@@ -17,6 +17,8 @@ type LoaderData = {
   planName: string;
   autoRequestEnabled: boolean;
   reminderEmailsEnabled: boolean;
+  reminder1DelayDays: number;
+  reminderFinalDelayDays: number;
   canUseAutomaticReviewRequests: boolean;
   canUseEmailReminders: boolean;
   canUseCustomBranding: boolean;
@@ -31,6 +33,8 @@ export const loader = async ({ request }: LoaderFunctionArgs): Promise<LoaderDat
     planName: getPlan(planId).name,
     autoRequestEnabled: store.autoRequestEnabled,
     reminderEmailsEnabled: store.reminderEmailsEnabled,
+    reminder1DelayDays: store.reminder1DelayDays,
+    reminderFinalDelayDays: store.reminderFinalDelayDays,
     canUseAutomaticReviewRequests: permissions.canUseAutomaticReviewRequests,
     canUseEmailReminders: permissions.canUseEmailReminders,
     canUseCustomBranding: permissions.canUseCustomBranding,
@@ -51,6 +55,8 @@ export default function SettingsOverviewPage() {
     planName,
     autoRequestEnabled,
     reminderEmailsEnabled,
+    reminder1DelayDays,
+    reminderFinalDelayDays,
     canUseAutomaticReviewRequests,
     canUseEmailReminders,
     canUseCustomBranding,
@@ -72,16 +78,19 @@ export default function SettingsOverviewPage() {
           }
         />
         <StatusRow
-          label="Day 3 / Day 7 reminder emails"
+          label={`Reminder emails (Day ${reminder1DelayDays} / Day ${reminderFinalDelayDays})`}
           state={!canUseEmailReminders ? "Requires Pro" : reminderEmailsEnabled ? "On" : "Off"}
         />
         <StatusRow label='"Powered by Imagyn" removal' state={canUseCustomBranding ? "Available" : "Requires Pro"} />
       </div>
 
+      {/* Real <a>, not <Link> — same reason app.settings.tsx's own sidebar uses real anchors:
+          a client-side pushState here is exactly what Shopify's embedded shell silently
+          reverts once it doesn't recognize the resulting URL. */}
       <div className={styles.overviewLinks}>
-        <Link to="/app/settings/requests">Configure request scheduling &amp; reminders</Link>
-        <Link to="/app/settings/moderation">Configure publishing &amp; moderation</Link>
-        <Link to="/app/settings/rewards">Configure Review Rewards</Link>
+        <a href="/app/settings/requests">Configure request scheduling &amp; reminders</a>
+        <a href="/app/settings/moderation">Configure publishing &amp; moderation</a>
+        <a href="/app/settings/rewards">Configure Review Rewards</a>
       </div>
     </Section>
   );

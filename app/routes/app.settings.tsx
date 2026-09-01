@@ -1,4 +1,4 @@
-import { NavLink, Outlet, useLoaderData, useLocation, useNavigate, useRouteError } from "react-router";
+import { Outlet, useLoaderData, useLocation, useRouteError } from "react-router";
 import type { HeadersFunction, LoaderFunctionArgs } from "react-router";
 import { boundary } from "@shopify/shopify-app-react-router/server";
 import { authenticateAdminDeduped } from "../services/auth-dedupe.server";
@@ -34,10 +34,10 @@ type SettingsLink = {
   label: string;
   href: string;
   /** Internal settings sub-route (rendered in this shell's own Outlet) vs. an existing,
-   *  already-real product page that lives outside the Settings workspace. Both use the same
-   *  client-side <NavLink> transition; this only controls whether "active" highlighting
-   *  applies (a merchant looking at Widgets shouldn't see a stale-highlighted sidebar once
-   *  they've left the shell entirely). */
+   *  already-real product page that lives outside the Settings workspace. Both are real
+   *  top-level <a> navigations (see the header comment above the sidebar below for why); this
+   *  only controls whether "active" highlighting applies (a merchant looking at Widgets
+   *  shouldn't see a stale-highlighted sidebar once they've left the shell entirely). */
   internal?: boolean;
   tag?: string;
 };
@@ -50,7 +50,6 @@ type SettingsGroup = {
 export default function SettingsWorkspace() {
   const { canUseAI } = useLoaderData<typeof loader>();
   const location = useLocation();
-  const navigate = useNavigate();
 
   const groups: SettingsGroup[] = [
     {
@@ -111,15 +110,29 @@ export default function SettingsWorkspace() {
         </header>
 
         <div className={styles.workspace}>
-          {/* Mobile-only — the full desktop <nav> below is hidden under 900px (see
-              app.settingsWorkspace.module.css). Built from the exact same `groups` array so
-              the two navigations can never list different things. */}
+          {/* Every Settings navigation link below is a REAL, plain <a href> — not a React
+              Router <Link>/<NavLink> — and deliberately so. Shopify Admin's embedded-app shell
+              owns the outer iframe URL via the <NavMenu> registration in app.tsx, which only
+              knows about the four PRIMARY nav items; it silently reverts any *other* client-side
+              history.pushState it doesn't recognize back to its own last-known URL a few hundred
+              ms later (already reproduced and documented for the Requests page's search/filter
+              state — see app.requests.tsx's identical comment; that page's fix was to route
+              through a fetcher instead of touching window.history at all). A <NavLink> click
+              here hits the exact same class of bug: confirmed live — clicking a Settings
+              subsection correctly changed the URL and content, but left the SIDEBAR'S OWN active
+              highlight on a stale, unrelated item once Shopify's shell fought the pushState.
+              A real anchor triggers a genuine top-level navigation with no synthetic history
+              entry for the shell to revert, which is why this reads `location.pathname` (fresh
+              on every real navigation, always correct) instead of NavLink's own isActive. */}
           <select
             className={styles.mobileSectionSelect}
             aria-label="Settings sections"
             value={location.pathname}
-            onChange={(event) => navigate(event.target.value)}
+            onChange={(event) => {
+              window.location.href = event.target.value;
+            }}
           >
+            <option value="/app/settings">Overview</option>
             {groups.map((group) => (
               <optgroup key={group.label} label={group.label}>
                 {group.items.map((item) => (
@@ -133,26 +146,36 @@ export default function SettingsWorkspace() {
           </select>
 
           <nav className={styles.sidebar} aria-label="Settings sections">
+            <div className={styles.sidebarGroup}>
+              <a
+                href="/app/settings"
+                aria-current={location.pathname === "/app/settings" ? "page" : undefined}
+                className={
+                  location.pathname === "/app/settings"
+                    ? `${styles.sidebarLink} ${styles.sidebarLinkActive}`
+                    : styles.sidebarLink
+                }
+              >
+                Overview
+              </a>
+            </div>
             {groups.map((group) => (
               <div key={group.label} className={styles.sidebarGroup}>
                 <p className={styles.sidebarGroupLabel}>{group.label}</p>
-                {group.items.map((item) =>
-                  item.internal ? (
-                    <NavLink
+                {group.items.map((item) => {
+                  const isActive = item.internal && location.pathname === item.href;
+                  return (
+                    <a
                       key={item.href}
-                      to={item.href}
-                      className={({ isActive }) => `${styles.sidebarLink} ${isActive ? styles.sidebarLinkActive : ""}`}
+                      href={item.href}
+                      aria-current={isActive ? "page" : undefined}
+                      className={isActive ? `${styles.sidebarLink} ${styles.sidebarLinkActive}` : styles.sidebarLink}
                     >
                       {item.label}
                       {item.tag ? <span className={styles.sidebarTag}>{item.tag}</span> : null}
-                    </NavLink>
-                  ) : (
-                    <NavLink key={item.href} to={item.href} className={styles.sidebarLink}>
-                      {item.label}
-                      {item.tag ? <span className={styles.sidebarTag}>{item.tag}</span> : null}
-                    </NavLink>
-                  ),
-                )}
+                    </a>
+                  );
+                })}
               </div>
             ))}
           </nav>
