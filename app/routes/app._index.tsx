@@ -71,6 +71,10 @@ const QUICK_ACTIONS = [
   { label: "Customize widgets", href: "/app/widgets" },
 ];
 
+// Only a real, reachable destination — added to QUICK_ACTIONS below, not the static list
+// above, since it only makes sense once the merchant has actually turned Rewards on.
+const REWARDS_QUICK_ACTION = { label: "Manage Review Rewards", href: "/app/settings/rewards" };
+
 const RATING_VALUES = [5, 4, 3, 2, 1] as const;
 
 export default function Index() {
@@ -130,16 +134,18 @@ export default function Index() {
         />
 
         <nav className={styles.quickActions} aria-label="Quick actions">
-          {QUICK_ACTIONS.map((action) => (
-            <Link key={action.href} to={action.href} className={styles.quickActionLink}>
+          {(rewardStats ? [...QUICK_ACTIONS, REWARDS_QUICK_ACTION] : QUICK_ACTIONS).map((action) => (
+            <Link key={action.href} to={action.href} className={styles.quickActionChip}>
               {action.label}
               <span aria-hidden="true">&rarr;</span>
             </Link>
           ))}
         </nav>
 
-        <div className={styles.attentionGrid}>
-          {attentionCards.map((item) => (
+        <div className={styles.group}>
+          <p className={styles.groupLabel}>Needs your attention</p>
+          <div className={styles.attentionGrid}>
+            {attentionCards.map((item) => (
             <Link
               key={item.key}
               to={item.href}
@@ -156,7 +162,8 @@ export default function Index() {
                 &rarr;
               </span>
             </Link>
-          ))}
+            ))}
+          </div>
         </div>
 
         {/* Real positive-moment gate, not a timer: at least 5 real published reviews means this
@@ -192,60 +199,46 @@ export default function Index() {
           ) : null}
         </div>
 
-        <div className={styles.healthGrid}>
-          <Card className={styles.healthCard}>
-            <p className={styles.healthCardTitle}>Products needing attention</p>
-            {productCoverage.totalProducts === 0 ? (
-              <p className={styles.healthCardText}>
-                No products synced yet. <Link to="/app/products">Sync your catalog</Link> to start connecting
-                reviews to products.
-              </p>
-            ) : productCoverage.withoutReviews === 0 ? (
-              <>
-                <p className={styles.healthCardValue}>All {productCoverage.totalProducts} covered</p>
-                <p className={styles.healthCardText}>Every synced product has at least one review.</p>
-              </>
-            ) : (
-              <>
-                <p className={styles.healthCardValue}>
-                  {productCoverage.withoutReviews} of {productCoverage.totalProducts}
-                </p>
-                <p className={styles.healthCardText}>
-                  Products with no reviews yet. <Link to="/app/requests">Request reviews</Link> for their recent
-                  buyers.
-                </p>
-              </>
-            )}
-          </Card>
-
-          <Card className={styles.healthCard}>
-            <p className={styles.healthCardTitle}>Automation &amp; reminders</p>
-            <p className={styles.healthCardValue}>
-              <StatusBadge tone={automation.isBlockedByShopify ? "warning" : automation.isEnabled ? "success" : "neutral"}>
-                {automation.isBlockedByShopify ? "Pending Shopify" : automation.isEnabled ? "On" : "Off"}
-              </StatusBadge>
-            </p>
-            <p className={styles.healthCardText}>
-              {automation.isBlockedByShopify
-                ? "Manual requests and their reminder schedule work fully today."
-                : automation.isEnabled
-                  ? "New fulfilled orders automatically get a review request."
-                  : "Turn on automatic requests in Request Scheduling."}{" "}
-              <Link to="/app/settings/requests">Manage scheduling</Link>
-            </p>
-          </Card>
-
-          {rewardStats ? (
+        <div className={styles.group}>
+          <p className={styles.groupLabel}>Setup &amp; health</p>
+          <div className={styles.healthGrid}>
             <Card className={styles.healthCard}>
-              <p className={styles.healthCardTitle}>Review Rewards</p>
-              <p className={styles.healthCardValue}>{rewardStats.issued} issued</p>
-              <p className={styles.healthCardText}>
-                {rewardStats.pending > 0 ? `${rewardStats.pending} pending · ` : ""}
-                {rewardStats.failed > 0 ? `${rewardStats.failed} failed · ` : ""}
-                <Link to="/app/settings/rewards">Manage rewards</Link>
-              </p>
+              <p className={styles.healthCardTitle}>Products needing attention</p>
+              {productCoverage.totalProducts === 0 ? (
+                <p className={styles.healthCardText}>
+                  No products synced yet. <Link to="/app/products">Sync your catalog</Link> to start connecting
+                  reviews to products.
+                </p>
+              ) : productCoverage.withoutReviews === 0 ? (
+                <>
+                  <p className={styles.healthCardValue}>All {productCoverage.totalProducts} covered</p>
+                  <p className={styles.healthCardText}>Every synced product has at least one review.</p>
+                </>
+              ) : (
+                <>
+                  <p className={styles.healthCardValue}>
+                    {productCoverage.withoutReviews} of {productCoverage.totalProducts}
+                  </p>
+                  <p className={styles.healthCardText}>
+                    Products with no reviews yet. <Link to="/app/requests">Request reviews</Link> for their recent
+                    buyers.
+                  </p>
+                </>
+              )}
             </Card>
-          ) : null}
+
+            {rewardStats ? (
+              <Card className={styles.healthCard}>
+                <p className={styles.healthCardTitle}>Review Rewards</p>
+                <p className={styles.healthCardValue}>{rewardStats.issued} issued</p>
+                <p className={styles.healthCardText}>
+                  {rewardStats.pending > 0 ? `${rewardStats.pending} pending · ` : ""}
+                  {rewardStats.failed > 0 ? `${rewardStats.failed} failed · ` : ""}
+                  <Link to="/app/settings/rewards">Manage rewards</Link>
+                </p>
+              </Card>
+            ) : null}
+          </div>
         </div>
 
         <Card>
@@ -281,6 +274,8 @@ export default function Index() {
                   {RATING_VALUES.map((value) => {
                     const count = stats.ratingCounts[value];
                     const widthPercent = Math.round((count / maxRatingCount) * 100);
+                    const sharePercent =
+                      stats.publishedReviews > 0 ? Math.round((count / stats.publishedReviews) * 100) : 0;
 
                     return (
                       <div key={value} className={styles.ratingBarRow}>
@@ -288,7 +283,9 @@ export default function Index() {
                         <span className={styles.ratingBarTrack}>
                           <span className={styles.ratingBarFill} style={{ width: `${widthPercent}%` }} />
                         </span>
-                        <span className={styles.ratingBarCount}>{count}</span>
+                        <span className={styles.ratingBarCount}>
+                          {count} ({sharePercent}%)
+                        </span>
                       </div>
                     );
                   })}
@@ -322,9 +319,26 @@ export default function Index() {
           </Card>
         </div>
 
-        {requestStats.totalCount > 0 ? (
-          <Card>
-            <Section title="Review Requests" description="How your automated and manual requests are performing.">
+        {/* Automation status folded in at the top — merged from what used to be a separate
+            "Automation & reminders" health card, so this one section answers "is review
+            collection actually working" instead of splitting status from performance. */}
+        <Card>
+          <Section title="Review Requests" description="How your automated and manual requests are performing.">
+            <div className={styles.automationStatus}>
+              <StatusBadge tone={automation.isBlockedByShopify ? "warning" : automation.isEnabled ? "success" : "neutral"}>
+                {automation.isBlockedByShopify ? "Pending Shopify" : automation.isEnabled ? "Automatic requests on" : "Automatic requests off"}
+              </StatusBadge>
+              <p className={styles.automationStatusText}>
+                {automation.isBlockedByShopify
+                  ? "Manual requests and their reminder schedule work fully today."
+                  : automation.isEnabled
+                    ? "New fulfilled orders automatically get a review request."
+                    : "Turn on automatic requests in Request Scheduling."}{" "}
+                <Link to="/app/settings/requests">Manage scheduling</Link>
+              </p>
+            </div>
+
+            {requestStats.totalCount > 0 ? (
               <div className={styles.trustRow}>
                 <div className={styles.trustStat}>
                   <p className={styles.trustValue}>{requestStats.scheduled + requestStats.pending}</p>
@@ -343,9 +357,14 @@ export default function Index() {
                   <p className={styles.trustLabel}>Completion rate</p>
                 </div>
               </div>
-            </Section>
-          </Card>
-        ) : null}
+            ) : (
+              <p className={styles.mutedText}>
+                No review requests sent yet. <Link to="/app/requests">Send your first one</Link> to start seeing
+                activity and completion rate here.
+              </p>
+            )}
+          </Section>
+        </Card>
 
         <Card>
           <Section title="Recent Activity" description="The latest review and request events for your store.">
