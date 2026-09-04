@@ -302,7 +302,9 @@ vi.mock("./notifications/provider.server", () => ({
 
 process.env.SHOPIFY_API_SECRET ||= "test-secret-for-unsubscribe-hmac";
 
-const { reviewRequestService, dispatchRequestEmail, dispatchReminderEmail } = await import("./review-request.server");
+const { reviewRequestService, dispatchRequestEmail, dispatchReminderEmail, RequestNotEligibleError } = await import(
+  "./review-request.server"
+);
 
 beforeEach(() => {
   requests = [];
@@ -868,6 +870,154 @@ describe("getExistingRequestContextBulk — Shopify Orders picker eligibility", 
   it("returns an empty map for empty input without querying anything", async () => {
     const bulk = await reviewRequestService.getExistingRequestContextBulk("store_1", []);
     expect(bulk.size).toBe(0);
+  });
+});
+
+// Direct unit coverage for the automatic webhook path's actual eligibility logic
+// (webhooks.fulfillments.create.tsx calls this per fulfilled line item). Not previously
+// covered directly — createManyFromOrders' own tests exercise it indirectly through the
+// manual bulk-send flow, but the automatic order-trigger path deserves its own coverage
+// since it's the exact function gated behind ORDER_AUTOMATION_ENABLED/Shopify's Protected
+// Customer Data approval (see app/config/features.ts) — this suite is what proves the
+// eligibility/duplicate-prevention logic is correct and ready for the moment that approval
+// lands, independent of whether the webhook itself is currently reachable in production.
+describe("createFromOrder — order-triggered eligibility (the automatic webhook's actual logic)", () => {
+  const baseOrder = {
+    storeId: "store_1",
+    productId: "product_1",
+    shopifyOrderId: "5001",
+    shopifyLineItemId: "1",
+    orderNumber: "#5001",
+    email: "jordan@example.com",
+    name: "Jordan Avery",
+  };
+
+  it("creates a real, order-tagged, scheduled request for an eligible order with a non-zero delay", async () => {
+    const result = await reviewRequestService.createFromOrder({ ...baseOrder, delayDays: 7 });
+
+    expect(result.request.status).toBe("scheduled");
+    expect(requests).toHaveLength(1);
+    expect(requests[0]).toMatchObject({
+      storeId: "store_1",
+      productId: "product_1",
+      shopifyOrderId: "5001",
+      shopifyLineItemId: "1",
+      source: "order",
+      email: "jordan@example.com",
+      status: "scheduled",
+    });
+  });
+
+  it("dispatches immediately for an eligible order with delayDays: 0 — lands as sent, not left scheduled", async () => {
+    const result = await reviewRequestService.createFromOrder({ ...baseOrder, delayDays: 0 });
+
+    // Written as "sending" before dispatch, then dispatchRequestEmail (mocked provider,
+    // resolves successfully) moves it to its real terminal state — "sent" — same as any other
+    // immediate-send path in this file (see resendRequest's own sendNow test).
+    expect(result.request.status).toBe("sent");
+    expect(requests).toHaveLength(1);
+    expect(requests[0].sentAt).not.toBeNull();
+  });
+
+  it("throws RequestNotEligibleError and creates nothing when the customer already reviewed this product", async () => {
+    reviews.push({
+      storeId: "store_1",
+      productId: "product_1",
+      reviewerName: "Jordan",
+      reviewerEmail: "jordan@example.com",
+      deletedAt: null,
+    });
+
+    await expect(reviewRequestService.createFromOrder({ ...baseOrder, delayDays: 7 })).rejects.toThrow(
+      RequestNotEligibleError,
+    );
+    expect(requests).toHaveLength(0);
+  });
+
+  it("throws RequestNotEligibleError and creates nothing when a request for this customer/product is already pending", async () => {
+    seedRequest({
+      id: "req_existing",
+      storeId: "store_1",
+      productId: "product_1",
+      email: "jordan@example.com",
+      status: "scheduled",
+    });
+
+    await expect(
+      reviewRequestService.createFromOrder({ ...baseOrder, shopifyOrderId: "9999", delayDays: 7 }),
+    ).rejects.toThrow(RequestNotEligibleError);
+    // Only the one pre-seeded request exists — the ineligible order created nothing.
+    expect(requests).toHaveLength(1);
+  });
+
+  it("throws RequestNotEligibleError and creates nothing when a request for this customer/product was already sent", async () => {
+    seedRequest({
+      id: "req_sent",
+      storeId: "store_1",
+      productId: "product_1",
+      email: "jordan@example.com",
+      status: "sent",
+    });
+
+    await expect(
+      reviewRequestService.createFromOrder({ ...baseOrder, shopifyOrderId: "9999", delayDays: 7 }),
+    ).rejects.toThrow(RequestNotEligibleError);
+    expect(requests).toHaveLength(1);
+  });
+
+  it("throws a real Prisma P2002 (not RequestNotEligibleError) when the (order, product) pair collides for a different customer — the webhook's at-least-once-delivery idempotency case", async () => {
+    // Seeded directly (not via createFromOrder) under a *different* email than baseOrder's, so
+    // getExistingRequestContext(email: jordan@..., productId: product_1) finds nothing and the
+    // eligibility check passes cleanly — only then does the DB's real
+    // @@unique([shopifyOrderId, productId]) constraint (which doesn't care about email at all)
+    // fire, exactly as it would for Shopify redelivering the same fulfillment webhook.
+    seedRequest({
+      id: "req_other_customer",
+      storeId: "store_1",
+      productId: "product_1",
+      email: "someone-else@example.com",
+      shopifyOrderId: baseOrder.shopifyOrderId,
+      shopifyLineItemId: baseOrder.shopifyLineItemId,
+      source: "order",
+      status: "scheduled",
+    });
+
+    await expect(reviewRequestService.createFromOrder({ ...baseOrder, delayDays: 7 })).rejects.toMatchObject({
+      code: "P2002",
+    });
+    // No second row was created for the same (order, product) pair.
+    expect(requests).toHaveLength(1);
+  });
+
+  it("never leaks into another store — an eligible order for store_2 is scoped correctly even when store_1 has a matching pending request", async () => {
+    seedRequest({
+      id: "req_store1",
+      storeId: "store_1",
+      productId: "product_1",
+      email: "jordan@example.com",
+      status: "scheduled",
+    });
+
+    const result = await reviewRequestService.createFromOrder({
+      storeId: "store_2",
+      productId: "product_2",
+      shopifyOrderId: "5001",
+      shopifyLineItemId: "1",
+      orderNumber: "#5001",
+      email: "jordan@example.com",
+      name: "Jordan Avery",
+      delayDays: 7,
+    });
+
+    expect(result.request.status).toBe("scheduled");
+    expect(requests.filter((r) => r.storeId === "store_2")).toHaveLength(1);
+  });
+
+  it("treats a negative delayDays as 0 (immediate send) rather than a negative scheduled date", async () => {
+    const result = await reviewRequestService.createFromOrder({ ...baseOrder, delayDays: -5 });
+
+    expect(result.request.status).toBe("sent");
+    expect(requests[0].delayDays).toBe(0);
   });
 });
 
