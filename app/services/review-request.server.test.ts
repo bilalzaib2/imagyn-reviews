@@ -106,6 +106,9 @@ function matchesInOrExact(value: unknown, clause: unknown): boolean {
   if (typeof clause === "object" && clause !== null && "in" in clause) {
     return (clause as { in: unknown[] }).in.includes(value);
   }
+  if (typeof clause === "object" && clause !== null && "not" in clause) {
+    return value !== (clause as { not: unknown }).not;
+  }
   return value === clause;
 }
 
@@ -118,6 +121,10 @@ function matchesRequestWhere(row: FakeRequest, where: Record<string, unknown>): 
     const status = where.status as string | { in?: string[] };
     if (typeof status === "string" && row.status !== status) return false;
     if (typeof status === "object" && status.in && !status.in.includes(row.status)) return false;
+  }
+  if (where.updatedAt !== undefined) {
+    const clause = where.updatedAt as { lt?: Date };
+    if (clause.lt && !(row.updatedAt < clause.lt)) return false;
   }
   return true;
 }
@@ -203,11 +210,13 @@ vi.mock("../db.server", () => ({
         async ({
           where,
           orderBy,
+          take,
         }: {
           where: Record<string, unknown>;
           orderBy?: Array<Record<string, "asc" | "desc">>;
+          take?: number;
         }) => {
-          const rows = requests.filter((r) => matchesRequestWhere(r, where));
+          let rows = requests.filter((r) => matchesRequestWhere(r, where));
           if (orderBy && orderBy.length > 0) {
             const [primary] = orderBy;
             const [field, dir] = Object.entries(primary)[0];
@@ -221,11 +230,19 @@ vi.mock("../db.server", () => ({
               return dir === "asc" ? comparison : -comparison;
             });
           }
+          if (typeof take === "number") {
+            rows = rows.slice(0, take);
+          }
           return rows.map(withInclude);
         },
       ),
       count: vi.fn(async ({ where }: { where: { storeId: string } }) => {
         return requests.filter((r) => r.storeId === where.storeId).length;
+      }),
+      updateMany: vi.fn(async ({ where, data }: { where: { id: { in: string[] } }; data: Partial<FakeRequest> }) => {
+        const targets = requests.filter((r) => where.id.in.includes(r.id));
+        targets.forEach((row) => Object.assign(row, data));
+        return { count: targets.length };
       }),
       groupBy: vi.fn(async ({ where }: { where: { storeId: string } }) => {
         const counts = new Map<string, number>();
@@ -286,6 +303,12 @@ vi.mock("../db.server", () => ({
           return suppressions.find((s) => s.storeId === storeId && s.email === email) ?? null;
         },
       ),
+    },
+    // Backs recordDataAccess (auditLog.server.ts), called by purgeStaleContactInfo — a bare
+    // resolved value is enough here since the audit write itself is covered directly by
+    // auditLog.server.test.ts, not re-tested per call site.
+    auditLog: {
+      create: vi.fn(async () => ({})),
     },
   },
 }));
@@ -1099,5 +1122,169 @@ describe("createManyFromOrders — the Shopify Orders bulk send flow", () => {
     expect(result).toEqual({ created: 1, skippedDuplicates: 0, failed: 1 });
     expect(requests).toHaveLength(1);
     expect(requests[0].shopifyOrderId).toBe("1002");
+  });
+});
+
+// Not called by any scheduler/cron today (see the function's own comment in
+// review-request.server.ts for why: the retention window is a business decision, not an
+// engineering one) — this is coverage for the mechanism itself, so it's correct and ready
+// whenever that decision lands.
+describe("purgeStaleContactInfo — retention purge (dormant, not scheduled)", () => {
+  const DAY_MS = 24 * 60 * 60 * 1000;
+  const now = new Date("2026-09-05T00:00:00Z");
+
+  it("redacts email/name on an old, terminal (completed) request", async () => {
+    seedRequest({
+      id: "req_old_completed",
+      storeId: "store_1",
+      productId: "product_1",
+      email: "jordan@example.com",
+      name: "Jordan Avery",
+      status: "completed",
+      updatedAt: new Date(now.getTime() - 400 * DAY_MS),
+    });
+
+    const result = await reviewRequestService.purgeStaleContactInfo("store_1", { retentionDays: 365, now });
+
+    expect(result).toEqual({ redacted: 1 });
+    expect(requests[0].email).toBeNull();
+    expect(requests[0].name).toBe("Redacted (retention policy)");
+  });
+
+  it("never touches a request younger than the retention window", async () => {
+    seedRequest({
+      id: "req_recent_completed",
+      storeId: "store_1",
+      productId: "product_1",
+      email: "jordan@example.com",
+      status: "completed",
+      updatedAt: new Date(now.getTime() - 10 * DAY_MS),
+    });
+
+    const result = await reviewRequestService.purgeStaleContactInfo("store_1", { retentionDays: 365, now });
+
+    expect(result).toEqual({ redacted: 0 });
+    expect(requests[0].email).toBe("jordan@example.com");
+  });
+
+  it.each(["sent", "delivered", "opened", "clicked", "scheduled", "pending"] as const)(
+    "never touches an old but non-terminal request (status: %s) — it could still become a real review",
+    async (status) => {
+      seedRequest({
+        id: "req_old_active",
+        storeId: "store_1",
+        productId: "product_1",
+        email: "jordan@example.com",
+        status,
+        updatedAt: new Date(now.getTime() - 400 * DAY_MS),
+      });
+
+      const result = await reviewRequestService.purgeStaleContactInfo("store_1", { retentionDays: 365, now });
+
+      expect(result).toEqual({ redacted: 0 });
+      expect(requests[0].email).toBe("jordan@example.com");
+    },
+  );
+
+  it("redacts an old, terminal request regardless of whether it's failed or cancelled, not just completed", async () => {
+    seedRequest({
+      id: "req_old_failed",
+      storeId: "store_1",
+      productId: "product_1",
+      email: "a@example.com",
+      status: "failed",
+      updatedAt: new Date(now.getTime() - 400 * DAY_MS),
+    });
+    seedRequest({
+      id: "req_old_cancelled",
+      storeId: "store_1",
+      productId: "product_1",
+      email: "b@example.com",
+      status: "cancelled",
+      updatedAt: new Date(now.getTime() - 400 * DAY_MS),
+    });
+
+    const result = await reviewRequestService.purgeStaleContactInfo("store_1", { retentionDays: 365, now });
+
+    expect(result).toEqual({ redacted: 2 });
+  });
+
+  it("never touches Review content — only ReviewRequest's own contact fields", async () => {
+    reviews.push({
+      storeId: "store_1",
+      productId: "product_1",
+      reviewerName: "Jordan Avery",
+      reviewerEmail: "jordan@example.com",
+      deletedAt: null,
+    });
+    seedRequest({
+      id: "req_old_completed",
+      storeId: "store_1",
+      productId: "product_1",
+      email: "jordan@example.com",
+      status: "completed",
+      updatedAt: new Date(now.getTime() - 400 * DAY_MS),
+    });
+
+    await reviewRequestService.purgeStaleContactInfo("store_1", { retentionDays: 365, now });
+
+    expect(reviews[0].reviewerEmail).toBe("jordan@example.com");
+    expect(reviews[0].reviewerName).toBe("Jordan Avery");
+  });
+
+  it("is idempotent — running it twice never double-counts an already-redacted row", async () => {
+    seedRequest({
+      id: "req_old_completed",
+      storeId: "store_1",
+      productId: "product_1",
+      email: "jordan@example.com",
+      status: "completed",
+      updatedAt: new Date(now.getTime() - 400 * DAY_MS),
+    });
+
+    const first = await reviewRequestService.purgeStaleContactInfo("store_1", { retentionDays: 365, now });
+    const second = await reviewRequestService.purgeStaleContactInfo("store_1", { retentionDays: 365, now });
+
+    expect(first).toEqual({ redacted: 1 });
+    expect(second).toEqual({ redacted: 0 });
+  });
+
+  it("respects the bound (limit) — never redacts more rows than requested in one call", async () => {
+    for (let i = 0; i < 5; i += 1) {
+      seedRequest({
+        id: `req_old_${i}`,
+        storeId: "store_1",
+        productId: "product_1",
+        email: `person${i}@example.com`,
+        status: "completed",
+        updatedAt: new Date(now.getTime() - 400 * DAY_MS),
+      });
+    }
+
+    const result = await reviewRequestService.purgeStaleContactInfo("store_1", { retentionDays: 365, limit: 2, now });
+
+    expect(result).toEqual({ redacted: 2 });
+    expect(requests.filter((r) => r.email === null)).toHaveLength(2);
+  });
+
+  it("never leaks into another store", async () => {
+    seedRequest({
+      id: "req_store2",
+      storeId: "store_2",
+      productId: "product_2",
+      email: "other@example.com",
+      status: "completed",
+      updatedAt: new Date(now.getTime() - 400 * DAY_MS),
+    });
+
+    const result = await reviewRequestService.purgeStaleContactInfo("store_1", { retentionDays: 365, now });
+
+    expect(result).toEqual({ redacted: 0 });
+    expect(requests[0].email).toBe("other@example.com");
+  });
+
+  it("rejects an invalid retentionDays instead of silently purging everything", async () => {
+    await expect(reviewRequestService.purgeStaleContactInfo("store_1", { retentionDays: 0 })).rejects.toThrow();
+    await expect(reviewRequestService.purgeStaleContactInfo("store_1", { retentionDays: -5 })).rejects.toThrow();
   });
 });

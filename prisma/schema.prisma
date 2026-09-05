@@ -48,6 +48,7 @@ model Store {
   emailTemplates EmailTemplate[]
   achievements Achievement[]
   emailSuppressions EmailSuppression[]
+  auditLogs    AuditLog[]
 
   // Order-lifecycle automation settings (see review-request.server.ts's createFromOrder and
   // webhooks.fulfillments.create.tsx). autoRequestTrigger is a plain string, not an enum, so
@@ -568,4 +569,45 @@ model EmailSuppression {
 
   @@unique([storeId, email])
   @@index([storeId, email])
+}
+
+// Minimal audit trail for MEANINGFUL access to protected customer data — the GDPR compliance
+// webhooks (webhooks.compliance.tsx) and bulk exports of reviewer contact fields
+// (reviewImportExport.server.ts's exportReviewsToCsv), not a general query log. See
+// docs/DATA_RETENTION_POLICY.md and app/services/auditLog.server.ts's own header comment for
+// the full "what gets logged and why" reasoning and the hard rule this table is built around:
+// no email, name, token, or raw content is ever written here — `resource` is always a fixed
+// category string and `detail` is short, non-PII context (e.g. a row count), so this table is
+// never itself a privacy liability to have to protect.
+model AuditLog {
+  id        String   @id @default(cuid())
+
+  storeId   String?
+  store     Store?   @relation(fields: [storeId], references: [id], onDelete: SetNull)
+
+  // What triggered the access — e.g. "webhook:customers_data_request",
+  // "webhook:customers_redact", "webhook:shop_redact", "admin:csv_export",
+  // "system:retention_purge". Identifies the trigger, not an individual staff member — this
+  // app has no login system of its own (see docs/ACCESS_CONTROL.md); every merchant-side
+  // action is already scoped by Shopify's own OAuth session at the storeId level.
+  actor     String
+
+  // e.g. "data_request", "redact", "export", "purge".
+  action    String
+
+  // A category, never a specific record's PII — e.g. "review.contact_fields",
+  // "reviewRequest.contact_fields".
+  resource  String
+
+  success   Boolean
+
+  // Short, non-PII context only (e.g. "42 rows", "no matching store"). Enforced by
+  // convention in auditLog.server.ts, the single write path for this table, not a DB
+  // constraint — same convention as every other free-text field in this schema.
+  detail    String?
+
+  createdAt DateTime @default(now())
+
+  @@index([storeId, createdAt])
+  @@index([action, createdAt])
 }

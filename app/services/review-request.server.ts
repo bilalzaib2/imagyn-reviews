@@ -4,6 +4,7 @@ import { getEmailProvider } from "./notifications/provider.server";
 import { buildReviewRequestEmail } from "./notifications/templates.server";
 import { emailTemplateService } from "./emailTemplate.server";
 import { buildUnsubscribeUrl, emailSuppressionService } from "./emailSuppression.server";
+import { recordDataAccess } from "./auditLog.server";
 
 // Full lifecycle: pending -> scheduled -> sending -> sent -> delivered -> opened -> clicked
 // -> completed, with failed/cancelled as terminal branches off any pre-completed state.
@@ -1063,5 +1064,66 @@ export const reviewRequestService = {
       data: { tokenUsedAt: new Date(), reviewedAt: new Date(), status: "completed" },
       include: REQUEST_INCLUDE,
     }).then(mapRequestRecord);
+  },
+
+  // Retention purge for ReviewRequest's own personal-data fields (email/name) — see
+  // docs/DATA_RETENTION_POLICY.md for the full policy this implements. Deliberately NOT wired
+  // into the scheduler (reviewRequestScheduler.server.ts) or called anywhere yet: the actual
+  // retention window (retentionDays) is a business/legal decision, not an engineering one —
+  // see the policy doc for why this ships built and tested but dormant, the same pattern
+  // ORDER_AUTOMATION_ENABLED already established for a different pending decision.
+  //
+  // Reuses the exact same redaction shape webhooks.compliance.tsx's handleCustomersRedact
+  // already uses in production (null email, "Redacted customer" name) — this is the same
+  // real, tested erasure mechanism, just triggered by age instead of by a Shopify webhook.
+  // Only ever touches a genuinely finished request (completed/failed/cancelled) — never
+  // "sent"/"delivered"/"opened"/"clicked", since those could still plausibly turn into a
+  // real review and the personal data may still be in legitimate use. Never touches Review
+  // rows at all — a customer's review content belongs to the merchant's storefront, not to
+  // the request that solicited it (same distinction handleCustomersRedact already draws).
+  async purgeStaleContactInfo(
+    storeId: string,
+    options: { retentionDays: number; limit?: number; now?: Date },
+  ): Promise<{ redacted: number }> {
+    const { retentionDays, limit = 500, now = new Date() } = options;
+
+    if (!Number.isFinite(retentionDays) || retentionDays <= 0) {
+      throw new Error("retentionDays must be a positive number.");
+    }
+
+    const cutoff = new Date(now.getTime() - retentionDays * 24 * 60 * 60 * 1000);
+
+    const candidates = await prisma.reviewRequest.findMany({
+      where: {
+        storeId,
+        status: { in: ["completed", "failed", "cancelled"] },
+        updatedAt: { lt: cutoff },
+        // Skip rows already redacted (by this purge or by a prior customers/redact webhook)
+        // so a repeated run never re-touches the same row or inflates the count.
+        email: { not: null },
+      },
+      select: { id: true },
+      take: limit,
+    });
+
+    if (candidates.length === 0) {
+      return { redacted: 0 };
+    }
+
+    const result = await prisma.reviewRequest.updateMany({
+      where: { id: { in: candidates.map((row) => row.id) } },
+      data: { email: null, name: "Redacted (retention policy)" },
+    });
+
+    await recordDataAccess({
+      storeId,
+      actor: "system:retention_purge",
+      action: "purge",
+      resource: "reviewRequest.contact_fields",
+      success: true,
+      detail: `${result.count} row(s), retentionDays=${retentionDays}`,
+    });
+
+    return { redacted: result.count };
   },
 };

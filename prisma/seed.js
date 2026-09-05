@@ -1,5 +1,24 @@
 import { PrismaClient } from "@prisma/client";
 
+// Hard safety gate — this script writes fake demo stores/products/reviews and has no
+// business ever running against the real database real merchants' data lives in. Two
+// independent signals, either one is enough to refuse: NODE_ENV=production is what
+// Railway's own docker-start script sets at runtime (see package.json's "setup"/"start"),
+// and RAILWAY_ENVIRONMENT is Railway's own auto-injected variable, present on every
+// Railway-hosted process regardless of NODE_ENV. Neither is guessed — both were confirmed
+// present in this app's real production environment. See DATABASE_SAFETY.md for the full
+// policy this codifies; that document already treats DATABASE_URL as production by default,
+// this is the code-level enforcement of the same rule for this one specific command.
+if (process.env.NODE_ENV === "production" || process.env.RAILWAY_ENVIRONMENT) {
+  console.error(
+    "\n[prisma/seed.js] Refusing to run: this looks like a production environment " +
+      "(NODE_ENV=production and/or RAILWAY_ENVIRONMENT is set). This script writes fake " +
+      "demo data and must never run against a real merchant database. If this really is a " +
+      "disposable, non-production database, run the seed with both of those unset.\n",
+  );
+  process.exit(1);
+}
+
 const prisma = new PrismaClient();
 
 const stores = [

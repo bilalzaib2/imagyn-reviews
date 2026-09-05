@@ -1,6 +1,7 @@
 import type { ActionFunctionArgs } from "react-router";
 import { authenticate } from "../shopify.server";
 import { deleteStore, getSlug, getStoreBySlug } from "../services/store.server";
+import { recordDataAccess } from "../services/auditLog.server";
 import db from "../db.server";
 
 // Shopify's three mandatory GDPR compliance topics (customers/data_request, customers/redact,
@@ -30,6 +31,14 @@ async function handleCustomersDataRequest(shop: string, payload: CustomersDataRe
 
   if (!store || !email) {
     console.log(`[GDPR] customers/data_request for ${shop}: no matching store or customer email on file.`);
+    await recordDataAccess({
+      storeId: store?.id ?? null,
+      actor: "webhook:customers_data_request",
+      action: "data_request",
+      resource: "review.contact_fields",
+      success: true,
+      detail: "no matching store or customer email on file",
+    });
     return;
   }
 
@@ -43,6 +52,15 @@ async function handleCustomersDataRequest(shop: string, payload: CustomersDataRe
       `${reviews.length} review(s), ${reviewRequests.length} review request(s) on file.`,
     { reviewIds: reviews.map((review) => review.id), reviewRequestIds: reviewRequests.map((item) => item.id) },
   );
+
+  await recordDataAccess({
+    storeId: store.id,
+    actor: "webhook:customers_data_request",
+    action: "data_request",
+    resource: "review.contact_fields",
+    success: true,
+    detail: `${reviews.length} review(s), ${reviewRequests.length} review request(s) on file`,
+  });
 }
 
 // Redacts (not deletes) the customer's identifying fields — their review content is the
@@ -53,6 +71,14 @@ async function handleCustomersRedact(shop: string, payload: CustomersRedactPaylo
 
   if (!store || !email) {
     console.log(`[GDPR] customers/redact for ${shop}: no matching store or customer email — nothing to redact.`);
+    await recordDataAccess({
+      storeId: store?.id ?? null,
+      actor: "webhook:customers_redact",
+      action: "redact",
+      resource: "review.contact_fields",
+      success: true,
+      detail: "no matching store or customer email — nothing to redact",
+    });
     return;
   }
 
@@ -71,6 +97,15 @@ async function handleCustomersRedact(shop: string, payload: CustomersRedactPaylo
     `[GDPR] customers/redact for ${shop}, customer ${payload.customer.id}: ` +
       `redacted ${redactedReviews.count} review(s), ${redactedRequests.count} review request(s).`,
   );
+
+  await recordDataAccess({
+    storeId: store.id,
+    actor: "webhook:customers_redact",
+    action: "redact",
+    resource: "review.contact_fields",
+    success: true,
+    detail: `redacted ${redactedReviews.count} review(s), ${redactedRequests.count} review request(s)`,
+  });
 }
 
 // Fires ~48 hours after uninstall. Every model in this schema cascades from Store (onDelete:
@@ -85,8 +120,29 @@ async function handleShopRedact(shop: string) {
 
   if (!store) {
     console.log(`[GDPR] shop/redact for ${shop}: no matching store — nothing to redact.`);
+    await recordDataAccess({
+      storeId: null,
+      actor: "webhook:shop_redact",
+      action: "redact",
+      resource: "store.all_data",
+      success: true,
+      detail: "no matching store — nothing to redact",
+    });
     return;
   }
+
+  // Logged before the delete, not after — deleteStore cascades to AuditLog too (onDelete:
+  // SetNull only detaches storeId, it doesn't block the delete from completing first), so
+  // this row is what actually survives as evidence the redaction happened; storeId reads
+  // back as null afterward, which is expected and correct.
+  await recordDataAccess({
+    storeId: store.id,
+    actor: "webhook:shop_redact",
+    action: "redact",
+    resource: "store.all_data",
+    success: true,
+    detail: "deleted store and all related data",
+  });
 
   await deleteStore(store.id);
   console.log(`[GDPR] shop/redact for ${shop}: deleted store ${store.id} and all related data.`);
@@ -115,6 +171,26 @@ export const action = async ({ request }: ActionFunctionArgs) => {
     return new Response();
   } catch (error) {
     console.error(`Failed to process ${topic} webhook for ${shop}:`, error);
+
+    // Only the three real compliance topics represent an actual protected-data-access
+    // attempt worth auditing — an unrecognized topic never reaches a handler above, so an
+    // error here couldn't be a failed data/redact operation in the first place.
+    if (topic === "CUSTOMERS_DATA_REQUEST" || topic === "CUSTOMERS_REDACT" || topic === "SHOP_REDACT") {
+      await recordDataAccess({
+        storeId: null,
+        actor:
+          topic === "CUSTOMERS_DATA_REQUEST"
+            ? "webhook:customers_data_request"
+            : topic === "CUSTOMERS_REDACT"
+              ? "webhook:customers_redact"
+              : "webhook:shop_redact",
+        action: topic === "CUSTOMERS_DATA_REQUEST" ? "data_request" : "redact",
+        resource: topic === "SHOP_REDACT" ? "store.all_data" : "review.contact_fields",
+        success: false,
+        detail: error instanceof Error ? error.name : "unknown error",
+      });
+    }
+
     return new Response();
   }
 };

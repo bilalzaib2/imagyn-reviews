@@ -5,6 +5,7 @@ import { createReview } from "./review.server";
 import { getImporter } from "./importers/provider.server";
 import { ProductMatcher, type ProductMatchTier } from "./importers/productMatcher.server";
 import type { ImportSource, ParsedReviewRow } from "./importers/types";
+import { recordDataAccess } from "./auditLog.server";
 
 export interface ImportRowIssue {
   row: number;
@@ -387,6 +388,19 @@ export async function exportReviewsToCsv(storeId: string): Promise<string> {
     reply: review.reply ?? "",
     reply_date: review.repliedAt?.toISOString() ?? "",
   }));
+
+  // A meaningful bulk-export of reviewer contact fields (reviewer_email is a real column
+  // above) — exactly the kind of protected-data access worth an audit trail, unlike a single
+  // review's own read in the admin list/detail view. Row count only, never which rows or
+  // any of their content.
+  await recordDataAccess({
+    storeId,
+    actor: "admin:csv_export",
+    action: "export",
+    resource: "review.contact_fields",
+    success: true,
+    detail: `${reviews.length} row(s)`,
+  });
 
   return Papa.unparse({ fields: [...EXPORT_COLUMNS], data });
 }

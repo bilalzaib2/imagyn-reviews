@@ -48,9 +48,31 @@ with no confirmation step in between.
 - Hand-write the migration SQL for human review instead of auto-generating it against a
   live connection.
 
+## Test/production data separation
+
+`DATABASE_URL` has historically been the **same production Railway database** for both the
+deployed app and local development (confirmed in `docs/OPERATIONS.md`'s infrastructure map:
+`DATABASE_PUBLIC_URL` — the external variant of the production connection string — "used in
+local `.env`"). That is the actual root cause this section addresses, not a hypothetical.
+
+- **Automated tests never touch this at all** — every `*.test.ts` file either mocks
+  `../db.server` directly or doesn't import anything that reaches Prisma (verified across
+  all 30 test files as of 2026-09). `npm test` cannot write to any database, production or
+  otherwise, by construction.
+- **`prisma/seed.js` has a hard runtime guard**: it refuses to run (exits non-zero before
+  ever calling Prisma) if `NODE_ENV=production` or `RAILWAY_ENVIRONMENT` is set — both are
+  real signals confirmed present in this app's actual production environment, not guessed.
+  This stops the one command that both writes real rows and is trivial to run by hand.
+- **Local development itself still requires a genuinely separate database** — the seed
+  guard only stops one specific script; `shopify app dev`, a manually-run `prisma migrate
+  dev`, or the app itself talking to Postgres in the ordinary course of local testing all
+  still use whatever `DATABASE_URL` is in your `.env`. See `.env.example`'s `DATABASE_URL`
+  comment for how to provision a real separate instance. **This part is an operational step
+  each developer must take — a comment and a seed guard cannot force a human to actually
+  change their local `.env`.**
+
 ## Workflow this protects
 
-- **Development seed strategy, backup strategy, and production guardrails** are tracked
-  separately as recommendations pending implementation — see the recovery report /
-  project notes for the current proposal. This file covers the non-negotiable safety
-  rules only.
+- **Backup strategy** is tracked separately as a recommendation pending implementation —
+  it depends on Railway's own managed-Postgres backup capabilities, which are
+  infrastructure/account configuration, not something this repo's code controls.

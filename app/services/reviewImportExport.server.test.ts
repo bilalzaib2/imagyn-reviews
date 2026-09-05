@@ -86,11 +86,25 @@ vi.mock("../db.server", () => ({
         fakeReviews.push(review);
         return review;
       }),
+      // Only exportReviewsToCsv's own test below uses this — every other test in this file
+      // exercises the import path, which never lists reviews back out.
+      findMany: vi.fn(async ({ where }: { where: Record<string, unknown> }) =>
+        fakeReviews
+          .filter((review) => matchesWhere(review, where))
+          .map((review) => ({ ...review, product: null, title: null, createdAt: new Date(), repliedAt: null })),
+      ),
     },
   },
 }));
 
-const { importReviews } = await import("./reviewImportExport.server");
+const recordDataAccessMock = vi.fn<(entry: Record<string, unknown>) => Promise<undefined>>(
+  async () => undefined,
+);
+vi.mock("./auditLog.server", () => ({
+  recordDataAccess: recordDataAccessMock,
+}));
+
+const { exportReviewsToCsv, importReviews } = await import("./reviewImportExport.server");
 
 function seedProduct(overrides: Partial<FakeProduct>): FakeProduct {
   const product: FakeProduct = {
@@ -437,5 +451,55 @@ describe("importReviews — Judge.me", () => {
     const second = await importReviews("store_1", "csv", csv);
     expect(second.duplicates).toBe(1000);
     expect(fakeReviews).toHaveLength(1000);
+  });
+});
+
+describe("exportReviewsToCsv — audit trail for a bulk contact-field export", () => {
+  it("records a data-access audit entry with a row count, never the actual reviewer data", async () => {
+    recordDataAccessMock.mockClear();
+    fakeReviews.push(
+      {
+        id: "review_1",
+        storeId: "store_1",
+        productId: "product_1",
+        externalId: null,
+        reviewerName: "Jordan Avery",
+        content: "Great product",
+        rating: 5,
+        status: "APPROVED",
+        isPublished: true,
+        verifiedPurchase: true,
+        deletedAt: null,
+      },
+      {
+        id: "review_2",
+        storeId: "store_1",
+        productId: "product_1",
+        externalId: null,
+        reviewerName: "Morgan",
+        content: "Good",
+        rating: 4,
+        status: "APPROVED",
+        isPublished: true,
+        verifiedPurchase: false,
+        deletedAt: null,
+      },
+    );
+
+    const csv = await exportReviewsToCsv("store_1");
+
+    expect(csv).toContain("Jordan Avery");
+    expect(recordDataAccessMock).toHaveBeenCalledTimes(1);
+    expect(recordDataAccessMock).toHaveBeenCalledWith({
+      storeId: "store_1",
+      actor: "admin:csv_export",
+      action: "export",
+      resource: "review.contact_fields",
+      success: true,
+      detail: "2 row(s)",
+    });
+    // The audit call itself never receives the reviewer's name/email — only a count.
+    const callArg = recordDataAccessMock.mock.calls[0][0];
+    expect(JSON.stringify(callArg)).not.toContain("Jordan");
   });
 });

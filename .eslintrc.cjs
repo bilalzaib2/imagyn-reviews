@@ -84,6 +84,7 @@ module.exports = {
         ".graphqlrc.{js,ts}",
         "shopify.server.{js,ts}",
         "**/*.server.{js,ts}",
+        "prisma/seed.js",
       ],
       env: {
         node: true,
