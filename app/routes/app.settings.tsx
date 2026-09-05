@@ -48,15 +48,13 @@ type SettingsGroup = {
   items: SettingsLink[];
 };
 
-// Claim the click before App Bridge's own same-origin anchor interception can (see the sidebar
-// comment below for why a plain <a href> alone isn't enough) while still letting modified clicks
-// (new tab, new window, etc.) fall through to native anchor behavior untouched.
-function handleSidebarLinkClick(event: MouseEvent<HTMLAnchorElement>, href: string) {
-  if (event.defaultPrevented || event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) {
+// See the sidebar comment below for why this is a <button>, not an <a href>, and why it
+// appends the current query string to the destination.
+function handleSidebarLinkClick(event: MouseEvent<HTMLButtonElement>, href: string, search: string) {
+  if (event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) {
     return;
   }
-  event.preventDefault();
-  window.location.assign(href);
+  window.location.assign(`${href}${search}`);
 }
 
 export default function SettingsWorkspace() {
@@ -122,44 +120,41 @@ export default function SettingsWorkspace() {
         </header>
 
         <div className={styles.workspace}>
-          {/* Every Settings navigation link below is a REAL, plain <a href> — not a React
-              Router <Link>/<NavLink> — and deliberately so. Shopify Admin's embedded-app shell
-              owns the outer iframe URL via the <NavMenu> registration in app.tsx, which only
-              knows about the four PRIMARY nav items; it silently reverts any *other* client-side
-              history.pushState it doesn't recognize back to its own last-known URL a few hundred
-              ms later (already reproduced and documented for the Requests page's search/filter
-              state — see app.requests.tsx's identical comment; that page's fix was to route
-              through a fetcher instead of touching window.history at all). A <NavLink> click
-              here hits the exact same class of bug: confirmed live — clicking a Settings
-              subsection correctly changed the URL and content, but left the SIDEBAR'S OWN active
-              highlight on a stale, unrelated item once Shopify's shell fought the pushState.
-              A real anchor triggers a genuine top-level navigation with no synthetic history
-              entry for the shell to revert, which is why this reads `location.pathname` (fresh
-              on every real navigation, always correct) instead of NavLink's own isActive.
+          {/* Settings navigation is a real, full top-level navigation of this app's own iframe
+              (never a React Router <Link>/<NavLink> SPA transition) — deliberately so. Shopify
+              Admin's embedded-app shell owns the outer iframe URL via the <NavMenu> registration
+              in app.tsx, which only knows about the four PRIMARY nav items; it silently reverts
+              any *other* client-side history.pushState it doesn't recognize back to its own
+              last-known URL a few hundred ms later (already reproduced and documented for the
+              Requests page's search/filter state — see app.requests.tsx's identical comment).
 
-              onClick below: a plain <a> left-click, INSIDE this embedded app's own iframe
-              document, is still a click App Bridge's own script (loaded in this same document to
-              talk to the parent Admin frame) can act on — App Bridge documents that it intercepts
-              same-origin anchor clicks in an embedded app to manage navigation itself instead of
-              letting the browser do a normal top-level load. That's the leading explanation for
-              the reported bug (a Settings sub-nav click rendering a bare "200" instead of the
-              page) — App Bridge's own interceptor handling the click and surfacing the raw
-              response status instead of our HTML — but the App Bridge script itself runs from
-              Shopify's CDN, not this repo, so its interception logic isn't something this codebase
-              can directly inspect or unit-test; this fix removes the anchor click as the
-              navigation trigger entirely rather than depending on that theory being exactly right.
-              Calling preventDefault() ourselves and doing the navigation via
-              window.location.assign is the same pattern app.tsx's NavMenu items already use to
-              claim a click before any other listener acts on it (see handleNavClick below) — the
-              only difference is we want a genuine full navigation here, not a React Router SPA
-              transition, for the shell-reversion reason above, so we assign the location
-              ourselves rather than calling navigate(). */}
+              Two things had to be true at once to get a real navigation right, and earlier
+              attempts here only got one of them:
+              1. It must not be a native <a href> click. A previous version of this file used a
+                 plain anchor for exactly this reason, reasoning that App Bridge (loaded in this
+                 same iframe document to talk to the parent Admin frame) intercepts same-origin
+                 anchor clicks to manage navigation itself. Switching the anchor's own onClick to
+                 preventDefault + window.location.assign did NOT fix it, and comparing against
+                 Railway's live request log proved why: clicking never produced a second HTTP
+                 request at all — whatever intercepted the click did so before any of our handler
+                 code, native or scripted, ever ran. Rendering these as real <button> elements
+                 (no href, no anchor semantics for anything to match against) removes that
+                 surface entirely.
+              2. The destination must carry the current embedded-context query string. Every
+                 param Shopify Admin puts on this app's iframe URL (host, embedded, id_token,
+                 hmac, shop, session, timestamp, locale) lives in the query string, not the path.
+                 A bare `window.location.assign("/app/settings/requests")` — no query string —
+                 drops all of it, which is a different, real bug on its own regardless of (1).
+                 app.tsx's own primary NavMenu items already do this correctly (see
+                 `appContextQuery` / handleNavClick below); this mirrors that by appending
+                 `location.search` (fresh on every render, always the current context) to every
+                 destination here, including the mobile <select> below. */}
           <select
             className={styles.mobileSectionSelect}
             aria-label="Settings sections"
             value={location.pathname}
             onChange={(event) => {
-              window.location.href = event.target.value;
+              window.location.assign(`${event.target.value}${location.search}`);
             }}
           >
             <option value="/app/settings">Overview</option>
@@ -177,9 +172,9 @@ export default function SettingsWorkspace() {
 
           <nav className={styles.sidebar} aria-label="Settings sections">
             <div className={styles.sidebarGroup}>
-              <a
-                href="/app/settings"
-                onClick={(event) => handleSidebarLinkClick(event, "/app/settings")}
+              <button
+                type="button"
+                onClick={(event) => handleSidebarLinkClick(event, "/app/settings", location.search)}
                 aria-current={location.pathname === "/app/settings" ? "page" : undefined}
                 className={
                   location.pathname === "/app/settings"
@@ -188,7 +183,7 @@ export default function SettingsWorkspace() {
                 }
               >
                 Overview
-              </a>
+              </button>
             </div>
             {groups.map((group) => (
               <div key={group.label} className={styles.sidebarGroup}>
@@ -196,16 +191,16 @@ export default function SettingsWorkspace() {
                 {group.items.map((item) => {
                   const isActive = item.internal && location.pathname === item.href;
                   return (
-                    <a
+                    <button
                       key={item.href}
-                      href={item.href}
-                      onClick={(event) => handleSidebarLinkClick(event, item.href)}
+                      type="button"
+                      onClick={(event) => handleSidebarLinkClick(event, item.href, location.search)}
                       aria-current={isActive ? "page" : undefined}
                       className={isActive ? `${styles.sidebarLink} ${styles.sidebarLinkActive}` : styles.sidebarLink}
                     >
                       {item.label}
                       {item.tag ? <span className={styles.sidebarTag}>{item.tag}</span> : null}
-                    </a>
+                    </button>
                   );
                 })}
               </div>
