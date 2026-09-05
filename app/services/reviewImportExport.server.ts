@@ -359,17 +359,36 @@ const EXPORT_COLUMNS = [
   "reply_date",
 ] as const;
 
+// A basic DLP control, not a real-world limitation — no Imagyn store has ever had a review
+// count anywhere near this in production. Bounds how much reviewer contact data (name/email)
+// a single CSV export can pull out of the database in one call, so an unbounded export can
+// never happen even if triggered many times or against an unexpectedly large store. Exported
+// rows are still ordered oldest-first (unchanged), so a capped export is always "the first N
+// reviews," a stable and reproducible subset, not an arbitrary one.
+export const MAX_EXPORT_ROWS = 10_000;
+
+export interface ExportReviewsResult {
+  csv: string;
+  totalCount: number;
+  exportedCount: number;
+  truncated: boolean;
+}
+
 // Uses the same column names importReviews accepts, so an exported file can be re-imported
 // (into this store or another) without edits. Includes product_id/product_handle alongside the
 // display-only product title, so a re-import always resolves at tier 1 or tier 3 of the
 // matcher instead of falling back to title matching, and external_id so a re-import of an
 // exported file is itself idempotent.
-export async function exportReviewsToCsv(storeId: string): Promise<string> {
-  const reviews = await prisma.review.findMany({
-    where: { storeId, deletedAt: null },
-    include: { product: { select: { name: true, shopifyProductId: true, handle: true } } },
-    orderBy: { createdAt: "asc" },
-  });
+export async function exportReviewsToCsv(storeId: string): Promise<ExportReviewsResult> {
+  const [totalCount, reviews] = await Promise.all([
+    prisma.review.count({ where: { storeId, deletedAt: null } }),
+    prisma.review.findMany({
+      where: { storeId, deletedAt: null },
+      include: { product: { select: { name: true, shopifyProductId: true, handle: true } } },
+      orderBy: { createdAt: "asc" },
+      take: MAX_EXPORT_ROWS,
+    }),
+  ]);
 
   const data = reviews.map((review) => ({
     product: review.product?.name ?? review.productTitle ?? "",
@@ -389,6 +408,8 @@ export async function exportReviewsToCsv(storeId: string): Promise<string> {
     reply_date: review.repliedAt?.toISOString() ?? "",
   }));
 
+  const truncated = totalCount > reviews.length;
+
   // A meaningful bulk-export of reviewer contact fields (reviewer_email is a real column
   // above) — exactly the kind of protected-data access worth an audit trail, unlike a single
   // review's own read in the admin list/detail view. Row count only, never which rows or
@@ -399,8 +420,15 @@ export async function exportReviewsToCsv(storeId: string): Promise<string> {
     action: "export",
     resource: "review.contact_fields",
     success: true,
-    detail: `${reviews.length} row(s)`,
+    detail: truncated
+      ? `${reviews.length} of ${totalCount} row(s) (capped at ${MAX_EXPORT_ROWS})`
+      : `${reviews.length} row(s)`,
   });
 
-  return Papa.unparse({ fields: [...EXPORT_COLUMNS], data });
+  return {
+    csv: Papa.unparse({ fields: [...EXPORT_COLUMNS], data }),
+    totalCount,
+    exportedCount: reviews.length,
+    truncated,
+  };
 }

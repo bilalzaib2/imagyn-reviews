@@ -35,32 +35,38 @@ customer request, these fields live as long as the review does (category 1, abov
 
 **Decision needed:** none. This is the correct, Shopify-mandated behavior as-is.
 
-### 3. ReviewRequest's contact fields (email, name) — the one category with no active retention window today
+### 3. ReviewRequest's contact fields (email, name) — 90-day retention, enforced
 
-**What:** `ReviewRequest.email`, `name`, `orderNumber`. This data exists solely to *deliver*
-a request/reminder email — once a request reaches a terminal state (`completed`, `failed`,
-or `cancelled`), there is no further operational reason to keep the raw email address
-indefinitely.
+**What:** `ReviewRequest.email`, `name`. This data exists solely to *deliver* a
+request/reminder email — once a request reaches a terminal state (`completed`, `failed`, or
+`cancelled`), there is no further operational reason to keep the raw email address.
 
-**Current behavior:** kept indefinitely unless a `CUSTOMERS_REDACT` webhook fires for that
-exact email. There is no age-based purge.
+**Decision (made 2026-09-08):** **90 days**, measured from the request's `updatedAt` (i.e.
+90 days after it last changed — in practice, 90 days after it became terminal, since
+`updatedAt` is what the completion/failure/cancellation itself sets). Chosen as the
+"minimal" option from the three proposed: comfortably past the ~37–45 day natural dead-end
+window every request reaches under default settings (30-day review-link expiry plus the
+default reminder schedule), while leaving a real buffer for manual `resendRequest`/`sendNow`
+activity and short-term support/dispute lookups.
 
-**What's built, not yet enabled:** `reviewRequestService.purgeStaleContactInfo(storeId, {
-retentionDays, limit })` in [`review-request.server.ts`](../app/services/review-request.server.ts) —
-redacts `email`/`name` (same shape as `handleCustomersRedact`: null email, a clearly-marked
-redacted name) on requests that are both **terminal** (`completed`/`failed`/`cancelled` only
-— never `sent`/`delivered`/`opened`/`clicked`, since those could still become a real review)
-and **older than `retentionDays`**, bounded per call by `limit` (default 500), fully logged
-at a category level (row count only — never the email/name being redacted), idempotent, and
-covered by 14 tests in `review-request.server.test.ts`.
+**Mechanism — built, tested, and now enforced:**
+`reviewRequestService.purgeStaleContactInfo(storeId, { retentionDays: 90, limit })` in
+[`review-request.server.ts`](../app/services/review-request.server.ts) redacts `email`/`name`
+(same shape as `handleCustomersRedact`: null email, a clearly-marked redacted name) on
+requests that are both **terminal** (`completed`/`failed`/`cancelled` only — never
+`sent`/`delivered`/`opened`/`clicked`, since those could still become a real review) and
+**older than 90 days**, bounded per call (default limit 500 rows/store/tick), fully audit-
+logged at a category level (row count only, via `AuditLog`/`recordDataAccess` — never the
+email/name being redacted), and idempotent (already-redacted rows are skipped, never
+re-counted).
 
-**Decision needed — business/legal, not engineering:** the actual number of days. This is
-deliberately not hardcoded anywhere and the function is not called by
-`reviewRequestScheduler.server.ts` or anything else — it is built and tested, but dormant,
-exactly like `ORDER_AUTOMATION_ENABLED` was for a different pending decision. Turning this on
-requires: (a) picking `retentionDays` (a reasonable starting point to discuss might be
-12–24 months, but that is a suggestion for discussion, not a recommendation being asserted as
-correct), and (b) wiring one call into the existing scheduler sweep, once (a) is decided.
+**Now wired into the scheduler:** [`reviewRequestScheduler.server.ts`](../app/services/reviewRequestScheduler.server.ts)'s
+`runRetentionPurgeSweep` calls this for every store on the same 5-minute interval as the
+existing request/reminder sweeps (plus once ~10s after boot). `RETENTION_DAYS = 90` is a
+named constant in that file — a single-line change if a future decision ever revises the
+window. Covered by 4 new scheduler-level tests (does it call the mechanism for every store,
+with 90 days, isolating one store's failure from the rest?) on top of the 14 existing tests
+for the mechanism itself.
 
 ### 4. EmailSuppression (unsubscribe records) — retained indefinitely, never purged
 
@@ -97,16 +103,17 @@ Shopify installation is, by definition, still in use.
 |---|---|---|---|
 | Review content | Until shop uninstall | `SHOP_REDACT` cascade | ✅ implemented |
 | Reviewer identity on a Review | Until customer/shop redact | `CUSTOMERS_REDACT` / `SHOP_REDACT` | ✅ implemented |
-| ReviewRequest contact fields | Indefinite (no age purge) | `purgeStaleContactInfo` | 🟡 built + tested, **not enabled** — needs a retention-days decision |
+| ReviewRequest contact fields | **90 days** from `updatedAt`, terminal requests only | `purgeStaleContactInfo`, scheduled via `runRetentionPurgeSweep` | ✅ implemented and enforced |
 | EmailSuppression | Indefinite, by design | None (intentional) | ✅ correct as-is |
 | Session | Until uninstall | `webhooks.app.uninstalled.tsx` / `SHOP_REDACT` | ✅ implemented |
 | Store + cascaded data | Until uninstall | `SHOP_REDACT` | ✅ implemented |
 
 ## What this document deliberately does not do
 
-- It does not pick a number of days for category 3. That's stated above as a real,
-  outstanding business decision — implementing a number here would be guessing at something
-  the person filling out Shopify's questionnaire needs to actually decide.
 - It does not touch `EmailSuppression`'s indefinite retention — that's correct, not a gap.
-- It does not add any new destructive migration, scheduled job, or production behavior
-  change. `purgeStaleContactInfo` exists as a tested, callable function and nothing calls it.
+- The 90-day number for category 3 was a real business decision (made 2026-09-08), not an
+  engineering guess — this document only implements it once decided, per the process
+  documented in the version history of this file.
+- The purge itself only ever redacts `email`/`name` on already-terminal `ReviewRequest`
+  rows — it never deletes a row, never touches `Review` content, and never touches a
+  still-live request that could still become a real review.

@@ -50,26 +50,34 @@ with no confirmation step in between.
 
 ## Test/production data separation
 
-`DATABASE_URL` has historically been the **same production Railway database** for both the
+`DATABASE_URL` had historically been the **same production Railway database** for both the
 deployed app and local development (confirmed in `docs/OPERATIONS.md`'s infrastructure map:
 `DATABASE_PUBLIC_URL` — the external variant of the production connection string — "used in
-local `.env`"). That is the actual root cause this section addresses, not a hypothetical.
+local `.env`"). **As of 2026-09-08, local development uses a genuinely separate database —**
+a local Postgres 16 instance (`imagyn_reviews_dev`, running via Homebrew's `postgresql@16`
+service on `localhost:5432`; Docker was the originally-planned route but isn't installed in
+this environment, so a native local Postgres instance was used instead — functionally
+identical for this purpose: a real, separate host, not a container flavor). Verified empty
+(0 stores, 0 reviews) before use, and brought current with all 20 migrations via a plain
+`prisma migrate deploy` run with `DATABASE_URL` overridden to point at it only for that one
+command — production's own `DATABASE_URL` was never read or touched by that command.
 
 - **Automated tests never touch this at all** — every `*.test.ts` file either mocks
   `../db.server` directly or doesn't import anything that reaches Prisma (verified across
-  all 30 test files as of 2026-09). `npm test` cannot write to any database, production or
+  all 31 test files as of 2026-09). `npm test` cannot write to any database, production or
   otherwise, by construction.
 - **`prisma/seed.js` has a hard runtime guard**: it refuses to run (exits non-zero before
   ever calling Prisma) if `NODE_ENV=production` or `RAILWAY_ENVIRONMENT` is set — both are
   real signals confirmed present in this app's actual production environment, not guessed.
-  This stops the one command that both writes real rows and is trivial to run by hand.
-- **Local development itself still requires a genuinely separate database** — the seed
-  guard only stops one specific script; `shopify app dev`, a manually-run `prisma migrate
-  dev`, or the app itself talking to Postgres in the ordinary course of local testing all
-  still use whatever `DATABASE_URL` is in your `.env`. See `.env.example`'s `DATABASE_URL`
-  comment for how to provision a real separate instance. **This part is an operational step
-  each developer must take — a comment and a seed guard cannot force a human to actually
-  change their local `.env`.**
+  Verified both ways this session: it correctly refuses when either signal is set, and
+  correctly proceeds against the local dev database when neither is set. (There is also a
+  second, independent, pre-existing confirmation gate in the same script —
+  `CONFIRM_SEED_RESET=yes` — required before it resets/reseeds any database at all,
+  regardless of which one.)
+- **Local `.env`'s `DATABASE_URL` now points at the local dev database**, not production.
+  Anyone else working on this app locally still needs to do the same — provision their own
+  local Postgres (or point at this same one if working on the same machine) and update their
+  own `.env`; this is a per-developer step no guard can force automatically.
 
 ## Workflow this protects
 

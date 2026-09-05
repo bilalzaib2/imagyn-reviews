@@ -33,6 +33,12 @@ let suppressedPairs: Set<string>;
 
 vi.mock("../db.server", () => ({
   default: {
+    // Backs runRetentionPurgeSweep's own "which stores exist" query — the actual purge
+    // mechanics are reviewRequestService.purgeStaleContactInfo's job (mocked separately
+    // below), already independently tested in review-request.server.test.ts.
+    store: {
+      findMany: vi.fn(async () => Object.keys(fakeStores).map((id) => ({ id }))),
+    },
     reviewRequest: {
       // Routes on whether the query filters by a related store (only runDueReminderSweep's
       // query does) — the two sweeps have genuinely different shapes, not worth two mock files.
@@ -110,7 +116,23 @@ vi.mock("./emailSuppression.server", () => ({
   },
 }));
 
-const { runDueReviewRequestSweep, runDueReminderSweep } = await import("./reviewRequestScheduler.server");
+// The scheduler's retention sweep is tested as pure orchestration (does it call the real
+// mechanism for the right stores, with the right args, isolating one store's failure from
+// the rest?) — the actual redaction/audit-logging mechanics of purgeStaleContactInfo already
+// have their own 14 tests in review-request.server.test.ts, not re-verified here.
+const purgeStaleContactInfoMock = vi.fn(
+  async (_storeId: string, _options: { retentionDays: number; now?: Date }) => ({ redacted: 0 }),
+);
+
+vi.mock("./review-request.server", () => ({
+  reviewRequestService: {
+    purgeStaleContactInfo: purgeStaleContactInfoMock,
+  },
+}));
+
+const { runDueReviewRequestSweep, runDueReminderSweep, runRetentionPurgeSweep } = await import(
+  "./reviewRequestScheduler.server"
+);
 
 describe("runDueReviewRequestSweep", () => {
   beforeEach(() => {
@@ -433,5 +455,64 @@ describe("runDueReminderSweep", () => {
       expect(result).toEqual({ due: 1, dispatched: 1 });
       expect(reminderDispatches).toEqual([{ id: "req_fast_store", type: "reminder_1" }]);
     });
+  });
+});
+
+describe("runRetentionPurgeSweep", () => {
+  beforeEach(() => {
+    fakeStores = {};
+    purgeStaleContactInfoMock.mockClear();
+    purgeStaleContactInfoMock.mockImplementation(async () => ({ redacted: 0 }));
+  });
+
+  it("calls purgeStaleContactInfo once per existing store, with the 90-day retention window", async () => {
+    fakeStores = {
+      store_1: { reminderEmailsEnabled: false, remindersEnabledAt: null, reminder1DelayDays: 3, reminderFinalDelayDays: 7 },
+      store_2: { reminderEmailsEnabled: false, remindersEnabledAt: null, reminder1DelayDays: 3, reminderFinalDelayDays: 7 },
+    };
+    const now = new Date("2026-09-08T00:00:00Z");
+
+    await runRetentionPurgeSweep(now);
+
+    expect(purgeStaleContactInfoMock).toHaveBeenCalledTimes(2);
+    expect(purgeStaleContactInfoMock).toHaveBeenCalledWith("store_1", { retentionDays: 90, now });
+    expect(purgeStaleContactInfoMock).toHaveBeenCalledWith("store_2", { retentionDays: 90, now });
+  });
+
+  it("sums the redacted count across every store", async () => {
+    fakeStores = {
+      store_1: { reminderEmailsEnabled: false, remindersEnabledAt: null, reminder1DelayDays: 3, reminderFinalDelayDays: 7 },
+      store_2: { reminderEmailsEnabled: false, remindersEnabledAt: null, reminder1DelayDays: 3, reminderFinalDelayDays: 7 },
+    };
+    purgeStaleContactInfoMock.mockImplementationOnce(async () => ({ redacted: 3 }));
+    purgeStaleContactInfoMock.mockImplementationOnce(async () => ({ redacted: 5 }));
+
+    const result = await runRetentionPurgeSweep(new Date());
+
+    expect(result).toEqual({ storesProcessed: 2, redacted: 8 });
+  });
+
+  it("one store's failure never aborts the rest of the sweep — same isolation as the other two sweeps", async () => {
+    fakeStores = {
+      store_1: { reminderEmailsEnabled: false, remindersEnabledAt: null, reminder1DelayDays: 3, reminderFinalDelayDays: 7 },
+      store_2: { reminderEmailsEnabled: false, remindersEnabledAt: null, reminder1DelayDays: 3, reminderFinalDelayDays: 7 },
+    };
+    purgeStaleContactInfoMock.mockImplementationOnce(async () => {
+      throw new Error("Connection reset");
+    });
+    purgeStaleContactInfoMock.mockImplementationOnce(async () => ({ redacted: 2 }));
+
+    const result = await runRetentionPurgeSweep(new Date());
+
+    expect(result).toEqual({ storesProcessed: 2, redacted: 2 });
+  });
+
+  it("returns zero cleanly when there are no stores at all", async () => {
+    fakeStores = {};
+
+    const result = await runRetentionPurgeSweep(new Date());
+
+    expect(result).toEqual({ storesProcessed: 0, redacted: 0 });
+    expect(purgeStaleContactInfoMock).not.toHaveBeenCalled();
   });
 });

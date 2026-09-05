@@ -1,6 +1,6 @@
 import prisma from "../db.server";
 import { enqueueReminderDispatch, enqueueReviewRequestDispatch } from "./reviewRequestDispatch.server";
-import type { ReminderType } from "./review-request.server";
+import { reviewRequestService, type ReminderType } from "./review-request.server";
 import { emailSuppressionService } from "./emailSuppression.server";
 
 // This process (react-router-serve) stays alive on Railway between requests — the same
@@ -135,6 +135,40 @@ export async function runDueReminderSweep(now: Date = new Date()): Promise<{ due
   return { due, dispatched };
 }
 
+// Data-retention purge (see docs/DATA_RETENTION_POLICY.md) — 90 days, a real business
+// decision made 2026-09-08, not an engineering default. Redacts ReviewRequest.email/name on
+// terminal (completed/failed/cancelled) requests older than this; never touches Review
+// content, never touches a still-live request that could still become a real review. See
+// reviewRequestService.purgeStaleContactInfo's own header comment for the full scoping rules
+// this delegates to.
+const RETENTION_DAYS = 90;
+
+// One pass: purges stale ReviewRequest contact info across every store. Deliberately loops
+// per-store rather than a single cross-store query — reuses
+// reviewRequestService.purgeStaleContactInfo as the single source of truth for what "stale"
+// means and what gets touched (already independently tested, including its own audit-log
+// call), instead of re-deriving that query and its redaction/audit logic a second time here.
+// A store count in the low tens (this app's actual scale) makes one findMany-per-store call
+// per 5-minute tick negligible — revisit the loop-vs-single-query tradeoff if that stops
+// holding. One store's failure never aborts the rest, same isolation convention as the two
+// sweeps above.
+export async function runRetentionPurgeSweep(now: Date = new Date()): Promise<{ storesProcessed: number; redacted: number }> {
+  const stores = await prisma.store.findMany({ select: { id: true } });
+
+  let redacted = 0;
+
+  for (const store of stores) {
+    try {
+      const result = await reviewRequestService.purgeStaleContactInfo(store.id, { retentionDays: RETENTION_DAYS, now });
+      redacted += result.redacted;
+    } catch (error) {
+      console.error(`[reviewRequestScheduler] Retention purge failed for store ${store.id}:`, error);
+    }
+  }
+
+  return { storesProcessed: stores.length, redacted };
+}
+
 declare global {
   // eslint-disable-next-line no-var
   var reviewRequestSchedulerStarted: boolean | undefined;
@@ -157,6 +191,9 @@ export function startReviewRequestScheduler(): void {
     });
     runDueReminderSweep().catch((error) => {
       console.error("[reviewRequestScheduler] Reminder sweep failed:", error);
+    });
+    runRetentionPurgeSweep().catch((error) => {
+      console.error("[reviewRequestScheduler] Retention purge sweep failed:", error);
     });
   };
 

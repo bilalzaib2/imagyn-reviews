@@ -66,7 +66,9 @@ vi.mock("../db.server", () => ({
         const match = fakeReviews.find((review) => matchesWhere(review, where));
         return match ? { id: match.id } : null;
       }),
-      count: vi.fn(async () => fakeReviews.length),
+      count: vi.fn(async ({ where }: { where: Record<string, unknown> } = { where: {} }) =>
+        fakeReviews.filter((review) => matchesWhere(review, where)).length,
+      ),
       aggregate: vi.fn(async () => ({ _avg: { rating: null } })),
       groupBy: vi.fn(async () => []),
       create: vi.fn(async ({ data }: { data: Record<string, unknown> }) => {
@@ -88,10 +90,13 @@ vi.mock("../db.server", () => ({
       }),
       // Only exportReviewsToCsv's own test below uses this — every other test in this file
       // exercises the import path, which never lists reviews back out.
-      findMany: vi.fn(async ({ where }: { where: Record<string, unknown> }) =>
-        fakeReviews
-          .filter((review) => matchesWhere(review, where))
-          .map((review) => ({ ...review, product: null, title: null, createdAt: new Date(), repliedAt: null })),
+      findMany: vi.fn(
+        async ({ where, take }: { where: Record<string, unknown>; take?: number }) => {
+          const rows = fakeReviews
+            .filter((review) => matchesWhere(review, where))
+            .map((review) => ({ ...review, product: null, title: null, createdAt: new Date(), repliedAt: null }));
+          return typeof take === "number" ? rows.slice(0, take) : rows;
+        },
       ),
     },
   },
@@ -104,7 +109,7 @@ vi.mock("./auditLog.server", () => ({
   recordDataAccess: recordDataAccessMock,
 }));
 
-const { exportReviewsToCsv, importReviews } = await import("./reviewImportExport.server");
+const { exportReviewsToCsv, importReviews, MAX_EXPORT_ROWS } = await import("./reviewImportExport.server");
 
 function seedProduct(overrides: Partial<FakeProduct>): FakeProduct {
   const product: FakeProduct = {
@@ -486,9 +491,10 @@ describe("exportReviewsToCsv — audit trail for a bulk contact-field export", (
       },
     );
 
-    const csv = await exportReviewsToCsv("store_1");
+    const result = await exportReviewsToCsv("store_1");
 
-    expect(csv).toContain("Jordan Avery");
+    expect(result.csv).toContain("Jordan Avery");
+    expect(result).toMatchObject({ totalCount: 2, exportedCount: 2, truncated: false });
     expect(recordDataAccessMock).toHaveBeenCalledTimes(1);
     expect(recordDataAccessMock).toHaveBeenCalledWith({
       storeId: "store_1",
@@ -501,5 +507,83 @@ describe("exportReviewsToCsv — audit trail for a bulk contact-field export", (
     // The audit call itself never receives the reviewer's name/email — only a count.
     const callArg = recordDataAccessMock.mock.calls[0][0];
     expect(JSON.stringify(callArg)).not.toContain("Jordan");
+  });
+});
+
+describe("exportReviewsToCsv — DLP export cap", () => {
+  function seedReviews(count: number) {
+    for (let i = 0; i < count; i += 1) {
+      fakeReviews.push({
+        id: `review_${i}`,
+        storeId: "store_1",
+        productId: "product_1",
+        externalId: null,
+        reviewerName: `Reviewer ${i}`,
+        content: "Content",
+        rating: 5,
+        status: "APPROVED",
+        isPublished: true,
+        verifiedPurchase: true,
+        deletedAt: null,
+      });
+    }
+  }
+
+  it("exports everything when the store is under the cap — no truncation", async () => {
+    seedReviews(5);
+
+    const result = await exportReviewsToCsv("store_1");
+
+    expect(result).toMatchObject({ totalCount: 5, exportedCount: 5, truncated: false });
+  });
+
+  it("caps the export at MAX_EXPORT_ROWS and reports the real total when a store exceeds it", async () => {
+    seedReviews(MAX_EXPORT_ROWS + 250);
+
+    const result = await exportReviewsToCsv("store_1");
+
+    expect(result.exportedCount).toBe(MAX_EXPORT_ROWS);
+    expect(result.totalCount).toBe(MAX_EXPORT_ROWS + 250);
+    expect(result.truncated).toBe(true);
+    // The CSV itself only ever contains the capped number of data rows (+1 header row).
+    expect(result.csv.trim().split("\n")).toHaveLength(MAX_EXPORT_ROWS + 1);
+  });
+
+  it("records the audit entry with both counts and the cap value when truncated", async () => {
+    recordDataAccessMock.mockClear();
+    seedReviews(MAX_EXPORT_ROWS + 1);
+
+    await exportReviewsToCsv("store_1");
+
+    expect(recordDataAccessMock).toHaveBeenCalledWith({
+      storeId: "store_1",
+      actor: "admin:csv_export",
+      action: "export",
+      resource: "review.contact_fields",
+      success: true,
+      detail: `${MAX_EXPORT_ROWS} of ${MAX_EXPORT_ROWS + 1} row(s) (capped at ${MAX_EXPORT_ROWS})`,
+    });
+  });
+
+  it("never lets a capped export leak another store's reviews to reach the limit", async () => {
+    seedReviews(3);
+    fakeReviews.push({
+      id: "other_store_review",
+      storeId: "store_2",
+      productId: "product_2",
+      externalId: null,
+      reviewerName: "Someone Else",
+      content: "Content",
+      rating: 5,
+      status: "APPROVED",
+      isPublished: true,
+      verifiedPurchase: true,
+      deletedAt: null,
+    });
+
+    const result = await exportReviewsToCsv("store_1");
+
+    expect(result.totalCount).toBe(3);
+    expect(result.csv).not.toContain("Someone Else");
   });
 });
