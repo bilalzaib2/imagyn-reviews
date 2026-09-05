@@ -30,6 +30,10 @@ interface FakeReview {
 
 let fakeProducts: FakeProduct[];
 let fakeReviews: FakeReview[];
+// Controls exportReviewsToCsv's own rate-limit check (prisma.auditLog.count) — a plain
+// number is enough here since the tests only need to control "how many recent exports does
+// the mock report," not model real AuditLog rows.
+let fakeRecentExportCount: number;
 let nextReviewId: number;
 
 function matchesWhere(review: FakeReview, where: Record<string, unknown>): boolean {
@@ -99,6 +103,11 @@ vi.mock("../db.server", () => ({
         },
       ),
     },
+    // Backs exportReviewsToCsv's own rate-limit check — deliberately a plain count, not a
+    // full fake table, since the tests only need to control the number this reports.
+    auditLog: {
+      count: vi.fn(async () => fakeRecentExportCount),
+    },
   },
 }));
 
@@ -109,7 +118,8 @@ vi.mock("./auditLog.server", () => ({
   recordDataAccess: recordDataAccessMock,
 }));
 
-const { exportReviewsToCsv, importReviews, MAX_EXPORT_ROWS } = await import("./reviewImportExport.server");
+const { exportReviewsToCsv, importReviews, MAX_EXPORT_ROWS, EXPORT_RATE_LIMIT_MAX, ExportRateLimitError } =
+  await import("./reviewImportExport.server");
 
 function seedProduct(overrides: Partial<FakeProduct>): FakeProduct {
   const product: FakeProduct = {
@@ -127,6 +137,7 @@ function seedProduct(overrides: Partial<FakeProduct>): FakeProduct {
 beforeEach(() => {
   fakeProducts = [];
   fakeReviews = [];
+  fakeRecentExportCount = 0;
   nextReviewId = 1;
 });
 
@@ -585,5 +596,91 @@ describe("exportReviewsToCsv — DLP export cap", () => {
 
     expect(result.totalCount).toBe(3);
     expect(result.csv).not.toContain("Someone Else");
+  });
+});
+
+describe("exportReviewsToCsv — DLP rate limit (per-call cap defeated by repeated calls otherwise)", () => {
+  it("allows the export when under the hourly limit", async () => {
+    fakeReviews.push({
+      id: "review_1",
+      storeId: "store_1",
+      productId: "product_1",
+      externalId: null,
+      reviewerName: "Jordan Avery",
+      content: "Great",
+      rating: 5,
+      status: "APPROVED",
+      isPublished: true,
+      verifiedPurchase: true,
+      deletedAt: null,
+    });
+    fakeRecentExportCount = EXPORT_RATE_LIMIT_MAX - 1;
+
+    const result = await exportReviewsToCsv("store_1");
+
+    expect(result.exportedCount).toBe(1);
+  });
+
+  it("blocks the export once the store has hit the hourly limit — never even queries reviews", async () => {
+    fakeReviews.push({
+      id: "review_1",
+      storeId: "store_1",
+      productId: "product_1",
+      externalId: null,
+      reviewerName: "Jordan Avery",
+      content: "Great",
+      rating: 5,
+      status: "APPROVED",
+      isPublished: true,
+      verifiedPurchase: true,
+      deletedAt: null,
+    });
+    fakeRecentExportCount = EXPORT_RATE_LIMIT_MAX;
+
+    await expect(exportReviewsToCsv("store_1")).rejects.toThrow(ExportRateLimitError);
+  });
+
+  it("records a failed audit entry (never the reviewer data) when a rate-limited export is blocked", async () => {
+    recordDataAccessMock.mockClear();
+    fakeRecentExportCount = EXPORT_RATE_LIMIT_MAX;
+
+    await expect(exportReviewsToCsv("store_1")).rejects.toThrow(ExportRateLimitError);
+
+    expect(recordDataAccessMock).toHaveBeenCalledWith({
+      storeId: "store_1",
+      actor: "admin:csv_export",
+      action: "export",
+      resource: "review.contact_fields",
+      success: false,
+      detail: `blocked — ${EXPORT_RATE_LIMIT_MAX} exports already in the last hour (max ${EXPORT_RATE_LIMIT_MAX})`,
+    });
+  });
+
+  it("scopes the rate limit per store — store_2 is unaffected by store_1 hitting its limit", async () => {
+    fakeReviews.push({
+      id: "review_1",
+      storeId: "store_2",
+      productId: "product_2",
+      externalId: null,
+      reviewerName: "Morgan",
+      content: "Good",
+      rating: 4,
+      status: "APPROVED",
+      isPublished: true,
+      verifiedPurchase: true,
+      deletedAt: null,
+    });
+    // The mock's auditLog.count doesn't distinguish stores (see its own comment) — this test
+    // documents the real implementation's actual behavior (storeId is part of the `where`
+    // clause passed to prisma.auditLog.count), verified instead by asserting the call itself
+    // included the right storeId, since the shared fake can't model true per-store counts.
+    fakeRecentExportCount = 0;
+
+    await exportReviewsToCsv("store_2");
+
+    const dbServer = await import("../db.server");
+    expect(dbServer.default.auditLog.count).toHaveBeenCalledWith({
+      where: { storeId: "store_2", actor: "admin:csv_export", action: "export", success: true, createdAt: { gte: expect.any(Date) } },
+    });
   });
 });

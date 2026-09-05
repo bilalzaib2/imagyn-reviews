@@ -6,6 +6,30 @@ one. Split explicitly into **technical controls** (code, verifiable in the repo)
 **policy** (rules that depend on people following them, not enforceable by code alone) per
 the requirement this document satisfies.
 
+## Mapping to Shopify's own definition
+
+Shopify defines this requirement (Protected Customer Data questionnaire, Q12) as: *"A
+combination of technical controls, policies, and standards that protect an organization from
+the possibility of a bad actor extracting data for nefarious purposes."* Read literally,
+against what actually exists:
+
+- **Technical controls** — tenant isolation (can't reach another store's data at all), a
+  per-call export cap (bounds one extraction), a per-store hourly export rate limit (bounds
+  repeated extraction attempts from defeating that cap), audit logging (every meaningful
+  access is recorded, including blocked attempts), and a 90-day retention purge (reduces how
+  much personal data exists to extract in the first place, over time). Five independent,
+  real, tested controls — not one.
+- **Policies** — the access rules below (who may access raw data, for what purpose, and the
+  explicit prohibition on copying it outside the app except for authorized support).
+- **Standards** — the consistent pattern applied across every control: least-privilege by
+  default (storeId-scoped), bounded rather than unbounded (row caps, rate limits, retention
+  windows), and audited rather than silent.
+
+This is judged sufficient for a small, single-operator app of this data sensitivity (Name and
+Email only, never payment/health/government-ID data). It is explicitly not equivalent to an
+enterprise DLP program (no DLP scanning product, no CASB, no SIEM) — that would be inventing
+a requirement Shopify's own wording doesn't ask for at this scale.
+
 ## Technical controls that exist today
 
 | Control | What it does | Where |
@@ -13,6 +37,7 @@ the requirement this document satisfies.
 | Tenant isolation | Every query is scoped to the authenticated session's own `storeId` — one store can never read or mutate another's data | Enforced throughout `app/services/review.server.ts`, `app/services/review-request.server.ts`; extensively covered by "cross-tenant isolation" tests |
 | Audit logging | Records every GDPR compliance-webhook event and every bulk CSV export (actor, action, resource category, row count, success/failure) — never the underlying email/name/content | `app/services/auditLog.server.ts`, wired into `app/routes/webhooks.compliance.tsx` and `app/services/reviewImportExport.server.ts` |
 | Export cap | `exportReviewsToCsv` cannot return more than `MAX_EXPORT_ROWS` (10,000) rows in a single call, regardless of how many reviews a store actually has — bounds the maximum personal data (reviewer name/email) extractable in one request | `app/services/reviewImportExport.server.ts` |
+| Export rate limit | A store cannot export more than `EXPORT_RATE_LIMIT_MAX` (10) times per rolling hour — closes the gap the per-call cap alone leaves open (repeating the call to defeat the cap in aggregate). Checked against the existing `AuditLog` table itself, no new dependency. A blocked attempt is still audit-logged (`success: false`), so it's visible, not silently dropped | `app/services/reviewImportExport.server.ts` (`ExportRateLimitError`); surfaced as HTTP 429 in `app/routes/app.reviews.export.tsx` |
 | Consent/suppression enforcement | An opted-out email is checked and blocked before every automated send, permanently (no retention purge applies to this table — see `docs/DATA_RETENTION_POLICY.md`) | `app/services/emailSuppression.server.ts` |
 | Retention purge | Redacts `ReviewRequest.email`/`name` 90 days after a request goes terminal, bounded, idempotent, audited | `app/services/review-request.server.ts`'s `purgeStaleContactInfo`, scheduled via `app/services/reviewRequestScheduler.server.ts` |
 

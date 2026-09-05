@@ -374,12 +374,50 @@ export interface ExportReviewsResult {
   truncated: boolean;
 }
 
+// The per-call MAX_EXPORT_ROWS cap above bounds one export, but does nothing to stop the same
+// cap being defeated by calling this repeatedly — a real gap in "prevents a bad actor from
+// extracting data" (Shopify's own Q12 DLP wording), not a hypothetical one. Reuses the
+// already-existing AuditLog table this function already writes to, rather than adding a new
+// dependency (Redis, a rate-limiting library, etc.) for what a simple lookback count already
+// answers. 10 exports/hour is deliberately generous for real merchant use (re-exporting after
+// fixing a filter, testing, etc.) while still stopping a scripted/automated extraction loop,
+// which would otherwise be able to pull an effectively unbounded amount of reviewer contact
+// data by calling this in a tight loop.
+export const EXPORT_RATE_LIMIT_WINDOW_MS = 60 * 60 * 1000;
+export const EXPORT_RATE_LIMIT_MAX = 10;
+
+export class ExportRateLimitError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "ExportRateLimitError";
+  }
+}
+
 // Uses the same column names importReviews accepts, so an exported file can be re-imported
 // (into this store or another) without edits. Includes product_id/product_handle alongside the
 // display-only product title, so a re-import always resolves at tier 1 or tier 3 of the
 // matcher instead of falling back to title matching, and external_id so a re-import of an
 // exported file is itself idempotent.
-export async function exportReviewsToCsv(storeId: string): Promise<ExportReviewsResult> {
+export async function exportReviewsToCsv(storeId: string, now: Date = new Date()): Promise<ExportReviewsResult> {
+  const windowStart = new Date(now.getTime() - EXPORT_RATE_LIMIT_WINDOW_MS);
+  const recentExportCount = await prisma.auditLog.count({
+    where: { storeId, actor: "admin:csv_export", action: "export", success: true, createdAt: { gte: windowStart } },
+  });
+
+  if (recentExportCount >= EXPORT_RATE_LIMIT_MAX) {
+    await recordDataAccess({
+      storeId,
+      actor: "admin:csv_export",
+      action: "export",
+      resource: "review.contact_fields",
+      success: false,
+      detail: `blocked — ${recentExportCount} exports already in the last hour (max ${EXPORT_RATE_LIMIT_MAX})`,
+    });
+    throw new ExportRateLimitError(
+      "Too many exports for this store in the last hour. Please wait before exporting again.",
+    );
+  }
+
   const [totalCount, reviews] = await Promise.all([
     prisma.review.count({ where: { storeId, deletedAt: null } }),
     prisma.review.findMany({
