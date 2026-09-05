@@ -120,9 +120,9 @@ vi.mock("./emailSuppression.server", () => ({
 // mechanism for the right stores, with the right args, isolating one store's failure from
 // the rest?) — the actual redaction/audit-logging mechanics of purgeStaleContactInfo already
 // have their own 14 tests in review-request.server.test.ts, not re-verified here.
-const purgeStaleContactInfoMock = vi.fn(
-  async (_storeId: string, _options: { retentionDays: number; now?: Date }) => ({ redacted: 0 }),
-);
+const purgeStaleContactInfoMock = vi.fn<
+  (storeId: string, options: { retentionDays: number; now?: Date }) => Promise<{ redacted: number }>
+>(async () => ({ redacted: 0 }));
 
 vi.mock("./review-request.server", () => ({
   reviewRequestService: {

@@ -66,7 +66,8 @@ const reviewBodies = [
   "After testing for a month, I can say it is dependable. This is one of the better purchases I have made this year.",
 ];
 
-const statuses = ["pending", "approved", "approved", "approved", "rejected"];
+// Matches the real ReviewStatus enum (prisma/schema.prisma) — not a free-text string.
+const statuses = ["PENDING", "APPROVED", "APPROVED", "APPROVED", "REJECTED"];
 
 const photoPool = [
   "https://images.unsplash.com/photo-1460353581641-37baddab0fa2?w=600&auto=format&fit=crop",
@@ -157,11 +158,11 @@ async function main() {
       data: {
         storeId: product.storeId,
         productId: product.id,
-        authorName: customer.name,
-        authorEmail: customer.email,
+        reviewerName: customer.name,
+        reviewerEmail: customer.email,
         rating: randomInt(2, 5),
         title: randomItem(reviewTitles),
-        body: randomItem(reviewBodies),
+        content: randomItem(reviewBodies),
         verifiedPurchase: i % 4 !== 0,
         status: randomItem(statuses),
         photoUrls,
