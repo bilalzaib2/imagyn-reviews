@@ -1,3 +1,4 @@
+import type { MouseEvent } from "react";
 import { Outlet, useLoaderData, useLocation, useRouteError } from "react-router";
 import type { HeadersFunction, LoaderFunctionArgs } from "react-router";
 import { boundary } from "@shopify/shopify-app-react-router/server";
@@ -46,6 +47,17 @@ type SettingsGroup = {
   label: string;
   items: SettingsLink[];
 };
+
+// Claim the click before App Bridge's own same-origin anchor interception can (see the sidebar
+// comment below for why a plain <a href> alone isn't enough) while still letting modified clicks
+// (new tab, new window, etc.) fall through to native anchor behavior untouched.
+function handleSidebarLinkClick(event: MouseEvent<HTMLAnchorElement>, href: string) {
+  if (event.defaultPrevented || event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) {
+    return;
+  }
+  event.preventDefault();
+  window.location.assign(href);
+}
 
 export default function SettingsWorkspace() {
   const { canUseAI } = useLoaderData<typeof loader>();
@@ -123,7 +135,25 @@ export default function SettingsWorkspace() {
               highlight on a stale, unrelated item once Shopify's shell fought the pushState.
               A real anchor triggers a genuine top-level navigation with no synthetic history
               entry for the shell to revert, which is why this reads `location.pathname` (fresh
-              on every real navigation, always correct) instead of NavLink's own isActive. */}
+              on every real navigation, always correct) instead of NavLink's own isActive.
+
+              onClick below: a plain <a> left-click, INSIDE this embedded app's own iframe
+              document, is still a click App Bridge's own script (loaded in this same document to
+              talk to the parent Admin frame) can act on — App Bridge documents that it intercepts
+              same-origin anchor clicks in an embedded app to manage navigation itself instead of
+              letting the browser do a normal top-level load. That's the leading explanation for
+              the reported bug (a Settings sub-nav click rendering a bare "200" instead of the
+              page) — App Bridge's own interceptor handling the click and surfacing the raw
+              response status instead of our HTML — but the App Bridge script itself runs from
+              Shopify's CDN, not this repo, so its interception logic isn't something this codebase
+              can directly inspect or unit-test; this fix removes the anchor click as the
+              navigation trigger entirely rather than depending on that theory being exactly right.
+              Calling preventDefault() ourselves and doing the navigation via
+              window.location.assign is the same pattern app.tsx's NavMenu items already use to
+              claim a click before any other listener acts on it (see handleNavClick below) — the
+              only difference is we want a genuine full navigation here, not a React Router SPA
+              transition, for the shell-reversion reason above, so we assign the location
+              ourselves rather than calling navigate(). */}
           <select
             className={styles.mobileSectionSelect}
             aria-label="Settings sections"
@@ -149,6 +179,7 @@ export default function SettingsWorkspace() {
             <div className={styles.sidebarGroup}>
               <a
                 href="/app/settings"
+                onClick={(event) => handleSidebarLinkClick(event, "/app/settings")}
                 aria-current={location.pathname === "/app/settings" ? "page" : undefined}
                 className={
                   location.pathname === "/app/settings"
@@ -168,6 +199,7 @@ export default function SettingsWorkspace() {
                     <a
                       key={item.href}
                       href={item.href}
+                      onClick={(event) => handleSidebarLinkClick(event, item.href)}
                       aria-current={isActive ? "page" : undefined}
                       className={isActive ? `${styles.sidebarLink} ${styles.sidebarLinkActive}` : styles.sidebarLink}
                     >
