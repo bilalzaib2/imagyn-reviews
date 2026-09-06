@@ -20,6 +20,21 @@ Every merchant-facing query in the codebase is scoped to the authenticated sessi
 `review.server.test.ts`, `review-request.server.test.ts`, and others, which specifically
 assert one store's session can never read or mutate another store's data.
 
+## Staff account password strength
+
+Confirmed directly with the operator (2026-09-06): the two accounts that gate access to the
+systems holding protected customer data — the GitHub account (`bilalzaib2`) that controls
+this repository, and the Railway account (personal workspace "Muhammad Bilal Zaib's
+Projects") that controls the production database and deploy pipeline — use unique passwords
+meeting Shopify's own "strong password" description (minimum length plus a mixture of
+numbers, letters, and special characters). This is currently a single-operator fact, not an
+enforced organizational policy with tooling behind it (there is no password manager mandate,
+no rotation schedule, no automated complexity check) — it reflects what the operator actually
+does today, not an aspirational claim. Whether 2FA is additionally enabled on these same two
+accounts remains a separate, unverified `[VERIFY]` item below — password strength and
+two-factor authentication are tracked as distinct facts here deliberately, since one doesn't
+imply the other.
+
 ## Repository access — GitHub
 
 Repository: `bilalzaib2/imagyn-reviews` (private, per the remote used throughout this
@@ -46,9 +61,12 @@ Project: `exemplary-clarity`, service `imagyn-reviews`, region `sfo` (per
   — confirmed by checking for that hostname pattern's presence in the live environment
   variable (value not printed). This means the database is not directly reachable from the
   public internet independent of the app.
-- **[VERIFY]** Who has member access to the Railway project/team, what role each member has
-  (owner vs. member vs. viewer), and whether 2FA is enforced on the Railway account — none of
-  this is visible from the repository. Confirm in Railway's own project → Settings → Members.
+- **Workspace type confirmed:** `railway status` reports the workspace as "Muhammad Bilal
+  Zaib's Projects" — a personal workspace, not a team workspace with multiple members. This
+  is consistent with the single-operator access picture above, though it doesn't substitute
+  for checking the project's own Members page directly.
+- **[VERIFY]** Whether 2FA is enforced on the Railway account — not visible from the
+  repository or the CLI's own output. Confirm in Railway's own account settings.
 - **[VERIFY]** Whether the production Postgres database is reachable from any IP outside
   Railway's own network (e.g., via `DATABASE_PUBLIC_URL`, which `docs/OPERATIONS.md`
   documents as existing and being "used in local `.env`" — this is itself a real exposure
