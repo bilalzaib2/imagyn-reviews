@@ -22,16 +22,33 @@ assert one store's session can never read or mutate another store's data.
 
 ## Staff account password strength
 
-Confirmed directly with the operator (2026-09-06): the two accounts that gate access to the
-systems holding protected customer data — the GitHub account (`bilalzaib2`) that controls
-this repository, and the Railway account (personal workspace "Muhammad Bilal Zaib's
-Projects") that controls the production database and deploy pipeline — use unique passwords
-meeting Shopify's own "strong password" description (minimum length plus a mixture of
-numbers, letters, and special characters). This is currently a single-operator fact, not an
-enforced organizational policy with tooling behind it (there is no password manager mandate,
-no rotation schedule, no automated complexity check) — it reflects what the operator actually
-does today, not an aspirational claim. Whether 2FA is additionally enabled on these same two
-accounts remains a separate, unverified `[VERIFY]` item below — password strength and
+There is exactly **one** credential surface gating access to the systems holding protected
+customer data, not two. The GitHub account (`bilalzaib2`) is the sole login credential in
+play: Railway's own login screen (confirmed directly, 2026-09-06) offers "Continue with
+GitHub" as the account's actual sign-in path, with no separate Railway-specific password set
+up — so the Railway account (personal workspace "Muhammad Bilal Zaib's Projects", controlling
+the production database and deploy pipeline) inherits its authentication entirely from the
+GitHub account rather than having independent credentials of its own.
+
+That single GitHub account's password strength is governed by an **external, provider-enforced
+control that Imagyn Reviews does not implement or configure** — GitHub's own account system.
+Per GitHub's current documentation
+([Creating a strong password](https://docs.github.com/en/authentication/keeping-your-account-and-data-secure/creating-a-strong-password),
+verbatim): *"you must choose or generate a password for your account on GitHub that is at
+least: eight characters long, if it includes a number and a lowercase letter, or 15 characters
+long with any combination of characters."* This is a mandatory, technically-enforced rule —
+GitHub's own signup/change-password form rejects a password that doesn't meet it — applied
+automatically to every GitHub account, with no configuration required on Imagyn's part.
+GitHub's same documentation also states passwords are checked against known-breached-password
+datasets (HaveIBeenPwned) at the point of entry.
+
+Confirmed directly with the operator (2026-09-06): the actual password on this account exceeds
+GitHub's enforced minimum, with real length and a genuine mixture of numbers, letters, and
+special characters — matching Shopify's own "strong password" description more closely than
+GitHub's bare floor alone would. To be precise about what is and isn't being claimed here:
+**Imagyn Reviews does not itself enforce, configure, or audit this password policy** — GitHub
+does, as the platform this credential belongs to. Whether 2FA is additionally enabled on this
+account remains a separate, unverified `[VERIFY]` item below — password strength and
 two-factor authentication are tracked as distinct facts here deliberately, since one doesn't
 imply the other.
 
@@ -65,8 +82,13 @@ Project: `exemplary-clarity`, service `imagyn-reviews`, region `sfo` (per
   Zaib's Projects" — a personal workspace, not a team workspace with multiple members. This
   is consistent with the single-operator access picture above, though it doesn't substitute
   for checking the project's own Members page directly.
-- **[VERIFY]** Whether 2FA is enforced on the Railway account — not visible from the
-  repository or the CLI's own output. Confirm in Railway's own account settings.
+- **Login method confirmed:** this account signs in via "Continue with GitHub" — Railway
+  does not hold an independent password for this account. See "Staff account password
+  strength" above; the relevant credential is the GitHub account's, not a separate Railway
+  one.
+- **[VERIFY]** Whether 2FA is enforced on the underlying GitHub account (which, per the login
+  method above, is what actually protects Railway access here) — not visible from the
+  repository or either platform's CLI output. Confirm in GitHub's own account settings.
 - **[VERIFY]** Whether the production Postgres database is reachable from any IP outside
   Railway's own network (e.g., via `DATABASE_PUBLIC_URL`, which `docs/OPERATIONS.md`
   documents as existing and being "used in local `.env`" — this is itself a real exposure
