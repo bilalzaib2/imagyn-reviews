@@ -20,7 +20,7 @@ import { getRewardStats } from "../services/rewards.server";
 import { getOrCreateStore } from "../services/store.server";
 import { getStorePermissions } from "../services/permissions";
 import { authenticateAdminDeduped } from "../services/auth-dedupe.server";
-import { ORDER_AUTOMATION_ENABLED } from "../config/features";
+import { ORDER_AUTOMATION_ENABLED, SHOPIFY_PROTECTED_CUSTOMER_DATA_APPROVED } from "../config/features";
 import shellStyles from "../styles/app.shell.module.css";
 import styles from "../styles/app._index.module.css";
 
@@ -49,11 +49,15 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
     productCoverage,
     rewardStats,
     automation: {
-      // Real, current state — not a guess: the webhook this depends on isn't subscribed yet
-      // (see webhooks.fulfillments.create.tsx / shopify.app.toml), pending Shopify's Protected
-      // Customer Data approval. canUse reflects this store's plan; isEnabled reflects whether
-      // the merchant has actually turned the setting on (irrelevant while blocked, but real).
-      isBlockedByShopify: !ORDER_AUTOMATION_ENABLED,
+      // Two distinct, real facts — not one flag. Shopify's Protected Customer Data approval
+      // (isApproved) was granted 2026-09-08; isLive is a separate, deliberate activation
+      // switch (restoring the fulfillments/create webhook + read_fulfillments scope and
+      // redeploying — see app/config/features.ts) that stays off until that's explicitly
+      // decided, since flipping it starts real automatic emails for every merchant. canUse
+      // reflects this store's plan; isEnabled reflects whether the merchant has actually
+      // turned the setting on (irrelevant until isLive, but real).
+      isApproved: SHOPIFY_PROTECTED_CUSTOMER_DATA_APPROVED,
+      isLive: ORDER_AUTOMATION_ENABLED,
       canUse: permissions.canUseAutomaticReviewRequests,
       isEnabled: store.autoRequestEnabled,
     },
@@ -183,11 +187,18 @@ export default function Index() {
               action={{ label: "Send a review request", href: "/app/requests" }}
             />
           ) : null}
-          {automation.isBlockedByShopify ? (
+          {!automation.isApproved ? (
             <Banner
               tone="warning"
               title="Automatic review requests are pending Shopify approval"
               description="Reading order fulfillment details requires Shopify's Protected Customer Data approval for this app, which hasn't been granted yet. This activates automatically once it is — manual requests (including their full reminder schedule) are unaffected and fully available today."
+              action={{ label: "View request scheduling", href: "/app/settings/requests" }}
+            />
+          ) : !automation.isLive ? (
+            <Banner
+              tone="warning"
+              title="Automatic review requests: approved, activating soon"
+              description="Shopify has approved this app to read order fulfillment details for automatic review requests. We're finishing turning this on — it'll activate here automatically, with no action needed from you. Manual requests (including their full reminder schedule) are unaffected and fully available today."
               action={{ label: "View request scheduling", href: "/app/settings/requests" }}
             />
           ) : automation.canUse && !automation.isEnabled ? (
@@ -325,11 +336,25 @@ export default function Index() {
         <Card>
           <Section title="Review Requests" description="How your automated and manual requests are performing.">
             <div className={styles.automationStatus}>
-              <StatusBadge tone={automation.isBlockedByShopify ? "warning" : automation.isEnabled ? "success" : "neutral"}>
-                {automation.isBlockedByShopify ? "Pending Shopify" : automation.isEnabled ? "Automatic requests on" : "Automatic requests off"}
+              <StatusBadge
+                tone={
+                  !automation.isApproved || !automation.isLive
+                    ? "warning"
+                    : automation.isEnabled
+                      ? "success"
+                      : "neutral"
+                }
+              >
+                {!automation.isApproved
+                  ? "Pending Shopify"
+                  : !automation.isLive
+                    ? "Approved — activating soon"
+                    : automation.isEnabled
+                      ? "Automatic requests on"
+                      : "Automatic requests off"}
               </StatusBadge>
               <p className={styles.automationStatusText}>
-                {automation.isBlockedByShopify
+                {!automation.isApproved || !automation.isLive
                   ? "Manual requests and their reminder schedule work fully today."
                   : automation.isEnabled
                     ? "New fulfilled orders automatically get a review request."
