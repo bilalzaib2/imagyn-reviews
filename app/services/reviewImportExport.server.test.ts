@@ -18,9 +18,11 @@ interface FakeReview {
   id: string;
   storeId: string;
   productId: string;
+  productTitle?: string | null;
   externalId: string | null;
   reviewerName: string;
   content: string;
+  title?: string | null;
   rating: number;
   status: string;
   isPublished: boolean;
@@ -66,9 +68,13 @@ vi.mock("../db.server", () => ({
       findUnique: vi.fn(async () => ({ plan: "owner" })),
     },
     review: {
+      // Returns the full fake row regardless of a real Prisma `select` — sufficient both for
+      // findExistingReview's {id, title} need and requireReview's (updateReview's own lookup)
+      // need for the whole row, same simplification every other fake-Prisma mock in this repo
+      // already uses.
       findFirst: vi.fn(async ({ where }: { where: Record<string, unknown> }) => {
         const match = fakeReviews.find((review) => matchesWhere(review, where));
-        return match ? { id: match.id } : null;
+        return match ?? null;
       }),
       count: vi.fn(async ({ where }: { where: Record<string, unknown> } = { where: {} }) =>
         fakeReviews.filter((review) => matchesWhere(review, where)).length,
@@ -80,9 +86,11 @@ vi.mock("../db.server", () => ({
           id: `review_${nextReviewId++}`,
           storeId: data.storeId as string,
           productId: data.productId as string,
+          productTitle: (data.productTitle as string | null) ?? null,
           externalId: (data.externalId as string | null) ?? null,
           reviewerName: data.reviewerName as string,
           content: data.content as string,
+          title: (data.title as string | null) ?? null,
           rating: data.rating as number,
           status: (data.status as string) ?? "PENDING",
           isPublished: (data.isPublished as boolean) ?? false,
@@ -90,6 +98,21 @@ vi.mock("../db.server", () => ({
           deletedAt: null,
         };
         fakeReviews.push(review);
+        return review;
+      }),
+      // Backs updateReview (called by the import pipeline's own title-repair path — see
+      // reviewImportExport.server.ts's importRow). Only applies the fields updateReview
+      // actually sends; real update semantics (partial, by id) — no separate stats
+      // recalculation needed here since recalculateProductStats reads from `review`/`product`
+      // mocks already present above.
+      update: vi.fn(async ({ where, data }: { where: { id: string }; data: Record<string, unknown> }) => {
+        const review = fakeReviews.find((r) => r.id === where.id);
+        if (!review) throw new Error("Review not found");
+        if (data.title !== undefined) review.title = data.title as string | null;
+        if (data.rating !== undefined) review.rating = data.rating as number;
+        if (data.content !== undefined) review.content = data.content as string;
+        if (data.reviewerName !== undefined) review.reviewerName = data.reviewerName as string;
+        if (data.verifiedPurchase !== undefined) review.verifiedPurchase = data.verifiedPurchase as boolean;
         return review;
       }),
       // Only exportReviewsToCsv's own test below uses this — every other test in this file
@@ -467,6 +490,174 @@ describe("importReviews — Judge.me", () => {
     const second = await importReviews("store_1", "csv", csv);
     expect(second.duplicates).toBe(1000);
     expect(fakeReviews).toHaveLength(1000);
+  });
+});
+
+describe("importReviews — review title mapping (regression: 'Untitled review' data-loss bug)", () => {
+  const JUDGEME_HEADER =
+    '"title","body","rating","review_date","source","curated","reviewer_name","reviewer_email","product_id","product_handle","reply","reply_date","picture_urls","ip_address","location","metaobject_handle"\n';
+
+  function judgemeRow(fields: {
+    title?: string;
+    body: string;
+    rating: string;
+    reviewerName: string;
+    productId?: string;
+    metaobjectHandle: string;
+  }): string {
+    const cols = [
+      fields.title ?? "",
+      fields.body,
+      fields.rating,
+      "2024-03-07 15:43:43 UTC",
+      "email",
+      "ok",
+      fields.reviewerName,
+      "customer@example.com",
+      fields.productId ?? "",
+      "",
+      "",
+      "",
+      "",
+      "",
+      "",
+      fields.metaobjectHandle,
+    ];
+    return cols.map((value) => `"${value}"`).join(",") + "\n";
+  }
+
+  // 1. Judge.me CSV with review title
+  it("persists the real title from a Judge.me CSV's title column", async () => {
+    seedProduct({ id: "db_1", shopifyProductId: "gid://shopify/Product/1", name: "P1" });
+
+    const csv =
+      JUDGEME_HEADER +
+      judgemeRow({ title: "Amazing quality", body: "Loved it", rating: "5", reviewerName: "A", productId: "1", metaobjectHandle: "review-with-title" });
+
+    const result = await importReviews("store_1", "judgeme", csv);
+
+    expect(result.imported).toBe(1);
+    expect(fakeReviews[0].title).toBe("Amazing quality");
+  });
+
+  // 2. CSV with alternate supported title header
+  it("persists the title from the generic CSV importer's 'headline' header alias", async () => {
+    seedProduct({ id: "db_1", name: "Blue Widget" });
+
+    const csv =
+      "product,rating,content,reviewer_name,headline\n" +
+      '"Blue Widget",5,"Great product",Jane Doe,"Exactly what I wanted"\n';
+    const result = await importReviews("store_1", "csv", csv);
+
+    expect(result.imported).toBe(1);
+    expect(fakeReviews[0].title).toBe("Exactly what I wanted");
+  });
+
+  // 3. CSV without title
+  it("leaves title null (not a placeholder string) when the source genuinely has no title", async () => {
+    seedProduct({ id: "db_1", shopifyProductId: "gid://shopify/Product/1", name: "P1" });
+
+    const csv =
+      JUDGEME_HEADER +
+      judgemeRow({ body: "No title in this export row", rating: "5", reviewerName: "A", productId: "1", metaobjectHandle: "review-no-title" });
+
+    const result = await importReviews("store_1", "judgeme", csv);
+
+    expect(result.imported).toBe(1);
+    expect(fakeReviews[0].title).toBeNull();
+  });
+
+  // 4. Existing review with legitimate title
+  it("never overwrites an existing review's real title when the same row is re-imported", async () => {
+    seedProduct({ id: "db_1", shopifyProductId: "gid://shopify/Product/1", name: "P1" });
+
+    const csv =
+      JUDGEME_HEADER +
+      judgemeRow({ title: "Original real title", body: "Body text", rating: "5", reviewerName: "A", productId: "1", metaobjectHandle: "review-stable" });
+
+    const first = await importReviews("store_1", "judgeme", csv);
+    expect(first.imported).toBe(1);
+    expect(fakeReviews[0].title).toBe("Original real title");
+
+    // Re-import the same file, this time with a different (would-be) title in the source —
+    // a legitimate existing title must never be silently replaced by re-importing.
+    const secondCsv =
+      JUDGEME_HEADER +
+      judgemeRow({ title: "A different title", body: "Body text", rating: "5", reviewerName: "A", productId: "1", metaobjectHandle: "review-stable" });
+    const second = await importReviews("store_1", "judgeme", secondCsv);
+
+    expect(second.duplicates).toBe(1);
+    expect(fakeReviews).toHaveLength(1);
+    expect(fakeReviews[0].title).toBe("Original real title");
+  });
+
+  // 5. Existing review update (repair) must not erase a title, and must backfill a real one
+  it("backfills a null title from a re-imported duplicate row without erasing any other data — the repair path", async () => {
+    seedProduct({ id: "db_1", shopifyProductId: "gid://shopify/Product/1", name: "P1" });
+
+    const csv =
+      JUDGEME_HEADER +
+      judgemeRow({ body: "Body text", rating: "5", reviewerName: "A", productId: "1", metaobjectHandle: "review-repairable" });
+
+    const first = await importReviews("store_1", "judgeme", csv);
+    expect(first.imported).toBe(1);
+    expect(fakeReviews[0].title).toBeNull();
+
+    const secondCsv =
+      JUDGEME_HEADER +
+      judgemeRow({ title: "Recovered title", body: "Body text", rating: "5", reviewerName: "A", productId: "1", metaobjectHandle: "review-repairable" });
+    const second = await importReviews("store_1", "judgeme", secondCsv);
+
+    expect(second.imported).toBe(0);
+    expect(second.titlesRepaired).toBe(1);
+    expect(fakeReviews).toHaveLength(1);
+    expect(fakeReviews[0].title).toBe("Recovered title");
+    expect(fakeReviews[0].content).toBe("Body text");
+    expect(fakeReviews[0].rating).toBe(5);
+
+    // A titled review's repair count must never be confused with "nothing happened."
+    expect(second.imported === 0 && second.duplicates === 0 && second.titlesRepaired > 0).toBe(true);
+  });
+
+  // 6. Import preview (dry run) counts a titled row as importable without persisting it — the
+  // browser-side raw-CSV preview table (app.reviews.tsx) echoes the file's own "title" column
+  // directly via PapaParse, so the only pipeline-side guarantee to test here is that a titled
+  // row survives dry-run validation/matching untouched, with zero writes.
+  it("dry run counts a titled row as importable and performs zero writes", async () => {
+    seedProduct({ id: "db_1", shopifyProductId: "gid://shopify/Product/1", name: "P1" });
+
+    const csv =
+      JUDGEME_HEADER +
+      judgemeRow({ title: "Preview this title", body: "Body text", rating: "5", reviewerName: "A", productId: "1", metaobjectHandle: "review-preview" });
+
+    const result = await importReviews("store_1", "judgeme", csv, null, true);
+
+    expect(result.dryRun).toBe(true);
+    expect(result.expectedImportedCount).toBe(1);
+    expect(result.errors).toHaveLength(0);
+    expect(fakeReviews).toHaveLength(0);
+
+    const real = await importReviews("store_1", "judgeme", csv, null, false);
+    expect(real.imported).toBe(1);
+    expect(fakeReviews[0].title).toBe("Preview this title");
+  });
+
+  // 7 & 8. Reviews page row + detail panel: both now render `review.title` directly (see
+  // app.reviews.tsx), which reads through getStoreReviews → queryReviews → prisma.review with
+  // `include` (not a narrowing `select`), so `title` is never dropped between the DB and the
+  // loader. The two UI call sites' "no real title" case was also fixed here (previously a
+  // hardcoded "Untitled review" fallback risked reading as data loss); this documents the
+  // titled case survives end-to-end through the same query the routes actually use.
+  it("a titled review round-trips through the store-wide review query used by the Reviews page and detail panel", async () => {
+    seedProduct({ id: "db_1", shopifyProductId: "gid://shopify/Product/1", name: "P1" });
+
+    const csv =
+      JUDGEME_HEADER +
+      judgemeRow({ title: "Shows up on the Reviews page", body: "Body text", rating: "5", reviewerName: "A", productId: "1", metaobjectHandle: "review-ui" });
+    const result = await importReviews("store_1", "judgeme", csv);
+
+    expect(result.imported).toBe(1);
+    expect(fakeReviews[0].title).toBe("Shows up on the Reviews page");
   });
 });
 

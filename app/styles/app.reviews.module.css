@@ -345,6 +345,12 @@
   white-space: nowrap;
 }
 
+.reviewTitleEmpty {
+  font-weight: 400;
+  font-style: italic;
+  color: var(--color-text-muted);
+}
+
 .reviewMetaLine {
   margin: 0.1rem 0 0;
   display: flex;
@@ -480,6 +486,12 @@
   font-size: var(--text-lg);
   font-weight: 600;
   letter-spacing: -0.02em;
+}
+
+.detailTitleEmpty {
+  font-weight: 400;
+  font-style: italic;
+  color: var(--color-text-muted);
 }
 
 .detailDivider {

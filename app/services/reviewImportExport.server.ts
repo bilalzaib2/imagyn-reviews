@@ -1,7 +1,7 @@
 import Papa from "papaparse";
 import type { AdminApiContext } from "@shopify/shopify-app-react-router/server";
 import prisma from "../db.server";
-import { createReview } from "./review.server";
+import { createReview, updateReview } from "./review.server";
 import { getImporter } from "./importers/provider.server";
 import { ProductMatcher, type ProductMatchTier } from "./importers/productMatcher.server";
 import type { ImportSource, ParsedReviewRow } from "./importers/types";
@@ -32,6 +32,13 @@ export interface ImportResult {
   imported: number;
   heldForModeration: number;
   duplicates: number;
+  // A duplicate row (matched by externalId or by product+reviewer+content) whose *existing*
+  // review has no title, where this row's own title is non-empty — the file's title is
+  // backfilled onto that existing row instead of being silently discarded as "just a
+  // duplicate." Never overwrites a title that's already set; see importRow's own comment for
+  // why this is safe to do unconditionally rather than requiring a merchant's confirmation
+  // per row. Counted separately from `duplicates` (a repaired row is not double-counted there).
+  titlesRepaired: number;
   // Genuinely distinct from `errors`: the row was well-formed, but no product in this store
   // matched any of the identifiers productMatcher.server.ts tried, in priority order.
   missingProducts: MissingProductIssue[];
@@ -101,31 +108,38 @@ function parseAutoApprove(raw: string): boolean {
   return normalized === "" || normalized === "approved" || normalized === "published" || parseBoolean(raw);
 }
 
+interface ExistingReviewMatch {
+  id: string;
+  title: string | null;
+}
+
 // Stable-ID-based dedup when the source provides one (Judge.me's metaobject_handle), falling
 // back to the same content-based check used when it doesn't. ID-based matching is strictly
 // more reliable: a review whose title/body was edited between two exports would slip past a
-// content-only check, but never past its own stable ID.
-async function isDuplicate(
+// content-only check, but never past its own stable ID. Returns the existing row's own title
+// (not just whether a match exists) so importRow can decide whether a safe title-backfill
+// applies — see its own comment for that logic.
+async function findExistingReview(
   storeId: string,
   productId: string,
   reviewerName: string,
   content: string,
   externalId: string | undefined,
-): Promise<boolean> {
+): Promise<ExistingReviewMatch | null> {
   if (externalId) {
     const existingById = await prisma.review.findFirst({
       where: { storeId, externalId, deletedAt: null },
-      select: { id: true },
+      select: { id: true, title: true },
     });
-    if (existingById) return true;
+    if (existingById) return existingById;
   }
 
   const existingByContent = await prisma.review.findFirst({
     where: { storeId, productId, reviewerName, content, deletedAt: null },
-    select: { id: true },
+    select: { id: true, title: true },
   });
 
-  return Boolean(existingByContent);
+  return existingByContent ?? null;
 }
 
 function buildMissingProductIssue(row: ParsedReviewRow): MissingProductIssue {
@@ -157,6 +171,7 @@ type RowOutcome =
   | { kind: "imported"; tier: ProductMatchTier | null }
   | { kind: "pending"; tier: ProductMatchTier | null }
   | { kind: "duplicate"; tier: ProductMatchTier | null }
+  | { kind: "repaired"; tier: ProductMatchTier | null }
   | { kind: "missing_product" }
   | { kind: "error"; reason: string; tier: ProductMatchTier | null };
 
@@ -199,7 +214,22 @@ async function importRow(
 
   const reviewerName = row.reviewerName || "Anonymous";
 
-  if (await isDuplicate(storeId, match.productId, reviewerName, row.content, row.externalId)) {
+  const existing = await findExistingReview(storeId, match.productId, reviewerName, row.content, row.externalId);
+  if (existing) {
+    // A safe, narrow repair: this row is a duplicate of a review already in the database, but
+    // that existing row has no title and this file's row does. This is exactly the shape a
+    // re-import of an originally-correct Judge.me export produces after an earlier import (via
+    // an older, buggy importer version, or a hand-edited file) lost titles the first time —
+    // backfilling here means re-running the same import a merchant already has is a real repair
+    // path, not just a no-op. Never touches a title that's already set (existing.title is
+    // truthy), so a merchant's own manual edit can never be silently overwritten by re-importing
+    // an older or different export of the same review.
+    if (!existing.title && row.title) {
+      if (!dryRun) {
+        await updateReview(storeId, existing.id, { title: row.title });
+      }
+      return { kind: "repaired", tier: match.tier };
+    }
     return { kind: "duplicate", tier: match.tier };
   }
 
@@ -236,6 +266,7 @@ function emptyResult(totalRows: number, dryRun: boolean): ImportResult {
     imported: 0,
     heldForModeration: 0,
     duplicates: 0,
+    titlesRepaired: 0,
     missingProducts: [],
     warnings: [],
     errors: [],
@@ -309,6 +340,9 @@ export async function importReviews(
       case "duplicate":
         result.duplicates += 1;
         break;
+      case "repaired":
+        result.titlesRepaired += 1;
+        break;
       case "missing_product": {
         const issue = buildMissingProductIssue(row);
         result.missingProducts.push(issue);
@@ -327,14 +361,17 @@ export async function importReviews(
 
   result.unmatchedRows = result.missingProducts.length;
   result.invalidRows = result.errors.length;
-  result.duplicateRows = result.duplicates;
-  result.matchedRows = result.imported + result.duplicates + result.errors.length;
+  // A repaired row is a duplicate that got its title backfilled — still counted as a
+  // duplicate for the merchant-facing "X duplicates" total (it created no new review), with
+  // titlesRepaired as its own additional, separately-reported detail.
+  result.duplicateRows = result.duplicates + result.titlesRepaired;
+  result.matchedRows = result.imported + result.duplicateRows + result.errors.length;
   result.expectedImportedCount = result.imported;
 
   console.log(
     `${logPrefix} complete — total=${result.totalRows} matched=${result.matchedRows} ` +
       `unmatched=${result.unmatchedRows} duplicates=${result.duplicateRows} invalid=${result.invalidRows} ` +
-      `imported=${result.imported} heldForModeration=${result.heldForModeration} ` +
+      `imported=${result.imported} heldForModeration=${result.heldForModeration} titlesRepaired=${result.titlesRepaired} ` +
       `tiers=${JSON.stringify(result.matchTierCounts)}`,
   );
 

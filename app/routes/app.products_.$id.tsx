@@ -420,7 +420,11 @@ export default function ProductDetailPage() {
                         </div>
                         <div className={styles.reviewContent}>
                           <div className={styles.reviewHeaderLine}>
-                            <span className={styles.reviewTitle}>{review.title ?? "Untitled review"}</span>
+                            {review.title ? (
+                              <span className={styles.reviewTitle}>{review.title}</span>
+                            ) : (
+                              <span className={`${styles.reviewTitle} ${styles.reviewTitleEmpty}`}>No title provided</span>
+                            )}
                             <ReviewStatusBadge status={review.status} />
                           </div>
                           <p className={styles.reviewMeta}>

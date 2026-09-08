@@ -184,10 +184,10 @@ export const action = async ({ request }: ActionFunctionArgs): Promise<ActionDat
       }
 
       const result = await importReviews(store.id, source, fileContent, admin, dryRun);
-      const nothingImported = result.imported === 0 && result.duplicates === 0;
+      const nothingHappened = result.imported === 0 && result.duplicates === 0 && result.titlesRepaired === 0;
       const hasIssues = result.errors.length > 0 || result.missingProducts.length > 0;
 
-      if (nothingImported && hasIssues) {
+      if (nothingHappened && hasIssues) {
         return {
           ok: false,
           intent,
@@ -196,12 +196,14 @@ export const action = async ({ request }: ActionFunctionArgs): Promise<ActionDat
         };
       }
 
+      const repairedNote = result.titlesRepaired > 0 ? ` ${result.titlesRepaired} existing review title${result.titlesRepaired === 1 ? "" : "s"} repaired.` : "";
+
       return {
         ok: true,
         intent,
         message: dryRun
-          ? `Dry run complete — ${result.expectedImportedCount} review${result.expectedImportedCount === 1 ? "" : "s"} would be imported. No changes were made.`
-          : `Imported ${result.imported} review${result.imported === 1 ? "" : "s"}.`,
+          ? `Dry run complete — ${result.expectedImportedCount} review${result.expectedImportedCount === 1 ? "" : "s"} would be imported.${repairedNote} No changes were made.`
+          : `Imported ${result.imported} review${result.imported === 1 ? "" : "s"}.${repairedNote}`,
         importResult: result,
       };
     }
@@ -1164,7 +1166,6 @@ export default function ReviewsPage() {
                       <tbody>
                         {effectiveReviews.map((review) => {
                           const isSelected = review.id === selectedReviewId;
-                          const reviewTitle = review.title ?? "Untitled review";
                           const customerName = review.reviewerName;
                           const productName = review.productTitle ?? review.product?.name ?? "Unassigned product";
                           const checked = selectedIds.includes(review.id);
@@ -1197,7 +1198,11 @@ export default function ReviewsPage() {
                                 </div>
                               </td>
                               <td className={styles.tdReview}>
-                                <p className={styles.reviewTitle}>{reviewTitle}</p>
+                                {review.title ? (
+                                  <p className={styles.reviewTitle}>{review.title}</p>
+                                ) : (
+                                  <p className={`${styles.reviewTitle} ${styles.reviewTitleEmpty}`}>No title provided</p>
+                                )}
                                 <p className={styles.reviewMetaLine}>
                                   <span className={styles.metaCustomer}>{customerName}</span>
                                   <span className={styles.metaSeparator} aria-hidden="true">·</span>
@@ -1225,7 +1230,9 @@ export default function ReviewsPage() {
                           <span className={styles.autoApprovedBadge}>Auto Approved</span>
                         ) : null}
                       </div>
-                      <h2 className={styles.detailTitle}>{selectedReview.title ?? "Untitled review"}</h2>
+                      <h2 className={selectedReview.title ? styles.detailTitle : `${styles.detailTitle} ${styles.detailTitleEmpty}`}>
+                        {selectedReview.title ?? "No title provided"}
+                      </h2>
                       <div className={styles.ratingLarge} aria-label={`${selectedReview.rating} out of 5 stars`}>
                         <StarRating value={selectedReview.rating} size={15} />
                       </div>
