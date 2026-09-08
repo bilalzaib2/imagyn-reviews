@@ -1,10 +1,12 @@
-import { AppProvider } from "@shopify/shopify-app-react-router/react";
 import { useState } from "react";
 import type { ActionFunctionArgs, LoaderFunctionArgs } from "react-router";
 import { Form, useActionData, useLoaderData } from "react-router";
 
 import { login } from "../../shopify.server";
 import { loginErrorMessage } from "./error.server";
+import { Button } from "../../components/ui/Button";
+
+import styles from "../_index/styles.module.css";
 
 export const loader = async ({ request }: LoaderFunctionArgs) => {
   const errors = loginErrorMessage(await login(request));
@@ -20,6 +22,10 @@ export const action = async ({ request }: ActionFunctionArgs) => {
   };
 };
 
+// Reachable whenever the shop-domain form on the sign-in page (_index/route.tsx) submits
+// with a validation error — same visual language as that page (shares its CSS module)
+// instead of the unstyled Polaris web-component defaults this route used to render, so a
+// merchant never lands on what reads as a bare developer scaffold mid-sign-in.
 export default function Auth() {
   const loaderData = useLoaderData<typeof loader>();
   const actionData = useActionData<typeof action>();
@@ -27,23 +33,37 @@ export default function Auth() {
   const { errors } = actionData || loaderData;
 
   return (
-    <AppProvider embedded={false}>
-      <s-page>
-        <Form method="post">
-        <s-section heading="Log in">
-          <s-text-field
-            name="shop"
-            label="Shop domain"
-            details="example.myshopify.com"
-            value={shop}
-            onChange={(e) => setShop(e.currentTarget.value)}
-            autocomplete="on"
-            error={errors.shop}
-          ></s-text-field>
-          <s-button type="submit">Log in</s-button>
-        </s-section>
-        </Form>
-      </s-page>
-    </AppProvider>
+    <div className={styles.page}>
+      <div className={styles.hero} style={{ gridTemplateColumns: "minmax(0, 1fr)", justifyItems: "center" }}>
+        <div className={styles.left}>
+          <img className={styles.logo} src="/assets/imagyn-app-logo.svg?v=2" alt="Imagyn Reviews" />
+
+          <div className={styles.copy}>
+            <h1 className={styles.heading}>Sign in to Imagyn Reviews</h1>
+            {errors.shop ? <p className={styles.description}>{errors.shop}</p> : null}
+          </div>
+
+          <div className={styles.loginCard}>
+            <Form className={styles.form} method="post">
+              <label className={styles.label}>
+                <span className={styles.labelText}>Shop domain</span>
+                <input
+                  className={styles.input}
+                  type="text"
+                  name="shop"
+                  placeholder="my-shop-domain.myshopify.com"
+                  value={shop}
+                  onChange={(event) => setShop(event.currentTarget.value)}
+                  autoComplete="on"
+                />
+              </label>
+              <Button type="submit" variant="primary" fullWidth>
+                Log in
+              </Button>
+            </Form>
+          </div>
+        </div>
+      </div>
+    </div>
   );
 }

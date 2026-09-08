@@ -3,6 +3,7 @@ import { redirect, Form, useLoaderData } from "react-router";
 
 import { login } from "../../shopify.server";
 import { Button } from "../../components/ui/Button";
+import { SystemPreview } from "./SystemPreview";
 
 import styles from "./styles.module.css";
 
@@ -50,9 +51,10 @@ export default function App() {
           <img className={styles.logo} src="/assets/imagyn-app-logo.svg?v=2" alt="Imagyn Reviews" />
 
           <div className={styles.copy}>
-            <h1 className={styles.heading}>Sign in to Imagyn Reviews</h1>
+            <h1 className={styles.heading}>Turn customer feedback into proof.</h1>
             <p className={styles.description}>
-              The premium review platform for Shopify brands who care about trust.
+              Sign in to collect, moderate, and showcase reviews that make your store more
+              trustworthy.
             </p>
           </div>
 
@@ -73,11 +75,7 @@ export default function App() {
 
         <div className={styles.right}>
           <div className={styles.previewFrame}>
-            <img
-              className={styles.previewImage}
-              src="/assets/landing-dashboard-preview.png"
-              alt="Imagyn Reviews dashboard showing trust overview, rating distribution and AI-powered insights"
-            />
+            <SystemPreview />
           </div>
         </div>
       </section>
