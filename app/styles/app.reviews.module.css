@@ -376,6 +376,15 @@
   flex: none;
 }
 
+/* A quiet trust signal, not a status pill — same restrained treatment as the storefront
+   widget's own .imagyn-review-card__verified (checkmark + label, no background/border), so a
+   merchant scanning this table sees the same "verified" language a shopper does. */
+.metaVerified {
+  flex: none;
+  color: var(--color-success);
+  font-weight: 500;
+}
+
 .metaProduct {
   flex: 1 1 0%;
   min-width: 0;

@@ -24,6 +24,7 @@ import { Button } from "../components/ui/Button";
 import { Container } from "../components/ui/Container";
 import { LinkButton } from "../components/ui/LinkButton";
 import { ReviewStatusBadge } from "../components/reviews/ReviewStatusBadge";
+import { VerifiedBadge } from "../components/reviews/VerifiedBadge";
 import { StarRating } from "../components/reviews/StarRating";
 import { authenticateAdminDeduped } from "../services/auth-dedupe.server";
 import { getOrCreateStore } from "../services/store.server";
@@ -426,6 +427,7 @@ export default function ProductDetailPage() {
                               <span className={`${styles.reviewTitle} ${styles.reviewTitleEmpty}`}>No title provided</span>
                             )}
                             <ReviewStatusBadge status={review.status} />
+                            {review.verifiedPurchase ? <VerifiedBadge /> : null}
                           </div>
                           <p className={styles.reviewMeta}>
                             {review.reviewerName} • {formatDate(review.createdAt)}

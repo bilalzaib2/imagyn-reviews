@@ -27,6 +27,7 @@ import { Container } from "../components/ui/Container";
 import { LinkButton } from "../components/ui/LinkButton";
 import { Section } from "../components/ui/Section";
 import { ReviewStatusBadge } from "../components/reviews/ReviewStatusBadge";
+import { VerifiedBadge } from "../components/reviews/VerifiedBadge";
 import { StarRating } from "../components/reviews/StarRating";
 import {
   approveReview,
@@ -1238,6 +1239,11 @@ export default function ReviewsPage() {
                                 )}
                                 <p className={styles.reviewMetaLine}>
                                   <span className={styles.metaCustomer}>{customerName}</span>
+                                  {review.verifiedPurchase ? (
+                                    <span className={styles.metaVerified} title="Verified buyer">
+                                      ✓ Verified
+                                    </span>
+                                  ) : null}
                                   <span className={styles.metaSeparator} aria-hidden="true">·</span>
                                   <span className={styles.metaProduct}>{productName}</span>
                                 </p>
@@ -1262,6 +1268,7 @@ export default function ReviewsPage() {
                         {selectedReview.moderationStatus === "auto_approved" ? (
                           <span className={styles.autoApprovedBadge}>Auto Approved</span>
                         ) : null}
+                        {selectedReview.verifiedPurchase ? <VerifiedBadge /> : null}
                       </div>
                       <h2 className={selectedReview.title ? styles.detailTitle : `${styles.detailTitle} ${styles.detailTitleEmpty}`}>
                         {selectedReview.title ?? "No title provided"}
@@ -1300,10 +1307,7 @@ export default function ReviewsPage() {
                       <div className={styles.detailMeta}>
                         <div className={styles.detailMetaRow}>
                           <span className={styles.detailMetaLabel}>Customer</span>
-                          <span className={styles.detailMetaValue}>
-                            {selectedReview.reviewerName}
-                            {selectedReview.verifiedPurchase ? " · Verified buyer" : ""}
-                          </span>
+                          <span className={styles.detailMetaValue}>{selectedReview.reviewerName}</span>
                         </div>
                         {selectedReview.reviewerEmail ? (
                           <div className={styles.detailMetaRow}>
