@@ -17,6 +17,7 @@ import { reviewRequestService } from "../services/review-request.server";
 import { getLatestAiSummaryForStore } from "../services/aiSummary.server";
 import { getProductReviewCoverage } from "../services/product.server";
 import { getRewardStats } from "../services/rewards.server";
+import { getSetupGuideItems } from "../services/setupGuide.server";
 import { getOrCreateStore } from "../services/store.server";
 import { getStorePermissions } from "../services/permissions";
 import { authenticateAdminDeduped } from "../services/auth-dedupe.server";
@@ -28,12 +29,13 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
   const { session } = await authenticateAdminDeduped(request);
   const store = await getOrCreateStore(session.shop);
 
-  const [stats, requestStats, aiSpotlight, productCoverage, permissions] = await Promise.all([
+  const [stats, requestStats, aiSpotlight, productCoverage, permissions, setupGuide] = await Promise.all([
     getStoreReviewStats(store.id, { recentLimit: 5 }),
     reviewRequestService.getRequestStats(store.id),
     getLatestAiSummaryForStore(store.id),
     getProductReviewCoverage(store.id),
     getStorePermissions(store.id),
+    getSetupGuideItems(store.id),
   ]);
 
   // Reward stats are their own query only when the merchant has actually turned Rewards on —
@@ -48,6 +50,7 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
     aiSpotlight,
     productCoverage,
     rewardStats,
+    setupGuide,
     automation: {
       // Two distinct, real facts — not one flag. Shopify's Protected Customer Data approval
       // (isApproved) was granted 2026-09-08; isLive is a separate, deliberate activation
@@ -82,8 +85,9 @@ const REWARDS_QUICK_ACTION = { label: "Manage Review Rewards", href: "/app/setti
 const RATING_VALUES = [5, 4, 3, 2, 1] as const;
 
 export default function Index() {
-  const { storeName, stats, requestStats, aiSpotlight, productCoverage, rewardStats, automation } =
+  const { storeName, stats, requestStats, aiSpotlight, productCoverage, rewardStats, setupGuide, automation } =
     useLoaderData<typeof loader>();
+  const incompleteSetupItems = setupGuide.filter((item) => !item.done);
 
   // Computed client-side (the merchant's local time), not in the loader (the server's) —
   // defaulting to a neutral greeting until mount avoids a server/client hydration mismatch.
@@ -136,6 +140,31 @@ export default function Index() {
             </>
           }
         />
+
+        {incompleteSetupItems.length > 0 ? (
+          <Section
+            title="Getting started"
+            description={`${setupGuide.length - incompleteSetupItems.length} of ${setupGuide.length} done.`}
+          >
+            <div className={styles.setupGuideGrid}>
+              {setupGuide.map((item) => (
+                <Link
+                  key={item.key}
+                  to={item.href}
+                  className={`${styles.setupGuideCard} ${item.done ? styles.setupGuideCardDone : ""}`}
+                >
+                  <span className={styles.setupGuideCheck} aria-hidden="true">
+                    {item.done ? "✓" : ""}
+                  </span>
+                  <span>
+                    <span className={styles.setupGuideLabel}>{item.label}</span>
+                    <span className={styles.setupGuideDescription}>{item.description}</span>
+                  </span>
+                </Link>
+              ))}
+            </div>
+          </Section>
+        ) : null}
 
         <nav className={styles.quickActions} aria-label="Quick actions">
           {(rewardStats ? [...QUICK_ACTIONS, REWARDS_QUICK_ACTION] : QUICK_ACTIONS).map((action) => (
