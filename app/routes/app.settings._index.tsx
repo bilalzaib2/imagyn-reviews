@@ -2,6 +2,7 @@ import { useLoaderData } from "react-router";
 import type { LoaderFunctionArgs } from "react-router";
 import { Section } from "../components/ui/Section";
 import { StatusBadge, type StatusBadgeTone } from "../components/ui/StatusBadge";
+import { ActionCard } from "../components/ui/ActionCard";
 import { authenticateAdminDeduped } from "../services/auth-dedupe.server";
 import { getOrCreateStore } from "../services/store.server";
 import { getStorePermissions } from "../services/permissions";
@@ -103,13 +104,22 @@ export default function SettingsOverviewPage() {
         />
       </div>
 
-      {/* Real <a>, not <Link> — same reason app.settings.tsx's own sidebar uses real anchors:
-          a client-side pushState here is exactly what Shopify's embedded shell silently
-          reverts once it doesn't recognize the resulting URL. */}
       <div className={styles.overviewLinks}>
-        <a href="/app/settings/requests">Configure request scheduling &amp; reminders</a>
-        <a href="/app/settings/moderation">Configure publishing &amp; moderation</a>
-        <a href="/app/settings/rewards">Configure Review Rewards</a>
+        <ActionCard
+          title="Request Scheduling"
+          description="Set when review requests and reminders are sent."
+          action={{ label: "Configure", href: "/app/settings/requests" }}
+        />
+        <ActionCard
+          title="Publishing & Moderation"
+          description="Control which reviews appear on your store."
+          action={{ label: "Manage", href: "/app/settings/moderation" }}
+        />
+        <ActionCard
+          title="Review Rewards"
+          description="Reward customers for leaving reviews."
+          action={{ label: "Configure", href: "/app/settings/rewards" }}
+        />
       </div>
     </Section>
   );
