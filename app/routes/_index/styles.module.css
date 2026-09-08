@@ -29,14 +29,26 @@
   max-width: 24rem;
 }
 
+/* A quiet, staggered entrance for the left column — logo, then heading, then description,
+   then the login card — instead of everything appearing at once. Each element reuses the
+   same fadeUp keyframe, offset only by animation-delay, so the sequence reads as one
+   deliberate motion rather than four different effects. */
+.logo,
+.copy,
+.loginCard {
+  animation: fadeUp 500ms ease-out both;
+}
+
 .logo {
   height: 20px;
   width: auto;
+  animation-delay: 0ms;
 }
 
 .copy {
   display: grid;
   gap: var(--space-3);
+  animation-delay: 80ms;
 }
 
 /* Deliberately restrained — a login screen states its purpose, it doesn't sell. Sized
@@ -64,6 +76,7 @@
   background: var(--color-surface);
   border-radius: var(--radius-lg);
   box-shadow: var(--shadow-md);
+  animation-delay: 160ms;
 }
 
 .form {
@@ -125,6 +138,28 @@
     0 2px 6px rgba(17, 17, 17, 0.05),
     0 16px 40px rgba(17, 17, 17, 0.08),
     0 40px 80px rgba(17, 17, 17, 0.07);
+  animation: fadeUp 500ms ease-out both;
+  animation-delay: 120ms;
+}
+
+@keyframes fadeUp {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .logo,
+  .copy,
+  .loginCard,
+  .previewFrame {
+    animation: none;
+  }
 }
 
 @media only screen and (max-width: 64rem) {

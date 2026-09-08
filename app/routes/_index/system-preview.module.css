@@ -36,6 +36,27 @@
   color: var(--color-text-muted);
 }
 
+/* Gentle, user-triggered lift on hover — a small cue that these are real product objects,
+   not a flat illustration. Kept subtle (2px, one shadow step up) so it reads as tactile
+   rather than as another animation competing with the entrance sequence. */
+.card,
+.badge {
+  transition: transform var(--transition-base), box-shadow var(--transition-base);
+}
+
+.card:hover,
+.badge:hover {
+  transform: translateY(-2px);
+  box-shadow: var(--shadow-md);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .card,
+  .badge {
+    transition: none;
+  }
+}
+
 .card {
   display: grid;
   gap: var(--space-1);
