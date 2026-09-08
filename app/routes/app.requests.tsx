@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
+import type { ChangeEvent } from "react";
 import {
   Link as RemixLink,
   useFetcher,
@@ -44,6 +45,7 @@ import {
   type ReviewRequestSortDir,
   type ReviewRequestStatus,
 } from "../services/review-request.server";
+import { importReviewRequestsFromCsv, type CsvRequestImportResult } from "../services/reviewRequestCsvImport.server";
 import shellStyles from "../styles/app.shell.module.css";
 import sharedStyles from "../styles/shared.module.css";
 import styles from "../styles/app.requests.module.css";
@@ -117,6 +119,7 @@ type ActionData = {
   // below) — distinguishes "here's something worth confirming" from a hard failure, so the UI
   // keeps the modal open with an inline banner instead of toasting an error and closing it.
   warning?: boolean;
+  csvResult?: CsvRequestImportResult;
 };
 
 type RequestModalMode = "create" | "edit" | "reschedule";
@@ -359,6 +362,36 @@ export const action = async ({ request }: ActionFunctionArgs): Promise<ActionDat
       }
 
       return { ok: true, message: parts.join(", ") + ".", intent };
+    }
+
+    if (intent === "create-from-csv") {
+      const fileContent = String(formData.get("fileContent") || "");
+      const delayDays = Number(formData.get("delayDays") || "0");
+
+      if (!fileContent.trim()) {
+        return { ok: false, error: "Choose a file to upload.", intent };
+      }
+      if (!Number.isFinite(delayDays) || delayDays < 0) {
+        return { ok: false, error: "Delay must be a positive number of days.", intent };
+      }
+
+      const result = await importReviewRequestsFromCsv(store.id, fileContent, null, delayDays);
+
+      const nothingHappened = result.created === 0 && result.skippedDuplicates === 0;
+      const hasIssues = result.errors.length > 0 || result.missingProducts.length > 0;
+      if (nothingHappened && hasIssues) {
+        return { ok: false, intent, error: "No requests could be created. See the details below.", csvResult: result };
+      }
+
+      const parts = [`${result.created} request${result.created === 1 ? "" : "s"} scheduled`];
+      if (result.skippedDuplicates > 0) {
+        parts.push(`${result.skippedDuplicates} skipped (already requested or reviewed)`);
+      }
+      if (hasIssues) {
+        parts.push(`${result.errors.length + result.missingProducts.length} row(s) had issues`);
+      }
+
+      return { ok: true, intent, message: parts.join(", ") + ".", csvResult: result };
     }
 
     if (intent === "edit") {
@@ -687,7 +720,7 @@ const SEND_SOURCE_TABS: Array<{ value: SendSource; label: string; disabled?: boo
   { value: "shopify-orders", label: "Shopify Orders" },
   { value: "individual", label: "Individual Customer" },
   { value: "segment", label: "Customer Segment" },
-  { value: "csv", label: "Upload CSV", disabled: true },
+  { value: "csv", label: "Upload CSV" },
 ];
 
 // "Choose source" step of the redesigned Send Request flow — Shopify Orders (real data) is the
@@ -1155,9 +1188,9 @@ export default function RequestsPage() {
   const [modalInstanceKey, setModalInstanceKey] = useState(0);
   // "Create" mode only — which of the four sources the merchant is sending from. Individual
   // Customer renders the exact same picker/fields that already existed before this source
-  // selector was added; Shopify Orders is the new real-data table below. Segment/CSV are
-  // honestly disabled — no schema, no CSV-to-request parser exists yet, so showing them as
-  // clickable-but-inert would be exactly the "decorative setting" this product avoids elsewhere.
+  // selector was added; Shopify Orders is the real-data table below; Customer Segment reuses
+  // that same table under a preset filter; Upload CSV parses a real file via
+  // reviewRequestCsvImport.server.ts. All four are real, working paths.
   const [sendSource, setSendSource] = useState<"shopify-orders" | "individual" | "segment" | "csv">("shopify-orders");
   const [orderSearch, setOrderSearch] = useState("");
   const [orderFilters, setOrderFilters] = useState<OrderFilters>(emptyOrderFilters);
@@ -1177,6 +1210,11 @@ export default function RequestsPage() {
   };
   const [selectedOrderLineItems, setSelectedOrderLineItems] = useState<Record<string, ShopifyOrderSelection>>({});
   const [orderSendDelayDays, setOrderSendDelayDays] = useState("7");
+  const [csvFileName, setCsvFileName] = useState<string | null>(null);
+  const [csvFileContent, setCsvFileContent] = useState<string | null>(null);
+  const [csvFileError, setCsvFileError] = useState<string | null>(null);
+  const [csvDelayDays, setCsvDelayDays] = useState("3");
+  const csvFileInputRef = useRef<HTMLInputElement>(null);
   const ordersFetcher = useFetcher<{
     ok: boolean;
     error?: string;
@@ -1392,6 +1430,13 @@ export default function RequestsPage() {
     setLoadedOrders([]);
     setOrderPageInfo({ hasNextPage: false, endCursor: null });
     lastOrderCursorRef.current = null;
+    setCsvFileName(null);
+    setCsvFileContent(null);
+    setCsvFileError(null);
+    setCsvDelayDays("3");
+    if (csvFileInputRef.current) {
+      csvFileInputRef.current.value = "";
+    }
     setRequestModalOpen(true);
   };
 
@@ -1546,6 +1591,41 @@ export default function RequestsPage() {
     }
 
     submitAction({ _intent: confirmationState.intent, requestId: confirmationState.requestId });
+  };
+
+  const handleCsvFileChange = (event: ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    setCsvFileName(null);
+    setCsvFileContent(null);
+    setCsvFileError(null);
+
+    if (!file) {
+      return;
+    }
+
+    setCsvFileName(file.name);
+    const reader = new FileReader();
+    reader.onload = () => {
+      const text = typeof reader.result === "string" ? reader.result : "";
+      if (!text.trim()) {
+        setCsvFileError("The file is empty.");
+        return;
+      }
+      setCsvFileContent(text);
+    };
+    reader.onerror = () => setCsvFileError("Unable to read the file.");
+    reader.readAsText(file);
+  };
+
+  const submitCsvRequests = () => {
+    if (!csvFileContent) {
+      return;
+    }
+    // Deliberately doesn't close the modal itself, unlike the other create paths — a partial
+    // failure (some rows created, some skipped/errored) needs the inline breakdown below to
+    // stay visible for review. The shared fetcher.data effect above already closes the modal
+    // for a real full success (ok: true) and leaves it open otherwise.
+    submitAction({ _intent: "create-from-csv", fileContent: csvFileContent, delayDays: csvDelayDays });
   };
 
   const handleModalSubmit = () => {
@@ -2149,6 +2229,12 @@ export default function RequestsPage() {
                 onAction: handleModalSubmit,
                 disabled: isMutating || Object.keys(selectedOrderLineItems).length === 0,
               }
+            : requestModalMode === "create" && sendSource === "csv"
+            ? {
+                content: isMutating && activeIntent === "create-from-csv" ? "Sending..." : "Send requests from file",
+                onAction: submitCsvRequests,
+                disabled: isMutating || !csvFileContent,
+              }
             : {
                 content:
                   requestModalMode === "create"
@@ -2192,11 +2278,30 @@ export default function RequestsPage() {
             ) : null}
 
             {requestModalMode === "create" && sendSource === "csv" ? (
-              <p className={styles.feedbackMuted}>
-                CSV upload for review requests isn&apos;t built yet (CSV import exists for reviews themselves — see
-                Reviews — but a request-specific importer is separate, unbuilt work). This tab will become real
-                functionality here, not a decorative option, once it is.
-              </p>
+              <BlockStack gap="300">
+                <p className={styles.feedbackMuted}>
+                  Upload a CSV with columns for email, name, and product (name or handle) — order number and delay
+                  days are optional per row. Customers who already have a pending, sent, or reviewed request for a
+                  given product are skipped automatically.
+                </p>
+                <input ref={csvFileInputRef} type="file" accept=".csv,text/csv" onChange={handleCsvFileChange} disabled={isMutating} />
+                {csvFileError ? <p className={styles.feedbackError}>{csvFileError}</p> : null}
+                {csvFileName && !csvFileError ? <p className={styles.feedbackMuted}>{csvFileName} ready to send.</p> : null}
+                <Select
+                  label="Default delay (rows without their own delay column use this)"
+                  options={DELAY_OPTIONS}
+                  value={csvDelayDays}
+                  onChange={setCsvDelayDays}
+                  disabled={isMutating}
+                />
+                {activeIntent === "create-from-csv" && fetcher.data?.csvResult ? (
+                  <p className={styles.feedbackMuted}>
+                    Last upload: {fetcher.data.csvResult.created} created, {fetcher.data.csvResult.skippedDuplicates} skipped
+                    {fetcher.data.csvResult.missingProducts.length > 0 ? `, ${fetcher.data.csvResult.missingProducts.length} unmatched product(s)` : ""}
+                    {fetcher.data.csvResult.errors.length > 0 ? `, ${fetcher.data.csvResult.errors.length} row error(s)` : ""}.
+                  </p>
+                ) : null}
+              </BlockStack>
             ) : null}
 
             {requestModalMode === "create" && sendSource === "segment" ? (
