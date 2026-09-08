@@ -612,6 +612,11 @@ export default function WidgetsPage() {
       setDraftSettings(reviewsWidget.settings);
       setBaselineSettings(reviewsWidget.settings);
     }
+    // Deliberately keyed on id/updatedAt, not the whole reviewsWidget object — a loader
+    // revalidation gives it a new object identity on every render even when nothing about the
+    // saved widget actually changed, which would otherwise reset the merchant's in-progress
+    // draft edits on every unrelated re-render.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [reviewsWidget?.id, reviewsWidget?.updatedAt]);
 
   useEffect(() => {

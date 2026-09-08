@@ -153,7 +153,7 @@ export default function SettingsRewardsPage() {
             <Checkbox label="Must include a video" checked={requireVideo} onChange={setRequireVideo} />
 
             <p className={styles.mutedText}>
-              A discount code is created only once per review, the moment it's approved and meets every condition
+              A discount code is created only once per review, the moment it&apos;s approved and meets every condition
               above — never before, and never twice for the same review. The customer is emailed using the
               &quot;Review Reward&quot; template in <a href="/app/email-studio?type=reward">Email Studio</a>.
             </p>

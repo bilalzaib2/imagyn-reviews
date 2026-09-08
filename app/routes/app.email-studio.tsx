@@ -441,7 +441,7 @@ export default function EmailStudioPage() {
                   {activeType === "review_request" ? (
                     <p className={styles.fieldHint}>
                       A merchant note added to an individual request always overrides this default message for that
-                      one send. Reminder emails always use this template's own message.
+                      one send. Reminder emails always use this template&apos;s own message.
                     </p>
                   ) : null}
                 </div>

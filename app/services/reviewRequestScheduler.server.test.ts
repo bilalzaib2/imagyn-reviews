@@ -263,7 +263,7 @@ describe("runDueReminderSweep", () => {
       { id: "req_1", storeId: "store_1", status: "sent", scheduledFor: null, sentAt: day(7), reminder1SentAt: null },
     ];
 
-    const result = await runDueReminderSweep(now);
+    await runDueReminderSweep(now);
 
     // Only one reminder per row per tick — reminder_1 takes priority since it's also due; the
     // final reminder becomes eligible on the very next tick once reminder1SentAt is set.

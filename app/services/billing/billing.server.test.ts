@@ -10,7 +10,7 @@ vi.mock("../../db.server", () => ({
   default: {},
 }));
 
-const setDevelopmentStoreFlag = vi.fn(async (_id: string, _isDevelopmentStore: boolean) => ({}));
+const setDevelopmentStoreFlag = vi.fn(async (id: string, isDevelopmentStore: boolean) => ({ id, isDevelopmentStore }));
 vi.mock("../store.server", () => ({
   getSlug: vi.fn(),
   updateBillingState: vi.fn(),
