@@ -145,6 +145,15 @@ model Store {
 
   rewards Reward[]
 
+  // Google Shopping / Product Ratings & Reviews feed (see googleReviewFeed.server.ts). The
+  // feed itself needs no new table — it's generated on demand from real Review/Product rows
+  // — just an enable flag and an unguessable per-store token so the public feed URL
+  // (feeds.google-reviews.$token.tsx) can't be enumerated by storeId. Token is generated
+  // lazily on first enable, not eagerly for every store, so an unused feed never allocates
+  // a public URL at all.
+  googleFeedEnabled Boolean @default(false)
+  googleFeedToken   String? @unique
+
   coupons           Coupon[]
   couponRedemptions CouponRedemption[]
 
