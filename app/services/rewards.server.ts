@@ -17,6 +17,7 @@ import prisma from "../db.server";
 import { emailTemplateService } from "./emailTemplate.server";
 import { buildReviewRequestEmail } from "./notifications/templates.server";
 import { getEmailProvider } from "./notifications/provider.server";
+import { createShopifyDiscount } from "./shopifyDiscount.server";
 
 export interface RewardSettings {
   enabled: boolean;
@@ -111,75 +112,6 @@ function generateDiscountCode(): string {
   return `THANKS-${random}`;
 }
 
-interface DiscountCodeBasicCreateResponse {
-  data?: {
-    discountCodeBasicCreate?: {
-      codeDiscountNode?: { id: string } | null;
-      userErrors: Array<{ field: string[] | null; message: string; code?: string }>;
-    };
-  };
-}
-
-const DISCOUNT_CODE_BASIC_CREATE = `#graphql
-  mutation DiscountCodeBasicCreate($basicCodeDiscount: DiscountCodeBasicInput!) {
-    discountCodeBasicCreate(basicCodeDiscount: $basicCodeDiscount) {
-      codeDiscountNode {
-        id
-      }
-      userErrors {
-        field
-        message
-        code
-      }
-    }
-  }
-`;
-
-async function createShopifyDiscount(
-  storeDomain: string,
-  code: string,
-  settings: Pick<RewardSettings, "valueType" | "value">,
-): Promise<{ ok: true; discountId: string } | { ok: false; error: string }> {
-  // Imported lazily (not at module scope) so that merely importing rewards.server.ts — e.g.
-  // transitively, via review.server.ts, from files that only test unrelated review logic —
-  // never eagerly evaluates shopify.server.ts's top-level PrismaSessionStorage construction.
-  const { unauthenticated } = await import("../shopify.server");
-  const { admin } = await unauthenticated.admin(storeDomain);
-
-  const customerGets =
-    settings.valueType === "percentage"
-      ? { value: { percentage: settings.value / 100 }, items: { all: true } }
-      : { value: { discountAmount: { amount: settings.value, appliesOnEachItem: false } }, items: { all: true } };
-
-  const basicCodeDiscount = {
-    title: `Review reward — ${code}`,
-    code,
-    startsAt: new Date().toISOString(),
-    customerSelection: { all: true },
-    customerGets,
-    // A real, Shopify-enforced abuse guard — not just our own DB uniqueness — so the same
-    // code can never be redeemed more than once by anyone, on top of one Reward row ever
-    // existing per review.
-    usageLimit: 1,
-    appliesOncePerCustomer: true,
-  };
-
-  const response = await admin.graphql(DISCOUNT_CODE_BASIC_CREATE, { variables: { basicCodeDiscount } });
-  const json = (await response.json()) as DiscountCodeBasicCreateResponse;
-  const result = json.data?.discountCodeBasicCreate;
-
-  if (!result || result.userErrors.length > 0) {
-    const message = result?.userErrors.map((error) => error.message).join(" ") || "Unable to create the discount.";
-    return { ok: false, error: message };
-  }
-
-  if (!result.codeDiscountNode?.id) {
-    return { ok: false, error: "Shopify did not return a discount id." };
-  }
-
-  return { ok: true, discountId: result.codeDiscountNode.id };
-}
-
 export interface RewardEvaluationInput {
   reviewId: string;
   storeId: string;
@@ -261,7 +193,17 @@ export async function evaluateAndIssueReward(input: RewardEvaluationInput): Prom
   const code = generateDiscountCode();
 
   try {
-    const result = await createShopifyDiscount(input.storeDomain, code, settings);
+    const result = await createShopifyDiscount(input.storeDomain, {
+      title: `Review reward — ${code}`,
+      code,
+      valueType: settings.valueType,
+      value: settings.value,
+      // A real, Shopify-enforced abuse guard — not just our own DB uniqueness — so the same
+      // code can never be redeemed more than once by anyone, on top of one Reward row ever
+      // existing per review.
+      usageLimit: 1,
+      appliesOncePerCustomer: true,
+    });
 
     if (!result.ok) {
       await prisma.reward

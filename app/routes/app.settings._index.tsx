@@ -120,6 +120,16 @@ export default function SettingsOverviewPage() {
           description="Reward customers for leaving reviews."
           action={{ label: "Configure", href: "/app/settings/rewards" }}
         />
+        <ActionCard
+          title="Coupons"
+          description="Create standalone promotional campaigns and issue real discount codes."
+          action={{ label: "Configure", href: "/app/settings/coupons" }}
+        />
+        <ActionCard
+          title="Referrals"
+          description="Reward customers for bringing in new buyers."
+          action={{ label: "Configure", href: "/app/settings/referrals" }}
+        />
       </div>
     </Section>
   );

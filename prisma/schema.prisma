@@ -28,27 +28,27 @@ model Session {
   accountOwner        Boolean   @default(false)
   locale              String?
   collaborator        Boolean?  @default(false)
-  emailVerified      Boolean?  @default(false)
+  emailVerified       Boolean?  @default(false)
   refreshToken        String?
   refreshTokenExpires DateTime?
 }
 
 model Store {
-  id           String          @id @default(cuid())
-  name         String
-  slug         String          @unique
-  domain       String?
-  createdAt    DateTime        @default(now())
-  updatedAt    DateTime        @updatedAt
-  products     Product[]
-  reviews      Review[]
-  reviewRequests ReviewRequest[]
-  widgets      Widget[]
-  appearances  Appearance[]
-  emailTemplates EmailTemplate[]
-  achievements Achievement[]
+  id                String             @id @default(cuid())
+  name              String
+  slug              String             @unique
+  domain            String?
+  createdAt         DateTime           @default(now())
+  updatedAt         DateTime           @updatedAt
+  products          Product[]
+  reviews           Review[]
+  reviewRequests    ReviewRequest[]
+  widgets           Widget[]
+  appearances       Appearance[]
+  emailTemplates    EmailTemplate[]
+  achievements      Achievement[]
   emailSuppressions EmailSuppression[]
-  auditLogs    AuditLog[]
+  auditLogs         AuditLog[]
 
   // Order-lifecycle automation settings (see review-request.server.ts's createFromOrder and
   // webhooks.fulfillments.create.tsx). autoRequestTrigger is a plain string, not an enum, so
@@ -65,14 +65,14 @@ model Store {
   // store.server.ts's updateReminderSettings), never on a resave while already on, so
   // re-enabling after a period of being off starts the cutoff fresh rather than resurrecting
   // whatever accumulated while off.
-  reminderEmailsEnabled Boolean   @default(false)
-  remindersEnabledAt    DateTime?
+  reminderEmailsEnabled  Boolean   @default(false)
+  remindersEnabledAt     DateTime?
   // Merchant-configurable reminder timing (see reviewRequestScheduler.server.ts's
   // runDueReminderSweep, previously hardcoded 3/7). Defaults match that exact prior hardcoded
   // behavior, so every existing store's real send timing is unchanged until a merchant actually
   // edits these in Settings → Request Scheduling.
-  reminder1DelayDays     Int @default(3)
-  reminderFinalDelayDays Int @default(7)
+  reminder1DelayDays     Int       @default(3)
+  reminderFinalDelayDays Int       @default(7)
 
   // Shopify Billing (see app/services/billing/). This is a local cache of Shopify's own
   // billing state — kept in sync by the app_subscriptions/update webhook and by the billing
@@ -89,14 +89,14 @@ model Store {
   // all of them to plan: "starter", planStatus: "active" rather than a dead-end status, so
   // access-control (app.tsx's gate) only ever needs to check for "active"/"trialing" (plus
   // the isDevelopmentStore/plan==="owner" bypasses — see getBillingSnapshot).
-  plan                 String    @default("starter")
-  planStatus           String    @default("pending")
+  plan                  String    @default("starter")
+  planStatus            String    @default("pending")
   shopifySubscriptionId String?
-  trialEndsAt          DateTime?
+  trialEndsAt           DateTime?
   // Computed once via Admin GraphQL (shop.plan.partnerDevelopment) and cached — a store's
   // development status essentially never changes in practice, so this avoids a live check on
   // every request. Development stores always bypass billing entirely (see billing.server.ts).
-  isDevelopmentStore   Boolean?
+  isDevelopmentStore    Boolean?
 
   // Moderation Rules (see app/services/moderationRules.server.ts) — automatic screening for
   // new customer-submitted reviews, applied in the submission pipeline (api.reviews.tsx,
@@ -144,13 +144,20 @@ model Store {
   rewardRequireVideo    Boolean @default(false)
 
   rewards Reward[]
+
+  coupons           Coupon[]
+  couponRedemptions CouponRedemption[]
+
+  referralProgram     ReferralProgram?
+  referrals           Referral[]
+  referralConversions ReferralConversion[]
 }
 
 model Product {
-  id               String   @id @default(cuid())
+  id String @id @default(cuid())
 
-  storeId          String
-  store            Store    @relation(fields: [storeId], references: [id], onDelete: Cascade)
+  storeId String
+  store   Store  @relation(fields: [storeId], references: [id], onDelete: Cascade)
 
   shopifyProductId String? @unique
   name             String
@@ -163,25 +170,25 @@ model Product {
   description      String?
 
   // Denormalized review statistics, recalculated by review.server.ts after every review mutation.
-  averageRating    Float    @default(0)
-  totalReviews     Int      @default(0)
-  rating5Count     Int      @default(0)
-  rating4Count     Int      @default(0)
-  rating3Count     Int      @default(0)
-  rating2Count     Int      @default(0)
-  rating1Count     Int      @default(0)
+  averageRating Float @default(0)
+  totalReviews  Int   @default(0)
+  rating5Count  Int   @default(0)
+  rating4Count  Int   @default(0)
+  rating3Count  Int   @default(0)
+  rating2Count  Int   @default(0)
+  rating1Count  Int   @default(0)
 
   // Set only by product.server.ts's syncProducts, kept separate from updatedAt so review-stat
   // recalculation (which also touches this row) can't make "last synced" look fresher than it is.
-  lastSyncedAt     DateTime?
+  lastSyncedAt DateTime?
 
-  createdAt        DateTime @default(now())
-  updatedAt        DateTime @updatedAt
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
-  reviews          Review[]
-  reviewRequests   ReviewRequest[]
-  widgets          Widget[]
-  aiSummary        ProductAiSummary?
+  reviews        Review[]
+  reviewRequests ReviewRequest[]
+  widgets        Widget[]
+  aiSummary      ProductAiSummary?
 }
 
 enum ReviewStatus {
@@ -191,35 +198,35 @@ enum ReviewStatus {
 }
 
 model Review {
-  id               String       @id @default(cuid())
+  id String @id @default(cuid())
 
-  storeId          String
-  store            Store        @relation(fields: [storeId], references: [id], onDelete: Cascade)
+  storeId String
+  store   Store  @relation(fields: [storeId], references: [id], onDelete: Cascade)
 
-  productId        String
-  product          Product      @relation(fields: [productId], references: [id], onDelete: Cascade)
-  productTitle     String?
+  productId    String
+  product      Product @relation(fields: [productId], references: [id], onDelete: Cascade)
+  productTitle String?
 
-  rating           Int
-  title            String?
-  content          String
+  rating  Int
+  title   String?
+  content String
 
   reviewerName     String
   reviewerEmail    String?
   reviewerLocation String?
-  verifiedPurchase Boolean      @default(false)
+  verifiedPurchase Boolean @default(false)
 
-  status           ReviewStatus @default(PENDING)
-  isPublished      Boolean      @default(false)
-  helpfulCount     Int          @default(0)
-  notHelpfulCount  Int          @default(0)
-  featured         Boolean      @default(false)
+  status          ReviewStatus @default(PENDING)
+  isPublished     Boolean      @default(false)
+  helpfulCount    Int          @default(0)
+  notHelpfulCount Int          @default(0)
+  featured        Boolean      @default(false)
 
-  reply            String?
-  repliedAt        DateTime?
+  reply     String?
+  repliedAt DateTime?
 
-  photoUrls        String?
-  deletedAt        DateTime?
+  photoUrls String?
+  deletedAt DateTime?
 
   // Set once, at creation, by the Moderation Rules pipeline (see
   // app/services/moderationRules.server.ts) — never updated afterward, even if a merchant
@@ -235,14 +242,14 @@ model Review {
   // back to content-based duplicate detection. Not a hard DB unique constraint — duplicate
   // prevention is an application-level check-before-create (see isDuplicate), same as the
   // rest of this pipeline, so a constraint violation is never a code path this app relies on.
-  externalId       String?
+  externalId String?
 
-  createdAt        DateTime     @default(now())
-  updatedAt        DateTime     @updatedAt
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
-  helpfulVotes     ReviewHelpfulVote[]
-  media            ReviewMedia[]
-  reward           Reward?
+  helpfulVotes ReviewHelpfulVote[]
+  media        ReviewMedia[]
+  reward       Reward?
 
   @@index([deletedAt, createdAt])
   @@index([storeId, deletedAt, createdAt])
@@ -265,10 +272,10 @@ model Review {
 // re-issues for a review that was already correctly judged ineligible under the rules active
 // at the time.
 model Reward {
-  id       String @id @default(cuid())
+  id String @id @default(cuid())
 
-  storeId  String
-  store    Store  @relation(fields: [storeId], references: [id], onDelete: Cascade)
+  storeId String
+  store   Store  @relation(fields: [storeId], references: [id], onDelete: Cascade)
 
   reviewId String @unique
   review   Review @relation(fields: [reviewId], references: [id], onDelete: Cascade)
@@ -303,10 +310,10 @@ enum ReviewMediaType {
 // item carries its own moderation lifecycle (independently deletable) and real dimensions for
 // aspect-ratio-safe rendering, instead of just a bare URL.
 model ReviewMedia {
-  id           String          @id @default(cuid())
+  id String @id @default(cuid())
 
-  reviewId     String
-  review       Review          @relation(fields: [reviewId], references: [id], onDelete: Cascade)
+  reviewId String
+  review   Review @relation(fields: [reviewId], references: [id], onDelete: Cascade)
 
   type         ReviewMediaType @default(IMAGE)
   url          String
@@ -314,7 +321,7 @@ model ReviewMedia {
   height       Int?
   thumbnailUrl String?
 
-  createdAt    DateTime        @default(now())
+  createdAt DateTime @default(now())
 
   @@index([reviewId])
 }
@@ -331,16 +338,16 @@ enum HelpfulVoteValue {
 // a real customer id would work identically, so this doesn't need to change if/when the
 // storefront gains real customer auth.
 model ReviewHelpfulVote {
-  id         String           @id @default(cuid())
+  id String @id @default(cuid())
 
-  reviewId   String
-  review     Review           @relation(fields: [reviewId], references: [id], onDelete: Cascade)
+  reviewId String
+  review   Review @relation(fields: [reviewId], references: [id], onDelete: Cascade)
 
-  visitorId  String
-  vote       HelpfulVoteValue
+  visitorId String
+  vote      HelpfulVoteValue
 
-  createdAt  DateTime         @default(now())
-  updatedAt  DateTime         @updatedAt
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
   @@unique([reviewId, visitorId])
   @@index([reviewId, vote])
@@ -352,35 +359,35 @@ model ReviewHelpfulVote {
 // positives/negatives are stored as JSON-encoded string arrays, the same pattern
 // Widget.settings already uses for structured data in this schema.
 model ProductAiSummary {
-  id              String   @id @default(cuid())
+  id String @id @default(cuid())
 
-  productId       String   @unique
-  product         Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
+  productId String  @unique
+  product   Product @relation(fields: [productId], references: [id], onDelete: Cascade)
 
-  summary         String
-  positives       String
-  negatives       String
-  recommendation  String
+  summary        String
+  positives      String
+  negatives      String
+  recommendation String
 
   reviewCountUsed Int
   provider        String
   modelUsed       String
 
-  generatedAt     DateTime @default(now())
-  updatedAt       DateTime @updatedAt
+  generatedAt DateTime @default(now())
+  updatedAt   DateTime @updatedAt
 }
 
 model ReviewRequest {
-  id           String          @id @default(cuid())
-  storeId      String
-  store        Store           @relation(fields: [storeId], references: [id], onDelete: Cascade)
-  productId    String?
-  product      Product?        @relation(fields: [productId], references: [id], onDelete: SetNull)
-  email        String?
-  name         String?
-  orderNumber  String?
-  customMessage String?
-  requestToken String?         @unique
+  id             String    @id @default(cuid())
+  storeId        String
+  store          Store     @relation(fields: [storeId], references: [id], onDelete: Cascade)
+  productId      String?
+  product        Product?  @relation(fields: [productId], references: [id], onDelete: SetNull)
+  email          String?
+  name           String?
+  orderNumber    String?
+  customMessage  String?
+  requestToken   String?   @unique
   // Extension seam for link security (README: expiration, single-use validation, fraud
   // protection) — a single opaque token + these two timestamps is enough for the MVP
   // resolver (app/routes/r.$token.tsx) to enforce both without a separate token table.
@@ -389,12 +396,12 @@ model ReviewRequest {
   // explicitly future work, not this pass.
   tokenExpiresAt DateTime?
   tokenUsedAt    DateTime?
-  delayDays    Int?
-  scheduledFor DateTime?
-  status       String          @default("pending")
-  sentAt       DateTime?
-  openedAt     DateTime?
-  reviewedAt   DateTime?
+  delayDays      Int?
+  scheduledFor   DateTime?
+  status         String    @default("pending")
+  sentAt         DateTime?
+  openedAt       DateTime?
+  reviewedAt     DateTime?
 
   // Order-lifecycle linkage (see webhooks.fulfillments.create.tsx and
   // review-request.server.ts's createFromOrder). Both null for manually-created requests —
@@ -403,10 +410,10 @@ model ReviewRequest {
   shopifyOrderId    String?
   shopifyLineItemId String?
   // "manual" | "order" — which flow created this row, surfaced in the admin UI.
-  source            String    @default("manual")
+  source            String  @default("manual")
   // Bounded retry count for dispatchRequestEmail — see MAX_SEND_ATTEMPTS in
   // review-request.server.ts. Never incremented past that constant.
-  sendAttempts      Int       @default(0)
+  sendAttempts      Int     @default(0)
 
   // Automatic Reminder Emails — set once each reminder actually sends (dispatchReminderEmail
   // in review-request.server.ts), independently of `status`/`sentAt` above, which track only
@@ -418,8 +425,8 @@ model ReviewRequest {
   reminder1SentAt     DateTime?
   reminderFinalSentAt DateTime?
 
-  createdAt    DateTime        @default(now())
-  updatedAt    DateTime        @updatedAt
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
   @@unique([shopifyOrderId, productId])
   @@index([status])
@@ -432,16 +439,16 @@ model ReviewRequest {
 }
 
 model Widget {
-  id           String          @id @default(cuid())
-  storeId      String
-  store        Store           @relation(fields: [storeId], references: [id], onDelete: Cascade)
-  productId    String?
-  product      Product?        @relation(fields: [productId], references: [id], onDelete: SetNull)
-  name         String
-  type         String          @default("review")
-  settings     String?
-  createdAt    DateTime        @default(now())
-  updatedAt    DateTime        @updatedAt
+  id        String   @id @default(cuid())
+  storeId   String
+  store     Store    @relation(fields: [storeId], references: [id], onDelete: Cascade)
+  productId String?
+  product   Product? @relation(fields: [productId], references: [id], onDelete: SetNull)
+  name      String
+  type      String   @default("review")
+  settings  String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 }
 
 // The centralized, store-wide design-token system every storefront widget (Product
@@ -455,25 +462,25 @@ model Widget {
 // so "Saved Presets"/"Brand Themes" (both documented future work) are additive later —
 // more rows, isActive toggled — with no schema change.
 model Appearance {
-  id           String          @id @default(cuid())
-  storeId      String
-  store        Store           @relation(fields: [storeId], references: [id], onDelete: Cascade)
+  id      String @id @default(cuid())
+  storeId String
+  store   Store  @relation(fields: [storeId], references: [id], onDelete: Cascade)
 
-  name         String          @default("Default")
+  name     String  @default("Default")
   // "minimal" | "modern" | "editorial" | "classic" | "custom" — see
   // app/services/appearance.presets.ts. Only "custom" is functional today.
-  preset       String          @default("custom")
+  preset   String  @default("custom")
   // Exactly one true per store; enforced in appearance.server.ts (not a DB constraint —
   // see that file for why), same application-level-enforcement convention already used
   // for widget resolution in widget.server.ts.
-  isActive     Boolean         @default(true)
+  isActive Boolean @default(true)
 
   // JSON-encoded AppearanceTokens (appearance.shared.ts) — same JSON-as-String precedent
   // as Widget.settings, so the token contract can grow without a migration per field.
-  tokens       String
+  tokens String
 
-  createdAt    DateTime        @default(now())
-  updatedAt    DateTime        @updatedAt
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
   @@index([storeId, isActive])
 }
@@ -485,26 +492,26 @@ model Appearance {
 // hardcoded defaults when no active row exists, so an un-configured store's emails are
 // byte-for-byte what they were before this model existed.
 model EmailTemplate {
-  id           String          @id @default(cuid())
-  storeId      String
-  store        Store           @relation(fields: [storeId], references: [id], onDelete: Cascade)
+  id      String @id @default(cuid())
+  storeId String
+  store   Store  @relation(fields: [storeId], references: [id], onDelete: Cascade)
 
-  name         String          @default("Default")
+  name     String  @default("Default")
   // "review_request" (every plan), "reminder_1" / "reminder_final" (Pro-only, gated by
   // canUseEmailReminders — see email.shared.ts's EmailTemplateType and
   // reviewRequestScheduler.server.ts's runDueReminderSweep). Same "additive rows" pattern
   // Appearance already established above — a new type is a new row, never a migration.
-  type         String          @default("review_request")
+  type     String  @default("review_request")
   // Exactly one true per (store, type); enforced in emailTemplate.server.ts, not a DB
   // constraint — same application-level-enforcement convention as Appearance/Widget.
-  isActive     Boolean         @default(true)
+  isActive Boolean @default(true)
 
   // JSON-encoded EmailTemplateContent (email.shared.ts) — subject/heading/body/button text,
   // accent color, logo URL.
-  content      String
+  content String
 
-  createdAt    DateTime        @default(now())
-  updatedAt    DateTime        @updatedAt
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
   @@index([storeId, type, isActive])
 }
@@ -518,24 +525,24 @@ model EmailTemplate {
 // inherently time-bound signal would misrepresent it. Once written, a row is never deleted
 // or "un-earned" if the underlying metric later dips — the achievement genuinely happened.
 model Achievement {
-  id        String   @id @default(cuid())
-  storeId   String
-  store     Store    @relation(fields: [storeId], references: [id], onDelete: Cascade)
+  id      String @id @default(cuid())
+  storeId String
+  store   Store  @relation(fields: [storeId], references: [id], onDelete: Cascade)
 
   // Stable key from achievements.shared.ts's ACHIEVEMENT_DEFINITIONS, e.g.
   // "verified_reviews_100" — never a display name, so renaming a medal in the UI later never
   // requires a data migration.
-  key       String
+  key String
 
   // The real, derived date this was earned — never "now" unless that IS the accurate
   // detection date for that specific medal (see achievements.server.ts's per-family comments
   // for which medals can derive an exact historical date vs. only a first-detected date).
-  earnedAt  DateTime
+  earnedAt DateTime
 
   // JSON snapshot of the stats at the moment this was earned (e.g. { count: 100 } or
   // { percentile: 10, storesConsidered: 42 }) — for display richness only ("earned at 100
   // verified reviews"), never re-derived from this column.
-  metadata  String?
+  metadata String?
 
   createdAt DateTime @default(now())
 
@@ -553,13 +560,13 @@ model Achievement {
 // admin UI reads this in V1 — it exists so the backend enforces suppression correctly and is
 // ready for a future admin/support view, not because one is being built now.
 model EmailSuppression {
-  id           String   @id @default(cuid())
-  storeId      String
-  store        Store    @relation(fields: [storeId], references: [id], onDelete: Cascade)
+  id      String @id @default(cuid())
+  storeId String
+  store   Store  @relation(fields: [storeId], references: [id], onDelete: Cascade)
 
   // Always lower-cased/trimmed before storage or lookup — see emailSuppression.server.ts's
   // normalizeEmail — so a differently-cased resend of the same address can't bypass suppression.
-  email        String
+  email String
 
   suppressedAt DateTime @default(now())
   // Extension seam (mirrors ReviewRequest.source's convention) — every row today is
@@ -580,34 +587,192 @@ model EmailSuppression {
 // category string and `detail` is short, non-PII context (e.g. a row count), so this table is
 // never itself a privacy liability to have to protect.
 model AuditLog {
-  id        String   @id @default(cuid())
+  id String @id @default(cuid())
 
-  storeId   String?
-  store     Store?   @relation(fields: [storeId], references: [id], onDelete: SetNull)
+  storeId String?
+  store   Store?  @relation(fields: [storeId], references: [id], onDelete: SetNull)
 
   // What triggered the access — e.g. "webhook:customers_data_request",
   // "webhook:customers_redact", "webhook:shop_redact", "admin:csv_export",
   // "system:retention_purge". Identifies the trigger, not an individual staff member — this
   // app has no login system of its own (see docs/ACCESS_CONTROL.md); every merchant-side
   // action is already scoped by Shopify's own OAuth session at the storeId level.
-  actor     String
+  actor String
 
   // e.g. "data_request", "redact", "export", "purge".
-  action    String
+  action String
 
   // A category, never a specific record's PII — e.g. "review.contact_fields",
   // "reviewRequest.contact_fields".
-  resource  String
+  resource String
 
-  success   Boolean
+  success Boolean
 
   // Short, non-PII context only (e.g. "42 rows", "no matching store"). Enforced by
   // convention in auditLog.server.ts, the single write path for this table, not a DB
   // constraint — same convention as every other free-text field in this schema.
-  detail    String?
+  detail String?
 
   createdAt DateTime @default(now())
 
   @@index([storeId, createdAt])
   @@index([action, createdAt])
+}
+
+// Coupons — standalone promotional campaigns, independent of a review triggering them
+// (contrast Reward, which only ever fires off an approved review). Shares the same real
+// Shopify discount-issuance mechanism (see shopifyDiscount.server.ts, extracted from what
+// rewards.server.ts already had) rather than duplicating that GraphQL call a second time.
+// status/discountType are plain strings, not enums, matching Reward's own convention above —
+// enforced by TypeScript union types in coupons.server.ts, not a DB constraint.
+model Coupon {
+  id      String @id @default(cuid())
+  storeId String
+  store   Store  @relation(fields: [storeId], references: [id], onDelete: Cascade)
+
+  name String
+
+  // "draft" (not yet issuable) | "active" | "paused" | "ended" (past endsAt, or manually
+  // ended) — coupons.server.ts is the only writer, so this can never drift from what the
+  // dates/limits below actually allow.
+  status String @default("draft")
+
+  // "percentage" | "fixed_amount" — same two values Reward already uses.
+  discountType  String
+  discountValue Float
+
+  // Real Shopify discount capabilities (discountCodeBasicCreate), not an invented rules
+  // engine: "all" | "new_customers" maps directly to that mutation's customerSelection, and
+  // minimumOrderAmount maps directly to its minimumRequirement.
+  eligibility        String @default("all")
+  minimumOrderAmount Float?
+
+  startsAt DateTime  @default(now())
+  endsAt   DateTime?
+
+  // null = unlimited. Both enforced in coupons.server.ts before ever calling Shopify (real
+  // duplicate/limit protection at our layer) — appliesOncePerCustomer is additionally set on
+  // the Shopify discount itself as a second, platform-enforced guard when perCustomerLimit is 1.
+  usageLimit       Int?
+  perCustomerLimit Int  @default(1)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  redemptions CouponRedemption[]
+
+  @@index([storeId])
+  @@index([storeId, status])
+}
+
+// One row per real issuance attempt — never per redemption-intent, so a merchant's
+// "Redemptions" count is always exactly how many real discount codes actually exist for a
+// coupon, not a guess. Duplicate protection (perCustomerLimit) is enforced by counting rows
+// here for (couponId, customerEmail) before issuing another, the same check-then-create
+// pattern review-request.server.ts's createFromOrder already uses for its own duplicate
+// protection — not a hard DB constraint, since perCustomerLimit is merchant-configurable and
+// can be >1.
+model CouponRedemption {
+  id      String @id @default(cuid())
+  storeId String
+  store   Store  @relation(fields: [storeId], references: [id], onDelete: Cascade)
+
+  couponId String
+  coupon   Coupon @relation(fields: [couponId], references: [id], onDelete: Cascade)
+
+  customerEmail String
+
+  // Set only once Shopify's mutation actually succeeds — same "never fabricated" rule
+  // Reward.discountCode already follows.
+  discountCode      String?
+  shopifyDiscountId String?
+
+  // "issued" | "failed" | "revoked" — a merchant can revoke a still-unused code (real
+  // discountCodeDeactivate call, see coupons.server.ts); "failed" mirrors Reward's own
+  // failure bookkeeping (Shopify returned userErrors).
+  status String  @default("issued")
+  reason String?
+
+  createdAt DateTime @default(now())
+
+  @@index([storeId])
+  @@index([couponId])
+  @@index([couponId, customerEmail])
+}
+
+// Referrals — one program configuration per store (real reward values for both sides of a
+// referral, mirroring Reward's own valueType/value shape). Conversion detection deliberately
+// does NOT add a new webhook subscription: it polls the real Shopify discount code's own
+// usage count (DiscountCodeNode.asyncUsageCount, via the already-granted read_orders/
+// read_customers scopes) from referrals.server.ts, instead of requiring a new
+// orders/create webhook subscription — which would face the same protected-customer-data
+// webhook-subscription approval gate fulfillments/create already did. See docs/DECISIONS.md.
+model ReferralProgram {
+  id      String @id @default(cuid())
+  storeId String @unique
+  store   Store  @relation(fields: [storeId], references: [id], onDelete: Cascade)
+
+  enabled Boolean @default(false)
+
+  referrerValueType String @default("percentage")
+  referrerValue     Float  @default(10)
+  refereeValueType  String @default("percentage")
+  refereeValue      Float  @default(10)
+
+  minimumOrderAmount Float?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+// One row per customer who has a shareable code — created on request from the Referrals
+// page (or, in a later pass, self-serve from a storefront account page; not built here).
+model Referral {
+  id      String @id @default(cuid())
+  storeId String
+  store   Store  @relation(fields: [storeId], references: [id], onDelete: Cascade)
+
+  referrerEmail String
+  referrerName  String?
+
+  // The real Shopify discount code the referrer shares — redeeming it IS the conversion
+  // signal (see ReferralConversion below), not a separate tracking link/cookie.
+  code              String  @unique
+  shopifyDiscountId String?
+
+  createdAt DateTime @default(now())
+
+  conversions ReferralConversion[]
+
+  @@index([storeId])
+  @@index([storeId, referrerEmail])
+}
+
+// Materialized once per referee — populated/updated by referrals.server.ts's polling check
+// against the referral code's real Shopify usage count, never fabricated. "pending" until
+// Shopify reports the code used; "qualified" once used (minimumOrderAmount permitting);
+// "rewarded" once the referrer's own discount has actually been issued for it.
+model ReferralConversion {
+  id      String @id @default(cuid())
+  storeId String
+  store   Store  @relation(fields: [storeId], references: [id], onDelete: Cascade)
+
+  referralId String
+  referral   Referral @relation(fields: [referralId], references: [id], onDelete: Cascade)
+
+  refereeEmail   String?
+  shopifyOrderId String?
+
+  status String  @default("pending")
+  reason String?
+
+  refereeDiscountCode    String?
+  referrerDiscountCode   String?
+  referrerRewardIssuedAt DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([storeId])
+  @@index([referralId])
 }

@@ -81,8 +81,8 @@ export default function SettingsWorkspace() {
       label: "Rewards & Engagement",
       items: [
         { label: "Review Rewards", href: "/app/settings/rewards", internal: true },
-        { label: "Coupons", href: "/app/settings/coupons", internal: true, tag: "Coming soon" },
-        { label: "Referrals", href: "/app/settings/referrals", internal: true, tag: "Coming soon" },
+        { label: "Coupons", href: "/app/settings/coupons", internal: true },
+        { label: "Referrals", href: "/app/settings/referrals", internal: true },
       ],
     },
     {

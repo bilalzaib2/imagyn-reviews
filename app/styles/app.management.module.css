@@ -42,6 +42,44 @@
   background: var(--color-surface-muted);
 }
 
+/* A real campaign/coupon row (or any similarly-shaped list item) — title/status/meta on the
+   left, real state-change actions on the right, matching the same card vocabulary
+   ActionCard already established for the Settings Overview page. */
+.cardList {
+  display: grid;
+  gap: var(--space-3);
+}
+
+.card {
+  display: grid;
+  gap: var(--space-3);
+  padding: var(--space-4) var(--space-5);
+  background: var(--color-surface-muted);
+  border-radius: var(--radius-md);
+}
+
+.cardHeader {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--space-4);
+  flex-wrap: wrap;
+}
+
+.inlineActions {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  flex-wrap: wrap;
+}
+
+/* A Polaris TextField inside an inline action row (e.g. Coupons' "issue to a customer"
+   email field) shouldn't stretch to the card's full width the way it does in a normal
+   single-column Section. */
+.inlineActions > :global(.Polaris-TextField) {
+  max-width: 16rem;
+}
+
 /* <Frame> here exists only so <Toast> has the ancestor context it requires to render —
    it's not page chrome. Polaris's own Frame.css unconditionally sets min-height:100vh/100svh
    and width:100% on .Polaris-Frame, which — with no real chrome inside it — leaves a full
