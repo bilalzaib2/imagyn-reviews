@@ -41,6 +41,7 @@ import {
 } from "../services/review.server";
 import { deleteReviewMedia } from "../services/reviewMedia.server";
 import { getAiSummariesForProducts, type ProductAiSummaryRecord } from "../services/aiSummary.server";
+import { draftReplyForReview } from "../services/aiReplyDraft.server";
 import { syncProductStructuredData } from "../services/structuredData/sync.server";
 import { ReviewStatus } from "../services/review.shared";
 import { IMPORT_SOURCES, type ImportSource } from "../services/importers/types";
@@ -65,6 +66,7 @@ type ActionData = {
   error?: string;
   message?: string;
   importResult?: ImportResult;
+  draft?: string;
 };
 
 const STATUS_VALUES: string[] = Object.values(ReviewStatus);
@@ -234,6 +236,18 @@ export const action = async ({ request }: ActionFunctionArgs): Promise<ActionDat
       const review = await deleteReview(store.id, reviewId);
       void syncProductStructuredData(admin, review.productId);
       return { ok: true, intent, message: "Review deleted." };
+    }
+
+    if (intent === "draftReply") {
+      const reviewId = String(formData.get("reviewId") || "");
+      const existingDraft = String(formData.get("existingDraft") || "");
+
+      if (!reviewId) {
+        return { ok: false, error: "Missing review id." };
+      }
+
+      const result = await draftReplyForReview(store.id, reviewId, existingDraft || null);
+      return { ok: true, intent, draft: result.draft };
     }
 
     if (intent === "replyCreate" || intent === "replyUpdate") {
@@ -482,11 +496,24 @@ export default function ReviewsPage() {
     if (!mutationFetcher.data.ok) {
       setMutationError(mutationFetcher.data.error || "Action failed.");
       setToastState({ content: mutationFetcher.data.error || "Action failed.", error: true });
-      setOptimisticStatus({});
-      setOptimisticDeleted({});
-      setOptimisticReply({});
-      setOptimisticRepliedAt({});
-      setOptimisticDeletedMediaIds({});
+      // A failed reply draft (e.g. the Pro-plan gate) never touched a review — the reply
+      // form/optimistic state it was drafting for should stay exactly as the merchant left it.
+      if (mutationFetcher.data.intent !== "draftReply") {
+        setOptimisticStatus({});
+        setOptimisticDeleted({});
+        setOptimisticReply({});
+        setOptimisticRepliedAt({});
+        setOptimisticDeletedMediaIds({});
+      }
+      return;
+    }
+
+    // A draft never changes a review — just fills the (already-open) reply textarea with the
+    // AI's suggestion for the merchant to review, edit, and publish themselves via the normal
+    // Publish button. No revalidate (nothing in the DB changed) and no "Review updated" toast.
+    if (mutationFetcher.data.intent === "draftReply") {
+      setReplyDraft(mutationFetcher.data.draft || "");
+      setIsReplyEditing(true);
       return;
     }
 
@@ -615,6 +642,7 @@ export default function ReviewsPage() {
 
   const activeIntent = mutationFetcher.formData?.get("_intent")?.toString() ?? "";
   const isReplySaving = mutationFetcher.state !== "idle" && activeIntent.startsWith("reply");
+  const isDraftingReply = mutationFetcher.state !== "idle" && activeIntent === "draftReply";
   const isImporting = importFetcher.state !== "idle";
   const previewHeaders = importPreviewRows.length > 0 ? Object.keys(importPreviewRows[0]) : [];
 
@@ -652,6 +680,11 @@ export default function ReviewsPage() {
     setOptimisticReply((prev) => ({ ...prev, [reviewId]: trimmedReply }));
     setOptimisticRepliedAt((prev) => ({ ...prev, [reviewId]: new Date() }));
     submitMutation({ _intent: nextIntent, reviewId, reply: trimmedReply });
+  };
+
+  const draftReplyWithAi = (reviewId: string, existingDraft: string) => {
+    setMutationError(null);
+    submitMutation({ _intent: "draftReply", reviewId, existingDraft });
   };
 
   const deleteReplyDraft = (reviewId: string) => {
@@ -1404,9 +1437,19 @@ export default function ReviewsPage() {
                         ) : !isReplyEditing ? (
                           <div className={styles.replyPrompt}>
                             <p className={styles.detailPlaceholder}>No reply yet.</p>
-                            <Button type="button" variant="ghost" onClick={() => setIsReplyEditing(true)}>
-                              Reply
-                            </Button>
+                            <div className={styles.replyActions}>
+                              <Button type="button" variant="ghost" onClick={() => setIsReplyEditing(true)}>
+                                Reply
+                              </Button>
+                              <Button
+                                type="button"
+                                variant="ghost"
+                                onClick={() => draftReplyWithAi(selectedReview.id, "")}
+                                disabled={isDraftingReply}
+                              >
+                                {isDraftingReply ? "Drafting…" : "Draft with AI"}
+                              </Button>
+                            </div>
                           </div>
                         ) : (
                           <>
@@ -1419,16 +1462,25 @@ export default function ReviewsPage() {
                                 autoComplete="off"
                                 multiline={4}
                                 placeholder="Write a public reply to this review"
-                                disabled={isReplySaving}
+                                disabled={isReplySaving || isDraftingReply}
                               />
                             </div>
                             <div className={styles.replyActions}>
                               <Button
                                 type="button"
                                 onClick={() => applyReply(selectedReview.id, replyDraft)}
-                                disabled={isReplySaving || replyDraft.trim().length === 0}
+                                disabled={isReplySaving || isDraftingReply || replyDraft.trim().length === 0}
                               >
                                 Save
+                              </Button>
+                              {/* Always a suggestion the merchant reviews before Save ever fires — see
+                                  aiReplyDraft.server.ts's own comment on why this never auto-publishes. */}
+                              <Button
+                                type="button"
+                                onClick={() => draftReplyWithAi(selectedReview.id, replyDraft)}
+                                disabled={isReplySaving || isDraftingReply}
+                              >
+                                {isDraftingReply ? "Drafting…" : replyDraft.trim() ? "Improve with AI" : "Draft with AI"}
                               </Button>
                               <Button
                                 type="button"
@@ -1436,7 +1488,7 @@ export default function ReviewsPage() {
                                   setReplyDraft(selectedReview.reply ?? "");
                                   setIsReplyEditing(false);
                                 }}
-                                disabled={isReplySaving}
+                                disabled={isReplySaving || isDraftingReply}
                               >
                                 Cancel
                               </Button>
@@ -1444,7 +1496,7 @@ export default function ReviewsPage() {
                                 <Button
                                   type="button"
                                   onClick={() => deleteReplyDraft(selectedReview.id)}
-                                  disabled={isReplySaving}
+                                  disabled={isReplySaving || isDraftingReply}
                                 >
                                   Delete
                                 </Button>

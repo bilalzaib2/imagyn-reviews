@@ -37,15 +37,34 @@ export interface AiBrandSuggestionResult {
   modelUsed: string;
 }
 
+// A merchant-facing draft only — never sent automatically. See aiReplyDraft.server.ts's own
+// comment for why this stays a suggestion the merchant must review/edit/submit through the
+// existing replyToReview action, exactly like every other reply in this app.
+export interface AiReplyDraftRequest {
+  productName: string;
+  review: AiSummaryReviewInput;
+  // The merchant's own in-progress draft, if they'd already started typing one before asking
+  // for AI help — when present, the model revises/polishes it instead of starting from a
+  // blank page, so "Draft with AI" is useful both as a first draft and as a rewrite tool.
+  existingDraft: string | null;
+}
+
+export interface AiReplyDraftResult {
+  draft: string;
+  modelUsed: string;
+}
+
 // Every provider (OpenAI, Anthropic, Gemini — see openai.server.ts / anthropic.server.ts /
-// gemini.server.ts) implements exactly this shape. aiSummary.server.ts/brandSuggestion.server.ts,
-// the only callers, depend on this interface and never on a specific provider's SDK/request
-// format — that's what makes switching providers a config change (AI_PROVIDER env var)
-// instead of a code change. UI components never import from this directory at all.
+// gemini.server.ts) implements exactly this shape. aiSummary.server.ts/brandSuggestion.server.ts/
+// aiReplyDraft.server.ts, the only callers, depend on this interface and never on a specific
+// provider's SDK/request format — that's what makes switching providers a config change
+// (AI_PROVIDER env var) instead of a code change. UI components never import from this
+// directory at all.
 export interface AiProvider {
   readonly name: string;
   generateReviewSummary(request: AiSummaryRequest): Promise<AiSummaryResult>;
   generateBrandSuggestion(request: AiBrandSuggestionRequest): Promise<AiBrandSuggestionResult>;
+  generateReplyDraft(request: AiReplyDraftRequest): Promise<AiReplyDraftResult>;
 }
 
 export class AiProviderError extends Error {

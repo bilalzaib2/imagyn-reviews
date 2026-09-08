@@ -3,16 +3,21 @@ import {
   type AiBrandSuggestionRequest,
   type AiBrandSuggestionResult,
   type AiProvider,
+  type AiReplyDraftRequest,
+  type AiReplyDraftResult,
   type AiSummaryRequest,
   type AiSummaryResult,
 } from "./types";
 import {
   buildBrandSuggestionSystemPrompt,
   buildBrandSuggestionUserPrompt,
+  buildReplyDraftSystemPrompt,
+  buildReplyDraftUserPrompt,
   buildSystemPrompt,
   buildUserPrompt,
   parseAiSummaryJson,
   parseBrandSuggestionJson,
+  parseReplyDraftJson,
 } from "./shared";
 
 // A real, current Gemini model as of this integration — overridable via GEMINI_MODEL
@@ -115,6 +120,54 @@ export function createGeminiProvider(): AiProvider {
       }
 
       const parsed = parseBrandSuggestionJson(text, "gemini");
+      return { ...parsed, modelUsed: model };
+    },
+
+    async generateReplyDraft(request: AiReplyDraftRequest): Promise<AiReplyDraftResult> {
+      const apiKey = process.env.GEMINI_API_KEY;
+      if (!apiKey) {
+        throw new AiProviderError(
+          "GEMINI_API_KEY is not configured. Set it in the environment to enable AI reply drafts.",
+          "gemini",
+        );
+      }
+
+      const model = process.env.GEMINI_MODEL || DEFAULT_MODEL;
+
+      const response = await fetch(
+        `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            systemInstruction: { parts: [{ text: buildReplyDraftSystemPrompt() }] },
+            contents: [{ role: "user", parts: [{ text: buildReplyDraftUserPrompt(request) }] }],
+            generationConfig: {
+              temperature: 0.4,
+              responseMimeType: "application/json",
+            },
+          }),
+        },
+      );
+
+      if (!response.ok) {
+        const errorText = await response.text().catch(() => "");
+        throw new AiProviderError(
+          `Gemini request failed (${response.status}): ${errorText.slice(0, 300)}`,
+          "gemini",
+        );
+      }
+
+      const data = (await response.json()) as {
+        candidates?: Array<{ content?: { parts?: Array<{ text?: string }> } }>;
+      };
+
+      const text = data.candidates?.[0]?.content?.parts?.[0]?.text;
+      if (!text) {
+        throw new AiProviderError("Gemini response did not include any text content.", "gemini");
+      }
+
+      const parsed = parseReplyDraftJson(text, "gemini");
       return { ...parsed, modelUsed: model };
     },
   };

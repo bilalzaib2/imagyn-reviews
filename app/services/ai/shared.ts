@@ -2,6 +2,8 @@ import {
   AiProviderError,
   type AiBrandSuggestionRequest,
   type AiBrandSuggestionResult,
+  type AiReplyDraftRequest,
+  type AiReplyDraftResult,
   type AiSummaryRequest,
   type AiSummaryResult,
 } from "./types";
@@ -163,4 +165,63 @@ export function parseBrandSuggestionJson(
   const rationale = typeof candidate.rationale === "string" ? candidate.rationale.trim() : "";
 
   return { starColor, typography: { scale, letterSpacing }, rationale };
+}
+
+const REPLY_DRAFT_JSON_SHAPE = `Respond with strict JSON only, matching exactly this shape (no markdown fences, no commentary outside the JSON):
+{
+  "draft": string  // the suggested merchant reply, ready to edit and publish as-is
+}`;
+
+// The merchant always reviews and can edit this before it's ever published — see
+// aiReplyDraft.server.ts's own comment — so the model is told to write a genuinely
+// publishable draft, not a rough outline the merchant has to rewrite from scratch.
+export function buildReplyDraftSystemPrompt(): string {
+  return (
+    "You are writing, on behalf of a Shopify merchant, a short public reply to a single " +
+    "customer product review. Write in a warm, professional, specific tone — respond to what " +
+    "the customer actually said, not a generic thank-you. If the review raises a genuine " +
+    "problem, acknowledge it plainly and, if appropriate, invite the customer to reach out for " +
+    "support; never be defensive or dismissive. If the review is positive, thank the customer " +
+    "for something specific they mentioned rather than a blanket 'thanks for your review'. " +
+    "Never invent facts about the order, the product, or a resolution that wasn't actually " +
+    "offered. Keep it to 1-3 sentences. Sign off with nothing (no name, no company) — the " +
+    "merchant adds that themselves if they want to. " +
+    REPLY_DRAFT_JSON_SHAPE
+  );
+}
+
+export function buildReplyDraftUserPrompt(request: AiReplyDraftRequest): string {
+  const { review } = request;
+  const titleLine = review.title ? ` — "${review.title}"` : "";
+  const draftLine = request.existingDraft?.trim()
+    ? `\n\nThe merchant has already started a draft reply — revise and improve it rather than starting over, keeping its intent:\n"${request.existingDraft.trim()}"`
+    : "";
+
+  return (
+    `Product: ${request.productName}\n\n` +
+    `Customer review [${review.rating}/5]${titleLine}: ${review.content}` +
+    draftLine
+  );
+}
+
+export function parseReplyDraftJson(raw: string, providerName: string): Omit<AiReplyDraftResult, "modelUsed"> {
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(extractJsonObject(raw));
+  } catch {
+    throw new AiProviderError(`${providerName} returned a response that wasn't valid JSON.`, providerName);
+  }
+
+  if (!parsed || typeof parsed !== "object") {
+    throw new AiProviderError(`${providerName} returned an unexpected response shape.`, providerName);
+  }
+
+  const candidate = parsed as Record<string, unknown>;
+  const draft = typeof candidate.draft === "string" ? candidate.draft.trim() : "";
+
+  if (!draft) {
+    throw new AiProviderError(`${providerName} response was missing a reply draft.`, providerName);
+  }
+
+  return { draft };
 }

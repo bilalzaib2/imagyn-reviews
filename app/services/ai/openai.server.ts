@@ -3,16 +3,21 @@ import {
   type AiBrandSuggestionRequest,
   type AiBrandSuggestionResult,
   type AiProvider,
+  type AiReplyDraftRequest,
+  type AiReplyDraftResult,
   type AiSummaryRequest,
   type AiSummaryResult,
 } from "./types";
 import {
   buildBrandSuggestionSystemPrompt,
   buildBrandSuggestionUserPrompt,
+  buildReplyDraftSystemPrompt,
+  buildReplyDraftUserPrompt,
   buildSystemPrompt,
   buildUserPrompt,
   parseAiSummaryJson,
   parseBrandSuggestionJson,
+  parseReplyDraftJson,
 } from "./shared";
 
 // A real, current OpenAI chat model as of this integration — overridable via OPENAI_MODEL
@@ -119,6 +124,56 @@ export function createOpenAiProvider(): AiProvider {
       }
 
       const parsed = parseBrandSuggestionJson(content, "openai");
+      return { ...parsed, modelUsed: data.model || model };
+    },
+
+    async generateReplyDraft(request: AiReplyDraftRequest): Promise<AiReplyDraftResult> {
+      const apiKey = process.env.OPENAI_API_KEY;
+      if (!apiKey) {
+        throw new AiProviderError(
+          "OPENAI_API_KEY is not configured. Set it in the environment to enable AI reply drafts.",
+          "openai",
+        );
+      }
+
+      const model = process.env.OPENAI_MODEL || DEFAULT_MODEL;
+
+      const response = await fetch("https://api.openai.com/v1/chat/completions", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${apiKey}`,
+        },
+        body: JSON.stringify({
+          model,
+          response_format: { type: "json_object" },
+          temperature: 0.4,
+          messages: [
+            { role: "system", content: buildReplyDraftSystemPrompt() },
+            { role: "user", content: buildReplyDraftUserPrompt(request) },
+          ],
+        }),
+      });
+
+      if (!response.ok) {
+        const errorText = await response.text().catch(() => "");
+        throw new AiProviderError(
+          `OpenAI request failed (${response.status}): ${errorText.slice(0, 300)}`,
+          "openai",
+        );
+      }
+
+      const data = (await response.json()) as {
+        model?: string;
+        choices?: Array<{ message?: { content?: string } }>;
+      };
+
+      const content = data.choices?.[0]?.message?.content;
+      if (!content) {
+        throw new AiProviderError("OpenAI response did not include any content.", "openai");
+      }
+
+      const parsed = parseReplyDraftJson(content, "openai");
       return { ...parsed, modelUsed: data.model || model };
     },
   };
