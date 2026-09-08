@@ -1,8 +1,7 @@
-// Shared CSV-parsing core behind both csv.server.ts (generic) and judgeme.server.ts
-// (Judge.me-specific column names + moderation-status vocabulary) — every future provider that
-// exports CSV (Stamped, Ryviu, Ali Reviews all do) reuses this instead of re-implementing
-// header-matching. Providers whose export isn't CSV at all (Loox uses JSON) implement Importer
-// directly instead of calling this.
+// Shared CSV-parsing core behind csv.server.ts (generic), judgeme.server.ts (Judge.me-specific
+// column names + moderation-status vocabulary), loox.server.ts, and stamped.server.ts — every
+// provider that exports CSV reuses this instead of re-implementing header-matching. A provider
+// whose export isn't CSV at all would implement Importer directly instead of calling this.
 import Papa from "papaparse";
 import type { ParsedImport, ParsedReviewRow } from "./types";
 

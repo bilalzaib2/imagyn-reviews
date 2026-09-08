@@ -493,6 +493,140 @@ describe("importReviews — Judge.me", () => {
   });
 });
 
+describe("importReviews — Loox", () => {
+  const LOOX_HEADER = '"product_handle","product_Id","rating","author","email","body","created_at","photo_url","reply","replied_at","verified_purchase","incentivized"\n';
+
+  function looxRow(fields: {
+    productHandle?: string;
+    productId?: string;
+    rating: string;
+    author: string;
+    email?: string;
+    body: string;
+    createdAt?: string;
+    verifiedPurchase?: string;
+  }): string {
+    const cols = [
+      fields.productHandle ?? "",
+      fields.productId ?? "",
+      fields.rating,
+      fields.author,
+      fields.email ?? "customer@example.com",
+      fields.body,
+      fields.createdAt ?? "2024-03-07",
+      "",
+      "",
+      "",
+      fields.verifiedPurchase ?? "",
+      "",
+    ];
+    return cols.map((value) => `"${value}"`).join(",") + "\n";
+  }
+
+  it("matches by product_handle and auto-approves (no status column, mirrors an already-live Loox review)", async () => {
+    seedProduct({ id: "db_1", handle: "blue-widget" });
+
+    const csv = LOOX_HEADER + looxRow({ productHandle: "blue-widget", rating: "5", author: "Jane Doe", body: "Great product" });
+    const result = await importReviews("store_1", "loox", csv);
+
+    expect(result.imported).toBe(1);
+    expect(fakeReviews[0].status).toBe("APPROVED");
+    expect(fakeReviews[0].title).toBeNull();
+  });
+
+  it("matches by product_Id when product_handle is absent", async () => {
+    seedProduct({ id: "db_2", shopifyProductId: "gid://shopify/Product/555" });
+
+    const csv = LOOX_HEADER + looxRow({ productId: "555", rating: "4", author: "John Roe", body: "Solid" });
+    const result = await importReviews("store_1", "loox", csv);
+
+    expect(result.imported).toBe(1);
+    expect(fakeReviews[0].productId).toBe("db_2");
+  });
+
+  it("reads the explicit verified_purchase column directly, no inference needed", async () => {
+    seedProduct({ id: "db_3", handle: "blue-widget" });
+
+    const csv =
+      LOOX_HEADER +
+      looxRow({ productHandle: "blue-widget", rating: "5", author: "A", body: "Verified", verifiedPurchase: "TRUE" }) +
+      looxRow({ productHandle: "blue-widget", rating: "5", author: "B", body: "Not verified", verifiedPurchase: "FALSE" });
+    const result = await importReviews("store_1", "loox", csv);
+
+    expect(result.imported).toBe(2);
+    expect(fakeReviews.find((r) => r.reviewerName === "A")?.verifiedPurchase).toBe(true);
+    expect(fakeReviews.find((r) => r.reviewerName === "B")?.verifiedPurchase).toBe(false);
+  });
+});
+
+describe("importReviews — Stamped.io", () => {
+  const STAMPED_HEADER =
+    '"product_id","product_handle","productUrl","productImageUrl","photoFilenames","videoFilenames","productTitle","rating","title","author","email","body","created_at","published","reply","replied_at","publishedReply","tags","recommended","votes_up","votes_down","location","featured"\n';
+
+  function stampedRow(fields: {
+    productId?: string;
+    productHandle?: string;
+    productTitle?: string;
+    rating: string;
+    title?: string;
+    author: string;
+    body: string;
+    published?: string;
+  }): string {
+    const cols = [
+      fields.productId ?? "",
+      fields.productHandle ?? "",
+      "",
+      "",
+      "",
+      "",
+      fields.productTitle ?? "",
+      fields.rating,
+      fields.title ?? "",
+      fields.author,
+      "customer@example.com",
+      fields.body,
+      "2024-03-07 15:43:43",
+      fields.published ?? "",
+      "",
+      "",
+      "",
+      "",
+      "",
+      "",
+      "",
+      "",
+      "",
+    ];
+    return cols.map((value) => `"${value}"`).join(",") + "\n";
+  }
+
+  it("matches by productTitle when product_id/product_handle are both absent", async () => {
+    seedProduct({ id: "db_1", name: "Grace Star Dress" });
+
+    const csv = STAMPED_HEADER + stampedRow({ productTitle: "Grace Star Dress", rating: "5", author: "Jane Doe", body: "Lovely" });
+    const result = await importReviews("store_1", "stamped", csv);
+
+    expect(result.imported).toBe(1);
+    expect(fakeReviews[0].productId).toBe("db_1");
+  });
+
+  it("persists a real title and honors the published column's TRUE/FALSE as auto-approve", async () => {
+    seedProduct({ id: "db_2", handle: "blue-widget" });
+
+    const csv =
+      STAMPED_HEADER +
+      stampedRow({ productHandle: "blue-widget", rating: "5", title: "Exactly as described", author: "A", body: "Great", published: "TRUE" }) +
+      stampedRow({ productHandle: "blue-widget", rating: "3", title: "Meh", author: "B", body: "It was okay", published: "FALSE" });
+    const result = await importReviews("store_1", "stamped", csv);
+
+    expect(result.imported).toBe(2);
+    expect(fakeReviews.find((r) => r.reviewerName === "A")?.title).toBe("Exactly as described");
+    expect(fakeReviews.find((r) => r.reviewerName === "A")?.status).toBe("APPROVED");
+    expect(fakeReviews.find((r) => r.reviewerName === "B")?.status).toBe("PENDING");
+  });
+});
+
 describe("importReviews — review title mapping (regression: 'Untitled review' data-loss bug)", () => {
   const JUDGEME_HEADER =
     '"title","body","rating","review_date","source","curated","reviewer_name","reviewer_email","product_id","product_handle","reply","reply_date","picture_urls","ip_address","location","metaobject_handle"\n';

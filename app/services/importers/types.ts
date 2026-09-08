@@ -61,14 +61,21 @@ export class ImportSourceNotSupportedError extends Error {
   }
 }
 
-// What the UI's "Import from" selector offers today — only "csv" has a real Importer behind
-// it; the rest are listed so the picker's shape never needs to change when they're wired up,
-// only provider.server.ts's factory. Lives here (not provider.server.ts) so route components
-// can import it without pulling in a .server-only module.
+// What the UI's "Import from" selector offers today. Lives here (not provider.server.ts) so
+// route components can import it without pulling in a .server-only module.
+//
+// Loox and Stamped are built against each platform's own officially documented CSV
+// import-template column spec (see loox.server.ts / stamped.server.ts's own comments) — real,
+// tested importers, not stubs — but neither has been verified against a live export file from
+// a real account, since neither platform publishes its raw export column names separately from
+// that template. Ryviu stays unavailable: public documentation only confirms a partial column
+// set (product_handle, rating, photo_urls, created_at) with no confirmed reviewer-name/content/
+// email columns, which isn't enough to build a real importer without guessing field mappings —
+// exactly the kind of silent mis-mapping this app's import pipeline is built to avoid.
 export const IMPORT_SOURCES: Array<{ value: ImportSource; label: string; available: boolean }> = [
   { value: "csv", label: "Generic CSV", available: true },
   { value: "judgeme", label: "Judge.me", available: true },
-  { value: "loox", label: "Loox", available: false },
-  { value: "stamped", label: "Stamped", available: false },
+  { value: "loox", label: "Loox", available: true },
+  { value: "stamped", label: "Stamped", available: true },
   { value: "ryviu", label: "Ryviu", available: false },
 ];
