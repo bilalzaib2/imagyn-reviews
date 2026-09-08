@@ -6,6 +6,7 @@ import { authenticateAdminDeduped } from "../services/auth-dedupe.server";
 import { getOrCreateStore } from "../services/store.server";
 import { getStorePermissions } from "../services/permissions";
 import { Container } from "../components/ui/Container";
+import { handleTopLevelNavigate } from "../components/ui/topLevelNavigate";
 import shellStyles from "../styles/app.shell.module.css";
 import styles from "../styles/app.settingsWorkspace.module.css";
 
@@ -49,12 +50,11 @@ type SettingsGroup = {
 };
 
 // See the sidebar comment below for why this is a <button>, not an <a href>, and why it
-// appends the current query string to the destination.
+// appends the current query string to the destination. Shared with ActionCard (Settings
+// Overview's own "Configure"/"Manage" buttons) via topLevelNavigate.ts — same real bug, same
+// fix, one implementation.
 function handleSidebarLinkClick(event: MouseEvent<HTMLButtonElement>, href: string, search: string) {
-  if (event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) {
-    return;
-  }
-  window.location.assign(`${href}${search}`);
+  handleTopLevelNavigate(event, href, search);
 }
 
 export default function SettingsWorkspace() {
