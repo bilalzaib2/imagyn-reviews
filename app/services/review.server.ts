@@ -211,8 +211,11 @@ export async function getStoreReviews(storeId: string, options: ReviewQueryOptio
   return queryReviews({ storeId }, options);
 }
 
-export async function getProductReviews(productId: string, options: ReviewQueryOptions = {}) {
-  return queryReviews({ productId }, options);
+// Accepts either a single product id (every pre-existing caller) or an array — the array form
+// is for a grouped product's storefront-facing review list (see productGroup.server.ts's
+// getGroupedProductIds), where reviews left on any product in the group should appear together.
+export async function getProductReviews(productId: string | string[], options: ReviewQueryOptions = {}) {
+  return queryReviews(Array.isArray(productId) ? { productId: { in: productId } } : { productId }, options);
 }
 
 export interface FeaturedReview {
@@ -401,17 +404,21 @@ export interface PublicReviewSummary {
 // intentionally counts every status for internal merchant reporting, and whose stored
 // Product.rating5Count..rating1Count therefore can't be reused here — they'd leak
 // pending/rejected counts into a public response). Used for public, unauthenticated
-// storefront display, where pending/rejected reviews must never surface.
-export async function getPublicReviewSummary(productId: string): Promise<PublicReviewSummary> {
+// storefront display, where pending/rejected reviews must never surface. Accepts either a
+// single product id or an array — see getProductReviews's own comment on the grouped-product
+// case this exists for.
+export async function getPublicReviewSummary(productId: string | string[]): Promise<PublicReviewSummary> {
+  const productWhere = Array.isArray(productId) ? { productId: { in: productId } } : { productId };
+
   const [totalReviews, aggregate, ratingGroups] = await Promise.all([
-    prisma.review.count({ where: { productId, deletedAt: null, status: ReviewStatus.APPROVED } }),
+    prisma.review.count({ where: { ...productWhere, deletedAt: null, status: ReviewStatus.APPROVED } }),
     prisma.review.aggregate({
-      where: { productId, deletedAt: null, status: ReviewStatus.APPROVED },
+      where: { ...productWhere, deletedAt: null, status: ReviewStatus.APPROVED },
       _avg: { rating: true },
     }),
     prisma.review.groupBy({
       by: ["rating"],
-      where: { productId, deletedAt: null, status: ReviewStatus.APPROVED },
+      where: { ...productWhere, deletedAt: null, status: ReviewStatus.APPROVED },
       _count: { rating: true },
     }),
   ]);

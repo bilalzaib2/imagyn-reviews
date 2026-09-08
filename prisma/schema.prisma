@@ -160,6 +160,7 @@ model Store {
   referralProgram     ReferralProgram?
   referrals           Referral[]
   referralConversions ReferralConversion[]
+  productGroups       ProductGroup[]
 }
 
 model Product {
@@ -191,6 +192,12 @@ model Product {
   // recalculation (which also touches this row) can't make "last synced" look fresher than it is.
   lastSyncedAt DateTime?
 
+  // Optional merchant-defined grouping (e.g. color/size variants set up as separate Shopify
+  // products) — see ProductGroup's own comment. SetNull, not Cascade: deleting a group must
+  // never delete or orphan-affect the products in it, only ungroup them.
+  productGroupId String?
+  productGroup   ProductGroup? @relation(fields: [productGroupId], references: [id], onDelete: SetNull)
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
@@ -198,6 +205,32 @@ model Product {
   reviewRequests ReviewRequest[]
   widgets        Widget[]
   aiSummary      ProductAiSummary?
+
+  @@index([productGroupId])
+}
+
+// A merchant-defined group of Products whose reviews should be shown together — the real case
+// this exists for: the same item set up as several separate Shopify products (one per color or
+// size), where a review left on one variant is just as relevant to the others. Grouping is
+// manual (a merchant explicitly builds the group in Settings), not inferred from Shopify data,
+// since Shopify has no reliable signal for "these are the same product" across separate product
+// records. Membership only ever affects which reviews a product's storefront widgets/summary
+// show (see productGroup.server.ts's getGroupedProductIds) — it never merges the products
+// themselves, their Shopify data, or their own individual review-count denormalization.
+model ProductGroup {
+  id String @id @default(cuid())
+
+  storeId String
+  store   Store  @relation(fields: [storeId], references: [id], onDelete: Cascade)
+
+  name String
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  products Product[]
+
+  @@index([storeId])
 }
 
 enum ReviewStatus {

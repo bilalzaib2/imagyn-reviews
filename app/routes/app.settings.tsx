@@ -68,6 +68,7 @@ export default function SettingsWorkspace() {
         { label: "Request Scheduling", href: "/app/settings/requests", internal: true },
         { label: "Email Studio", href: "/app/email-studio" },
         { label: "Product Management", href: "/app/products" },
+        { label: "Product Groups", href: "/app/settings/productGroups", internal: true },
       ],
     },
     {

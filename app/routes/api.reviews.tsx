@@ -16,6 +16,7 @@ import {
   uploadReviewVideos,
 } from "../services/reviewMedia.server";
 import { getOrSyncProductForStoreByShopifyId } from "../services/product.server";
+import { getGroupedProductIds } from "../services/productGroup.server";
 import { getStoreBySlug } from "../services/store.server";
 import { getStorefrontWidgetSettings } from "../services/widget.server";
 import { getAiSummary } from "../services/aiSummary.server";
@@ -120,9 +121,16 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
   // setting, entirely outside our admin UI).
   const permissions = await getStorePermissions(store.id);
 
+  // Product Grouping (Settings > Product Groups): when a merchant has grouped this product
+  // with others (e.g. separate Shopify products for each color/size), a shopper sees reviews
+  // left on any product in the group, not just this exact one. Returns [product.id] alone —
+  // a single-element array behaving identically to the old plain productId — for the
+  // overwhelming majority of products, which aren't grouped at all.
+  const reviewProductIds = await getGroupedProductIds(product.id);
+
   const [summary, result, widget, aiSummary, gallery, appearance, medals] = await Promise.all([
-    getPublicReviewSummary(product.id),
-    getProductReviews(product.id, { status: ReviewStatus.APPROVED, limit: 50 }),
+    getPublicReviewSummary(reviewProductIds),
+    getProductReviews(reviewProductIds, { status: ReviewStatus.APPROVED, limit: 50 }),
     getStorefrontWidgetSettings(store.id, product.id, "review-list", permissions.canUseMultipleWidgetThemes),
     // Pure cache read — never triggers generation, so this can never slow down or block a
     // storefront page view. Returns null until a merchant has generated one at least once.

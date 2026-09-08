@@ -130,6 +130,11 @@ export default function SettingsOverviewPage() {
           description="Reward customers for bringing in new buyers."
           action={{ label: "Configure", href: "/app/settings/referrals" }}
         />
+        <ActionCard
+          title="Product Groups"
+          description="Group products that are the same item — color or size variants, for example — so reviews show on all of them."
+          action={{ label: "Configure", href: "/app/settings/productGroups" }}
+        />
       </div>
     </Section>
   );
