@@ -17,6 +17,7 @@ interface FakeReview {
   title: string | null;
   content: string;
   reviewerName: string;
+  verifiedPurchase?: boolean;
   createdAt: Date;
   deletedAt: Date | null;
   isPublished: boolean;
@@ -52,7 +53,8 @@ vi.mock("../db.server", () => ({
   },
 }));
 
-const { getFeedReadiness, setGoogleFeedEnabled, generateFeedXml, findStoreByFeedToken } = await import("./googleReviewFeed.server");
+const { getFeedReadiness, setGoogleFeedEnabled, generateFeedXml, generateDistributionFeedJson, findStoreByFeedToken } =
+  await import("./googleReviewFeed.server");
 
 beforeEach(() => {
   stores = [{ id: "store_1", domain: "example.myshopify.com", googleFeedEnabled: false, googleFeedToken: null }];
@@ -78,6 +80,17 @@ describe("getFeedReadiness", () => {
     const readiness = await getFeedReadiness("store_1");
     expect(readiness.feedEnabled).toBe(false);
     expect(readiness.feedUrl).toBeNull();
+    expect(readiness.distributionFeedUrl).toBeNull();
+  });
+
+  it("reports both the Google XML feed URL and the plain-JSON distribution feed URL once enabled", async () => {
+    await setGoogleFeedEnabled("store_1", true);
+    const readiness = await getFeedReadiness("store_1");
+    expect(readiness.feedUrl).toContain("/feeds/google-reviews/");
+    expect(readiness.distributionFeedUrl).toContain("/feeds/reviews-json/");
+    // Same underlying token — two output formats of the same merchant decision, not two.
+    const token = readiness.feedUrl?.split("/").pop();
+    expect(readiness.distributionFeedUrl).toContain(`/${token}`);
   });
 });
 
@@ -134,5 +147,58 @@ describe("generateFeedXml", () => {
     expect(xml).toContain("Love &amp; trust");
     expect(xml).toContain("Great &lt;product&gt;");
     expect(xml).toContain("https://example.myshopify.com/products/mug");
+  });
+});
+
+describe("generateDistributionFeedJson", () => {
+  it("includes only the same eligible reviews generateFeedXml would, as real JSON", async () => {
+    reviews.push(
+      {
+        id: "r1",
+        storeId: "store_1",
+        rating: 5,
+        title: "Great fit",
+        content: "Fits perfectly",
+        reviewerName: "A",
+        verifiedPurchase: true,
+        createdAt: new Date("2024-01-01T00:00:00.000Z"),
+        deletedAt: null,
+        isPublished: true,
+        product: { name: "Mug", handle: "mug" },
+      },
+      {
+        id: "r2",
+        storeId: "store_1",
+        rating: 4,
+        title: null,
+        content: "",
+        reviewerName: "B",
+        createdAt: new Date(),
+        deletedAt: null,
+        isPublished: true,
+        product: { name: "Cup", handle: "cup" },
+      },
+    );
+
+    const json = await generateDistributionFeedJson("store_1", "example.myshopify.com");
+    const parsed = JSON.parse(json);
+
+    expect(parsed.store).toBe("example.myshopify.com");
+    expect(parsed.reviews).toHaveLength(1);
+    expect(parsed.reviews[0]).toMatchObject({
+      id: "r1",
+      rating: 5,
+      title: "Great fit",
+      content: "Fits perfectly",
+      reviewerName: "A",
+      verifiedPurchase: true,
+      product: { name: "Mug", url: "https://example.myshopify.com/products/mug" },
+    });
+  });
+
+  it("produces valid, parseable JSON even with zero eligible reviews", async () => {
+    const json = await generateDistributionFeedJson("store_1", "example.myshopify.com");
+    const parsed = JSON.parse(json);
+    expect(parsed.reviews).toEqual([]);
   });
 });

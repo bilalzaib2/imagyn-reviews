@@ -14,15 +14,29 @@ import prisma from "../db.server";
 export interface FeedReadiness {
   feedEnabled: boolean;
   feedUrl: string | null;
+  // Same enable flag and token as feedUrl — this is one merchant decision ("make my published
+  // reviews publicly fetchable"), exposed in two output formats rather than a second toggle.
+  // Google Merchant Center needs the XML shape above; any other distribution channel (ad
+  // network, affiliate feed, a merchant's own script) is far more likely to want plain JSON —
+  // see generateDistributionFeedJson below.
+  distributionFeedUrl: string | null;
   hasStoreDomain: boolean;
   eligibleReviewCount: number;
   excludedReviewCount: number;
   excludedReasons: { noProductHandle: number; missingContent: number };
 }
 
-function buildFeedUrl(token: string): string {
+function appBaseUrl(): string {
   const appUrl = process.env.SHOPIFY_APP_URL || process.env.APP_URL || "http://127.0.0.1:3000";
-  return `${appUrl.replace(/\/$/, "")}/feeds/google-reviews/${token}`;
+  return appUrl.replace(/\/$/, "");
+}
+
+function buildFeedUrl(token: string): string {
+  return `${appBaseUrl()}/feeds/google-reviews/${token}`;
+}
+
+function buildDistributionFeedUrl(token: string): string {
+  return `${appBaseUrl()}/feeds/reviews-json/${token}`;
 }
 
 async function ensureFeedToken(storeId: string): Promise<string> {
@@ -36,15 +50,18 @@ async function ensureFeedToken(storeId: string): Promise<string> {
   return token;
 }
 
-export async function setGoogleFeedEnabled(storeId: string, enabled: boolean): Promise<{ feedUrl: string | null }> {
+export async function setGoogleFeedEnabled(
+  storeId: string,
+  enabled: boolean,
+): Promise<{ feedUrl: string | null; distributionFeedUrl: string | null }> {
   if (!enabled) {
     await prisma.store.update({ where: { id: storeId }, data: { googleFeedEnabled: false } });
-    return { feedUrl: null };
+    return { feedUrl: null, distributionFeedUrl: null };
   }
 
   const token = await ensureFeedToken(storeId);
   await prisma.store.update({ where: { id: storeId }, data: { googleFeedEnabled: true } });
-  return { feedUrl: buildFeedUrl(token) };
+  return { feedUrl: buildFeedUrl(token), distributionFeedUrl: buildDistributionFeedUrl(token) };
 }
 
 // A product qualifies for the feed if it has a real, resolvable storefront URL
@@ -81,9 +98,14 @@ export async function getFeedReadiness(storeId: string): Promise<FeedReadiness> 
     eligible += 1;
   }
 
+  const feedUrl = store.googleFeedEnabled && store.googleFeedToken ? buildFeedUrl(store.googleFeedToken) : null;
+  const distributionFeedUrl =
+    store.googleFeedEnabled && store.googleFeedToken ? buildDistributionFeedUrl(store.googleFeedToken) : null;
+
   return {
     feedEnabled: store.googleFeedEnabled,
-    feedUrl: store.googleFeedEnabled && store.googleFeedToken ? buildFeedUrl(store.googleFeedToken) : null,
+    feedUrl,
+    distributionFeedUrl,
     hasStoreDomain: Boolean(store.domain),
     eligibleReviewCount: eligible,
     excludedReviewCount: noProductHandle + missingContent,
@@ -158,4 +180,53 @@ ${entries.join("\n")}
 </reviews>
 </feed>
 `;
+}
+
+export interface DistributionFeedReview {
+  id: string;
+  rating: number;
+  title: string | null;
+  content: string;
+  reviewerName: string;
+  verifiedPurchase: boolean;
+  createdAt: string;
+  product: { name: string; url: string };
+}
+
+// A plain-JSON counterpart to generateFeedXml — same eligibility rule (real product URL, real
+// content), same store-scoping, same public unauthenticated token gate, just a shape any
+// channel that isn't Google Merchant Center specifically (an ad network, an affiliate feed, a
+// merchant's own script) can consume without parsing Google's XML review-feed schema. Not a
+// second data source: this and the XML feed are two views of the exact same underlying
+// eligible-review set, so getFeedReadiness's counts describe both.
+export async function generateDistributionFeedJson(storeId: string, storeDomain: string): Promise<string> {
+  const reviews = await prisma.review.findMany({
+    where: { storeId, deletedAt: null, isPublished: true },
+    select: {
+      id: true,
+      rating: true,
+      title: true,
+      content: true,
+      reviewerName: true,
+      verifiedPurchase: true,
+      createdAt: true,
+      product: { select: { name: true, handle: true } },
+    },
+    orderBy: { createdAt: "desc" },
+  });
+
+  const eligible: DistributionFeedReview[] = reviews
+    .filter((review) => review.product.handle && review.content.trim().length > 0)
+    .map((review) => ({
+      id: review.id,
+      rating: review.rating,
+      title: review.title,
+      content: review.content,
+      reviewerName: review.reviewerName,
+      verifiedPurchase: review.verifiedPurchase,
+      createdAt: review.createdAt.toISOString(),
+      product: { name: review.product.name, url: `https://${storeDomain}/products/${review.product.handle}` },
+    }));
+
+  return JSON.stringify({ store: storeDomain, generatedAt: new Date().toISOString(), reviews: eligible }, null, 2);
 }

@@ -27,6 +27,7 @@ type ActionData = {
   ok: boolean;
   error?: string;
   feedUrl?: string | null;
+  distributionFeedUrl?: string | null;
 };
 
 export const loader = async ({ request }: LoaderFunctionArgs): Promise<LoaderData> => {
@@ -45,7 +46,7 @@ export const action = async ({ request }: ActionFunctionArgs): Promise<ActionDat
   try {
     const enabled = formData.get("enabled") === "true";
     const result = await setGoogleFeedEnabled(store.id, enabled);
-    return { ok: true, feedUrl: result.feedUrl };
+    return { ok: true, feedUrl: result.feedUrl, distributionFeedUrl: result.distributionFeedUrl };
   } catch (error) {
     return { ok: false, error: error instanceof Error ? error.message : "Unable to update the feed." };
   }
@@ -68,6 +69,7 @@ export default function SettingsSeoPage() {
   const [enabled, setEnabled] = useState(feed.feedEnabled);
   const [toast, setToast] = useState<{ content: string; error?: boolean } | null>(null);
   const feedUrl = fetcher.data?.ok ? fetcher.data.feedUrl : feed.feedUrl;
+  const distributionFeedUrl = fetcher.data?.ok ? fetcher.data.distributionFeedUrl : feed.distributionFeedUrl;
 
   useEffect(() => {
     if (!fetcher.data) return;
@@ -136,6 +138,31 @@ export default function SettingsSeoPage() {
         {!feed.hasStoreDomain ? (
           <p className={styles.mutedText}>Your store needs a storefront domain on file before the feed can include any products.</p>
         ) : null}
+      </Section>
+
+      <Section
+        title="Other distribution channels"
+        description="The same approved reviews as plain JSON, for any ad network, affiliate feed, or script that isn't Google Merchant Center specifically. Same on/off switch as the feed above — turning it on or off there controls this too."
+      >
+        {enabled && distributionFeedUrl ? (
+          <>
+            <p className={styles.mutedText}>
+              Feed URL: <code>{distributionFeedUrl}</code>
+            </p>
+            <div className={styles.inlineActions}>
+              <a
+                href={distributionFeedUrl}
+                target="_blank"
+                rel="noreferrer"
+                className={`${buttonStyles.button} ${buttonStyles.secondary}`}
+              >
+                Preview feed
+              </a>
+            </div>
+          </>
+        ) : (
+          <p className={styles.mutedText}>Turn on the review feed above to get a URL here.</p>
+        )}
       </Section>
 
       <Section
