@@ -8,6 +8,7 @@ import { authenticateAdminDeduped } from "../services/auth-dedupe.server";
 import { getOrCreateStore } from "../services/store.server";
 import { getStorePermissions } from "../services/permissions";
 import { getFeedReadiness, setGoogleFeedEnabled, type FeedReadiness } from "../services/googleReviewFeed.server";
+import { getReviewSiteUrl } from "../services/reviewSite.server";
 import buttonStyles from "../components/ui/button.module.css";
 import styles from "../styles/app.management.module.css";
 
@@ -21,6 +22,7 @@ import styles from "../styles/app.management.module.css";
 type LoaderData = {
   canUseAI: boolean;
   feed: FeedReadiness;
+  reviewSiteUrl: string;
 };
 
 type ActionData = {
@@ -35,7 +37,7 @@ export const loader = async ({ request }: LoaderFunctionArgs): Promise<LoaderDat
   const store = await getOrCreateStore(session.shop);
   const [permissions, feed] = await Promise.all([getStorePermissions(store.id), getFeedReadiness(store.id)]);
 
-  return { canUseAI: permissions.canUseAI, feed };
+  return { canUseAI: permissions.canUseAI, feed, reviewSiteUrl: getReviewSiteUrl(store.slug) };
 };
 
 export const action = async ({ request }: ActionFunctionArgs): Promise<ActionData> => {
@@ -64,7 +66,7 @@ function StatusRow({ label, state, description }: { label: string; state: string
 }
 
 export default function SettingsSeoPage() {
-  const { canUseAI, feed } = useLoaderData<typeof loader>();
+  const { canUseAI, feed, reviewSiteUrl } = useLoaderData<typeof loader>();
   const fetcher = useFetcher<ActionData>();
   const [enabled, setEnabled] = useState(feed.feedEnabled);
   const [toast, setToast] = useState<{ content: string; error?: boolean } | null>(null);
@@ -163,6 +165,20 @@ export default function SettingsSeoPage() {
         ) : (
           <p className={styles.mutedText}>Turn on the review feed above to get a URL here.</p>
         )}
+      </Section>
+
+      <Section
+        title="Public review page"
+        description="A shareable page listing your real approved reviews — link to it from an email signature, social bio, or ad landing page. Always available; no separate switch, since these are the same already-published reviews your storefront widgets show."
+      >
+        <p className={styles.mutedText}>
+          Page URL: <code>{reviewSiteUrl}</code>
+        </p>
+        <div className={styles.inlineActions}>
+          <a href={reviewSiteUrl} target="_blank" rel="noreferrer" className={`${buttonStyles.button} ${buttonStyles.secondary}`}>
+            View page
+          </a>
+        </div>
       </Section>
 
       <Section
