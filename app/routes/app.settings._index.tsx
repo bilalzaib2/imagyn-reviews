@@ -7,7 +7,7 @@ import { getOrCreateStore } from "../services/store.server";
 import { getStorePermissions } from "../services/permissions";
 import { getPlan } from "../services/billing/plans";
 import { getStorePlanId } from "../services/billing/billing.server";
-import { ORDER_AUTOMATION_ENABLED } from "../config/features";
+import { ORDER_AUTOMATION_ENABLED, SHOPIFY_PROTECTED_CUSTOMER_DATA_APPROVED } from "../config/features";
 import styles from "../styles/app.settingsWorkspace.module.css";
 
 // Settings workspace index — a real status summary of what's actually configured right now
@@ -69,16 +69,26 @@ export default function SettingsOverviewPage() {
         <StatusRow
           label="Automatic review requests"
           state={
-            !ORDER_AUTOMATION_ENABLED
+            !SHOPIFY_PROTECTED_CUSTOMER_DATA_APPROVED
               ? "Pending Shopify approval"
-              : !canUseAutomaticReviewRequests
-                ? "Requires Pro"
-                : autoRequestEnabled
-                  ? "On"
-                  : "Off"
+              : !ORDER_AUTOMATION_ENABLED
+                ? "Approved — activating soon"
+                : !canUseAutomaticReviewRequests
+                  ? "Requires Pro"
+                  : autoRequestEnabled
+                    ? "On"
+                    : "Off"
           }
           tone={
-            !ORDER_AUTOMATION_ENABLED ? "warning" : !canUseAutomaticReviewRequests ? "pro" : autoRequestEnabled ? "success" : "neutral"
+            !SHOPIFY_PROTECTED_CUSTOMER_DATA_APPROVED
+              ? "warning"
+              : !ORDER_AUTOMATION_ENABLED
+                ? "warning"
+                : !canUseAutomaticReviewRequests
+                  ? "pro"
+                  : autoRequestEnabled
+                    ? "success"
+                    : "neutral"
           }
         />
         <StatusRow

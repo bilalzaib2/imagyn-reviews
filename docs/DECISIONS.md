@@ -486,3 +486,29 @@
     "Date range" and "Product" segments surface the picker's own date/product controls rather
     than duplicating them. CSV upload remains an honestly disabled tab — no request-specific
     CSV importer exists yet, unchanged from the prior pass.
+
+## Shopify Protected Customer Data: approval granted, activation still deliberately withheld (2026-09-08)
+
+-   **Shopify approved this app's Protected Customer Data request** (Partner Dashboard:
+    "Protected customer data access — Approved," Sep 8, 2026; requested fields Name + Email,
+    confirmed via a direct screenshot of the dashboard, not just a status claim). This
+    resolves the external blocker `ORDER_AUTOMATION_ENABLED` and the docs above have
+    described since 2026-07-22 and 2026-08-31.
+-   **Approval and activation are now two separate, explicitly-named facts, not one flag.**
+    `app/config/features.ts` adds `SHOPIFY_PROTECTED_CUSTOMER_DATA_APPROVED = true` for the
+    external Shopify fact; `ORDER_AUTOMATION_ENABLED` remains `false` on purpose — flipping it
+    still requires restoring the `fulfillments/create` webhook subscription and
+    `read_fulfillments` scope to `shopify.app.toml` and running `shopify app deploy`, at which
+    point every live merchant's real customers start receiving automatic emails with no undo.
+    That's a deliberate go-live decision withheld pending explicit approval, not an
+    engineering gap.
+-   **Merchant-facing copy corrected to match**, replacing the flat "Pending Shopify approval"
+    state (`app.settings._index.tsx`'s Overview status row, `app.settings.requests.tsx`'s
+    banner) with an honest three-state read: not yet approved / approved and activating soon
+    / live — never overclaiming automation is already running.
+-   **The automatic-request pipeline itself was independently re-read end-to-end this pass**
+    (`webhooks.fulfillments.create.tsx`, `review-request.server.ts`) and found already
+    idempotent (unique `(shopifyOrderId, productId)` constraint + `getExistingRequestContext`
+    eligibility check), suppression-checked before every send, retry-bounded (3 attempts),
+    per-store opt-in, plan-gated, and retention-purge-capable — no code changes were needed
+    there to be ready for live enablement once that separate decision is made.

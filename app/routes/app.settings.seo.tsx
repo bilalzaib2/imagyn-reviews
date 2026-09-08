@@ -1,7 +1,6 @@
-import { useLoaderData } from "react-router";
+import { useLoaderData, useRouteError } from "react-router";
 import type { HeadersFunction, LoaderFunctionArgs } from "react-router";
 import { boundary } from "@shopify/shopify-app-react-router/server";
-import { useRouteError } from "react-router";
 import { Section } from "../components/ui/Section";
 import { authenticateAdminDeduped } from "../services/auth-dedupe.server";
 import { getOrCreateStore } from "../services/store.server";
@@ -12,7 +11,8 @@ import styles from "../styles/app.management.module.css";
 // here either already works (structured data, AI summaries — both genuinely shipped) or is
 // honestly marked as not built. No toggle exists for anything without a real backend, per the
 // "never pretend" rule — a merchant reading this page should never wonder if a switch here
-// actually does anything.
+// actually does anything. Copy here is merchant-facing only — no file paths, service names, or
+// other implementation details; that's what DECISIONS.md/code comments are for.
 type LoaderData = {
   canUseAI: boolean;
 };
@@ -42,42 +42,42 @@ export default function SettingsSeoPage() {
   return (
     <>
       <Section
-        title="Structured data (JSON-LD)"
-        description="Real, shipped, and already live on every store — see app/services/structuredData."
+        title="Search engine visibility"
+        description="Helps Google and other search engines show your star rating directly in search results."
       >
         <StatusRow
           label="Review & rating rich snippets"
           state="Live"
           description={
-            'Every product page renders real AggregateRating/Review JSON-LD, sourced from your actual approved reviews — no separate toggle needed here. Merchants can turn the embed off per-theme from the "Product Reviews Widget" block’s own "Include reviews in search engine markup" setting in the Shopify Theme Editor.'
+            'Every product page automatically publishes your real approved reviews and average rating in the format search engines look for — no setup needed. You can turn this off for a specific theme from the "Product Reviews Widget" block\'s "Include reviews in search engine markup" setting in the Shopify Theme Editor.'
           }
         />
       </Section>
 
       <Section
         title="AI Review Summaries"
-        description="A real AI-generated summary of a product's reviews, shown in the admin and (where enabled) on the storefront."
+        description="A short, AI-generated summary of what customers say about a product, shown in your admin and (where enabled) on your storefront."
       >
         <StatusRow
           label="AI Review Summaries"
           state={canUseAI ? "Available on your plan" : "Requires Pro"}
-          description="Generated from your store's own real, approved reviews — never fabricated. Regenerate it from any product's detail page."
+          description="Generated from your store's own real, approved reviews — never fabricated. Regenerate it any time from a product's detail page."
         />
       </Section>
 
       <Section
-        title="Google Shopping & AI shopping surfaces"
-        description="Not built yet — shown here honestly rather than as a decorative toggle."
+        title="Coming next"
+        description="Ideas on our roadmap. Nothing below is available yet, and nothing on this page claims otherwise."
       >
         <StatusRow
           label="Google Shopping review feed"
           state="Not available yet"
-          description="No integration exists today. This would require a real Google Merchant Center connection — nothing here claims otherwise."
+          description="Syncing your reviews into Google Merchant Center so they can appear on Google Shopping listings."
         />
         <StatusRow
           label="AI shopping assistant visibility"
           state="Not available yet"
-          description="No integration exists today."
+          description="Making your review content easier for AI shopping assistants to reference when customers ask about your products."
         />
       </Section>
     </>

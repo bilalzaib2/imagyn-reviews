@@ -9,7 +9,7 @@ import { authenticateAdminDeduped } from "../services/auth-dedupe.server";
 import { getOrCreateStore, updateAutoRequestSettings, updateReminderSettings } from "../services/store.server";
 import { sendTestReviewRequestEmail } from "../services/notifications/testEmail.server";
 import { getStorePermissions } from "../services/permissions";
-import { ORDER_AUTOMATION_ENABLED } from "../config/features";
+import { ORDER_AUTOMATION_ENABLED, SHOPIFY_PROTECTED_CUSTOMER_DATA_APPROVED } from "../config/features";
 import styles from "../styles/app.management.module.css";
 
 // Settings > Review Collection > Request Scheduling. Split out of the former single
@@ -247,12 +247,20 @@ export default function SettingsRequestsPage() {
         title="Automatic review requests"
         description="Automatically create a Review Request for every fulfilled order line item, instead of creating them by hand."
       >
-        {!ORDER_AUTOMATION_ENABLED ? (
+        {!SHOPIFY_PROTECTED_CUSTOMER_DATA_APPROVED ? (
           <Banner tone="info">
             Pending Shopify approval: automatic review requests read order fulfillment details, which
             requires Shopify&apos;s Protected Customer Data approval for this app. This section will
             activate automatically once that&apos;s granted &mdash; manual review requests are unaffected
             and fully available today, including their full email schedule (see Reminder Emails below).
+          </Banner>
+        ) : !ORDER_AUTOMATION_ENABLED ? (
+          <Banner tone="info">
+            Approved by Shopify: this app&apos;s request to read order fulfillment details for automatic
+            review requests has been approved. We&apos;re finishing turning this on &mdash; it&apos;ll
+            activate here automatically, with no action needed from you. Manual review requests are
+            unaffected and fully available today, including their full email schedule (see Reminder
+            Emails below).
           </Banner>
         ) : !planIncludesAutomaticRequests ? (
           <Banner tone="info">Automatic review requests are disabled for this store&apos;s plan.</Banner>
