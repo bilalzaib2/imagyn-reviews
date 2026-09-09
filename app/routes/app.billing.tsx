@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import type { CSSProperties } from "react";
 import { useFetcher, useLoaderData, useLocation, useRouteError } from "react-router";
 import type { ActionFunctionArgs, HeadersFunction, LoaderFunctionArgs } from "react-router";
 import { boundary } from "@shopify/shopify-app-react-router/server";
@@ -71,18 +72,25 @@ function formatPrice(plan: Plan) {
   return plan.price === 0 ? "Free" : `$${plan.price.toFixed(2)}/month`;
 }
 
+// Per-card stagger reusing shellStyles.reveal's own --reveal-delay mechanism (see
+// app.shell.module.css) — the same one-mechanism-everywhere convention every other redesigned
+// screen this session reused, rather than a bespoke animation.
+const revealStyle = (stepIndex: number): CSSProperties => ({ "--reveal-delay": `${stepIndex * 80}ms` }) as CSSProperties;
+
 function PlanCard({
   plan,
   snapshot,
   manageUrl,
   onSelectStarter,
   isBusy,
+  index,
 }: {
   plan: Plan;
   snapshot: BillingSnapshot;
   manageUrl: string;
   onSelectStarter: () => void;
   isBusy: boolean;
+  index: number;
 }) {
   // hasAccess is required here, not just a plan-id match: a brand-new store defaults to
   // plan: "starter" before the merchant has ever made a choice (planStatus stays "pending"
@@ -93,7 +101,8 @@ function PlanCard({
 
   return (
     <div
-      className={`${styles.card} ${isCurrent ? styles.cardCurrent : ""} ${isPopular ? styles.cardPopular : ""}`}
+      className={`${styles.card} ${shellStyles.reveal} ${isCurrent ? styles.cardCurrent : ""} ${isPopular ? styles.cardPopular : ""}`}
+      style={revealStyle(index)}
     >
       <div className={styles.badgeSlot}>
         {isPopular ? <p className={styles.popularBadge}>Most popular</p> : null}
@@ -195,7 +204,7 @@ export default function BillingPage() {
           </header>
 
           <div className={styles.grid}>
-            {plans.map((plan) => (
+            {plans.map((plan, index) => (
               <PlanCard
                 key={plan.id}
                 plan={plan}
@@ -203,6 +212,7 @@ export default function BillingPage() {
                 manageUrl={manageUrl}
                 onSelectStarter={handleSelectStarter}
                 isBusy={isBusy}
+                index={index}
               />
             ))}
           </div>

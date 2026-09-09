@@ -166,22 +166,24 @@ export default function SettingsRewardsPage() {
       </Section>
 
       <Section title="Reward activity" description="A real, live count of every review this store has evaluated for a reward.">
-        <div className={styles.statRow}>
-          <div className={styles.stat}>
-            <p className={styles.statValue}>{stats.issued}</p>
-            <p className={styles.statLabel}>Issued</p>
-          </div>
-          <div className={styles.stat}>
-            <p className={styles.statValue}>{stats.pending}</p>
-            <p className={styles.statLabel}>Pending</p>
-          </div>
-          <div className={styles.stat}>
-            <p className={styles.statValue}>{stats.failed}</p>
-            <p className={styles.statLabel}>Failed</p>
-          </div>
-          <div className={styles.stat}>
-            <p className={styles.statValue}>{stats.ineligible}</p>
-            <p className={styles.statLabel}>Didn&apos;t qualify</p>
+        <div className={styles.card}>
+          <div className={styles.statRow}>
+            <div className={styles.stat}>
+              <p className={styles.statValue}>{stats.issued}</p>
+              <p className={styles.statLabel}>Issued</p>
+            </div>
+            <div className={styles.stat}>
+              <p className={styles.statValue}>{stats.pending}</p>
+              <p className={styles.statLabel}>Pending</p>
+            </div>
+            <div className={styles.stat}>
+              <p className={styles.statValue}>{stats.failed}</p>
+              <p className={styles.statLabel}>Failed</p>
+            </div>
+            <div className={styles.stat}>
+              <p className={styles.statValue}>{stats.ineligible}</p>
+              <p className={styles.statLabel}>Didn&apos;t qualify</p>
+            </div>
           </div>
         </div>
       </Section>

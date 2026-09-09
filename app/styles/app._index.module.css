@@ -46,6 +46,43 @@
   font-size: var(--text-sm);
 }
 
+/* The "at a glance" KPI strip — the very first thing under the greeting, matching the
+   Judge.me-style convention of leading a dashboard with a compact vitals row before anything
+   else. Deliberately NOT boxed in individual Cards (see the Apple-inspired design skill's
+   "avoid decorative statistics" / "could a card be removed" guidance) — five bordered chips
+   in one continuous strip read as one coherent readout, not five competing panels. Replaces
+   the old standalone "Trust Overview" card (2026-09-09) — every number it showed is still
+   here, just consolidated instead of duplicated with the Trust & Certification card below. */
+.kpiRow {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+  gap: var(--space-3);
+}
+
+.kpiCard {
+  display: grid;
+  gap: var(--space-1);
+  padding: var(--space-4) var(--space-5);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  background: var(--color-surface);
+}
+
+.kpiValue {
+  margin: 0;
+  font-size: clamp(1.5rem, 2.4vw, 1.875rem);
+  font-weight: 600;
+  letter-spacing: -0.02em;
+  font-variant-numeric: tabular-nums;
+}
+
+.kpiLabel {
+  margin: 0;
+  color: var(--color-text-muted);
+  font-size: var(--text-xs);
+  font-weight: 500;
+}
+
 /* Real, state-driven banners (no reviews yet / automation pending Shopify approval) — each is
    a <Banner> (components/ui/Banner.tsx), this just spaces multiple of them when more than one
    applies at once. */
@@ -322,6 +359,56 @@
   color: var(--color-text-muted);
   font-size: var(--text-sm);
   font-variant-numeric: tabular-nums;
+}
+
+/* Trust & Certification — overall status pill + one summary line, then the two trust-score
+   stats (reusing .trustRow/.trustStat), then the four pillar cards below. Deliberately no
+   colored gradients or "premium" chrome: the restrained IMAGYN identity (light surfaces, one
+   badge tone per real state) is the entire visual expression here, matching the site-wide
+   "no colorful Judge.me clone" rule. */
+.trustCertHeader {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  flex-wrap: wrap;
+  margin-bottom: var(--space-4);
+}
+
+.trustCertSummary {
+  margin: 0;
+  color: var(--color-text-muted);
+  font-size: var(--text-sm);
+}
+
+.pillarGrid {
+  display: grid;
+  gap: var(--space-4);
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  margin-top: var(--space-6);
+}
+
+.pillarCard {
+  display: grid;
+  align-content: start;
+  gap: var(--space-2);
+  padding: var(--space-4);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  background: var(--color-surface);
+}
+
+.pillarTitle {
+  margin: 0;
+  font-size: var(--text-sm);
+  font-weight: 600;
+  color: var(--color-text);
+}
+
+.pillarDetail {
+  margin: 0;
+  color: var(--color-text-muted);
+  font-size: var(--text-sm);
+  line-height: 1.5;
 }
 
 .aiSpotlight {

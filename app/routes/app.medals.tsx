@@ -1,3 +1,4 @@
+import type { CSSProperties } from "react";
 import { useLoaderData, useRouteError } from "react-router";
 import type { HeadersFunction, LoaderFunctionArgs } from "react-router";
 import { boundary } from "@shopify/shopify-app-react-router/server";
@@ -48,6 +49,11 @@ export const loader = async ({ request }: LoaderFunctionArgs): Promise<LoaderDat
   };
 };
 
+// Same staggered-entrance mechanism as app._index.tsx/app.reviews.tsx (shellStyles.reveal +
+// an inline --reveal-delay custom property) — reused here per family Section instead of one
+// flat page-level reveal, so multiple achievement families settle in as a considered sequence.
+const revealStyle = (stepIndex: number): CSSProperties => ({ "--reveal-delay": `${stepIndex * 70}ms` }) as CSSProperties;
+
 function formatEarnedDate(value: string) {
   return new Intl.DateTimeFormat("en", { month: "short", day: "numeric", year: "numeric" }).format(new Date(value));
 }
@@ -92,7 +98,7 @@ export default function MedalsPage() {
 
   return (
     <Container as="main">
-      <div className={`${shellStyles.page} ${styles.page} ${shellStyles.reveal}`}>
+      <div className={`${shellStyles.page} ${styles.page}`}>
         <header className={shellStyles.header}>
           <div className={shellStyles.headerContent}>
             <SettingsBreadcrumb current="Medals" />
@@ -103,8 +109,13 @@ export default function MedalsPage() {
           </div>
         </header>
 
-        {families.map(({ family, statuses }) => (
-          <Section key={family} title={FAMILY_TITLES[family] ?? family}>
+        {families.map(({ family, statuses }, index) => (
+          <Section
+            key={family}
+            title={FAMILY_TITLES[family] ?? family}
+            className={shellStyles.reveal}
+            style={revealStyle(index)}
+          >
             <div className={styles.medalGrid}>
               {statuses.map((status) => (
                 <MedalCard key={status.key} status={status} />

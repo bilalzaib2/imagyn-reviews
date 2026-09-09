@@ -135,7 +135,7 @@ function GroupCard({ group, ungroupedProducts, isBusy }: { group: ProductGroupRe
   const [isEditingName, setIsEditingName] = useState(false);
 
   return (
-    <div className={styles.card}>
+    <div className={`${styles.card}${group.products.length > 0 ? ` ${styles.cardAccent}` : ""}`}>
       <div className={styles.cardHeader}>
         {isEditingName ? (
           <renameFetcher.Form

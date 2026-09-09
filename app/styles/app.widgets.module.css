@@ -79,6 +79,31 @@
   }
 }
 
+/* The one genuinely configurable widget (Product Reviews Widget) versus five theme-editor-
+   only cards that all previously looked identical in the grid — this gives the gallery a real
+   primary/secondary hierarchy instead of six visually-equal tiles. Spans two columns on wide
+   viewports so its live preview reads at a size worth looking at; collapses back to one column
+   below 960px (see the media query at the bottom of this file) so it never crowds out the
+   others on tablet/mobile. */
+.widgetCardFeatured {
+  grid-column: span 2;
+  border-color: var(--color-border-strong);
+  border-left: 3px solid var(--color-accent);
+  background: color-mix(in srgb, var(--color-accent) 3%, var(--color-surface));
+}
+
+.widgetCardFeaturedTag {
+  display: inline-flex;
+  width: fit-content;
+  align-items: center;
+  gap: 0.3rem;
+  color: var(--color-accent);
+  font-size: var(--text-xs);
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
 .widgetCardHeader {
   display: flex;
   align-items: center;
@@ -590,6 +615,12 @@
 
   .inspectorPreviewColumn {
     position: static;
+  }
+}
+
+@media (max-width: 960px) {
+  .widgetCardFeatured {
+    grid-column: span 1;
   }
 }
 

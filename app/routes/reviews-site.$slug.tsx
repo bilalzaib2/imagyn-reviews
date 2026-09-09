@@ -37,14 +37,36 @@ export default function ReviewSitePage() {
     <div className={styles.page}>
       <div className={styles.container}>
         <header className={styles.header}>
+          <p className={styles.eyebrow}>Customer Reviews</p>
           <h1 className={styles.storeName}>{site.storeName}</h1>
           {site.publishedReviews > 0 ? (
-            <div className={styles.summaryRow}>
-              <StarRating value={Math.round(site.averageRating)} size={22} />
-              <span className={styles.averageRating}>{site.averageRating.toFixed(1)}</span>
-              <span className={styles.reviewCount}>
-                {site.publishedReviews} review{site.publishedReviews === 1 ? "" : "s"}
-              </span>
+            <div className={styles.summary}>
+              <div className={styles.summaryHero}>
+                <span className={styles.averageRating}>{site.averageRating.toFixed(1)}</span>
+                <div className={styles.summaryHeroMeta}>
+                  <StarRating value={Math.round(site.averageRating)} size={20} />
+                  <span className={styles.reviewCount}>
+                    Based on {site.publishedReviews} review{site.publishedReviews === 1 ? "" : "s"}
+                  </span>
+                </div>
+              </div>
+
+              <div className={styles.distribution}>
+                {([5, 4, 3, 2, 1] as const).map((value) => {
+                  const count = site.ratingCounts[value];
+                  const percent =
+                    site.publishedReviews > 0 ? Math.round((count / site.publishedReviews) * 100) : 0;
+                  return (
+                    <div key={value} className={styles.distributionRow}>
+                      <span className={styles.distributionLabel}>{value}</span>
+                      <span className={styles.distributionTrack}>
+                        <span className={styles.distributionFill} style={{ width: `${percent}%` }} />
+                      </span>
+                      <span className={styles.distributionCount}>{count}</span>
+                    </div>
+                  );
+                })}
+              </div>
             </div>
           ) : null}
         </header>

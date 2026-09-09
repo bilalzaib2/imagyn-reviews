@@ -14,29 +14,111 @@
   margin-bottom: var(--space-12);
 }
 
-.storeName {
+.eyebrow {
   margin: 0 0 var(--space-2);
-  font-size: var(--text-3xl);
+  font-size: var(--text-xs);
+  font-weight: 600;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--color-text-muted);
+}
+
+.storeName {
+  margin: 0 0 var(--space-6);
+  font-size: clamp(2rem, 5vw, var(--text-3xl));
   font-weight: 600;
   letter-spacing: -0.02em;
 }
 
-.summaryRow {
-  display: flex;
+.summary {
+  display: inline-flex;
+  flex-direction: column;
   align-items: center;
-  justify-content: center;
-  gap: var(--space-3);
-  margin-top: var(--space-4);
+  gap: var(--space-6);
+  padding: var(--space-8);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  background: var(--color-surface);
 }
 
+.summaryHero {
+  display: flex;
+  align-items: center;
+  gap: var(--space-4);
+}
+
+.summaryHeroMeta {
+  display: grid;
+  gap: var(--space-1);
+  justify-items: start;
+  text-align: left;
+}
+
+/* The one genuinely large number on this page — a real hero stat, not a plain inline
+   figure, since this page's entire job is to make a shopper trust this rating at a glance. */
 .averageRating {
-  font-size: var(--text-xl);
-  font-weight: 600;
+  font-size: clamp(2.75rem, 6vw, 3.5rem);
+  font-weight: 700;
+  letter-spacing: -0.03em;
+  line-height: 1;
+  font-variant-numeric: tabular-nums;
 }
 
 .reviewCount {
   color: var(--color-text-muted);
-  font-size: var(--text-base);
+  font-size: var(--text-sm);
+}
+
+.distribution {
+  display: grid;
+  gap: var(--space-2);
+  width: 100%;
+  max-width: 320px;
+}
+
+.distributionRow {
+  display: grid;
+  grid-template-columns: 0.75rem 1fr 1.5rem;
+  align-items: center;
+  gap: var(--space-3);
+}
+
+.distributionLabel {
+  color: var(--color-text-muted);
+  font-size: var(--text-xs);
+  text-align: right;
+}
+
+.distributionTrack {
+  height: 0.4rem;
+  border-radius: var(--radius-full);
+  background: var(--color-surface-muted);
+  overflow: hidden;
+}
+
+.distributionFill {
+  display: block;
+  height: 100%;
+  border-radius: var(--radius-full);
+  background: var(--color-text);
+}
+
+.distributionCount {
+  color: var(--color-text-muted);
+  font-size: var(--text-xs);
+  font-variant-numeric: tabular-nums;
+}
+
+@media (max-width: 480px) {
+  .summaryHero {
+    flex-direction: column;
+    text-align: center;
+  }
+
+  .summaryHeroMeta {
+    justify-items: center;
+    text-align: center;
+  }
 }
 
 .reviewList {
@@ -73,7 +155,13 @@
 }
 
 .verifiedBadge {
+  display: inline-flex;
+  align-items: center;
+  padding: 0.15rem 0.55rem;
+  border-radius: var(--radius-full);
+  background: color-mix(in srgb, var(--color-success) 12%, transparent);
   color: var(--color-success);
+  font-size: var(--text-xs);
   font-weight: 600;
 }
 

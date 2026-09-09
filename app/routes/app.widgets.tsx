@@ -1,4 +1,4 @@
-import { type ReactNode, useEffect, useMemo, useState } from "react";
+import { type CSSProperties, type ReactNode, useEffect, useMemo, useState } from "react";
 import { useFetcher, useLoaderData, useLocation, useNavigation, useRevalidator, useRouteError } from "react-router";
 import type { ActionFunctionArgs, HeadersFunction, LoaderFunctionArgs } from "react-router";
 import { boundary } from "@shopify/shopify-app-react-router/server";
@@ -172,6 +172,11 @@ const sampleReviews = [
 ];
 
 const REVIEWS_WIDGET_TYPE: WidgetType = "review-list";
+
+// Same staggered-entrance convention already established on the Dashboard/Reviews pages
+// (shellStyles.reveal + an inline --reveal-delay custom property) — reused here rather than a
+// bespoke gallery animation, so every card settles in as one considered moment.
+const revealStyle = (stepIndex: number): CSSProperties => ({ "--reveal-delay": `${stepIndex * 50}ms` }) as CSSProperties;
 
 export const loader = async ({ request }: LoaderFunctionArgs): Promise<LoaderData> => {
   const { session } = await authenticateAdminDeduped(request);
@@ -737,7 +742,7 @@ export default function WidgetsPage() {
             </div>
           ) : view === "gallery" ? (
             <div className={styles.cardGrid}>
-              {widgetCards.map((card) => {
+              {widgetCards.map((card, cardIndex) => {
                 if (card.status === "theme-editor") {
                   const status = installStatus[card.key as WidgetInstallKey] ?? UNKNOWN_INSTALL_STATUS;
                   // Detected live against this store's own storefront (see
@@ -753,7 +758,11 @@ export default function WidgetsPage() {
                         : status.reason ?? "Install state can't be determined automatically.";
 
                   return (
-                    <div key={card.key} className={styles.widgetCard}>
+                    <div
+                      key={card.key}
+                      className={`${styles.widgetCard} ${shellStyles.reveal}`}
+                      style={revealStyle(cardIndex)}
+                    >
                       <div className={styles.widgetCardHeader}>
                         <h2 className={styles.widgetCardTitle}>{card.title}</h2>
                         <InstallStateBadge status={status} />
@@ -806,7 +815,12 @@ export default function WidgetsPage() {
                       : `Block: ${card.blockName}. ${reviewsInstallStatus.reason ?? "Install state can't be determined automatically."}`;
 
                 return (
-                  <div key={card.key} className={styles.widgetCard}>
+                  <div
+                    key={card.key}
+                    className={`${styles.widgetCard} ${styles.widgetCardFeatured} ${shellStyles.reveal}`}
+                    style={revealStyle(cardIndex)}
+                  >
+                    <span className={styles.widgetCardFeaturedTag}>Core widget</span>
                     <div className={styles.widgetCardHeader}>
                       <h2 className={styles.widgetCardTitle}>{card.title}</h2>
                       <span className={draftSettings.enabled ? styles.statusEnabled : styles.statusDisabled}>

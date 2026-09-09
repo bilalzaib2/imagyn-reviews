@@ -95,6 +95,24 @@
   color: var(--color-text);
 }
 
+/* Gives each trend chart a real headline (the period total) instead of letting the bars alone
+   carry the card — the number is the primary fact, the shape of the trend is supporting
+   detail, matching the same headline/detail hierarchy the summary cards above already use. */
+.chartHeader {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--space-3);
+}
+
+.chartHeadline {
+  margin: 0;
+  font-size: var(--text-xl);
+  font-weight: 600;
+  letter-spacing: -0.02em;
+  font-variant-numeric: tabular-nums;
+}
+
 /* Rating distribution — same track/fill bar pattern as the dashboard's Trust Overview
    (app._index.module.css), reused here rather than re-invented. */
 .ratingBars {

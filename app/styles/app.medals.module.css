@@ -42,6 +42,22 @@
 .medalCardUnlocked {
   background: color-mix(in srgb, var(--color-text) 2%, var(--color-surface));
   border-color: color-mix(in srgb, var(--color-accent) 22%, var(--color-border));
+  transition: transform var(--transition-base), box-shadow var(--transition-base);
+}
+
+.medalCardUnlocked:hover {
+  transform: translateY(-1px);
+  box-shadow: var(--shadow-md);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .medalCardUnlocked {
+    transition: none;
+  }
+
+  .medalCardUnlocked:hover {
+    transform: none;
+  }
 }
 
 .medalBody {

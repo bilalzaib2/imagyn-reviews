@@ -1,3 +1,4 @@
+import type { CSSProperties } from "react";
 import { useFetcher, useLoaderData, useNavigation, useRouteError } from "react-router";
 import type { HeadersFunction, LoaderFunctionArgs } from "react-router";
 import { boundary } from "@shopify/shopify-app-react-router/server";
@@ -61,6 +62,16 @@ export const loader = async ({ request }: LoaderFunctionArgs): Promise<LoaderDat
 
 const formatPercent = (value: number) => `${Math.round(value * 100)}%`;
 const formatCount = (value: number) => new Intl.NumberFormat("en").format(value);
+
+// Same staggered-entrance convention already used on the Dashboard/Reviews/Widgets pages
+// (shellStyles.reveal + an inline --reveal-delay custom property).
+const revealStyle = (stepIndex: number): CSSProperties => ({ "--reveal-delay": `${stepIndex * 70}ms` }) as CSSProperties;
+
+// A trend chart with no headline number reads as decoration, not data — this gives each
+// mini bar chart a real anchor (the period total) before the shape of the trend itself.
+function chartTotal(trend: Array<{ date: string; count: number }>): number {
+  return trend.reduce((sum, point) => sum + point.count, 0);
+}
 
 function SummaryCard({ label, value }: { label: string; value: string }) {
   return (
@@ -178,7 +189,12 @@ export default function AnalyticsPage() {
 
         {isLoading ? <p className={styles.feedbackMuted}>Refreshing analytics…</p> : null}
 
-        <Section title="Reviews" description="Volume, rating, and status for reviews created in this range.">
+        <Section
+          className={shellStyles.reveal}
+          style={revealStyle(0)}
+          title="Reviews"
+          description="Volume, rating, and status for reviews created in this range."
+        >
           <div className={styles.summaryGrid}>
             <SummaryCard label="Total reviews" value={formatCount(reviewAnalytics.totalReviews)} />
             <SummaryCard
@@ -192,7 +208,10 @@ export default function AnalyticsPage() {
 
           <div className={styles.insightsGrid}>
             <Card className={styles.chartCard}>
-              <p className={styles.chartTitle}>Reviews over time</p>
+              <div className={styles.chartHeader}>
+                <p className={styles.chartTitle}>Reviews over time</p>
+                <p className={styles.chartHeadline}>{formatCount(chartTotal(reviewAnalytics.trend))}</p>
+              </div>
               <TrendChart trend={reviewAnalytics.trend} />
             </Card>
             <Card className={styles.chartCard}>
@@ -206,7 +225,12 @@ export default function AnalyticsPage() {
           </div>
         </Section>
 
-        <Section title="Review requests" description="Volume and conversion for requests created in this range.">
+        <Section
+          className={shellStyles.reveal}
+          style={revealStyle(1)}
+          title="Review requests"
+          description="Volume and conversion for requests created in this range."
+        >
           <div className={styles.summaryGrid}>
             <SummaryCard label="Total requests" value={formatCount(requestAnalytics.totalRequests)} />
             <SummaryCard label="Sent" value={formatCount(requestAnalytics.sent)} />
@@ -215,12 +239,20 @@ export default function AnalyticsPage() {
           </div>
 
           <Card className={styles.chartCard}>
-            <p className={styles.chartTitle}>Requests over time</p>
+            <div className={styles.chartHeader}>
+              <p className={styles.chartTitle}>Requests over time</p>
+              <p className={styles.chartHeadline}>{formatCount(chartTotal(requestAnalytics.trend))}</p>
+            </div>
             <TrendChart trend={requestAnalytics.trend} />
           </Card>
         </Section>
 
-        <Section title="Advanced analytics" description="Deeper conversion insights and AI-generated review themes.">
+        <Section
+          className={shellStyles.reveal}
+          style={revealStyle(2)}
+          title="Advanced analytics"
+          description="Deeper conversion insights and AI-generated review themes."
+        >
           {canUseAnalytics && conversionInsights && aiDigest ? (
             <div className={styles.proContent}>
               <div className={styles.summaryGrid}>

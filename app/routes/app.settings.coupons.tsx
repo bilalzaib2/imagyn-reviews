@@ -171,7 +171,7 @@ function CouponRow({ coupon }: { coupon: CouponRecord }) {
   };
 
   return (
-    <div className={styles.card}>
+    <div className={`${styles.card}${coupon.status === "active" ? ` ${styles.cardAccent}` : ""}`}>
       <div className={styles.cardHeader}>
         <div>
           <p className={styles.settingsGroupLabel}>

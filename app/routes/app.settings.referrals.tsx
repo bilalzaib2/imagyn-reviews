@@ -112,7 +112,7 @@ function ReferralRow({ referral }: { referral: ReferralRecord }) {
   };
 
   return (
-    <div className={styles.card}>
+    <div className={`${styles.card}${referral.conversionCount > 0 ? ` ${styles.cardAccent}` : ""}`}>
       <div className={styles.cardHeader}>
         <div>
           <p className={styles.settingsGroupLabel}>{referral.referrerName || referral.referrerEmail}</p>

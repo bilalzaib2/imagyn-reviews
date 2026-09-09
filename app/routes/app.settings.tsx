@@ -93,6 +93,10 @@ export default function SettingsWorkspace() {
       ],
     },
     {
+      label: "Trust",
+      items: [{ label: "Trust & Certification", href: "/app/settings/trust", internal: true }],
+    },
+    {
       label: "Brand",
       items: [
         { label: "Brand Studio", href: "/app/appearance" },

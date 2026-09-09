@@ -46,6 +46,21 @@
   font-size: var(--text-sm);
 }
 
+/* A single labeled status row (label + state + description) — e.g. Google/SEO's status
+   list. Previously referenced by app.settings.seo.tsx as `styles.fieldGroup` with no
+   matching rule defined anywhere (a real pre-existing bug: the class name resolved to
+   `undefined`, so every StatusRow rendered as an unstyled div with zero spacing between
+   rows). Fixed here, additive only. */
+.fieldGroup {
+  display: grid;
+  gap: var(--space-1);
+  padding: var(--space-3) 0;
+}
+
+.fieldGroup:not(:last-child) {
+  border-bottom: 1px solid var(--color-border);
+}
+
 /* Sub-groups within a single Section (e.g. Moderation Rules' Auto-publish / Always hold /
    Notify clusters) — a plain label, not a new bordered box, so 8 flat controls read as 3
    legible decisions without adding another card-within-a-card visual layer. */
@@ -94,6 +109,16 @@
   justify-content: space-between;
   gap: var(--space-4);
   flex-wrap: wrap;
+}
+
+/* Opt-in modifier (append alongside `.card`, never replaces it) — a quiet left accent for a
+   row that's genuinely live/active/has-real-content right now (an active coupon, a referral
+   with a real conversion, a group with members), so a list of otherwise-identical `.card`
+   rows gets real visual hierarchy instead of a flat, undifferentiated stack. Same restrained
+   language as app._index.module.css's `.attentionCardActive` (border-left accent only, no
+   new color) — never applied automatically, only where a caller has a genuine reason. */
+.cardAccent {
+  border-left: 3px solid var(--color-accent);
 }
 
 .inlineActions {

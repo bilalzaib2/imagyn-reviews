@@ -135,6 +135,11 @@ export default function SettingsOverviewPage() {
           description="Group products that are the same item — color or size variants, for example — so reviews show on all of them."
           action={{ label: "Configure", href: "/app/settings/productGroups" }}
         />
+        <ActionCard
+          title="Trust & Certification"
+          description="Real-time verification of how trustworthy your store looks to shoppers, calculated from your own store data."
+          action={{ label: "View", href: "/app/settings/trust" }}
+        />
       </div>
     </Section>
   );

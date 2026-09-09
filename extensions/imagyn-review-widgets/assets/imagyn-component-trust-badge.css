@@ -1,0 +1,278 @@
+/*
+ * Imagyn Reviews — Trust Badge + Trust modal component.
+ *
+ * Restrained by design: light/off-white surfaces, near-black text, one hairline border —
+ * never a colorful "Trust Score" gradient. The only deliberately saturated element anywhere
+ * in this file is the star color (merchant-configurable, defaults to --imagyn-color-star);
+ * the CERTIFIED chip is monochrome (solid dark fill / light text), matching
+ * imagyn-component-chip.css's own `--selected` pattern exactly, not a green "verified" badge.
+ *
+ * Load imagyn-tokens.css, imagyn-typography.css and imagyn-component-modal.css (for the
+ * shared .imagyn-modal-overlay/.imagyn-modal shell) before this file.
+ */
+
+/* imagyn-component-modal.css's .imagyn-modal-overlay is `display: flex` unconditionally (it
+   was "reserved, not yet wired into any block" until this file); the [hidden] attribute alone
+   loses to that class rule under equal-specificity cascade ordering, so this raises specificity
+   explicitly rather than relying on attribute-vs-class ordering luck. */
+.imagyn-modal-overlay[hidden] {
+  display: none;
+}
+
+.imagyn-trust-badge-wrap {
+  display: flex;
+  margin: var(--imagyn-trust-badge-spacing, 8px) 0;
+  font-family: var(--imagyn-font-family);
+}
+
+.imagyn-trust-badge-wrap--left {
+  justify-content: flex-start;
+}
+
+.imagyn-trust-badge-wrap--center {
+  justify-content: center;
+}
+
+.imagyn-trust-badge-wrap--right {
+  justify-content: flex-end;
+}
+
+.imagyn-trust-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--imagyn-space-px-xs, 8px);
+  padding: 0.5em 0.9em;
+  border-radius: var(--imagyn-radius-full, 999px);
+  border: var(--imagyn-border-width, 1px) solid var(--imagyn-color-border, rgba(0, 0, 0, 0.12));
+  background: var(--imagyn-color-surface, #ffffff);
+  color: var(--imagyn-color-text, inherit);
+  font-size: var(--imagyn-font-size-sm, 13px);
+  line-height: var(--imagyn-line-height-tight, 1);
+  cursor: pointer;
+  transition: box-shadow var(--imagyn-duration-fast, 120ms) var(--imagyn-easing, ease-out),
+    transform var(--imagyn-duration-fast, 120ms) var(--imagyn-easing, ease-out);
+}
+
+.imagyn-trust-badge:hover {
+  box-shadow: var(--imagyn-shadow-sm, 0 1px 2px rgba(0, 0, 0, 0.05));
+  transform: translateY(-1px);
+}
+
+.imagyn-trust-badge:focus-visible {
+  outline: 2px solid var(--imagyn-color-focus, #0a0a0a);
+  outline-offset: 2px;
+}
+
+/* "Filled" style — same safe two-token pattern as imagyn-component-chip.css's
+   .imagyn-chip--selected (background through --imagyn-color-text, text color through
+   --imagyn-color-surface): never chain the same currentColor-based token through both
+   properties on one element, or an unconfigured store renders invisible text-on-text. */
+.imagyn-trust-badge[data-badge-style="filled"] {
+  background: var(--imagyn-color-text, currentColor);
+  color: var(--imagyn-color-surface, #ffffff);
+  border-color: transparent;
+}
+
+.imagyn-trust-badge[data-size="compact"] {
+  padding: 0.35em 0.7em;
+  font-size: var(--imagyn-font-size-xs, 12px);
+  gap: 0.4em;
+}
+
+.imagyn-trust-badge[data-size="large"] {
+  padding: 0.65em 1.1em;
+  font-size: var(--imagyn-font-size-md, 17px);
+  gap: 0.55em;
+}
+
+.imagyn-trust-badge__stars {
+  color: var(--imagyn-trust-badge-star-color, var(--imagyn-color-star, #f5a623));
+  letter-spacing: 0.05em;
+}
+
+/* "Outline" star style: hollow glyph via text-stroke, same fill/empty character set as
+   ImagynShared.renderStars — a CSS-only treatment, no separate icon asset needed. */
+.imagyn-trust-badge[data-star-style="outline"] .imagyn-trust-badge__stars {
+  color: transparent;
+  -webkit-text-stroke: 1px var(--imagyn-trust-badge-star-color, var(--imagyn-color-star, #f5a623));
+}
+
+.imagyn-trust-badge__rating {
+  font-weight: var(--imagyn-font-weight-semibold, 600);
+  font-variant-numeric: tabular-nums;
+}
+
+.imagyn-trust-badge__count {
+  opacity: var(--imagyn-color-text-muted-opacity, 0.6);
+}
+
+.imagyn-trust-badge__certified {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3em;
+  padding: 0.2em 0.55em;
+  margin-left: 0.2em;
+  border-radius: var(--imagyn-radius-full, 999px);
+  background: var(--imagyn-color-text, currentColor);
+  color: var(--imagyn-color-surface, #ffffff);
+  font-size: 0.85em;
+  font-weight: var(--imagyn-font-weight-semibold, 600);
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.imagyn-trust-badge__certified-icon {
+  width: 0.9em;
+  height: 0.9em;
+  flex: none;
+}
+
+/* --- Trust modal content (sits inside the shared .imagyn-modal from
+   imagyn-component-modal.css) --- */
+
+.imagyn-trust-modal__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--imagyn-space-px-md, 16px);
+  margin-bottom: var(--imagyn-space-md, 1em);
+}
+
+.imagyn-trust-modal__store {
+  font-size: var(--imagyn-font-size-lg, 20px);
+  font-weight: var(--imagyn-font-weight-semibold, 600);
+  margin: 0;
+}
+
+.imagyn-trust-modal__stats {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: var(--imagyn-space-px-md, 16px);
+  padding: var(--imagyn-space-px-md, 16px) 0;
+  border-top: var(--imagyn-border-width, 1px) solid var(--imagyn-color-border, rgba(0, 0, 0, 0.08));
+  border-bottom: var(--imagyn-border-width, 1px) solid var(--imagyn-color-border, rgba(0, 0, 0, 0.08));
+}
+
+.imagyn-trust-modal__stat-value {
+  margin: 0;
+  font-size: var(--imagyn-font-size-xl, 26px);
+  font-weight: var(--imagyn-font-weight-semibold, 600);
+  font-variant-numeric: tabular-nums;
+}
+
+.imagyn-trust-modal__stat-label {
+  margin: 0.2em 0 0;
+  font-size: var(--imagyn-font-size-xs, 12px);
+  opacity: var(--imagyn-color-text-muted-opacity, 0.6);
+}
+
+.imagyn-trust-modal__section-title {
+  margin: var(--imagyn-space-lg, 1.5em) 0 var(--imagyn-space-sm, 0.6em);
+  font-size: var(--imagyn-font-size-xs, 12px);
+  font-weight: var(--imagyn-font-weight-semibold, 600);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  opacity: var(--imagyn-color-text-muted-opacity, 0.6);
+}
+
+.imagyn-trust-modal__pillars {
+  display: grid;
+  gap: var(--imagyn-space-xs, 0.4em);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.imagyn-trust-modal__pillar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--imagyn-space-sm, 0.6em);
+  padding: 0.55em 0;
+  border-bottom: var(--imagyn-border-width, 1px) solid var(--imagyn-color-border, rgba(0, 0, 0, 0.06));
+}
+
+.imagyn-trust-modal__pillar:last-child {
+  border-bottom: none;
+}
+
+.imagyn-trust-modal__pillar-status {
+  flex: none;
+  padding: 0.15em 0.6em;
+  border-radius: var(--imagyn-radius-full, 999px);
+  border: var(--imagyn-border-width, 1px) solid var(--imagyn-color-border, rgba(0, 0, 0, 0.12));
+  font-size: var(--imagyn-font-size-xs, 12px);
+  font-weight: var(--imagyn-font-weight-medium, 500);
+}
+
+.imagyn-trust-modal__pillar-status--met {
+  background: var(--imagyn-color-text, currentColor);
+  color: var(--imagyn-color-surface, #ffffff);
+  border-color: transparent;
+}
+
+.imagyn-trust-modal__summary-text {
+  margin: 0;
+  font-size: var(--imagyn-font-size-base, 15px);
+  line-height: var(--imagyn-line-height-base, 1.5);
+}
+
+.imagyn-trust-modal__sentiment {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: var(--imagyn-space-px-md, 16px);
+}
+
+.imagyn-trust-modal__sentiment-list {
+  margin: 0;
+  padding-left: 1.1em;
+  font-size: var(--imagyn-font-size-sm, 13px);
+  line-height: var(--imagyn-line-height-base, 1.5);
+}
+
+.imagyn-trust-modal__media {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: var(--imagyn-space-px-xs, 8px);
+}
+
+.imagyn-trust-modal__media-item {
+  aspect-ratio: 1;
+  border-radius: var(--imagyn-radius-sm, 4px);
+  overflow: hidden;
+  background: var(--imagyn-color-border, rgba(0, 0, 0, 0.06));
+}
+
+.imagyn-trust-modal__media-item img,
+.imagyn-trust-modal__media-item video {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+.imagyn-trust-modal__explainer {
+  margin: var(--imagyn-space-lg, 1.5em) 0 0;
+  padding-top: var(--imagyn-space-md, 1em);
+  border-top: var(--imagyn-border-width, 1px) solid var(--imagyn-color-border, rgba(0, 0, 0, 0.08));
+  font-size: var(--imagyn-font-size-xs, 12px);
+  line-height: var(--imagyn-line-height-base, 1.5);
+  opacity: var(--imagyn-color-text-muted-opacity, 0.6);
+}
+
+@media (max-width: 640px) {
+  .imagyn-trust-modal__stats,
+  .imagyn-trust-modal__sentiment {
+    grid-template-columns: 1fr 1fr;
+  }
+
+  .imagyn-trust-modal__media {
+    grid-template-columns: repeat(3, 1fr);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .imagyn-trust-badge {
+    transition: none;
+  }
+}

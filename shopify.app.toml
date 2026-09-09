@@ -59,7 +59,14 @@ api_version = "2026-07"
 # app/services/shopifyOrders.server.ts. read_fulfillments (required specifically for the
 # fulfillments/create webhook subscription above) was restored alongside it once Protected
 # Customer Data approval was granted 2026-09-08 — see docs/DECISIONS.md.
-scopes = "write_products,write_metaobjects,write_metaobject_definitions,write_files,read_files,read_orders,read_customers,read_fulfillments"
+# read_legal_policies (added 2026-09-09) is required ONLY for the IMAGYN Trust Certification
+# "Transparent Shipping & Refund Policy" pillar to read shop.shopPolicies (confirmed via live
+# introspection to be ACCESS_DENIED without it — see trustCertification.server.ts's
+# calculatePolicyPillar/fetchShopPolicies). Existing merchants who haven't re-consented yet
+# keep working exactly as before: fetchShopPolicies treats the resulting ACCESS_DENIED as an
+# expected, honest "needs_permission" outcome, never a crash and never an inferred pass — see
+# that function's own header comment. No other part of the app reads or requests this scope.
+scopes = "write_products,write_metaobjects,write_metaobject_definitions,write_files,read_files,read_orders,read_customers,read_fulfillments,read_legal_policies"
 
 [auth]
 redirect_urls = [

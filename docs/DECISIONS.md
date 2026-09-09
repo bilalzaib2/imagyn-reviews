@@ -512,3 +512,80 @@
     eligibility check), suppression-checked before every send, retry-bounded (3 attempts),
     per-store opt-in, plan-gated, and retention-purge-capable — no code changes were needed
     there to be ready for live enablement once that separate decision is made.
+
+## IMAGYN Trust Certification: database/logic, Dashboard card, Settings page, Theme App
+## Extension Trust Badge + modal, and the `read_legal_policies` scope (2026-09-09)
+
+-   **Built the full IMAGYN Trust Certification system**: four independently-calculated,
+    pure-function pillars (`trustCertification.server.ts` — Transparent Review Practices,
+    Secure Payment Methods, Transparent Shipping & Refund Policy, Verified Store History), an
+    overall-status derivation with a deliberate priority order (a real `not_met` always
+    outranks an unresolved `pending`/`needs_permission`), and a thin orchestration layer
+    (`refreshTrustCertification`) that is the only place any Admin API call happens. No
+    function anywhere accepts a "just mark this passed" input — every status is derived from
+    real, already-fetched data. 50 regression tests cover every pillar boundary the pillars
+    themselves define (verified-review thresholds, the 95% published boundary, the 90-day
+    store-age boundary, payment-gateway dispute-path detection, policy timeframe detection,
+    paused/at_risk/needs_permission precedence).
+-   **Real production bug found and fixed via live QA, not assumption**: `admin.graphql()`
+    (this app's `@shopify/shopify-api` v13.1.0 client) does not resolve with `.errors` in the
+    JSON body for a GraphQL-level error — it *rejects* the call with a `GraphqlQueryError`,
+    confirmed live against verveonline's real (at the time) missing `read_legal_policies`
+    scope. Before `adminGraphql`'s try/catch normalization was added, this crashed the entire
+    Dashboard loader for every merchant, every page load — not a "needs_permission" state, an
+    unhandled exception. Two regression tests lock in both the resolved-with-errors shape and
+    the real thrown-error shape so this can't silently regress.
+-   **Added `read_legal_policies` to `shopify.app.toml`'s access_scopes** (2026-09-09, this
+    entry) specifically so the Policy pillar can read `shop.shopPolicies` instead of being
+    permanently stuck at `needs_permission`. This is the only place in the codebase that reads
+    or requests this scope. Existing merchants who haven't re-consented yet are unaffected:
+    `fetchShopPolicies` treats the resulting `ACCESS_DENIED` as an expected, honest
+    `needs_permission` outcome (never a crash, never an inferred pass) exactly as it did
+    before the scope was requested — the only change for an un-consented merchant is that
+    Shopify will prompt them to approve the new scope the next time they open the app
+    (standard Shopify scope-update consent flow via the `app/scopes_update` webhook this app
+    already subscribes to; no forced reinstall, no data reset, no interruption to any other
+    feature).
+-   **Dashboard**: a real "Trust & Certification" card (`app._index.tsx`) — trust score
+    (verified review count + verified average rating), overall status, and four pillar cards
+    with real status/explanation/metric and a fix-link where one genuinely exists (moderate
+    pending reviews, review payment settings, edit shipping & refund policy) — plus an
+    explicit merchant-triggered "Recheck now" action. `getOrRefreshTrustCertification` is a
+    pure cache read that refreshes itself in the background once the snapshot is >12 hours
+    stale, so a normal page load is never blocked on live Shopify latency.
+-   **Settings → Trust & Certification** (`app.settings.trust.tsx`, new sidebar group): full
+    pillar detail, last-checked timestamp, and the one real merchant control this system
+    exposes — pausing/resuming *display* of an already-earned certification. Pausing never
+    changes what's actually being measured; the pillars keep calculating in the background.
+-   **Presentation logic extracted to `trustCertification.presentation.ts`** (status
+    labels/tones, `buildPillarViews`) so the Dashboard card and Settings page can never drift
+    into inconsistent wording for the same real state.
+-   **Theme App Extension**: a real `trust_badge.liquid` block (Online Store 2.0, `target:
+    "section"`, appears under any section's "Apps" tab — confirmed live in the Shopify theme
+    editor) with theme-editor settings for enabled/disabled, alignment, outline/filled, badge
+    size, star style/color, CERTIFIED-indicator visibility, and spacing. `trust-badge.js`
+    fetches `/apps/reviews/trust` (new `api.reviews.trust.tsx` App Proxy endpoint — a pure
+    cache read via `getTrustCertification`, **never** `refreshTrustCertification`; a
+    storefront request must never trigger a live Admin API call) and renders the badge, or
+    hides it entirely when there are zero verified reviews or certification display is
+    paused — confirmed live against verveonline (0 verified reviews today), which correctly
+    shows nothing rather than a fabricated "0.0★" claim.
+-   **Click-through modal** (same file, reusing the previously-reserved
+    `imagyn-component-modal.css` shell — the first real consumer of it): store name, verified
+    rating/count, rating distribution, all four pillars (public-safe labels only — the
+    merchant-facing pillar detail strings can mention internal Shopify scope names, which
+    would be meaningless to a shopper, so the public API deliberately returns only
+    `{key, title, status}` per pillar, never the internal `detail`/`reason` text), AI summary
+    + sentiment (positives/negatives) when one exists, verified customer media when any
+    exists (a new `getVerifiedStoreMediaGallery` query, scoped to verified+published reviews
+    only — never the store's full public media gallery), and a plain-language "what does
+    Verified mean" explainer. Accessible: focus-trapped, Escape closes, focus restored to the
+    triggering badge.
+-   **Deliberately not fabricated for testing**: the "badge/modal with real content" render
+    path was verified by code review and reuse of already-proven shared helpers
+    (`ImagynShared.renderStars`/`renderHistogram`, already live in `rating-badge.js`/
+    `store-reviews.js`), not by live-clicking it with seeded data — an attempt to temporarily
+    seed verified reviews on verveonline for this exact QA purpose was correctly blocked by
+    Claude Code's own safety classifier as fabricating verified-review data, which this
+    feature's entire premise forbids. The empty-state path (zero verified reviews → badge
+    hidden) *is* live-confirmed.

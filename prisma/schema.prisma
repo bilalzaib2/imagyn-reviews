@@ -46,9 +46,10 @@ model Store {
   widgets           Widget[]
   appearances       Appearance[]
   emailTemplates    EmailTemplate[]
-  achievements      Achievement[]
-  emailSuppressions EmailSuppression[]
-  auditLogs         AuditLog[]
+  achievements       Achievement[]
+  emailSuppressions  EmailSuppression[]
+  auditLogs          AuditLog[]
+  trustCertification TrustCertification?
 
   // Order-lifecycle automation settings (see review-request.server.ts's createFromOrder and
   // webhooks.fulfillments.create.tsx). autoRequestTrigger is a plain string, not an enum, so
@@ -589,6 +590,77 @@ model Achievement {
   createdAt DateTime @default(now())
 
   @@unique([storeId, key])
+  @@index([storeId])
+}
+
+// IMAGYN Trust Certification — a real, calculated-not-toggled certification state (see
+// trustCertification.server.ts). Every *Status field is one of "met" | "not_met" | "pending" |
+// "needs_permission" — "pending" means genuinely insufficient data to decide yet (e.g. zero
+// real orders to infer a payment gateway from), "needs_permission" means a specific, named
+// Shopify scope this app doesn't currently have is required (see policyStatus below). No
+// field here is ever set by a merchant directly — every write comes from
+// recalculateTrustCertification, which only ever derives from real Review/Order/Shop data.
+// One row per store — a running snapshot, recomputed on demand (dashboard "Recheck" action)
+// and opportunistically on review/order-relevant events, not a per-request live calculation
+// (the payment-methods pillar reads real Order data via the Admin API, which is too slow/
+// costly to call on every dashboard render).
+model TrustCertification {
+  id      String @id @default(cuid())
+  storeId String @unique
+  store   Store  @relation(fields: [storeId], references: [id], onDelete: Cascade)
+
+  // Overall derived status — "certified" | "pending" | "at_risk" | "paused" | "not_certified" |
+  // "needs_permission". Computed by deriveOverallStatus from the four pillars below plus
+  // `paused`/`everCertified`; never itself the source of truth for any pillar.
+  status String @default("pending")
+
+  // Pillar 1 — Transparent Review Practices: % of VERIFIED reviews that are published,
+  // requiring >=95%. reviewPracticesPercent is null until at least minVerifiedReviews (5)
+  // verified reviews exist — see trustCertification.server.ts's MIN_VERIFIED_REVIEWS.
+  reviewPracticesStatus  String
+  reviewPracticesPercent Float?
+  reviewPracticesReason  String?
+
+  // Pillar 2 — Secure Payment Methods: inferred from real Order.paymentGatewayNames (existing
+  // read_orders scope — no new permission needed). "pending" when the store has zero orders
+  // to infer from yet; never assumes manual/COD-only counts as secure.
+  paymentMethodsStatus String
+  paymentMethodsDetail String?
+
+  // Pillar 3 — Shipping & Refund Policy: reads shop.shopPolicies (SHIPPING_POLICY /
+  // REFUND_POLICY), which requires the `read_legal_policies` scope — confirmed via live
+  // Admin GraphQL introspection against this app's real scopes (ACCESS_DENIED without it),
+  // not assumed. "needs_permission" until that scope is granted and the merchant re-consents.
+  policyStatus String
+  policyDetail String?
+
+  // Pillar 4 — Verified Store History: shop.createdAt (>=3 months) plus the shop remaining
+  // queryable (a suspended/frozen shop's Admin API access would itself fail, which is the
+  // only "good standing" signal this API surface honestly offers — see the service's own
+  // comment for why nothing stronger is claimed here).
+  storeHistoryStatus String
+  storeHistoryDetail String?
+
+  // Real, cached from the same verified+published review population reviewPracticesPercent
+  // is computed from — the Trust Badge and Dashboard Trust Card both read these two fields
+  // directly rather than recomputing on every render.
+  verifiedReviewCount   Int   @default(0)
+  verifiedAverageRating Float @default(0)
+
+  // Merchant-controlled, but only ever pauses *display* of an otherwise-real result — never
+  // fabricates or overrides a pillar's own calculated status. See trustCertification.server.ts.
+  paused Boolean @default(false)
+
+  // Set once, the first time status ever reaches "certified", and never cleared afterward —
+  // the one signal that distinguishes "at_risk" (was certified, currently isn't) from
+  // "not_certified" (never has been).
+  everCertified Boolean   @default(false)
+  certifiedAt   DateTime?
+
+  lastCheckedAt DateTime @default(now())
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
   @@index([storeId])
 }
 

@@ -1122,7 +1122,11 @@ export default function ReviewsPage() {
             )}
           </div>
 
-          <div className={styles.splitLayout}>
+          {/* .splitLayoutDetailActive only changes anything at narrow (mobile) widths — see
+              its own rule in app.reviews.module.css — where it drills down to a full-width
+              detail view instead of squeezing list+panel into one column. Desktop/tablet are
+              unaffected (the class has no rule outside that media query). */}
+          <div className={`${styles.splitLayout} ${selectedReviewId ? styles.splitLayoutDetailActive : ""}`}>
             {isLoading ? (
               <>
                 <div className={styles.listColumn}>
@@ -1261,7 +1265,20 @@ export default function ReviewsPage() {
                 </div>
 
                 {selectedReview ? (
-                  <aside className={styles.detailPanel} aria-label="Review details">
+                  // key={selectedReview.id} forces a real remount on every selection change —
+                  // the only way a CSS mount animation (.detailPanel's own fade-in) replays
+                  // per-review instead of only once for the panel's own lifetime.
+                  <aside key={selectedReview.id} className={styles.detailPanel} aria-label="Review details">
+                    {/* Mobile-only (hidden by default — see .mobileBackButton's own rule) —
+                        the drill-down escape hatch back to the list on narrow widths, where
+                        .splitLayoutDetailActive hides the list column entirely. */}
+                    <button
+                      type="button"
+                      className={styles.mobileBackButton}
+                      onClick={() => setSelectedReviewId(null)}
+                    >
+                      &larr; Back to reviews
+                    </button>
                     <div className={styles.detailHeader}>
                       <div className={styles.detailStatusRow}>
                         <ReviewStatusBadge status={selectedReview.status} />

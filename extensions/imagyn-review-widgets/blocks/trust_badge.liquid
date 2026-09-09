@@ -1,0 +1,100 @@
+{{ 'imagyn-tokens.css' | asset_url | stylesheet_tag }}
+{{ 'imagyn-typography.css' | asset_url | stylesheet_tag }}
+{{ 'imagyn-component-modal.css' | asset_url | stylesheet_tag }}
+{{ 'imagyn-component-histogram.css' | asset_url | stylesheet_tag }}
+{{ 'imagyn-component-trust-badge.css' | asset_url | stylesheet_tag }}
+
+{% comment %}
+  IMAGYN Trust Badge — a real, store-wide indicator backed by app/services/trustCertification.server.ts
+  (see that file's own header comment for the full "no fabricated certification" architecture).
+  Rating/count shown here are VERIFIED+PUBLISHED reviews only (Review.verifiedPurchase &&
+  status == APPROVED), never the store's full public review count — that distinction is the
+  entire point of this badge versus the plain Rating Badge / Store Reviews widgets. The
+  CERTIFIED chip only ever renders when app/routes/api.reviews.trust.tsx reports
+  trust.status === "certified"; every other state (pending/at_risk/needs_permission/
+  not_certified) renders the badge WITHOUT a certified claim, and a paused certification hides
+  the badge entirely (data-imagyn-trust-badge stays hidden) — never a fake or stale claim.
+{% endcomment %}
+{% if block.settings.enabled %}
+  <div
+    class="imagyn-trust-badge-wrap imagyn-trust-badge-wrap--{{ block.settings.alignment }}"
+    data-imagyn-trust-badge
+    data-badge-style="{{ block.settings.style }}"
+    data-size="{{ block.settings.size }}"
+    data-star-style="{{ block.settings.star_style }}"
+    data-star-color="{{ block.settings.star_color }}"
+    data-show-certification="{{ block.settings.show_certification }}"
+    style="--imagyn-trust-badge-spacing: {{ block.settings.spacing }}px;"
+    hidden
+  ></div>
+
+  <script src="{{ 'imagyn-appearance.js' | asset_url }}" defer></script>
+  <script src="{{ 'trust-badge.js' | asset_url }}" defer></script>
+{% endif %}
+
+{% schema %}
+{
+  "name": "Trust Badge",
+  "target": "section",
+  "settings": [
+    { "type": "checkbox", "id": "enabled", "label": "Show Trust Badge", "default": true },
+    {
+      "type": "select",
+      "id": "alignment",
+      "label": "Alignment",
+      "options": [
+        { "value": "left", "label": "Left" },
+        { "value": "center", "label": "Center" },
+        { "value": "right", "label": "Right" }
+      ],
+      "default": "left"
+    },
+    {
+      "type": "select",
+      "id": "style",
+      "label": "Badge style",
+      "options": [
+        { "value": "outline", "label": "Outline" },
+        { "value": "filled", "label": "Filled" }
+      ],
+      "default": "outline"
+    },
+    {
+      "type": "select",
+      "id": "size",
+      "label": "Badge size",
+      "options": [
+        { "value": "compact", "label": "Compact" },
+        { "value": "standard", "label": "Standard" },
+        { "value": "large", "label": "Large" }
+      ],
+      "default": "standard"
+    },
+    {
+      "type": "select",
+      "id": "star_style",
+      "label": "Star style",
+      "options": [
+        { "value": "filled", "label": "Filled" },
+        { "value": "outline", "label": "Outline" }
+      ],
+      "default": "filled"
+    },
+    { "type": "color", "id": "star_color", "label": "Star color" },
+    { "type": "checkbox", "id": "show_certification", "label": "Show CERTIFIED indicator", "default": true },
+    {
+      "type": "range",
+      "id": "spacing",
+      "label": "Spacing around badge (px)",
+      "min": 0,
+      "max": 48,
+      "step": 4,
+      "default": 8
+    },
+    {
+      "type": "paragraph",
+      "content": "Typography and base surface colors come from Brand Studio (Settings > Brand Studio in the app) — this badge always matches the rest of your Imagyn widgets automatically."
+    }
+  ]
+}
+{% endschema %}

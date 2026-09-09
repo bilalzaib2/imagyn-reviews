@@ -1,11 +1,12 @@
 import { useEffect, useState } from "react";
 import type { CSSProperties } from "react";
-import type { LoaderFunctionArgs } from "react-router";
-import { Link, useLoaderData } from "react-router";
+import type { ActionFunctionArgs, LoaderFunctionArgs } from "react-router";
+import { Link, useFetcher, useLoaderData } from "react-router";
 
 import { Container } from "../components/ui/Container";
 import { Section } from "../components/ui/Section";
 import { Card } from "../components/ui/Card";
+import { Button } from "../components/ui/Button";
 import { LinkButton } from "../components/ui/LinkButton";
 import { PageHeader } from "../components/ui/PageHeader";
 import { Banner } from "../components/ui/Banner";
@@ -22,21 +23,34 @@ import { getSetupGuideItems } from "../services/setupGuide.server";
 import { getOrCreateStore } from "../services/store.server";
 import { getStorePermissions } from "../services/permissions";
 import { authenticateAdminDeduped } from "../services/auth-dedupe.server";
+import { getOrRefreshTrustCertification, refreshTrustCertification } from "../services/trustCertification.server";
+import {
+  OVERALL_STATUS_LABEL,
+  OVERALL_STATUS_SUMMARY,
+  OVERALL_STATUS_TONE,
+  PILLAR_STATUS_LABEL,
+  PILLAR_STATUS_TONE,
+  buildPillarViews,
+} from "../services/trustCertification.presentation";
 import { ORDER_AUTOMATION_ENABLED, SHOPIFY_PROTECTED_CUSTOMER_DATA_APPROVED } from "../config/features";
 import shellStyles from "../styles/app.shell.module.css";
 import styles from "../styles/app._index.module.css";
 
 export const loader = async ({ request }: LoaderFunctionArgs) => {
-  const { session } = await authenticateAdminDeduped(request);
+  const { session, admin } = await authenticateAdminDeduped(request);
   const store = await getOrCreateStore(session.shop);
 
-  const [stats, requestStats, aiSpotlight, productCoverage, permissions, setupGuide] = await Promise.all([
+  const [stats, requestStats, aiSpotlight, productCoverage, permissions, setupGuide, trust] = await Promise.all([
     getStoreReviewStats(store.id, { recentLimit: 5 }),
     reviewRequestService.getRequestStats(store.id),
     getLatestAiSummaryForStore(store.id),
     getProductReviewCoverage(store.id),
     getStorePermissions(store.id),
     getSetupGuideItems(store.id),
+    // Real, cached read that transparently refreshes itself in the background once stale (see
+    // getOrRefreshTrustCertification's own header comment) — never blocks this page load on
+    // live Shopify latency, but also never shows a certification state older than 12 hours.
+    getOrRefreshTrustCertification(admin, store.id),
   ]);
 
   // Reward stats are their own query only when the merchant has actually turned Rewards on —
@@ -46,12 +60,14 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
 
   return {
     storeName: store.name,
+    storeDomain: store.domain,
     stats,
     requestStats,
     aiSpotlight,
     productCoverage,
     rewardStats,
     setupGuide,
+    trust,
     automation: {
       // Two distinct, real facts — not one flag. Shopify's Protected Customer Data approval
       // (isApproved) was granted 2026-09-08; isLive is a separate, deliberate activation
@@ -66,6 +82,26 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
       isEnabled: store.autoRequestEnabled,
     },
   };
+};
+
+// The Dashboard's only action: an explicit, merchant-triggered Trust Certification recheck.
+// Always calls the real refreshTrustCertification (live Admin API + real Review rows) — there
+// is no code path anywhere that lets a request just set a status directly.
+export const action = async ({ request }: ActionFunctionArgs) => {
+  const { session, admin } = await authenticateAdminDeduped(request);
+  const store = await getOrCreateStore(session.shop);
+  const formData = await request.formData();
+
+  if (formData.get("intent") === "recheck-trust") {
+    try {
+      await refreshTrustCertification(admin, store.id);
+      return { ok: true };
+    } catch (error) {
+      return { ok: false, error: error instanceof Error ? error.message : "Unable to recheck Trust Certification." };
+    }
+  }
+
+  return { ok: false, error: "Unknown action." };
 };
 
 const formatDate = (value: Date) =>
@@ -92,9 +128,13 @@ const RATING_VALUES = [5, 4, 3, 2, 1] as const;
 const revealStyle = (stepIndex: number): CSSProperties => ({ "--reveal-delay": `${stepIndex * 60}ms` }) as CSSProperties;
 
 export default function Index() {
-  const { storeName, stats, requestStats, aiSpotlight, productCoverage, rewardStats, setupGuide, automation } =
+  const { storeName, storeDomain, stats, requestStats, aiSpotlight, productCoverage, rewardStats, setupGuide, trust, automation } =
     useLoaderData<typeof loader>();
   const incompleteSetupItems = setupGuide.filter((item) => !item.done);
+
+  const trustFetcher = useFetcher<{ ok: boolean; error?: string }>();
+  const isRechecking = trustFetcher.state !== "idle";
+  const pillarViews = buildPillarViews(trust, storeDomain);
 
   // Computed client-side (the merchant's local time), not in the loader (the server's) —
   // defaulting to a neutral greeting until mount avoids a server/client hydration mismatch.
@@ -148,10 +188,41 @@ export default function Index() {
           }
         />
 
+        {/* The immediate "at a glance" read — Judge.me and every mature review-management
+            dashboard leads with this before anything else. Every number here already existed
+            elsewhere on this page (the old standalone "Trust Overview" card duplicated three
+            of these); consolidating them into one KPI strip right under the header means a
+            merchant never has to scroll to answer "how is my store doing right now," and nothing
+            real was removed — see the Trust & Certification card below for the two numbers that
+            specifically feed certification (verified review COUNT and verified AVERAGE RATING,
+            not the same thing as "share of reviews that are verified" shown here). */}
+        <div className={`${styles.kpiRow} ${styles.reveal}`} style={revealStyle(0)}>
+          <div className={styles.kpiCard}>
+            <p className={styles.kpiValue}>{stats.totalReviews}</p>
+            <p className={styles.kpiLabel}>Total reviews</p>
+          </div>
+          <div className={styles.kpiCard}>
+            <p className={styles.kpiValue}>{stats.publishedReviews > 0 ? stats.averageRating.toFixed(1) : "—"}</p>
+            <p className={styles.kpiLabel}>Average rating</p>
+          </div>
+          <div className={styles.kpiCard}>
+            <p className={styles.kpiValue}>{verifiedPercent}%</p>
+            <p className={styles.kpiLabel}>Verified share</p>
+          </div>
+          <div className={styles.kpiCard}>
+            <p className={styles.kpiValue}>{completionPercent}%</p>
+            <p className={styles.kpiLabel}>Request completion</p>
+          </div>
+          <div className={styles.kpiCard}>
+            <p className={styles.kpiValue}>{stats.autoPublishedToday}</p>
+            <p className={styles.kpiLabel}>Auto-published today</p>
+          </div>
+        </div>
+
         {incompleteSetupItems.length > 0 ? (
           <Section
             className={styles.reveal}
-            style={revealStyle(0)}
+            style={revealStyle(1)}
             title="Getting started"
             description={`${setupGuide.length - incompleteSetupItems.length} of ${setupGuide.length} done.`}
           >
@@ -175,7 +246,7 @@ export default function Index() {
           </Section>
         ) : null}
 
-        <nav className={`${styles.quickActions} ${styles.reveal}`} style={revealStyle(1)} aria-label="Quick actions">
+        <nav className={`${styles.quickActions} ${styles.reveal}`} style={revealStyle(2)} aria-label="Quick actions">
           {(rewardStats ? [...QUICK_ACTIONS, REWARDS_QUICK_ACTION] : QUICK_ACTIONS).map((action) => (
             <Link key={action.href} to={action.href} className={styles.quickActionChip}>
               {action.label}
@@ -184,7 +255,7 @@ export default function Index() {
           ))}
         </nav>
 
-        <div className={`${styles.group} ${styles.reveal}`} style={revealStyle(2)}>
+        <div className={`${styles.group} ${styles.reveal}`} style={revealStyle(3)}>
           <p className={styles.groupLabel}>Needs your attention</p>
           <div className={styles.attentionGrid}>
             {attentionCards.map((item) => (
@@ -217,7 +288,7 @@ export default function Index() {
         {/* Both conditions are real and orthogonal — a brand-new store and Shopify's pending
             approval are two different things a merchant might need to know, so both can show
             at once rather than picking one to suppress the other. */}
-        <div className={`${styles.banners} ${styles.reveal}`} style={revealStyle(3)}>
+        <div className={`${styles.banners} ${styles.reveal}`} style={revealStyle(4)}>
           {stats.totalReviews === 0 ? (
             <Banner
               title="Collect your first review"
@@ -248,7 +319,7 @@ export default function Index() {
           ) : null}
         </div>
 
-        <div className={`${styles.group} ${styles.reveal}`} style={revealStyle(4)}>
+        <div className={`${styles.group} ${styles.reveal}`} style={revealStyle(5)}>
           <p className={styles.groupLabel}>Setup &amp; health</p>
           <div className={styles.healthGrid}>
             <Card className={styles.healthCard}>
@@ -290,30 +361,64 @@ export default function Index() {
           </div>
         </div>
 
-        <Card className={styles.reveal} style={revealStyle(5)}>
-          <Section title="Trust Overview" description="How your store looks to shoppers right now.">
+        <Card className={styles.reveal} style={revealStyle(6)}>
+          <Section
+            title="Trust & Certification"
+            description="IMAGYN's real-time verification of how trustworthy your store looks to shoppers — every pillar is calculated from your real store data, never manually set."
+            actions={
+              <trustFetcher.Form method="post">
+                <input type="hidden" name="intent" value="recheck-trust" />
+                <Button type="submit" variant="secondary" disabled={isRechecking}>
+                  {isRechecking ? "Rechecking…" : "Recheck now"}
+                </Button>
+              </trustFetcher.Form>
+            }
+          >
+            {trustFetcher.data && !trustFetcher.data.ok ? (
+              <p className={styles.errorText}>{trustFetcher.data.error ?? "Unable to recheck Trust Certification."}</p>
+            ) : null}
+
+            <div className={styles.trustCertHeader}>
+              <StatusBadge tone={OVERALL_STATUS_TONE[trust.status]}>{OVERALL_STATUS_LABEL[trust.status]}</StatusBadge>
+              <p className={styles.trustCertSummary}>{OVERALL_STATUS_SUMMARY[trust.status]}</p>
+            </div>
+
             <div className={styles.trustRow}>
               <div className={styles.trustStat}>
-                <p className={styles.trustValue}>{stats.publishedReviews > 0 ? stats.averageRating.toFixed(1) : "—"}</p>
-                <p className={styles.trustLabel}>Average rating</p>
-              </div>
-              <div className={styles.trustStat}>
-                <p className={styles.trustValue}>{verifiedPercent}%</p>
+                <p className={styles.trustValue}>{trust.verifiedReviewCount}</p>
                 <p className={styles.trustLabel}>Verified reviews</p>
               </div>
               <div className={styles.trustStat}>
-                <p className={styles.trustValue}>{stats.totalReviews}</p>
-                <p className={styles.trustLabel}>Total reviews</p>
+                <p className={styles.trustValue}>
+                  {trust.verifiedReviewCount > 0 ? trust.verifiedAverageRating.toFixed(1) : "—"}
+                </p>
+                <p className={styles.trustLabel}>Verified average rating</p>
               </div>
-              <div className={styles.trustStat}>
-                <p className={styles.trustValue}>{stats.autoPublishedToday}</p>
-                <p className={styles.trustLabel}>Auto-published today</p>
-              </div>
+            </div>
+
+            <div className={styles.pillarGrid}>
+              {pillarViews.map((pillar) => (
+                <div key={pillar.key} className={styles.pillarCard}>
+                  <StatusBadge tone={PILLAR_STATUS_TONE[pillar.status]}>{PILLAR_STATUS_LABEL[pillar.status]}</StatusBadge>
+                  <p className={styles.pillarTitle}>{pillar.title}</p>
+                  <p className={styles.pillarDetail}>{pillar.detail}</p>
+                  {pillar.actionHref ? (
+                    <a
+                      className={styles.spotlightLink}
+                      href={pillar.actionHref}
+                      target={pillar.external ? "_blank" : undefined}
+                      rel={pillar.external ? "noreferrer" : undefined}
+                    >
+                      {pillar.actionLabel} &rarr;
+                    </a>
+                  ) : null}
+                </div>
+              ))}
             </div>
           </Section>
         </Card>
 
-        <div className={`${styles.insightsGrid} ${styles.reveal}`} style={revealStyle(6)}>
+        <div className={`${styles.insightsGrid} ${styles.reveal}`} style={revealStyle(7)}>
           <Card>
             <Section title="Rating Distribution" description="Approved reviews, by star rating.">
               {stats.publishedReviews === 0 ? (
@@ -371,7 +476,7 @@ export default function Index() {
         {/* Automation status folded in at the top — merged from what used to be a separate
             "Automation & reminders" health card, so this one section answers "is review
             collection actually working" instead of splitting status from performance. */}
-        <Card className={styles.reveal} style={revealStyle(7)}>
+        <Card className={styles.reveal} style={revealStyle(8)}>
           <Section title="Review Requests" description="How your automated and manual requests are performing.">
             <div className={styles.automationStatus}>
               <StatusBadge
@@ -429,7 +534,7 @@ export default function Index() {
           </Section>
         </Card>
 
-        <Card className={styles.reveal} style={revealStyle(8)}>
+        <Card className={styles.reveal} style={revealStyle(9)}>
           <Section title="Recent Activity" description="The latest review and request events for your store.">
             {stats.recentReviews.length === 0 ? (
               <EmptyState

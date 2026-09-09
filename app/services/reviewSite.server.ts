@@ -8,6 +8,10 @@ export interface ReviewSiteData {
   storeName: string;
   averageRating: number;
   publishedReviews: number;
+  // Real, already-computed distribution (same query getStoreReviewStats' Dashboard caller
+  // uses) — added so the public page can show a genuine rating breakdown instead of just the
+  // single average number, without a second query.
+  ratingCounts: { 5: number; 4: number; 3: number; 2: number; 1: number };
   reviews: ReviewWithProduct[];
   nextCursor: string | null;
   hasMore: boolean;
@@ -35,6 +39,7 @@ export async function getReviewSiteData(slug: string, cursor?: string | null): P
     storeName: store.name,
     averageRating: stats.averageRating,
     publishedReviews: stats.publishedReviews,
+    ratingCounts: stats.ratingCounts,
     reviews: page.reviews,
     nextCursor: page.nextCursor,
     hasMore: page.hasMore,

@@ -424,6 +424,22 @@ export async function getProductMediaGallery(productId: string, limit = 24): Pro
   });
 }
 
+// Store-wide counterpart of getProductMediaGallery, for the IMAGYN Trust Badge modal's
+// "verified customer media" — only photos/videos attached to a VERIFIED purchase's APPROVED
+// review count, matching the same verified+published scoping every Trust Certification pillar
+// uses (see trustCertification.server.ts). Never includes media from an unverified review, even
+// if approved and otherwise public elsewhere on the storefront.
+export async function getVerifiedStoreMediaGallery(storeId: string, limit = 12): Promise<ProductGalleryItem[]> {
+  return prisma.reviewMedia.findMany({
+    where: {
+      review: { storeId, deletedAt: null, status: ReviewStatus.APPROVED, verifiedPurchase: true },
+    },
+    orderBy: { createdAt: "desc" },
+    take: limit,
+    select: { id: true, url: true, thumbnailUrl: true, width: true, height: true, reviewId: true, type: true },
+  });
+}
+
 // Admin-only moderation action: deletes a single media item independently of its review
 // (the review itself, and any other photos on it, are untouched). Scoped through the parent
 // review's storeId (ReviewMedia carries no storeId of its own) — a mediaId belonging to

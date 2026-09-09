@@ -4,6 +4,7 @@ import type { ActionFunctionArgs, HeadersFunction, LoaderFunctionArgs } from "re
 import { boundary } from "@shopify/shopify-app-react-router/server";
 import { Checkbox, Frame, Toast } from "@shopify/polaris";
 import { Section } from "../components/ui/Section";
+import { StatusBadge, type StatusBadgeTone } from "../components/ui/StatusBadge";
 import { authenticateAdminDeduped } from "../services/auth-dedupe.server";
 import { getOrCreateStore } from "../services/store.server";
 import { getStorePermissions } from "../services/permissions";
@@ -54,12 +55,20 @@ export const action = async ({ request }: ActionFunctionArgs): Promise<ActionDat
   }
 };
 
+const STATUS_TONE: Record<string, StatusBadgeTone> = {
+  Live: "success",
+  "Available on your plan": "success",
+  "Requires Pro": "pro",
+  "Not available yet": "neutral",
+};
+
 function StatusRow({ label, state, description }: { label: string; state: string; description: string }) {
   return (
     <div className={styles.fieldGroup}>
-      <p className={styles.settingsGroupLabel}>
-        {label} — {state}
-      </p>
+      <div className={styles.cardHeader}>
+        <span className={styles.settingsGroupLabel}>{label}</span>
+        <StatusBadge tone={STATUS_TONE[state] ?? "neutral"}>{state}</StatusBadge>
+      </div>
       <p className={styles.mutedText}>{description}</p>
     </div>
   );

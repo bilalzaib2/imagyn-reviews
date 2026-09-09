@@ -39,11 +39,17 @@
   font-size: var(--text-sm);
 }
 
+/* A floating pill, not a plain button row — reads as one contained "you're in bulk-action
+   mode" surface (Linear/Notion convention) rather than four loose buttons appearing where
+   the results count normally sits. */
 .bulkBar {
   display: flex;
   align-items: center;
   flex-wrap: wrap;
   gap: var(--space-2);
+  padding: 0.4rem 0.4rem 0.4rem var(--space-4);
+  border-radius: var(--radius-full);
+  background: color-mix(in srgb, var(--color-text) 4%, var(--color-surface));
 }
 
 /* Lives at the top of the list column now (not the section header) — see proposal: "Select
@@ -476,6 +482,43 @@
   position: sticky;
   top: var(--space-5);
   max-height: 32rem;
+  animation: reviewDetailReveal 220ms cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+@keyframes reviewDetailReveal {
+  from {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .detailPanel {
+    animation: none;
+  }
+}
+
+/* Hidden by default (desktop/tablet never need a "back" affordance — the list stays visible
+   alongside the panel). Only shown at the same breakpoint .splitLayoutDetailActive kicks in. */
+.mobileBackButton {
+  display: none;
+  align-self: flex-start;
+  border: none;
+  background: transparent;
+  padding: 0;
+  margin-bottom: calc(-1 * var(--space-1));
+  color: var(--color-text-muted);
+  font-size: var(--text-sm);
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.mobileBackButton:hover {
+  color: var(--color-text);
 }
 
 .detailHeader {
@@ -544,13 +587,16 @@
   padding-right: var(--space-1);
 }
 
-/* The one prominent, unmissable AI surface in the panel — a quiet tint, not a hard box,
-   rendered only when this product actually has a generated summary (never fabricated). */
+/* The one prominent, unmissable AI surface in the panel — a quiet tint plus a left accent
+   stripe (same restrained "accent stripe, not a bordered box" language as the Dashboard's own
+   .attentionCard), rendered only when this product actually has a generated summary (never
+   fabricated). */
 .aiSummaryCallout {
   display: grid;
   gap: var(--space-2);
-  padding: var(--space-3);
-  border-radius: var(--radius-lg);
+  padding: var(--space-3) var(--space-4);
+  border-left: 2px solid var(--color-accent);
+  border-radius: var(--radius-sm);
   background: color-mix(in srgb, var(--color-accent) 4%, var(--color-surface));
 }
 
@@ -727,6 +773,21 @@
   overflow: hidden;
   background: var(--color-surface-muted);
   box-shadow: var(--shadow-sm);
+  transition: transform var(--transition-base);
+}
+
+.photoThumb:hover {
+  transform: translateY(-1px);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .photoThumb {
+    transition: none;
+  }
+
+  .photoThumb:hover {
+    transform: none;
+  }
 }
 
 .photoThumbImage {
@@ -809,6 +870,27 @@
   .detailPanel {
     margin-top: var(--space-2);
     position: static;
+  }
+}
+
+/* Real mobile treatment, not a squeezed sidebar: below 640px, selecting a review drills down
+   to a full-width detail view instead of stacking the (already-selected) list above it —
+   .splitLayoutDetailActive is only added to the DOM once a review is actually selected (see
+   app.reviews.tsx), so browsing the list itself is completely unaffected. */
+@media (max-width: 640px) {
+  .splitLayoutDetailActive .listColumn {
+    display: none;
+  }
+
+  .splitLayoutDetailActive .detailPanel {
+    max-height: none;
+  }
+
+  .mobileBackButton {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.3rem;
+    min-height: 44px;
   }
 }
 
