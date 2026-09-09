@@ -7,13 +7,12 @@ export const SHOPIFY_PROTECTED_CUSTOMER_DATA_APPROVED = true;
 
 // Order-lifecycle automation (auto-creating Review Requests from Shopify orders) depends on
 // the `fulfillments/create` webhook, whose payload (destination address, customer email) is
-// protected customer data. Shopify's approval for that data (see
-// SHOPIFY_PROTECTED_CUSTOMER_DATA_APPROVED above) is now granted, but this flag is
-// deliberately still false: turning it on requires restoring the `fulfillments/create`
-// webhook subscription + `read_fulfillments` scope in shopify.app.toml and running
-// `shopify app deploy` — the moment every live merchant's real customers start receiving
-// automatic emails, with no undo. That's a deliberate go-live decision, not an automatic
-// consequence of Shopify's approval landing. Everything upstream of the actual webhook
-// trigger (schema, service layer, retry logic, admin UI) is built, tested, and shipped —
-// see docs/DECISIONS.md.
-export const ORDER_AUTOMATION_ENABLED = false;
+// protected customer data. Shopify's approval for that data
+// (SHOPIFY_PROTECTED_CUSTOMER_DATA_APPROVED above) was granted 2026-09-08. Activated
+// 2026-09-09 after an explicit, separately-authorized go-live decision and a full re-audit
+// (order eligibility, duplicate prevention via the (shopifyOrderId, productId) unique
+// constraint, unsubscribe/suppression checked before every send, bounded retry, per-store
+// opt-in, plan gating) plus a successful real-provider end-to-end test send. The
+// `fulfillments/create` webhook subscription + `read_fulfillments` scope were restored in
+// shopify.app.toml alongside this flag — see docs/DECISIONS.md.
+export const ORDER_AUTOMATION_ENABLED = true;
