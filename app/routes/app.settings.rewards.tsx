@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { useFetcher, useLoaderData, useRouteError } from "react-router";
 import type { ActionFunctionArgs, HeadersFunction, LoaderFunctionArgs } from "react-router";
 import { boundary } from "@shopify/shopify-app-react-router/server";
-import { Checkbox, Frame, Select, Text, TextField, Toast } from "@shopify/polaris";
+import { Checkbox, Frame, Select, TextField, Toast } from "@shopify/polaris";
 import { Button } from "../components/ui/Button";
 import { Section } from "../components/ui/Section";
 import { authenticateAdminDeduped } from "../services/auth-dedupe.server";
@@ -166,10 +166,23 @@ export default function SettingsRewardsPage() {
       </Section>
 
       <Section title="Reward activity" description="A real, live count of every review this store has evaluated for a reward.">
-        <div className={styles.mutedText}>
-          <Text as="p">
-            {stats.issued} issued · {stats.failed} failed · {stats.ineligible} didn&apos;t meet the conditions
-          </Text>
+        <div className={styles.statRow}>
+          <div className={styles.stat}>
+            <p className={styles.statValue}>{stats.issued}</p>
+            <p className={styles.statLabel}>Issued</p>
+          </div>
+          <div className={styles.stat}>
+            <p className={styles.statValue}>{stats.pending}</p>
+            <p className={styles.statLabel}>Pending</p>
+          </div>
+          <div className={styles.stat}>
+            <p className={styles.statValue}>{stats.failed}</p>
+            <p className={styles.statLabel}>Failed</p>
+          </div>
+          <div className={styles.stat}>
+            <p className={styles.statValue}>{stats.ineligible}</p>
+            <p className={styles.statLabel}>Didn&apos;t qualify</p>
+          </div>
         </div>
       </Section>
 

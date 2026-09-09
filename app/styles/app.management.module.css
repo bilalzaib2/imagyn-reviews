@@ -16,6 +16,36 @@
   font-size: var(--text-sm);
 }
 
+/* A real activity/stat row — same large-numeral, quiet-label language as the Dashboard's
+   own Trust Overview (app._index.module.css's .trustRow/.trustStat), reused here rather than
+   duplicated with different values, so "0 issued · 0 failed" (Rewards, Coupons, Referrals)
+   reads as a real, scannable metric instead of a single flat sentence. Real data only — no
+   new numbers are introduced, only how the same loader values are displayed. */
+.statRow {
+  display: grid;
+  gap: var(--space-6);
+  grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+}
+
+.stat {
+  display: grid;
+  gap: var(--space-1);
+}
+
+.statValue {
+  margin: 0;
+  font-size: clamp(1.75rem, 2.6vw, 2.25rem);
+  font-weight: 600;
+  letter-spacing: -0.03em;
+  font-variant-numeric: tabular-nums;
+}
+
+.statLabel {
+  margin: 0;
+  color: var(--color-text-muted);
+  font-size: var(--text-sm);
+}
+
 /* Sub-groups within a single Section (e.g. Moderation Rules' Auto-publish / Always hold /
    Notify clusters) — a plain label, not a new bordered box, so 8 flat controls read as 3
    legible decisions without adding another card-within-a-card visual layer. */

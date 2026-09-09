@@ -324,6 +324,17 @@
   white-space: nowrap;
 }
 
+/* Bug fix: .colEmail (the actual class on the Email <td> — see app.requests.tsx) previously
+   had no base rule at all, only the @media toggle below that hides it at narrow widths. A
+   long email address in a fixed-width table-layout cell doesn't wrap or get clipped by the
+   browser on its own, so it visually spilled into the Order column next to it. Same
+   ellipsis treatment .customerEmail/.tdProduct already use elsewhere in this same table. */
+.colEmail {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 /* De-emphasized first (item 9 — "prioritize Customer, Product, Status" at narrow widths);
    hidden entirely once the table can no longer breathe. See the max-width: 640px block below. */
 .colOrder,
