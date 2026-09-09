@@ -351,3 +351,21 @@
   font-size: var(--text-sm);
   color: var(--color-text-muted);
 }
+
+/* A quiet, real link from Brand Studio straight into the Theme Editor for the one widget
+   whose own settings (width/size/element visibility) live outside Brand Studio's reach —
+   reuses the exact same allow-listed deep-link route the Widgets page's own "Open Theme
+   Editor" actions use. */
+.themeEditorShortcut {
+  display: inline-flex;
+  align-items: center;
+  margin-top: var(--space-2);
+  font-size: var(--text-sm);
+  font-weight: 600;
+  color: var(--color-accent);
+  text-decoration: none;
+}
+
+.themeEditorShortcut:hover {
+  text-decoration: underline;
+}

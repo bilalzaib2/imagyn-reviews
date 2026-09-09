@@ -256,7 +256,14 @@
     // Reviews Widget keeps its own already-shipped, already-tested copy of this exact
     // function untouched rather than risking a refactor of a mature, heavily-used file for
     // zero behavioral change.
-    renderHistogram: function (ratingCounts) {
+    //
+    // `options.starLabels` (opt-in, default off) swaps the plain numeral row label for real
+    // star glyphs (e.g. "★★★★★") — added for store-reviews.js's wider distribution rows,
+    // where a numeral-only label read as too quiet for a section meant to visually prove
+    // the rating, not just log it. Off by default so this stays a strict addition, never a
+    // behavior change for the sole existing caller if it were ever passed no options.
+    renderHistogram: function (ratingCounts, options) {
+      var starLabels = !!(options && options.starLabels);
       var maxCount = 0;
       for (var star = 1; star <= 5; star++) {
         if (ratingCounts[star] > maxCount) maxCount = ratingCounts[star];
@@ -266,10 +273,11 @@
       for (var value = 5; value >= 1; value--) {
         var count = ratingCounts[value] || 0;
         var fillPercent = maxCount > 0 ? Math.round((count / maxCount) * 100) : 0;
+        var label = starLabels ? this.renderStars(value) : String(value);
 
         rows +=
           '<div class="imagyn-histogram__row">' +
-          '<span class="imagyn-histogram__label" aria-hidden="true">' + value + "</span>" +
+          '<span class="imagyn-histogram__label' + (starLabels ? " imagyn-histogram__label--stars" : "") + '" aria-hidden="true">' + label + "</span>" +
           '<span class="imagyn-histogram__track">' +
           '<span class="imagyn-histogram__fill" aria-hidden="true" data-target-fill="' + fillPercent +
           '" style="--imagyn-histogram-fill: 0%"></span>' +

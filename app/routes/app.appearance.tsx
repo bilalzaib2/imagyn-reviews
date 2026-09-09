@@ -220,6 +220,16 @@ export default function AppearancePage() {
   const { tokens: initialTokens, preset: initialPreset, canUseBrandStudio, savedThemes } =
     useLoaderData<typeof loader>();
   const location = useLocation();
+  // Same real, allow-listed deep-link route the Widgets page's own "Add to Theme"/"Open Theme
+  // Editor" actions use (app.widgets.add-to-theme.tsx) — reused here rather than duplicated,
+  // so Brand Studio's color/typography controls and the actual storefront placement are one
+  // click apart. Store Reviews specifically: it's the one widget whose own theme editor
+  // settings (width/size/element visibility) live outside Brand Studio's reach entirely.
+  const storeReviewsThemeEditorHref = (() => {
+    const params = new URLSearchParams(location.search);
+    params.set("handle", "store_reviews");
+    return `/app/widgets/add-to-theme?${params.toString()}`;
+  })();
   const revalidator = useRevalidator();
   const fetcher = useFetcher<ActionData>();
   const themeFetcher = useFetcher<ActionData>();
@@ -423,6 +433,9 @@ export default function AppearancePage() {
                 Design how reviews look on your storefront — no code, no theme editing. Changes preview instantly
                 on the right and apply the moment you save.
               </p>
+              <a className={styles.themeEditorShortcut} href={storeReviewsThemeEditorHref}>
+                Customize the Store Reviews widget in your Theme Editor →
+              </a>
             </div>
           </header>
 

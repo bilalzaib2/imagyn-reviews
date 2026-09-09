@@ -2,14 +2,18 @@
  * Imagyn Reviews — Medals Showcase component.
  *
  * A store-wide (not per-product) homepage section showing a merchant's currently-earned
- * achievements as small, flat, circular badges in one compact horizontal row — distinct
- * from the small quiet-pill medal row already shown inside the Product Reviews Widget next
- * to reviewer content (imagyn-component-medals.css), which stays untouched. This block is a
+ * achievements as flat, circular medallion badges in one horizontal row — distinct from the
+ * small quiet-pill medal row already shown inside the Product Reviews Widget next to
+ * reviewer content (imagyn-component-medals.css), which stays untouched. This block is a
  * deliberately more prominent showcase a merchant places on purpose, same as Review Carousel.
  *
- * Redesigned from an earlier wide grid of large (72px) brushed-metal medallion cards to a
- * compact row of small (44px) flat badges — several fit comfortably on one line on desktop,
- * matching the "achievement row," not "dashboard card," reference concept.
+ * 2026-09-09: bumped from 44px flat badges back up to 80px — the 44px size (itself a
+ * deliberate down-size from an even earlier 72px) turned out too small once compared
+ * side-by-side against a mature review platform's own achievement presentation: a merchant
+ * or shopper couldn't actually register what a medal was at a glance. 80px keeps the same
+ * flat, restrained artwork (no gradient/bevel/shadow added) — this is a sizing fix, not a
+ * style change — while giving each medal real physical presence. Still several per row on
+ * desktop; wraps to fewer per row exactly as any flex-wrap layout does at 80px instead of 44.
  *
  * Load imagyn-tokens.css, imagyn-typography.css, and imagyn-utilities.css before this file.
  */
@@ -47,8 +51,8 @@
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: var(--imagyn-space-2xs, 0.3em);
-  width: 7.5rem;
+  gap: var(--imagyn-space-xs, 0.4em);
+  width: 11rem;
   text-align: center;
 }
 
@@ -58,20 +62,20 @@
 
 .imagyn-medals-showcase__body {
   display: grid;
-  gap: 0.15em;
+  gap: 0.2em;
   width: 100%;
 }
 
 .imagyn-medals-showcase__name {
   margin: 0;
-  font-size: var(--imagyn-font-size-sm, 13px);
+  font-size: var(--imagyn-font-size-base, 15px);
   font-weight: var(--imagyn-font-weight-semibold, 600);
   line-height: 1.3;
 }
 
 .imagyn-medals-showcase__description {
   margin: 0;
-  font-size: var(--imagyn-font-size-xs, 12px);
+  font-size: var(--imagyn-font-size-sm, 13px);
   color: var(--imagyn-color-text, inherit);
   opacity: var(--imagyn-color-text-muted-opacity, 0.6);
   line-height: 1.4;
@@ -87,6 +91,6 @@
   }
 
   .imagyn-medals-showcase__item {
-    width: 6rem;
+    width: 8rem;
   }
 }

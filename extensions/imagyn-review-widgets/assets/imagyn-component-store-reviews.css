@@ -3,52 +3,198 @@
  *
  * A store-wide rating summary + achievements section, distinct from the existing
  * per-product Review Summary (imagyn-component-summary.css) — this rolls up every approved
- * review across the whole store, not one product. Reuses .imagyn-summary/.imagyn-histogram
- * for the rating hero and .imagyn-medals-showcase for the achievements row rather than
- * duplicating either — this file only supplies what's genuinely new: the section heading
- * and the empty state. Deliberately no CTA — see store_reviews.liquid's own comment on why.
+ * review across the whole store, not one product.
+ *
+ * 2026-09-09 layout redesign: the previous version centered everything in a narrow
+ * (22rem-capped) single column, which read as weak and left most of the section's width
+ * empty. Replaced with a wide, three-part horizontal grid (rating / distribution / CTA) on
+ * desktop, collapsing to a single stacked column on narrow viewports — studied against a
+ * mature review platform's storefront summary for product-experience and visual hierarchy
+ * only (no assets, copy, layout code, or branding reproduced). Reuses .imagyn-histogram
+ * (imagyn-component-histogram.css, with its starLabels option) for the distribution bars and
+ * .imagyn-medals-showcase (imagyn-component-medals-showcase.css) for the achievements row —
+ * this file supplies the grid, the rating typography, the CTA button, and the empty state.
  *
  * Load imagyn-tokens.css, imagyn-typography.css, imagyn-utilities.css,
- * imagyn-component-summary.css, imagyn-component-histogram.css,
- * imagyn-component-medals-showcase.css, and imagyn-component-ratings-section.css (for
- * .imagyn-ratings-section__label) before this file.
+ * imagyn-component-histogram.css, imagyn-component-medals-showcase.css, and
+ * imagyn-component-ratings-section.css (for .imagyn-ratings-section__label) before this file.
  */
 
+/* --imagyn-store-reviews-max-width is set inline by store-reviews.js from the block's own
+   "Max width" theme editor setting (480-1200px) — a per-block override, distinct from
+   --imagyn-medals-showcase-max-width (Brand Studio's global layout width) so a merchant can
+   make this one section narrower/wider than every other widget without changing their whole
+   storefront's Imagyn max-width. */
 [data-imagyn-store-reviews] {
   display: grid;
-  gap: var(--imagyn-space-px-lg, 24px);
+  gap: var(--imagyn-space-px-xl, 32px);
   font-family: var(--imagyn-font-family);
   color: var(--imagyn-color-text, inherit);
   width: 100%;
-  max-width: var(--imagyn-medals-showcase-max-width, 1080px);
+  max-width: var(--imagyn-store-reviews-max-width, var(--imagyn-medals-showcase-max-width, 1080px));
   margin-inline: auto;
   padding-inline: var(--imagyn-space-px-md, 16px);
   box-sizing: border-box;
-  text-align: center;
+}
+
+/* Size setting (Compact/Standard/Large) — scales the rating number, medallions and grid
+   padding together as one deliberate step, not independent sliders per element, so the
+   section always reads as one coherent size rather than mismatched parts. Standard (the
+   default) sets no overrides at all — it IS the base values defined below. */
+[data-imagyn-store-reviews][data-imagyn-size="compact"] .imagyn-store-reviews__grid {
+  padding: var(--imagyn-space-px-md, 16px) var(--imagyn-space-px-lg, 24px);
+}
+
+[data-imagyn-store-reviews][data-imagyn-size="compact"] .imagyn-store-reviews__rating-number {
+  font-size: var(--imagyn-font-size-xl, 26px);
+}
+
+[data-imagyn-store-reviews][data-imagyn-size="compact"] .imagyn-medals-showcase__medallion {
+  width: 56px;
+  height: 56px;
+}
+
+[data-imagyn-store-reviews][data-imagyn-size="large"] .imagyn-store-reviews__grid {
+  padding: var(--imagyn-space-px-xl, 32px) var(--imagyn-space-px-xl, 40px);
+}
+
+[data-imagyn-store-reviews][data-imagyn-size="large"] .imagyn-store-reviews__rating-number {
+  font-size: 56px;
+}
+
+[data-imagyn-store-reviews][data-imagyn-size="large"] .imagyn-medals-showcase__medallion {
+  width: 104px;
+  height: 104px;
+}
+
+[data-imagyn-store-reviews][data-imagyn-size="large"] .imagyn-medals-showcase__item {
+  width: 13rem;
 }
 
 .imagyn-store-reviews__heading {
   margin: 0;
+  text-align: center;
   font-size: var(--imagyn-font-size-lg, 20px);
   font-weight: var(--imagyn-font-weight-semibold, 600);
 }
 
-/* Reuses .imagyn-summary's own hero layout, just centered (the product widget's summary is
-   left-aligned inline content; this is a standalone, centered section). */
-.imagyn-store-reviews__summary {
-  margin: 0;
+/* The three-part horizontal summary. auto/1fr/auto so the rating and CTA take only the
+   width their content needs, and the distribution — the part that most needs room to
+   actually communicate proportion — gets everything left over. */
+.imagyn-store-reviews__grid {
+  display: grid;
+  grid-template-columns: auto 1fr auto;
   align-items: center;
+  gap: var(--imagyn-space-px-xl, 32px);
+  padding: var(--imagyn-space-px-lg, 24px) var(--imagyn-space-px-xl, 32px);
+  border: var(--imagyn-border-width, 1px) solid var(--imagyn-color-border, rgba(0, 0, 0, 0.08));
+  border-radius: var(--imagyn-radius-lg, 16px);
+}
+
+.imagyn-store-reviews__grid--empty {
+  display: block;
   text-align: center;
+  padding: var(--imagyn-space-px-xl, 32px);
 }
 
-.imagyn-store-reviews__summary .imagyn-summary__hero {
+.imagyn-store-reviews__rating {
+  display: grid;
+  justify-items: flex-start;
+  gap: var(--imagyn-space-3xs, 0.2em);
+  white-space: nowrap;
+}
+
+/* Real visual dominance for the number itself — this is the one figure a shopper should
+   register first, so it's sized well above the per-product widget's own 26px rating
+   (imagyn-component-summary.css), which sits inline among other stats rather than
+   standing as its own hero. */
+.imagyn-store-reviews__rating-number {
+  font-size: var(--imagyn-font-size-3xl, 44px);
+  font-weight: var(--imagyn-font-weight-semibold, 600);
+  line-height: var(--imagyn-line-height-tight, 1);
+  font-variant-numeric: tabular-nums;
+}
+
+.imagyn-store-reviews__rating-stars {
+  font-size: var(--imagyn-font-size-lg, 20px);
+  letter-spacing: var(--imagyn-letter-spacing-normal, 0.02em);
+  color: var(--imagyn-color-star, #f5a623);
+  line-height: var(--imagyn-line-height-tight, 1);
+}
+
+.imagyn-store-reviews__rating-count {
+  font-size: var(--imagyn-font-size-sm, 13px);
+  color: var(--imagyn-color-text, inherit);
+  opacity: var(--imagyn-color-text-muted-opacity, 0.6);
+  font-variant-numeric: tabular-nums;
+}
+
+/* Wider distribution columns than the per-product widget's own histogram context — the
+   star-glyph label needs the room, and a wider bar is the whole point of giving this its
+   own horizontal section instead of squeezing it into a 22rem column. */
+.imagyn-store-reviews__distribution {
+  min-width: 0;
+}
+
+.imagyn-store-reviews__distribution .imagyn-histogram__row {
+  grid-template-columns: 5.5em 1fr 3em;
+}
+
+.imagyn-store-reviews__distribution .imagyn-histogram__track {
+  height: 8px;
+}
+
+/* A real filled button — deliberately more prominent than the per-product widget's quiet
+   outline pill (.imagyn-summary__quickbar-write), matching "proper visual weight, easy to
+   find" rather than the detail-page's more restrained repeated trigger. Named
+   .imagyn-store-reviews__write to match the consumer name imagyn-appearance.js's
+   applyButtons already documented as reserved for this widget. Colors come from
+   --imagyn-btn-background/--imagyn-btn-color/--imagyn-btn-border-color (Brand Studio's
+   Button Style: Filled/Outline/Ghost — imagyn-component-button.css's .imagyn-btn--primary
+   consumes the same three variables) — deliberately NOT --imagyn-color-text directly: that
+   token is allowed to be the literal keyword `currentColor` (imagyn-tokens.css), and a solid
+   background can never safely be `background: currentColor` on an element whose own `color`
+   is a different literal value — it resolves against this element's own (white) color, not
+   an ambient one, producing an invisible white-on-white button. applyButtons() always sets
+   all three --imagyn-btn-* variables to real, independently-resolving colors for exactly
+   this reason, matching BUTTON_STYLE.solid's own hardcoded #111111. */
+.imagyn-store-reviews__write {
+  display: inline-flex;
   align-items: center;
-  max-width: 22rem;
-  margin-inline: auto;
+  justify-content: center;
+  white-space: nowrap;
+  font-family: inherit;
+  font-size: var(--imagyn-font-size-base, 15px);
+  font-weight: var(--imagyn-font-weight-semibold, 600);
+  color: var(--imagyn-btn-color, #ffffff);
+  background: var(--imagyn-btn-background, #111111);
+  border: var(--imagyn-border-width, 1px) solid var(--imagyn-btn-border-color, transparent);
+  border-radius: var(--imagyn-radius-full, 999px);
+  padding: 0.85em 1.75em;
+  text-decoration: none;
+  cursor: pointer;
+  transition:
+    opacity var(--imagyn-duration-fast, 120ms) var(--imagyn-easing, ease-out),
+    transform var(--imagyn-duration-fast, 120ms) var(--imagyn-easing, ease-out);
 }
 
-.imagyn-store-reviews__summary .imagyn-summary__headline {
-  justify-content: center;
+.imagyn-store-reviews__write:hover {
+  opacity: 0.85;
+}
+
+.imagyn-store-reviews__write:active {
+  transform: scale(0.98);
+}
+
+.imagyn-store-reviews__write:focus-visible {
+  outline: 2px solid var(--imagyn-color-focus, #0a0a0a);
+  outline-offset: 2px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .imagyn-store-reviews__write {
+    transition: none;
+  }
 }
 
 .imagyn-store-reviews__empty {
@@ -61,11 +207,64 @@
 .imagyn-store-reviews__medals {
   display: grid;
   justify-items: center;
-  gap: var(--imagyn-space-sm, 0.6em);
+  gap: var(--imagyn-space-md, 1em);
   padding-top: var(--imagyn-space-px-lg, 24px);
   border-top: var(--imagyn-border-width, 1px) solid var(--imagyn-color-border, rgba(0, 0, 0, 0.08));
 }
 
 .imagyn-store-reviews__medals .imagyn-medals-showcase__list {
   padding: 0;
+}
+
+/* Tablet: keep the summary horizontal (rating + distribution), but drop the CTA to its own
+   full-width row underneath rather than squeezing three columns into less space than they
+   need — matches the "balanced two/three-column adaptation" requirement without a second
+   JS render path. */
+@media (max-width: 900px) {
+  .imagyn-store-reviews__grid {
+    grid-template-columns: auto 1fr;
+    grid-template-areas:
+      "rating distribution"
+      "cta cta";
+  }
+
+  .imagyn-store-reviews__rating {
+    grid-area: rating;
+  }
+
+  .imagyn-store-reviews__distribution {
+    grid-area: distribution;
+  }
+
+  .imagyn-store-reviews__cta {
+    grid-area: cta;
+    justify-self: stretch;
+  }
+
+  .imagyn-store-reviews__write {
+    width: 100%;
+  }
+}
+
+/* Mobile: full stack — rating stays prominent at the top, distribution stays legible at
+   full width, CTA stays reachable, no giant vertical gaps between them. */
+@media (max-width: 640px) {
+  .imagyn-store-reviews__grid {
+    grid-template-columns: 1fr;
+    grid-template-areas:
+      "rating"
+      "distribution"
+      "cta";
+    gap: var(--imagyn-space-px-lg, 24px);
+    padding: var(--imagyn-space-px-lg, 24px);
+  }
+
+  .imagyn-store-reviews__rating {
+    justify-items: center;
+    text-align: center;
+  }
+
+  .imagyn-store-reviews__distribution .imagyn-histogram__row {
+    grid-template-columns: 4.5em 1fr 2.5em;
+  }
 }

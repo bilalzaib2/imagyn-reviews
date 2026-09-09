@@ -11,20 +11,30 @@
   Store-wide (not per-product) — a rollup of this store's own real, approved product reviews
   (see app/services/review.server.ts's getPublicStoreReviewSummary) plus currently-earned
   achievement medals, both sourced from app/routes/api.reviews.store.tsx. Not a separate
-  "store review" entity — no such concept exists in the schema, and none is introduced here.
-  Deliberately has no "Write a review" / "View all reviews" CTA: this app has no store-level
-  review submission flow and no public, store-wide review listing page today (see
-  PROJECT_STATE.md's "Public Review Pages" roadmap item) — every real review is tied to a
-  specific product, and every real "write a review" action lives on that product's own page
-  (see star_rating.liquid). Adding a CTA here with nowhere honest to send a shopper would be
-  exactly the kind of fabricated affordance this app avoids; the summary + achievements below
-  stand on their own as a trust signal. Colors/typography/spacing come from the same
-  centralized Appearance System (Brand Studio) every other Imagyn widget on this storefront
-  already uses.
+  "store review" entity — no such concept exists in the schema, and none is introduced here;
+  every real review is still tied to a specific product.
+
+  CTA (added in the 2026-09-09 layout redesign): there is still no unified "write a store
+  review" submission flow — every real write-a-review form lives on a product's own page (see
+  star_rating.liquid). Rather than fabricate a flow that doesn't exist, the CTA honestly reads
+  "Write a Review" and sends a shopper to the storefront's real all-products page
+  (`routes.all_products_collection_url`, a URL every Shopify store has) to pick a product to
+  review — the same real destination every review is genuinely tied to, not a dead end. If a
+  merchant later adds a store-level submission flow, only this one data attribute needs to
+  change. Colors/typography/spacing come from the same centralized Appearance System (Brand
+  Studio) every other Imagyn widget on this storefront already uses.
 {% endcomment %}
 <div
   data-imagyn-store-reviews
   data-heading="{{ block.settings.heading }}"
+  data-cta-label="{{ block.settings.cta_label }}"
+  data-cta-url="{{ routes.all_products_collection_url }}"
+  data-max-width="{{ block.settings.max_width }}"
+  data-size="{{ block.settings.size }}"
+  data-show-rating="{{ block.settings.show_rating }}"
+  data-show-distribution="{{ block.settings.show_distribution }}"
+  data-show-cta="{{ block.settings.show_cta }}"
+  data-show-achievements="{{ block.settings.show_achievements }}"
 ></div>
 
 <script src="{{ 'imagyn-appearance.js' | asset_url }}" defer></script>
@@ -35,7 +45,36 @@
   "name": "Store Reviews",
   "target": "section",
   "settings": [
-    { "type": "text", "id": "heading", "label": "Heading", "default": "Store Reviews" }
+    { "type": "text", "id": "heading", "label": "Heading", "default": "Store Reviews" },
+    {
+      "type": "range",
+      "id": "max_width",
+      "label": "Max width (px)",
+      "min": 480,
+      "max": 1200,
+      "step": 20,
+      "default": 1080
+    },
+    {
+      "type": "select",
+      "id": "size",
+      "label": "Size",
+      "options": [
+        { "value": "compact", "label": "Compact" },
+        { "value": "standard", "label": "Standard" },
+        { "value": "large", "label": "Large" }
+      ],
+      "default": "standard"
+    },
+    {
+      "type": "paragraph",
+      "content": "Colors, typography and corner radius come from Brand Studio (Settings > Brand Studio in the app) — this block always matches the rest of your Imagyn widgets automatically."
+    },
+    { "type": "checkbox", "id": "show_rating", "label": "Show overall rating", "default": true },
+    { "type": "checkbox", "id": "show_distribution", "label": "Show rating distribution", "default": true },
+    { "type": "checkbox", "id": "show_cta", "label": "Show \"Write a Review\" button", "default": true },
+    { "type": "text", "id": "cta_label", "label": "Write-a-review button label", "default": "Write a Review" },
+    { "type": "checkbox", "id": "show_achievements", "label": "Show achievements", "default": true }
   ]
 }
 {% endschema %}

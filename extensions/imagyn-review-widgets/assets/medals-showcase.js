@@ -69,15 +69,15 @@
     return svg;
   }
 
-  // Compact card: a small flat badge (44px, down from the previous 72px brushed-metal
-  // treatment) with tight name/description text beneath — sized so several sit comfortably
-  // in one horizontal row, per the Medals Showcase redesign (see imagyn-medals-showcase__item
-  // in imagyn-component-medals-showcase.css). Earned-date meta was dropped for compactness —
-  // it's the least essential fact here, and the flat design otherwise reads as a quiet row of
-  // achievements, not a set of data cards.
+  // A flat badge (80px — see imagyn-component-medals-showcase.css's 2026-09-09 comment for
+  // why this came back up from an earlier 44px) with name/description text beneath — several
+  // still sit comfortably in one horizontal row on desktop, wrapping to fewer per row at
+  // this size rather than needing a second layout. Earned-date meta was dropped for
+  // compactness — it's the least essential fact here, and the flat design otherwise reads as
+  // a quiet row of achievements, not a set of data cards.
   function renderMedalCard(medal) {
     var html = '<li class="imagyn-medals-showcase__item">';
-    html += renderMedallion(medal.category, medal.tier, 44);
+    html += renderMedallion(medal.category, medal.tier, 80);
     html += '<div class="imagyn-medals-showcase__body">';
     html += '<p class="imagyn-medals-showcase__name">' + escapeHtml(medal.name) + "</p>";
     html += '<p class="imagyn-medals-showcase__description">' + escapeHtml(medal.description) + "</p>";

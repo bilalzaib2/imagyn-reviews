@@ -40,6 +40,16 @@
   font-variant-numeric: tabular-nums;
 }
 
+/* Opt-in star-glyph label (renderHistogram's starLabels option) — a wider column and the
+   real star color, since "★★★★★" needs more room and more presence than a bare numeral. */
+.imagyn-histogram__label--stars {
+  color: var(--imagyn-color-star, #f5a623);
+  opacity: 1;
+  font-size: var(--imagyn-font-size-sm, 13px);
+  letter-spacing: var(--imagyn-letter-spacing-normal, 0.02em);
+  white-space: nowrap;
+}
+
 .imagyn-histogram__track {
   position: relative;
   height: 6px;

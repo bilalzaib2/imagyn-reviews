@@ -32,11 +32,15 @@
   // Same flat-badge technique as medals-showcase.js's renderMedallion — kept as its own small
   // copy (not a cross-script import) matching this extension's existing convention of each
   // widget script being self-contained. Keep both in sync if the medal artwork ever changes.
-  function renderMedallion(category, tier) {
+  // Size bumped from a fixed 44 to a `size` parameter (default 80) as part of the 2026-09-09
+  // "medals are far too small" fix — matches medals-showcase.js's own already-parameterized
+  // renderMedallion exactly, just closing the gap between the two copies.
+  function renderMedallion(category, tier, size) {
     var finish = FINISH_STOPS[finishForTier(tier)];
     var glyph = GLYPH_BY_CATEGORY[category];
+    var resolvedSize = size || 80;
 
-    var svg = '<svg width="44" height="44" viewBox="0 0 24 24" fill="none" role="img" aria-hidden="true" class="imagyn-medals-showcase__medallion">';
+    var svg = '<svg width="' + resolvedSize + '" height="' + resolvedSize + '" viewBox="0 0 24 24" fill="none" role="img" aria-hidden="true" class="imagyn-medals-showcase__medallion">';
     svg += '<circle cx="12" cy="12" r="10.5" stroke="' + finish.ring + '" stroke-width="1.5" fill="none"></circle>';
     svg += '<circle cx="12" cy="12" r="9" fill="' + finish.fill + '"></circle>';
 
@@ -67,7 +71,7 @@
       var medal = medals[i];
       html +=
         '<li class="imagyn-medals-showcase__item">' +
-        renderMedallion(medal.category, medal.tier) +
+        renderMedallion(medal.category, medal.tier, 80) +
         '<div class="imagyn-medals-showcase__body">' +
         '<p class="imagyn-medals-showcase__name">' + escapeHtml(medal.name) + "</p>" +
         '<p class="imagyn-medals-showcase__description">' + escapeHtml(medal.description) + "</p>" +
@@ -83,35 +87,87 @@
     );
   }
 
+  // "true"/"false" arrive as literal strings from Liquid's {{ block.settings.x }} — a real
+  // boolean setting always renders one of those two words, never blank, so an explicit
+  // string check (not truthy-string-coercion, which would treat "false" as truthy) is the
+  // correct read here.
+  function isOn(value) {
+    return value !== "false";
+  }
+
+  // 2026-09-09 layout redesign: replaces the old single centered, narrow (22rem-capped)
+  // column with a wide three-part horizontal grid — rating, distribution, CTA — matching a
+  // mature review platform's store-review summary (studied for product-experience/hierarchy
+  // only; no assets, copy, or code from any reference site). Falls back to a single stacked
+  // column below the tablet breakpoint via CSS grid, not a second JS render path.
+  //
+  // `visibility` (show_rating/show_distribution/show_cta) lets a merchant turn off any one
+  // part via the block's own theme editor settings — e.g. a store with only a handful of
+  // reviews might hide the distribution and keep just the headline number, or a store with
+  // no honest place to send a shopper yet might turn the CTA off entirely rather than have
+  // this file guess at intent.
+  function renderSummaryGrid(summary, ctaLabel, ctaUrl, visibility) {
+    var totalReviews = summary.totalReviews || 0;
+
+    if (totalReviews === 0) {
+      return '<div class="imagyn-store-reviews__grid imagyn-store-reviews__grid--empty">' + renderEmptyState() + "</div>";
+    }
+
+    var html = '<div class="imagyn-store-reviews__grid">';
+
+    if (visibility.rating) {
+      html += '<div class="imagyn-store-reviews__rating">';
+      html += '<span class="imagyn-store-reviews__rating-number">' + summary.averageRating.toFixed(1) + "</span>";
+      html += '<span class="imagyn-store-reviews__rating-stars" aria-hidden="true">' + renderStars(summary.averageRating) + "</span>";
+      html +=
+        '<span class="imagyn-store-reviews__rating-count">Based on ' + totalReviews +
+        (totalReviews === 1 ? " store review" : " store reviews") + "</span>";
+      html += "</div>";
+    }
+
+    if (visibility.distribution) {
+      html += '<div class="imagyn-store-reviews__distribution">';
+      html += window.ImagynShared.renderHistogram(summary.ratingCounts, { starLabels: true });
+      html += "</div>";
+    }
+
+    if (visibility.cta && ctaUrl) {
+      html += '<div class="imagyn-store-reviews__cta">';
+      html += '<a class="imagyn-store-reviews__write" href="' + escapeHtml(ctaUrl) + '">' + escapeHtml(ctaLabel || "Write a Review") + "</a>";
+      html += "</div>";
+    }
+
+    html += "</div>";
+    return html;
+  }
+
   function render(container, data) {
     var summary = data.summary || { averageRating: 0, totalReviews: 0, ratingCounts: { 1: 0, 2: 0, 3: 0, 4: 0, 5: 0 } };
-    var totalReviews = summary.totalReviews || 0;
     var heading = container.getAttribute("data-heading") || "";
+    var ctaLabel = container.getAttribute("data-cta-label") || "";
+    var ctaUrl = container.getAttribute("data-cta-url") || "";
+    var maxWidth = container.getAttribute("data-max-width");
+    var size = container.getAttribute("data-size") || "standard";
+    var visibility = {
+      rating: isOn(container.getAttribute("data-show-rating")),
+      distribution: isOn(container.getAttribute("data-show-distribution")),
+      cta: isOn(container.getAttribute("data-show-cta")),
+      achievements: isOn(container.getAttribute("data-show-achievements")),
+    };
+
+    if (maxWidth) {
+      container.style.setProperty("--imagyn-store-reviews-max-width", maxWidth + "px");
+    }
+    container.setAttribute("data-imagyn-size", size);
 
     var html = "";
     if (heading) {
       html += '<p class="imagyn-store-reviews__heading">' + escapeHtml(heading) + "</p>";
     }
 
-    html += '<div class="imagyn-summary imagyn-store-reviews__summary">';
-    html += '<div class="imagyn-summary__hero">';
+    html += renderSummaryGrid(summary, ctaLabel, ctaUrl, visibility);
 
-    if (totalReviews === 0) {
-      html += renderEmptyState();
-    } else {
-      html += '<div class="imagyn-summary__headline">';
-      html += '<span class="imagyn-summary__rating">' + summary.averageRating.toFixed(1) + "</span>";
-      html += '<span class="imagyn-summary__quickbar-stars" aria-hidden="true">' + renderStars(summary.averageRating) + "</span>";
-      html += "</div>";
-      html +=
-        '<span class="imagyn-summary__count">Based on ' + totalReviews + (totalReviews === 1 ? " store review" : " store reviews") + "</span>";
-      html += window.ImagynShared.renderHistogram(summary.ratingCounts);
-    }
-
-    html += "</div>";
-    html += "</div>";
-
-    var medalsHtml = renderMedals(data.medals);
+    var medalsHtml = visibility.achievements ? renderMedals(data.medals) : "";
     if (medalsHtml) {
       html += '<div class="imagyn-medals-showcase imagyn-store-reviews__medals">';
       html += '<p class="imagyn-ratings-section__label">Achievements</p>';
