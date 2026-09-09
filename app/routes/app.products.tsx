@@ -394,7 +394,7 @@ export default function ProductsPage() {
   return (
     <>
       <Container as="main">
-        <div className={shellStyles.page}>
+        <div className={`${shellStyles.page} ${shellStyles.reveal}`}>
           <header className={`${shellStyles.header} ${styles.header}`}>
             <div className={shellStyles.headerContent}>
               <SettingsBreadcrumb current="Product Management" />

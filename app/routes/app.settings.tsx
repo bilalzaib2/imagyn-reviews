@@ -1,4 +1,4 @@
-import type { MouseEvent } from "react";
+import type { CSSProperties, MouseEvent } from "react";
 import { Outlet, useLoaderData, useLocation, useRouteError } from "react-router";
 import type { HeadersFunction, LoaderFunctionArgs } from "react-router";
 import { boundary } from "@shopify/shopify-app-react-router/server";
@@ -109,7 +109,7 @@ export default function SettingsWorkspace() {
 
   return (
     <Container as="main">
-      <div className={shellStyles.page}>
+      <div className={`${shellStyles.page} ${shellStyles.reveal}`}>
         <header className={shellStyles.header}>
           <div className={shellStyles.headerContent}>
             <p className={shellStyles.eyebrow}>Imagyn Reviews</p>
@@ -208,7 +208,7 @@ export default function SettingsWorkspace() {
             ))}
           </nav>
 
-          <div className={styles.content}>
+          <div className={`${styles.content} ${shellStyles.reveal}`} style={{ "--reveal-delay": "80ms" } as CSSProperties}>
             <Outlet />
           </div>
         </div>

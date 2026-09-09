@@ -152,7 +152,7 @@ export default function AnalyticsPage() {
 
   return (
     <Container as="main">
-      <div className={shellStyles.page}>
+      <div className={`${shellStyles.page} ${shellStyles.reveal}`}>
         <header className={shellStyles.header}>
           <div className={shellStyles.headerContent}>
             <p className={shellStyles.eyebrow}>Imagyn Reviews</p>

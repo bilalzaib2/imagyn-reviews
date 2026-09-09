@@ -117,7 +117,7 @@ export default function NewReviewPage() {
 
   return (
     <Container as="main">
-      <div className={`${shellStyles.page} ${styles.page}`}>
+      <div className={`${shellStyles.page} ${styles.page} ${shellStyles.reveal}`}>
         <header className={`${shellStyles.header} ${styles.header}`}>
           <div className={shellStyles.headerContent}>
             <p className={`${shellStyles.eyebrow} ${styles.eyebrow}`}>Imagyn Reviews</p>

@@ -92,7 +92,7 @@ export default function MedalsPage() {
 
   return (
     <Container as="main">
-      <div className={`${shellStyles.page} ${styles.page}`}>
+      <div className={`${shellStyles.page} ${styles.page} ${shellStyles.reveal}`}>
         <header className={shellStyles.header}>
           <div className={shellStyles.headerContent}>
             <SettingsBreadcrumb current="Medals" />

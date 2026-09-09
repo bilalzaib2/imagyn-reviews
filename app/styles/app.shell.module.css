@@ -4,6 +4,33 @@
   padding-block: var(--space-10);
 }
 
+/* Shared, one-mechanism page-load entrance for every /app/* screen using this shell — fade +
+   rise, staggered via each caller's own inline --reveal-delay custom property. Originated on
+   the Dashboard (app._index.module.css had its own copy first); promoted here so every other
+   page reuses the identical timing/easing instead of a bespoke animation per screen. Plays
+   once on paint and never re-triggers on client-side navigation back to a route. */
+.reveal {
+  animation: shellReveal 480ms cubic-bezier(0.16, 1, 0.3, 1) both;
+  animation-delay: var(--reveal-delay, 0ms);
+}
+
+@keyframes shellReveal {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .reveal {
+    animation: none;
+  }
+}
+
 .header {
   display: grid;
   gap: var(--space-3);

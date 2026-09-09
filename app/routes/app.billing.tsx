@@ -170,7 +170,7 @@ export default function BillingPage() {
   return (
     <>
       <Container as="main">
-        <div className={shellStyles.page}>
+        <div className={`${shellStyles.page} ${shellStyles.reveal}`}>
           <header className={shellStyles.header}>
             <div className={shellStyles.headerContent}>
               <SettingsBreadcrumb current="Plan & Billing" />
