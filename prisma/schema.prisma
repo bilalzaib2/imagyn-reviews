@@ -50,6 +50,7 @@ model Store {
   emailSuppressions  EmailSuppression[]
   auditLogs          AuditLog[]
   trustCertification TrustCertification?
+  storeAiSummary     StoreAiSummary?
 
   // Order-lifecycle automation settings (see review-request.server.ts's createFromOrder and
   // webhooks.fulfillments.create.tsx). autoRequestTrigger is a plain string, not an enum, so
@@ -406,6 +407,31 @@ model ProductAiSummary {
 
   productId String  @unique
   product   Product @relation(fields: [productId], references: [id], onDelete: Cascade)
+
+  summary        String
+  positives      String
+  negatives      String
+  recommendation String
+
+  reviewCountUsed Int
+  provider        String
+  modelUsed       String
+
+  generatedAt DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}
+
+// Store-wide counterpart of ProductAiSummary — a real, separate synthesis across a store's
+// entire approved-review catalog (not "the most recently generated product summary," which is
+// what getLatestAiSummaryForStore in aiSummary.server.ts already provided for the Dashboard's
+// old "AI Spotlight" card). One row per store (storeId unique), same generation/regeneration
+// architecture and AiProvider contract as ProductAiSummary — see aiSummary.server.ts's
+// regenerateStoreAiSummary.
+model StoreAiSummary {
+  id String @id @default(cuid())
+
+  storeId String @unique
+  store   Store  @relation(fields: [storeId], references: [id], onDelete: Cascade)
 
   summary        String
   positives      String

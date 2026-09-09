@@ -1,6 +1,6 @@
 import type { Prisma } from "@prisma/client";
 import prisma from "../db.server";
-import { maybeAutoRegenerateAiSummary } from "./aiSummary.server";
+import { maybeAutoRegenerateAiSummary, maybeAutoRegenerateStoreAiSummary } from "./aiSummary.server";
 import { HelpfulVoteValue, ReviewStatus } from "./review.shared";
 import { getStorePermissions, PermissionError } from "./permissions";
 import { getStoreById } from "./store.server";
@@ -684,6 +684,7 @@ async function setReviewStatus(
   // and only actually calls the AI provider when enough new approved reviews warrant it.
   if (status === ReviewStatus.APPROVED) {
     void maybeAutoRegenerateAiSummary(storeId, existing.productId);
+    void maybeAutoRegenerateStoreAiSummary(storeId);
     void issueRewardIfEligible(storeId, {
       ...review,
       hasPhoto: review.media.some((item) => item.type === "IMAGE"),
@@ -841,6 +842,7 @@ export async function bulkModerateReviews(
 
   if (status === ReviewStatus.APPROVED) {
     affectedProductIds.forEach((productId) => void maybeAutoRegenerateAiSummary(storeId, productId));
+    void maybeAutoRegenerateStoreAiSummary(storeId);
   }
 
   return { count: result.count, affectedProductIds };

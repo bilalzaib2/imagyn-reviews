@@ -20,17 +20,29 @@ interface FakeReview {
   deletedAt: Date | null;
 }
 
+interface FakeStore {
+  id: string;
+  name: string;
+}
+
+let stores: FakeStore[];
 let products: FakeProduct[];
 let reviews: FakeReview[];
 let summaries: Map<string, { id: string; productId: string; summary: string; positives: string; negatives: string; recommendation: string; reviewCountUsed: number; provider: string; modelUsed: string; generatedAt: Date; updatedAt: Date }>;
+let storeSummaries: Map<string, { id: string; storeId: string; summary: string; positives: string; negatives: string; recommendation: string; reviewCountUsed: number; provider: string; modelUsed: string; generatedAt: Date; updatedAt: Date }>;
+let generateReviewSummaryMock: ReturnType<typeof vi.fn>;
 
 vi.mock("../db.server", () => ({
   default: {
     store: {
       // "owner" => every permission (including canUseAI) is granted — this file's focus is
       // ownership scoping, not plan gating, which aiSummary.server.ts already has its own
-      // assertPermission call for.
-      findUnique: vi.fn(async () => ({ plan: "owner" })),
+      // assertPermission call for. Real id/name are still returned (looked up by the `where`
+      // clause) so regenerateStoreAiSummary's real store-name lookup has something real to use.
+      findUnique: vi.fn(async ({ where }: { where: { id: string } }) => {
+        const store = stores.find((s) => s.id === where.id);
+        return store ? { id: store.id, name: store.name, plan: "owner" } : null;
+      }),
     },
     product: {
       findFirst: vi.fn(async ({ where }: { where: { id: string; storeId: string } }) => {
@@ -39,11 +51,19 @@ vi.mock("../db.server", () => ({
       }),
     },
     review: {
-      findMany: vi.fn(async ({ where }: { where: { productId: string; deletedAt: null; status: string } }) => {
-        return reviews.filter((r) => r.productId === where.productId && r.deletedAt === null && r.status === where.status);
+      findMany: vi.fn(async ({ where }: { where: Record<string, unknown> }) => {
+        return reviews.filter((r) => {
+          if (where.productId && r.productId !== where.productId) return false;
+          if (where.storeId && !products.some((p) => p.id === r.productId && p.storeId === where.storeId)) return false;
+          return r.deletedAt === null && r.status === where.status;
+        });
       }),
-      count: vi.fn(async ({ where }: { where: { productId: string; deletedAt: null; status: string } }) => {
-        return reviews.filter((r) => r.productId === where.productId && r.deletedAt === null && r.status === where.status).length;
+      count: vi.fn(async ({ where }: { where: Record<string, unknown> }) => {
+        return reviews.filter((r) => {
+          if (where.productId && r.productId !== where.productId) return false;
+          if (where.storeId && !products.some((p) => p.id === r.productId && p.storeId === where.storeId)) return false;
+          return r.deletedAt === null && r.status === where.status;
+        }).length;
       }),
     },
     productAiSummary: {
@@ -80,25 +100,58 @@ vi.mock("../db.server", () => ({
         return row;
       }),
     },
+    storeAiSummary: {
+      findUnique: vi.fn(async ({ where }: { where: { storeId: string } }) => storeSummaries.get(where.storeId) ?? null),
+      upsert: vi.fn(async ({
+        where,
+        create,
+      }: {
+        where: { storeId: string };
+        create: {
+          summary: string;
+          positives: string;
+          negatives: string;
+          recommendation: string;
+          reviewCountUsed: number;
+          provider: string;
+          modelUsed: string;
+        };
+      }) => {
+        const row = {
+          id: `store_summary_${where.storeId}`,
+          storeId: where.storeId,
+          summary: create.summary,
+          positives: create.positives,
+          negatives: create.negatives,
+          recommendation: create.recommendation,
+          reviewCountUsed: create.reviewCountUsed,
+          provider: create.provider,
+          modelUsed: create.modelUsed,
+          generatedAt: new Date(),
+          updatedAt: new Date(),
+        };
+        storeSummaries.set(where.storeId, row);
+        return row;
+      }),
+    },
   },
 }));
 
 vi.mock("./ai/provider.server", () => ({
   getAiProvider: () => ({
     name: "fake-provider",
-    generateReviewSummary: vi.fn(async () => ({
-      summary: "Customers love it.",
-      positives: ["Great quality"],
-      negatives: [],
-      recommendation: "Anyone who wants a reliable product.",
-      modelUsed: "fake-model",
-    })),
+    generateReviewSummary: generateReviewSummaryMock,
   }),
 }));
 
-const { regenerateAiSummary } = await import("./aiSummary.server");
+const { regenerateAiSummary, regenerateStoreAiSummary, getStoreAiSummary, maybeAutoRegenerateStoreAiSummary } =
+  await import("./aiSummary.server");
 
 beforeEach(() => {
+  stores = [
+    { id: "store_1", name: "Verve Handmade" },
+    { id: "store_2", name: "Other Store" },
+  ];
   products = [
     { id: "product_1", storeId: "store_1", name: "Own Product" },
     { id: "product_2", storeId: "store_2", name: "Other Store's Product" },
@@ -108,6 +161,14 @@ beforeEach(() => {
     { productId: "product_2", rating: 5, title: "Great", content: "Loved it", status: "APPROVED", deletedAt: null },
   ];
   summaries = new Map();
+  storeSummaries = new Map();
+  generateReviewSummaryMock = vi.fn(async () => ({
+    summary: "Customers love it.",
+    positives: ["Great quality"],
+    negatives: [],
+    recommendation: "Anyone who wants a reliable product.",
+    modelUsed: "fake-model",
+  }));
 });
 
 describe("regenerateAiSummary — cross-tenant isolation", () => {
@@ -141,5 +202,104 @@ describe("regenerateAiSummary — cross-tenant isolation", () => {
     expect(result.productId).toBe("product_1");
     expect(result.summary).toBe("Customers love it.");
     expect(summaries.get("product_1")?.summary).toBe("Customers love it.");
+  });
+});
+
+describe("getStoreAiSummary", () => {
+  it("returns null when no store summary has ever been generated", async () => {
+    const result = await getStoreAiSummary("store_1");
+    expect(result).toBeNull();
+  });
+});
+
+describe("regenerateStoreAiSummary", () => {
+  it("throws when the store has no approved reviews to summarize yet", async () => {
+    reviews = [];
+    await expect(regenerateStoreAiSummary("store_1")).rejects.toThrow("This store has no approved reviews");
+    expect(generateReviewSummaryMock).not.toHaveBeenCalled();
+  });
+
+  it("generates and persists a real, store-scoped summary from approved reviews", async () => {
+    const result = await regenerateStoreAiSummary("store_1");
+
+    expect(result.storeId).toBe("store_1");
+    expect(result.summary).toBe("Customers love it.");
+    expect(result.reviewCountUsed).toBe(1);
+    expect(storeSummaries.get("store_1")?.summary).toBe("Customers love it.");
+
+    // scope: "store" is passed through to the provider so the prompt frames the request as a
+    // multi-product catalog summary, not a single-product one.
+    expect(generateReviewSummaryMock).toHaveBeenCalledWith(
+      expect.objectContaining({ productName: "Verve Handmade", scope: "store" }),
+    );
+  });
+
+  it("never pulls in another store's reviews when summarizing", async () => {
+    await regenerateStoreAiSummary("store_1");
+    // Only product_1's review (store_1) should have been counted — product_2's review
+    // (store_2) must never contribute, even though both exist in the same fake table.
+    expect(storeSummaries.get("store_1")?.reviewCountUsed).toBe(1);
+  });
+
+  it("excludes rejected reviews from the store summary review count", async () => {
+    reviews.push({
+      productId: "product_1",
+      rating: 1,
+      title: "Bad",
+      content: "Spam content",
+      status: "REJECTED",
+      deletedAt: null,
+    });
+
+    await regenerateStoreAiSummary("store_1");
+    expect(storeSummaries.get("store_1")?.reviewCountUsed).toBe(1);
+  });
+
+  it("propagates a real provider failure instead of persisting a fabricated summary", async () => {
+    generateReviewSummaryMock.mockRejectedValueOnce(new Error("OPENAI_API_KEY is not configured."));
+
+    await expect(regenerateStoreAiSummary("store_1")).rejects.toThrow("OPENAI_API_KEY is not configured.");
+    expect(storeSummaries.has("store_1")).toBe(false);
+  });
+});
+
+describe("maybeAutoRegenerateStoreAiSummary", () => {
+  it("does nothing when the store has zero approved reviews", async () => {
+    reviews = [];
+    await maybeAutoRegenerateStoreAiSummary("store_1");
+    expect(generateReviewSummaryMock).not.toHaveBeenCalled();
+  });
+
+  it("regenerates when no store summary exists yet, regardless of threshold", async () => {
+    await maybeAutoRegenerateStoreAiSummary("store_1");
+    expect(generateReviewSummaryMock).toHaveBeenCalledTimes(1);
+    expect(storeSummaries.has("store_1")).toBe(true);
+  });
+
+  it("does not regenerate again before enough new approved reviews accumulate", async () => {
+    await maybeAutoRegenerateStoreAiSummary("store_1"); // establishes reviewCountUsed = 1
+    generateReviewSummaryMock.mockClear();
+
+    await maybeAutoRegenerateStoreAiSummary("store_1"); // still just 1 approved review
+    expect(generateReviewSummaryMock).not.toHaveBeenCalled();
+  });
+
+  it("regenerates once the configured threshold of new approved reviews is crossed", async () => {
+    await maybeAutoRegenerateStoreAiSummary("store_1");
+    generateReviewSummaryMock.mockClear();
+
+    for (let i = 0; i < 5; i++) {
+      reviews.push({
+        productId: "product_1",
+        rating: 5,
+        title: null,
+        content: `Another great review ${i}`,
+        status: "APPROVED",
+        deletedAt: null,
+      });
+    }
+
+    await maybeAutoRegenerateStoreAiSummary("store_1");
+    expect(generateReviewSummaryMock).toHaveBeenCalledTimes(1);
   });
 });

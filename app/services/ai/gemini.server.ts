@@ -44,7 +44,7 @@ export function createGeminiProvider(): AiProvider {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
-            systemInstruction: { parts: [{ text: buildSystemPrompt() }] },
+            systemInstruction: { parts: [{ text: buildSystemPrompt(request.scope) }] },
             contents: [{ role: "user", parts: [{ text: buildUserPrompt(request) }] }],
             generationConfig: {
               temperature: 0.3,

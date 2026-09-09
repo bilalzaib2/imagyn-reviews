@@ -221,3 +221,154 @@ export async function maybeAutoRegenerateAiSummary(storeId: string, productId: s
     console.error("[aiSummary] auto-regeneration failed:", error instanceof Error ? error.message : error);
   }
 }
+
+// ---------------------------------------------------------------------------
+// Store AI Summary — a real, separate synthesis across a store's entire approved-review
+// catalog (many products), not a proxy built from a single product's summary. Mirrors every
+// architectural decision above exactly (same AiProvider, same JSON contract, same
+// upsert/threshold/plan-gate pattern) — the StoreAiSummary model's own schema comment explains
+// why this stays one implementation, not two.
+// ---------------------------------------------------------------------------
+
+export interface StoreAiSummaryRecord {
+  id: string;
+  storeId: string;
+  summary: string;
+  positives: string[];
+  negatives: string[];
+  recommendation: string;
+  reviewCountUsed: number;
+  provider: string;
+  modelUsed: string;
+  generatedAt: Date;
+  updatedAt: Date;
+}
+
+// Spans many more reviews than a single product typically has, so the cap is higher than
+// MAX_REVIEWS_PER_SUMMARY — still bounded, for the same prompt-size/cost/latency reasons.
+const MAX_REVIEWS_PER_STORE_SUMMARY = 150;
+
+function toStoreRecord(row: {
+  id: string;
+  storeId: string;
+  summary: string;
+  positives: string;
+  negatives: string;
+  recommendation: string;
+  reviewCountUsed: number;
+  provider: string;
+  modelUsed: string;
+  generatedAt: Date;
+  updatedAt: Date;
+}): StoreAiSummaryRecord {
+  return {
+    id: row.id,
+    storeId: row.storeId,
+    summary: row.summary,
+    positives: safeParseStringArray(row.positives),
+    negatives: safeParseStringArray(row.negatives),
+    recommendation: row.recommendation,
+    reviewCountUsed: row.reviewCountUsed,
+    provider: row.provider,
+    modelUsed: row.modelUsed,
+    generatedAt: row.generatedAt,
+    updatedAt: row.updatedAt,
+  };
+}
+
+// Pure cache read — same guarantee as getAiSummary: never triggers generation, never touches
+// the AI provider. The only function any read-only surface (Dashboard, storefront widget)
+// should call.
+export async function getStoreAiSummary(storeId: string): Promise<StoreAiSummaryRecord | null> {
+  const row = await prisma.storeAiSummary.findUnique({ where: { storeId } });
+  return row ? toStoreRecord(row) : null;
+}
+
+async function getApprovedReviewCountForStore(storeId: string): Promise<number> {
+  return prisma.review.count({ where: { storeId, deletedAt: null, status: ReviewStatus.APPROVED } });
+}
+
+// The actual generation path for a store-wide summary. Callers: the admin's explicit
+// "Regenerate" action and maybeAutoRegenerateStoreAiSummary below (only past its own
+// threshold check) — never a storefront-facing loader, same rule as regenerateAiSummary.
+export async function regenerateStoreAiSummary(storeId: string): Promise<StoreAiSummaryRecord> {
+  const store = await prisma.store.findUnique({ where: { id: storeId }, select: { id: true, name: true } });
+
+  if (!store) {
+    throw new Error("Store not found.");
+  }
+
+  const permissions = await getStorePermissions(storeId);
+  assertPermission(permissions, "canUseAI", "AI review summaries require the Pro plan.", "growth");
+
+  const reviews = await prisma.review.findMany({
+    where: { storeId, deletedAt: null, status: ReviewStatus.APPROVED },
+    select: { rating: true, title: true, content: true },
+    orderBy: { createdAt: "desc" },
+    take: MAX_REVIEWS_PER_STORE_SUMMARY,
+  });
+
+  if (reviews.length === 0) {
+    throw new Error("This store has no approved reviews to summarize yet.");
+  }
+
+  const provider = getAiProvider();
+  const result = await provider.generateReviewSummary({ productName: store.name, reviews, scope: "store" });
+
+  const row = await prisma.storeAiSummary.upsert({
+    where: { storeId },
+    update: {
+      summary: result.summary,
+      positives: JSON.stringify(result.positives),
+      negatives: JSON.stringify(result.negatives),
+      recommendation: result.recommendation,
+      reviewCountUsed: reviews.length,
+      provider: provider.name,
+      modelUsed: result.modelUsed,
+      generatedAt: new Date(),
+    },
+    create: {
+      storeId,
+      summary: result.summary,
+      positives: JSON.stringify(result.positives),
+      negatives: JSON.stringify(result.negatives),
+      recommendation: result.recommendation,
+      reviewCountUsed: reviews.length,
+      provider: provider.name,
+      modelUsed: result.modelUsed,
+    },
+  });
+
+  return toStoreRecord(row);
+}
+
+// Fire-and-forget counterpart of maybeAutoRegenerateAiSummary, called alongside it wherever a
+// review becomes APPROVED (see review.server.ts) — same never-block-the-caller guarantee, same
+// threshold check (shared getRegenerationThreshold/AI_SUMMARY_REGENERATION_THRESHOLD).
+export async function maybeAutoRegenerateStoreAiSummary(storeId: string): Promise<void> {
+  try {
+    const [existing, approvedCount] = await Promise.all([
+      prisma.storeAiSummary.findUnique({ where: { storeId }, select: { reviewCountUsed: true } }),
+      getApprovedReviewCountForStore(storeId),
+    ]);
+
+    if (approvedCount === 0) {
+      return;
+    }
+
+    const newReviewsSinceLastGeneration = approvedCount - (existing?.reviewCountUsed ?? 0);
+    const shouldRegenerate = !existing || newReviewsSinceLastGeneration >= getRegenerationThreshold();
+
+    if (!shouldRegenerate) {
+      return;
+    }
+
+    await regenerateStoreAiSummary(storeId);
+  } catch (error) {
+    if (error instanceof PermissionError) {
+      return;
+    }
+
+    console.error("[aiSummary] store auto-regeneration failed:", error instanceof Error ? error.message : error);
+  }
+}

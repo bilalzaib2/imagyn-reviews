@@ -18,8 +18,23 @@ const JSON_SHAPE_DESCRIPTION = `Respond with strict JSON only, matching exactly 
 
 // Shared by every provider so the model always sees the same instructions regardless of
 // which one is configured — the prompt is not something that should vary provider to
-// provider, only the transport/request format does.
-export function buildSystemPrompt(): string {
+// provider, only the transport/request format does. `scope` branches the framing between a
+// single product and a store's full multi-product catalog — see AiSummaryRequest's own
+// comment for why this stays one prompt/parsing pipeline, not two.
+export function buildSystemPrompt(scope: "product" | "store" = "product"): string {
+  if (scope === "store") {
+    return (
+      "You are a precise customer review analyst. Given a set of approved customer reviews " +
+      "spanning a store's entire product catalog (not a single product), identify genuine " +
+      "patterns across them — do not simply describe or average the star ratings. Base every " +
+      "statement strictly on what the reviews actually say; never invent products, details, " +
+      "features, or complaints that aren't present in the text. If the reviews are mixed or " +
+      "too few to find a clear pattern, say so plainly rather than inventing a false " +
+      "consensus. Be concise and specific, not generic marketing language. " +
+      JSON_SHAPE_DESCRIPTION
+    );
+  }
+
   return (
     "You are a precise product review analyst. Given a set of customer reviews for a " +
     "single product, identify genuine patterns across them — do not simply describe or " +
@@ -40,7 +55,8 @@ export function buildUserPrompt(request: AiSummaryRequest): string {
     })
     .join("\n");
 
-  return `Product: ${request.productName}\n\nCustomer reviews (${request.reviews.length} total):\n${reviewLines}`;
+  const subjectLabel = request.scope === "store" ? "Store" : "Product";
+  return `${subjectLabel}: ${request.productName}\n\nCustomer reviews (${request.reviews.length} total):\n${reviewLines}`;
 }
 
 // Some models wrap JSON in markdown fences or add stray text despite instructions not to

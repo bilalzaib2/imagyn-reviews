@@ -7,6 +7,12 @@ export interface AiSummaryReviewInput {
 export interface AiSummaryRequest {
   productName: string;
   reviews: AiSummaryReviewInput[];
+  // "product" (default, omitted by every existing caller) frames the prompt around a single
+  // product; "store" frames it around a store's full catalog of approved reviews spanning many
+  // products — see aiSummary.server.ts's regenerateStoreAiSummary. Same request/response shape
+  // either way (same architecture, same provider, same JSON contract) — only the prompt framing
+  // changes, per the explicit requirement not to introduce a second AI architecture for this.
+  scope?: "product" | "store";
 }
 
 export interface AiSummaryResult {

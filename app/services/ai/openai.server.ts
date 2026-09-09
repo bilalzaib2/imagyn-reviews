@@ -49,7 +49,7 @@ export function createOpenAiProvider(): AiProvider {
           response_format: { type: "json_object" },
           temperature: 0.3,
           messages: [
-            { role: "system", content: buildSystemPrompt() },
+            { role: "system", content: buildSystemPrompt(request.scope) },
             { role: "user", content: buildUserPrompt(request) },
           ],
         }),

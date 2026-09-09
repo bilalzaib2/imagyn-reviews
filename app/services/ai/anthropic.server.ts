@@ -50,7 +50,7 @@ export function createAnthropicProvider(): AiProvider {
           model,
           max_tokens: 1024,
           temperature: 0.3,
-          system: buildSystemPrompt(),
+          system: buildSystemPrompt(request.scope),
           messages: [{ role: "user", content: buildUserPrompt(request) }],
         }),
       });

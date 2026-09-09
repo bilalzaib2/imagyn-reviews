@@ -9,6 +9,7 @@ import { getOrCreateStore } from "../services/store.server";
 import { getStorePermissions } from "../services/permissions";
 import { getFeedReadiness, setGoogleFeedEnabled, type FeedReadiness } from "../services/googleReviewFeed.server";
 import { getReviewSiteUrl } from "../services/reviewSite.server";
+import { getStoreAiSummary, regenerateStoreAiSummary, type StoreAiSummaryRecord } from "../services/aiSummary.server";
 import buttonStyles from "../components/ui/button.module.css";
 import managementStyles from "../styles/app.management.module.css";
 import styles from "../styles/app.settings.seo.module.css";
@@ -27,6 +28,7 @@ type LoaderData = {
   canUseAI: boolean;
   feed: FeedReadiness;
   reviewSiteUrl: string;
+  storeAiSummary: StoreAiSummaryRecord | null;
 };
 
 type ActionData = {
@@ -34,27 +36,41 @@ type ActionData = {
   error?: string;
   feedUrl?: string | null;
   distributionFeedUrl?: string | null;
+  storeAiSummary?: StoreAiSummaryRecord;
 };
 
 export const loader = async ({ request }: LoaderFunctionArgs): Promise<LoaderData> => {
   const { session } = await authenticateAdminDeduped(request);
   const store = await getOrCreateStore(session.shop);
-  const [permissions, feed] = await Promise.all([getStorePermissions(store.id), getFeedReadiness(store.id)]);
+  const [permissions, feed, storeAiSummary] = await Promise.all([
+    getStorePermissions(store.id),
+    getFeedReadiness(store.id),
+    getStoreAiSummary(store.id),
+  ]);
 
-  return { canUseAI: permissions.canUseAI, feed, reviewSiteUrl: getReviewSiteUrl(store.slug) };
+  return { canUseAI: permissions.canUseAI, feed, reviewSiteUrl: getReviewSiteUrl(store.slug), storeAiSummary };
 };
 
 export const action = async ({ request }: ActionFunctionArgs): Promise<ActionData> => {
   const { session } = await authenticateAdminDeduped(request);
   const store = await getOrCreateStore(session.shop);
   const formData = await request.formData();
+  const intent = String(formData.get("intent") || "toggleFeed");
 
   try {
+    if (intent === "generateStoreSummary") {
+      const summary = await regenerateStoreAiSummary(store.id);
+      return { ok: true, storeAiSummary: summary };
+    }
+
     const enabled = formData.get("enabled") === "true";
     const result = await setGoogleFeedEnabled(store.id, enabled);
     return { ok: true, feedUrl: result.feedUrl, distributionFeedUrl: result.distributionFeedUrl };
   } catch (error) {
-    return { ok: false, error: error instanceof Error ? error.message : "Unable to update the feed." };
+    return {
+      ok: false,
+      error: error instanceof Error ? error.message : "Something went wrong.",
+    };
   }
 };
 
@@ -108,13 +124,20 @@ function SparkleIcon() {
   );
 }
 
+function formatGeneratedAt(value: Date | string) {
+  return new Intl.DateTimeFormat("en", { month: "short", day: "numeric", year: "numeric" }).format(new Date(value));
+}
+
 export default function SettingsSeoPage() {
-  const { canUseAI, feed, reviewSiteUrl } = useLoaderData<typeof loader>();
+  const { canUseAI, feed, reviewSiteUrl, storeAiSummary: loaderStoreAiSummary } = useLoaderData<typeof loader>();
   const fetcher = useFetcher<ActionData>();
+  const storeSummaryFetcher = useFetcher<ActionData>();
   const [enabled, setEnabled] = useState(feed.feedEnabled);
   const [toast, setToast] = useState<{ content: string; error?: boolean } | null>(null);
   const feedUrl = fetcher.data?.ok ? fetcher.data.feedUrl : feed.feedUrl;
   const distributionFeedUrl = fetcher.data?.ok ? fetcher.data.distributionFeedUrl : feed.distributionFeedUrl;
+  const storeAiSummary = storeSummaryFetcher.data?.ok ? (storeSummaryFetcher.data.storeAiSummary ?? loaderStoreAiSummary) : loaderStoreAiSummary;
+  const isGeneratingStoreSummary = storeSummaryFetcher.state !== "idle";
 
   const totalFeedReviews = feed.eligibleReviewCount + feed.excludedReviewCount;
   const eligibleSharePercent = totalFeedReviews > 0 ? Math.round((feed.eligibleReviewCount / totalFeedReviews) * 100) : null;
@@ -130,11 +153,28 @@ export default function SettingsSeoPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [fetcher.data]);
 
+  useEffect(() => {
+    if (!storeSummaryFetcher.data) return;
+    if (!storeSummaryFetcher.data.ok) {
+      setToast({ content: storeSummaryFetcher.data.error || "Unable to generate the store AI summary.", error: true });
+      return;
+    }
+    setToast({ content: "Store AI summary generated." });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [storeSummaryFetcher.data]);
+
   const toggle = (next: boolean) => {
     setEnabled(next);
     const formData = new FormData();
+    formData.set("intent", "toggleFeed");
     formData.set("enabled", String(next));
     fetcher.submit(formData, { method: "post" });
+  };
+
+  const generateStoreSummary = () => {
+    const formData = new FormData();
+    formData.set("intent", "generateStoreSummary");
+    storeSummaryFetcher.submit(formData, { method: "post" });
   };
 
   return (
@@ -317,6 +357,44 @@ export default function SettingsSeoPage() {
                   Suggests a starting reply to a customer review, based on its real content — you always review and
                   edit before sending. Available from a review&apos;s detail panel.
                 </p>
+              </div>
+            </div>
+            <div className={styles.aiFeatureRow}>
+              <div style={{ width: "100%" }}>
+                <p className={styles.aiFeatureName}>Store AI Summary</p>
+                <p className={styles.aiFeatureDetail}>
+                  A single summary synthesized across every approved review in your store, not just one product —
+                  what customers say about your store as a whole.
+                </p>
+
+                {!canUseAI ? (
+                  <p className={managementStyles.mutedText}>Requires the Pro plan.</p>
+                ) : storeAiSummary ? (
+                  <>
+                    <p className={managementStyles.mutedText} style={{ marginTop: "0.75rem" }}>
+                      &ldquo;{storeAiSummary.summary}&rdquo;
+                    </p>
+                    <p className={managementStyles.mutedText}>
+                      Based on {storeAiSummary.reviewCountUsed} approved review{storeAiSummary.reviewCountUsed === 1 ? "" : "s"} ·
+                      Last generated {formatGeneratedAt(storeAiSummary.generatedAt)}
+                    </p>
+                  </>
+                ) : (
+                  <p className={managementStyles.mutedText} style={{ marginTop: "0.75rem" }}>
+                    Not generated yet. This will use your store&apos;s real approved reviews only.
+                  </p>
+                )}
+
+                <div className={styles.ctaRow}>
+                  <button
+                    type="button"
+                    className={`${buttonStyles.button} ${buttonStyles.secondary}`}
+                    onClick={generateStoreSummary}
+                    disabled={!canUseAI || isGeneratingStoreSummary}
+                  >
+                    {isGeneratingStoreSummary ? "Generating…" : storeAiSummary ? "Regenerate" : "Generate summary"}
+                  </button>
+                </div>
               </div>
             </div>
           </div>
