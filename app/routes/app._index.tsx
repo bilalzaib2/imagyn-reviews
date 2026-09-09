@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import type { CSSProperties } from "react";
 import type { LoaderFunctionArgs } from "react-router";
 import { Link, useLoaderData } from "react-router";
 
@@ -84,6 +85,12 @@ const REWARDS_QUICK_ACTION = { label: "Manage Review Rewards", href: "/app/setti
 
 const RATING_VALUES = [5, 4, 3, 2, 1] as const;
 
+// One shared entrance animation (styles.reveal — see its own comment in app._index.module.css)
+// staggered by a plain inline custom property, so the page's major zones settle in as one
+// considered moment rather than popping in all at once. A CSSProperties cast is needed since
+// a custom property isn't a known style key to the DOM typings.
+const revealStyle = (stepIndex: number): CSSProperties => ({ "--reveal-delay": `${stepIndex * 60}ms` }) as CSSProperties;
+
 export default function Index() {
   const { storeName, stats, requestStats, aiSpotlight, productCoverage, rewardStats, setupGuide, automation } =
     useLoaderData<typeof loader>();
@@ -143,6 +150,8 @@ export default function Index() {
 
         {incompleteSetupItems.length > 0 ? (
           <Section
+            className={styles.reveal}
+            style={revealStyle(0)}
             title="Getting started"
             description={`${setupGuide.length - incompleteSetupItems.length} of ${setupGuide.length} done.`}
           >
@@ -166,7 +175,7 @@ export default function Index() {
           </Section>
         ) : null}
 
-        <nav className={styles.quickActions} aria-label="Quick actions">
+        <nav className={`${styles.quickActions} ${styles.reveal}`} style={revealStyle(1)} aria-label="Quick actions">
           {(rewardStats ? [...QUICK_ACTIONS, REWARDS_QUICK_ACTION] : QUICK_ACTIONS).map((action) => (
             <Link key={action.href} to={action.href} className={styles.quickActionChip}>
               {action.label}
@@ -175,7 +184,7 @@ export default function Index() {
           ))}
         </nav>
 
-        <div className={styles.group}>
+        <div className={`${styles.group} ${styles.reveal}`} style={revealStyle(2)}>
           <p className={styles.groupLabel}>Needs your attention</p>
           <div className={styles.attentionGrid}>
             {attentionCards.map((item) => (
@@ -208,7 +217,7 @@ export default function Index() {
         {/* Both conditions are real and orthogonal — a brand-new store and Shopify's pending
             approval are two different things a merchant might need to know, so both can show
             at once rather than picking one to suppress the other. */}
-        <div className={styles.banners}>
+        <div className={`${styles.banners} ${styles.reveal}`} style={revealStyle(3)}>
           {stats.totalReviews === 0 ? (
             <Banner
               title="Collect your first review"
@@ -239,7 +248,7 @@ export default function Index() {
           ) : null}
         </div>
 
-        <div className={styles.group}>
+        <div className={`${styles.group} ${styles.reveal}`} style={revealStyle(4)}>
           <p className={styles.groupLabel}>Setup &amp; health</p>
           <div className={styles.healthGrid}>
             <Card className={styles.healthCard}>
@@ -281,7 +290,7 @@ export default function Index() {
           </div>
         </div>
 
-        <Card>
+        <Card className={styles.reveal} style={revealStyle(5)}>
           <Section title="Trust Overview" description="How your store looks to shoppers right now.">
             <div className={styles.trustRow}>
               <div className={styles.trustStat}>
@@ -304,7 +313,7 @@ export default function Index() {
           </Section>
         </Card>
 
-        <div className={styles.insightsGrid}>
+        <div className={`${styles.insightsGrid} ${styles.reveal}`} style={revealStyle(6)}>
           <Card>
             <Section title="Rating Distribution" description="Approved reviews, by star rating.">
               {stats.publishedReviews === 0 ? (
@@ -362,7 +371,7 @@ export default function Index() {
         {/* Automation status folded in at the top — merged from what used to be a separate
             "Automation & reminders" health card, so this one section answers "is review
             collection actually working" instead of splitting status from performance. */}
-        <Card>
+        <Card className={styles.reveal} style={revealStyle(7)}>
           <Section title="Review Requests" description="How your automated and manual requests are performing.">
             <div className={styles.automationStatus}>
               <StatusBadge
@@ -420,7 +429,7 @@ export default function Index() {
           </Section>
         </Card>
 
-        <Card>
+        <Card className={styles.reveal} style={revealStyle(8)}>
           <Section title="Recent Activity" description="The latest review and request events for your store.">
             {stats.recentReviews.length === 0 ? (
               <EmptyState

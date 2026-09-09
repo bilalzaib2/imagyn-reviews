@@ -11,6 +11,34 @@
   gap: var(--space-10);
 }
 
+/* A single, quiet entrance for the page's major zones — fade + rise, staggered via the
+   inline --reveal-delay each zone sets (see app._index.tsx). One mechanism reused everywhere
+   rather than a bespoke animation per section, so the page reads as one considered moment on
+   load instead of a demo reel. Pure CSS (no JS mount-state, no new dependency) — animation
+   plays once on paint and never re-triggers, so it can't interfere with client-side
+   navigation back to this route. */
+.reveal {
+  animation: dashboardReveal 480ms cubic-bezier(0.16, 1, 0.3, 1) both;
+  animation-delay: var(--reveal-delay, 0ms);
+}
+
+@keyframes dashboardReveal {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .reveal {
+    animation: none;
+  }
+}
+
 
 .mutedText {
   margin: 0;
