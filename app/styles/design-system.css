@@ -1,19 +1,41 @@
 :root {
   color-scheme: light;
-  --color-background: #ffffff;
-  --color-surface: #ffffff;
-  --color-surface-muted: #fafafa;
-  --color-surface-strong: #f2f2f2;
-  --color-text: #111111;
-  --color-text-muted: #6b6b6b;
-  --color-border: #e5e5e5;
-  --color-border-strong: #d0d0d0;
-  --color-accent: #111111;
-  --color-accent-soft: #f2f2f2;
-  --color-success: #2c5e45;
-  --color-warning: #8a5a12;
-  --color-danger: #8f3c2f;
-  --color-info: #6b6b6b;
+  /* Warm, editorial base — not stark white. Every --color-surface-* below is a step of the
+     same warm neutral family, not independent grays, so the whole app reads as one considered
+     palette rather than "white with gray boxes." */
+  --color-background: #faf9f4;
+  --color-surface: #fffefb;
+  --color-surface-muted: #f4f2ea;
+  --color-surface-strong: #ece8dc;
+  --color-text: #16160f;
+  --color-text-muted: #6f6c60;
+  --color-border: #e6e2d3;
+  --color-border-strong: #d3cdb8;
+
+  /* Structural brand color — primary buttons, focus rings, "selected" states. Stays
+     near-black on purpose (see docs/DESIGN_SYSTEM.md's 2026-09-10 note): black is IMAGYN's
+     one strong, confident brand color, not a stand-in for "no real color system." */
+  --color-accent: #16160f;
+  --color-accent-soft: #efece0;
+
+  /* IMAGYN's one restrained chartreuse accent — used deliberately for genuine emphasis
+     (a real status, a key metric, an earned badge), never as a default card treatment and
+     never as the primary button color. Muted/olive-leaning on purpose, not a neon highlighter
+     — "restrained," per the brand direction, not "loud." */
+  --color-highlight: #97a819;
+  --color-highlight-strong: #6f7a13;
+
+  /* Real, distinct functional hues — previously too desaturated/brownish to read as actual
+     green/amber/red at a glance. */
+  --color-success: #1f7a45;
+  --color-warning: #b06a06;
+  --color-danger: #c23b2b;
+  /* Subtle blue, reserved for AI/integration-flavored moments (never a generic "info gray"
+     — this token existed but resolved to plain gray before, i.e. no real info color at all). */
+  --color-info: #3a5bc7;
+  /* Subtle purple, reserved specifically for AI-generated content/insights, distinct from
+     --color-info's blue (used for non-AI integration/connection states). */
+  --color-ai: #7a5cc4;
 
   --font-sans: Helvetica, Arial, sans-serif;
   --font-display: Helvetica, Arial, sans-serif;

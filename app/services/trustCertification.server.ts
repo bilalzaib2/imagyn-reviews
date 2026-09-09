@@ -1,6 +1,7 @@
 import type { AdminApiContext } from "@shopify/shopify-app-react-router/server";
 import prisma from "../db.server";
 import { ReviewStatus } from "./review.shared";
+import { MIN_VERIFIED_REVIEWS, REVIEW_PRACTICES_THRESHOLD } from "./trustCertification.presentation";
 
 // IMAGYN Trust Certification — see the TrustCertification model's own header comment in
 // schema.prisma for the full architectural rationale. This file is the ONLY place any pillar
@@ -15,9 +16,10 @@ export type PillarStatus = "met" | "not_met" | "pending" | "needs_permission";
 export type OverallStatus = "certified" | "pending" | "at_risk" | "paused" | "not_certified" | "needs_permission";
 
 // Real, deliberate thresholds — not tunable per merchant (that would let a store lower the
-// bar until it passes, which is exactly what "no fake certification" prohibits).
-export const MIN_VERIFIED_REVIEWS = 5;
-const REVIEW_PRACTICES_THRESHOLD_PERCENT = 95;
+// bar until it passes, which is exactly what "no fake certification" prohibits). Canonical
+// values live in trustCertification.presentation.ts (see its own comment); re-exported here
+// so every existing import of these two names from this file keeps working unchanged.
+export { MIN_VERIFIED_REVIEWS, REVIEW_PRACTICES_THRESHOLD };
 const MIN_STORE_AGE_DAYS = 90; // ~3 months
 
 export interface ReviewPracticesResult {
@@ -56,14 +58,14 @@ export function calculateReviewPracticesPillar(
     };
   }
 
-  if (percent >= REVIEW_PRACTICES_THRESHOLD_PERCENT) {
+  if (percent >= REVIEW_PRACTICES_THRESHOLD) {
     return { status: "met", percent, reason: null, verifiedReviewCount, verifiedAverageRating };
   }
 
   return {
     status: "not_met",
     percent,
-    reason: `${percent}% of verified reviews are published — ${REVIEW_PRACTICES_THRESHOLD_PERCENT}% is required.`,
+    reason: `${percent}% of verified reviews are published — ${REVIEW_PRACTICES_THRESHOLD}% is required.`,
     verifiedReviewCount,
     verifiedAverageRating,
   };
@@ -364,7 +366,6 @@ export async function setTrustCertificationPaused(storeId: string, paused: boole
   });
 }
 
-export const REVIEW_PRACTICES_THRESHOLD = REVIEW_PRACTICES_THRESHOLD_PERCENT;
 export const MIN_STORE_AGE_DAYS_EXPORT = MIN_STORE_AGE_DAYS;
 
 // ---------------------------------------------------------------------------

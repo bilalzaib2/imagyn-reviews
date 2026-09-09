@@ -59,6 +59,30 @@
 .summaryCard {
   display: grid;
   gap: var(--space-1);
+  padding: var(--space-3) var(--space-4);
+  border-radius: var(--radius-lg);
+  border: 1px solid transparent;
+}
+
+/* Real, threshold-based tone (see toneForRating/toneForShare in app.analytics.tsx) — a
+   tinted surface + colored value, never a border-left rail, for the one or two headline
+   metrics whose real number genuinely reads as good or attention-worthy. */
+.summaryCardPositive {
+  background: color-mix(in srgb, var(--color-success) 8%, var(--color-surface));
+  border-color: color-mix(in srgb, var(--color-success) 22%, var(--color-border));
+}
+
+.summaryCardPositive .summaryValue {
+  color: var(--color-success);
+}
+
+.summaryCardAttention {
+  background: color-mix(in srgb, var(--color-warning) 8%, var(--color-surface));
+  border-color: color-mix(in srgb, var(--color-warning) 22%, var(--color-border));
+}
+
+.summaryCardAttention .summaryValue {
+  color: var(--color-warning);
 }
 
 .summaryValue {
@@ -143,7 +167,7 @@
   display: block;
   height: 100%;
   border-radius: var(--radius-full);
-  background: var(--color-accent);
+  background: var(--color-highlight);
 }
 
 .ratingBarCount {
@@ -181,7 +205,7 @@
   width: 100%;
   min-height: 2px;
   border-radius: 2px 2px 0 0;
-  background: var(--color-accent);
+  background: var(--color-highlight);
   transition: height var(--transition-base);
 }
 
@@ -191,6 +215,120 @@
   margin-top: var(--space-2);
   font-size: var(--text-xs);
   color: var(--color-text-muted);
+}
+
+/* Request funnel — three real stages (created/sent/completed), each bar's width its own real
+   share of the total. A funnel shape communicates drop-off at a glance; the table above this
+   card already gave the raw numbers, this gives their shape. */
+.funnel {
+  display: grid;
+  gap: var(--space-3);
+}
+
+.funnelRow {
+  display: grid;
+  grid-template-columns: 5.5rem 1fr auto;
+  align-items: center;
+  gap: var(--space-3);
+}
+
+.funnelLabel {
+  font-size: var(--text-sm);
+  color: var(--color-text-muted);
+}
+
+.funnelTrack {
+  height: 0.75rem;
+  border-radius: var(--radius-full);
+  background: var(--color-surface-strong);
+  overflow: hidden;
+}
+
+.funnelFill {
+  display: block;
+  height: 100%;
+  border-radius: var(--radius-full);
+  background: var(--color-highlight);
+  transition: width var(--transition-base);
+}
+
+.funnelCount {
+  font-size: var(--text-sm);
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.funnelPercent {
+  font-weight: 400;
+  color: var(--color-text-muted);
+}
+
+/* Conversion-by-source/-delay — a real proportional bar per row instead of a bare number
+   table, so the completion rate is visually legible, not just printed. */
+.conversionList {
+  display: grid;
+  gap: var(--space-4);
+}
+
+.conversionRow {
+  display: grid;
+  gap: var(--space-1);
+}
+
+.conversionHead {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+}
+
+.conversionLabel {
+  font-size: var(--text-sm);
+  font-weight: 600;
+}
+
+.conversionRate {
+  font-size: var(--text-sm);
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+
+.conversionTrack {
+  height: 0.4rem;
+  border-radius: var(--radius-full);
+  background: var(--color-surface-strong);
+  overflow: hidden;
+}
+
+.conversionFill {
+  display: block;
+  height: 100%;
+  border-radius: var(--radius-full);
+  background: var(--color-highlight);
+  transition: width var(--transition-base);
+}
+
+.conversionMeta {
+  font-size: var(--text-xs);
+  color: var(--color-text-muted);
+}
+
+/* AI review insights — tinted with --color-ai (not a border-left rail) so AI-generated
+   content reads as its own real category, matching the same treatment the Dashboard's AI
+   Spotlight card and Reviews' AI callout already use this session. */
+.aiCard {
+  background: color-mix(in srgb, var(--color-ai) 5%, var(--color-surface));
+  border-color: color-mix(in srgb, var(--color-ai) 16%, var(--color-border));
+}
+
+.aiDot {
+  display: inline-block;
+  width: 0.4rem;
+  height: 0.4rem;
+  margin-right: var(--space-2);
+  border-radius: 50%;
+  background: var(--color-ai);
+  vertical-align: middle;
 }
 
 .proContent {

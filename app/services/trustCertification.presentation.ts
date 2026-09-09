@@ -1,5 +1,16 @@
 import type { OverallStatus, PillarStatus, TrustCertificationSnapshot } from "./trustCertification.server";
 
+// Real, deliberate thresholds — canonical home is here (not trustCertification.server.ts)
+// specifically because these two are the only two Trust Certification constants a route's
+// CLIENT-rendered component needs (for an honest progress-bar calculation) — see
+// app._index.tsx / app.settings.trust.tsx. A route component importing a value from a
+// `.server.ts` module pulls that entire server module (Prisma, Admin API calls) into the
+// client bundle, which React Router's build correctly refuses. trustCertification.server.ts
+// imports these back from here for its own internal use, so there is still exactly one
+// source of truth, not two copies that could drift.
+export const MIN_VERIFIED_REVIEWS = 5;
+export const REVIEW_PRACTICES_THRESHOLD = 95;
+
 // Real copy only — every string here describes a genuine PillarStatus/OverallStatus value the
 // service layer can actually return, never an invented "looks nice" label. Shared between the
 // Dashboard Trust & Certification card and the Settings > Trust & Certification page so the two

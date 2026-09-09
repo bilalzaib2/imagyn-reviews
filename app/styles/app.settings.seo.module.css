@@ -1,0 +1,269 @@
+/* Settings > Growth > Google, SEO & AI — a dedicated module, not a force-fit into
+   app.management.module.css's plain settings-list primitives. This page's real content
+   (a live rich-snippet status, a live feed with a real eligible/excluded ratio, AI
+   capabilities, distribution channels) reads as a command center, not a form, so it needs
+   its own feature-card language: an icon chip + tinted identity per real category, a status
+   pill, and a real metric/ratio where one genuinely exists — never decoration.
+
+   No black left-rail anywhere here — identity comes from the icon chip's tint, the status
+   pill, and typography, matching this session's global "remove the black rail as a default
+   card motif" direction. */
+
+.intro {
+  display: grid;
+  gap: var(--space-2);
+  margin-bottom: var(--space-2);
+}
+
+.introEyebrow {
+  margin: 0;
+  font-size: var(--text-xs);
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--color-text-muted);
+}
+
+.introText {
+  margin: 0;
+  max-width: 60ch;
+  color: var(--color-text-muted);
+  font-size: var(--text-sm);
+  line-height: 1.6;
+}
+
+.grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: var(--space-4);
+}
+
+.cardWide {
+  grid-column: 1 / -1;
+}
+
+@media (max-width: 860px) {
+  .grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+.card {
+  display: grid;
+  gap: var(--space-3);
+  align-content: start;
+  padding: var(--space-5) var(--space-6);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  background: var(--color-surface);
+}
+
+/* Each real category gets its own quiet identity tint — never a loud full-card wash, just
+   enough to let a merchant tell "this is the AI section" from "this is the Google section"
+   at a glance, the way a section label alone can't. */
+.card[data-tone="ai"] {
+  background: color-mix(in srgb, var(--color-ai) 5%, var(--color-surface));
+  border-color: color-mix(in srgb, var(--color-ai) 20%, var(--color-border));
+}
+
+.card[data-tone="info"] {
+  background: color-mix(in srgb, var(--color-info) 5%, var(--color-surface));
+  border-color: color-mix(in srgb, var(--color-info) 18%, var(--color-border));
+}
+
+.card[data-tone="success"] {
+  background: color-mix(in srgb, var(--color-success) 5%, var(--color-surface));
+  border-color: color-mix(in srgb, var(--color-success) 18%, var(--color-border));
+}
+
+.cardHeader {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--space-3);
+}
+
+.cardHeaderLeft {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  min-width: 0;
+}
+
+.iconChip {
+  flex: none;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 2.25rem;
+  height: 2.25rem;
+  border-radius: var(--radius-md);
+  color: var(--color-text);
+}
+
+.iconChip svg {
+  width: 1.15rem;
+  height: 1.15rem;
+}
+
+.iconChip[data-tone="ai"] {
+  background: color-mix(in srgb, var(--color-ai) 16%, transparent);
+  color: var(--color-ai);
+}
+
+.iconChip[data-tone="info"] {
+  background: color-mix(in srgb, var(--color-info) 16%, transparent);
+  color: var(--color-info);
+}
+
+.iconChip[data-tone="success"] {
+  background: color-mix(in srgb, var(--color-success) 16%, transparent);
+  color: var(--color-success);
+}
+
+.iconChip[data-tone="neutral"] {
+  background: var(--color-surface-strong);
+  color: var(--color-text-muted);
+}
+
+.cardTitle {
+  margin: 0;
+  font-size: var(--text-base);
+  font-weight: 600;
+  color: var(--color-text);
+}
+
+.cardDescription {
+  margin: 0;
+  color: var(--color-text-muted);
+  font-size: var(--text-sm);
+  line-height: 1.6;
+}
+
+/* Local status pill — same visual language as components/ui/StatusBadge, but covers two
+   tones (info, ai) that component doesn't have yet, kept local here rather than widening a
+   shared component mid-way through a multi-file design pass other work is also touching. */
+.pill {
+  display: inline-flex;
+  align-items: center;
+  flex: none;
+  padding: 0.2rem 0.55rem;
+  border-radius: var(--radius-full);
+  font-size: var(--text-xs);
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.pillInfo {
+  color: var(--color-info);
+  background: color-mix(in srgb, var(--color-info) 14%, transparent);
+}
+
+.pillAi {
+  color: var(--color-ai);
+  background: color-mix(in srgb, var(--color-ai) 14%, transparent);
+}
+
+.metricRow {
+  display: flex;
+  align-items: baseline;
+  gap: var(--space-2);
+}
+
+.metricValue {
+  margin: 0;
+  font-size: var(--text-2xl);
+  font-weight: 600;
+  letter-spacing: -0.02em;
+  font-variant-numeric: tabular-nums;
+  color: var(--color-text);
+}
+
+.metricLabel {
+  margin: 0;
+  color: var(--color-text-muted);
+  font-size: var(--text-sm);
+}
+
+/* A real eligible/excluded ratio — never decoration. Hidden entirely by the route when
+   there's nothing real to show a ratio of yet. */
+.ratioTrack {
+  height: 0.4rem;
+  border-radius: var(--radius-full);
+  background: var(--color-surface-strong);
+  overflow: hidden;
+}
+
+.ratioFill {
+  display: block;
+  height: 100%;
+  border-radius: var(--radius-full);
+  background: var(--color-info);
+}
+
+.ctaRow {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  flex-wrap: wrap;
+}
+
+.codeUrl {
+  padding: 0.15rem 0.4rem;
+  border-radius: var(--radius-sm);
+  background: var(--color-surface-strong);
+  font-size: var(--text-xs);
+  word-break: break-all;
+}
+
+.aiFeatureRow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+  padding: var(--space-3) 0;
+  border-top: 1px solid color-mix(in srgb, var(--color-ai) 14%, var(--color-border));
+}
+
+.aiFeatureRow:first-of-type {
+  border-top: none;
+  padding-top: 0;
+}
+
+.aiFeatureName {
+  margin: 0;
+  font-size: var(--text-sm);
+  font-weight: 600;
+  color: var(--color-text);
+}
+
+.aiFeatureDetail {
+  margin: 0.15rem 0 0;
+  color: var(--color-text-muted);
+  font-size: var(--text-xs);
+}
+
+/* Quiet, deliberately low-weight — a roadmap note is honestly "not real yet," so it should
+   never compete visually with the real feature cards above it. Dashed border is this app's
+   existing vocabulary for "auxiliary, not primary" (see app.management.module.css's
+   .diagnosticsBlock for the same idea, defined independently here to avoid touching that
+   shared file mid-pass). */
+.roadmapCard {
+  padding: var(--space-4) var(--space-5);
+  border: 1px dashed var(--color-border-strong);
+  border-radius: var(--radius-lg);
+  background: transparent;
+}
+
+.roadmapLabel {
+  margin: 0 0 var(--space-1);
+  font-size: var(--text-sm);
+  font-weight: 600;
+  color: var(--color-text-muted);
+}
+
+.roadmapText {
+  margin: 0;
+  color: var(--color-text-muted);
+  font-size: var(--text-sm);
+}

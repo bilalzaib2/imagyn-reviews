@@ -28,6 +28,9 @@ import { LinkButton } from "../components/ui/LinkButton";
 import { Section } from "../components/ui/Section";
 import { ReviewStatusBadge } from "../components/reviews/ReviewStatusBadge";
 import { VerifiedBadge } from "../components/reviews/VerifiedBadge";
+import { ImportedBadge } from "../components/reviews/ImportedBadge";
+import { FeaturedBadge } from "../components/reviews/FeaturedBadge";
+import { RewardBadge } from "../components/reviews/RewardBadge";
 import { StarRating } from "../components/reviews/StarRating";
 import {
   approveReview,
@@ -343,6 +346,42 @@ const formatLongDate = (value: Date) =>
   }).format(new Date(value));
 
 const formatCount = (value: number) => new Intl.NumberFormat("en").format(value);
+
+// Compact list-row signal icons — plain inline SVG, no external icon library (matches this
+// codebase's existing ad-hoc inline-SVG convention). Each one only renders when its row
+// actually has that real, true condition (see the callers below) — a row with none of these
+// shows none of these, so the list stays quiet for the common case and only lights up for a
+// review that's genuinely notable in that specific way.
+function MediaIcon() {
+  return (
+    <svg width="12" height="12" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+      <rect x="2" y="4.5" width="12" height="9" rx="1.5" stroke="currentColor" strokeWidth="1.3" />
+      <path d="M5.5 4.5l1.2-1.8h2.6l1.2 1.8" stroke="currentColor" strokeWidth="1.3" strokeLinejoin="round" />
+      <circle cx="8" cy="9" r="2.2" stroke="currentColor" strokeWidth="1.3" />
+    </svg>
+  );
+}
+
+function ReplyIcon() {
+  return (
+    <svg width="12" height="12" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+      <path
+        d="M3 9.5c0-2.8 2.2-5 5-5s5 2.2 5 5-2.2 5-5 5H5.2L3 16v-3.2C3 11.8 3 10.6 3 9.5z"
+        stroke="currentColor"
+        strokeWidth="1.3"
+        strokeLinejoin="round"
+      />
+    </svg>
+  );
+}
+
+function FeaturedIcon() {
+  return (
+    <svg width="12" height="12" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true">
+      <path d="M8 1.6l1.85 3.75 4.15.6-3 2.93.7 4.13L8 11.05l-3.7 1.96.7-4.13-3-2.93 4.15-.6z" />
+    </svg>
+  );
+}
 
 export default function ReviewsPage() {
   const loaderData = useLoaderData<typeof loader>();
@@ -1250,6 +1289,29 @@ export default function ReviewsPage() {
                                   ) : null}
                                   <span className={styles.metaSeparator} aria-hidden="true">·</span>
                                   <span className={styles.metaProduct}>{productName}</span>
+                                  {review.featured || review.media.length > 0 || review.reply ? (
+                                    <span className={styles.metaSignals}>
+                                      {review.featured ? (
+                                        <span className={`${styles.metaSignal} ${styles.metaSignalHighlight}`} title="Featured">
+                                          <FeaturedIcon />
+                                        </span>
+                                      ) : null}
+                                      {review.media.length > 0 ? (
+                                        <span
+                                          className={styles.metaSignal}
+                                          title={`${review.media.length} photo${review.media.length === 1 ? "" : "s"}/video${review.media.length === 1 ? "" : "s"}`}
+                                        >
+                                          <MediaIcon />
+                                          {review.media.length}
+                                        </span>
+                                      ) : null}
+                                      {review.reply ? (
+                                        <span className={`${styles.metaSignal} ${styles.metaSignalSuccess}`} title="Replied">
+                                          <ReplyIcon />
+                                        </span>
+                                      ) : null}
+                                    </span>
+                                  ) : null}
                                 </p>
                               </td>
                               <td className={styles.tdStatus}>
@@ -1286,6 +1348,9 @@ export default function ReviewsPage() {
                           <span className={styles.autoApprovedBadge}>Auto Approved</span>
                         ) : null}
                         {selectedReview.verifiedPurchase ? <VerifiedBadge /> : null}
+                        {selectedReview.externalId ? <ImportedBadge /> : null}
+                        {selectedReview.featured ? <FeaturedBadge /> : null}
+                        <RewardBadge reward={selectedReview.reward} />
                       </div>
                       <h2 className={selectedReview.title ? styles.detailTitle : `${styles.detailTitle} ${styles.detailTitleEmpty}`}>
                         {selectedReview.title ?? "No title provided"}
@@ -1305,7 +1370,7 @@ export default function ReviewsPage() {
 
                       {aiSummaries[selectedReview.productId] ? (
                         <div className={styles.aiSummaryCallout}>
-                          <p className={styles.aiSummaryLabel}>✨ AI Summary</p>
+                          <p className={styles.aiSummaryLabel}>AI Summary</p>
                           <p className={styles.aiSummaryText}>{aiSummaries[selectedReview.productId].summary}</p>
                           {aiSummaries[selectedReview.productId].recommendation ? (
                             <p className={styles.aiSummaryRecommendation}>

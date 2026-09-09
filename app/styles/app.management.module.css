@@ -111,14 +111,57 @@
   flex-wrap: wrap;
 }
 
-/* Opt-in modifier (append alongside `.card`, never replaces it) — a quiet left accent for a
+/* Opt-in modifier (append alongside `.card`, never replaces it) — real visual hierarchy for a
    row that's genuinely live/active/has-real-content right now (an active coupon, a referral
    with a real conversion, a group with members), so a list of otherwise-identical `.card`
-   rows gets real visual hierarchy instead of a flat, undifferentiated stack. Same restrained
-   language as app._index.module.css's `.attentionCardActive` (border-left accent only, no
-   new color) — never applied automatically, only where a caller has a genuine reason. */
+   rows doesn't read as a flat, undifferentiated stack. 2026-09-10: replaced the earlier
+   black-left-border treatment (a motif the user explicitly flagged as overused everywhere in
+   the app) with a genuine success-tinted surface + hairline ring — "this row is active" is a
+   real, positive state, so it earns a real color, not a monochrome bar. Never applied
+   automatically, only where a caller has a genuine reason. */
 .cardAccent {
-  border-left: 3px solid var(--color-accent);
+  background: color-mix(in srgb, var(--color-success) 7%, var(--color-surface-muted));
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--color-success) 20%, transparent);
+}
+
+/* Small real-metric pill — a positive/neutral count shown inline next to a title (coupon
+   discount value, referral conversion count, product-group member count). Neutral by default;
+   pass a real semantic modifier only when the number itself represents a genuinely positive
+   state (see call sites). */
+.metricPill {
+  display: inline-flex;
+  align-items: center;
+  padding: 0.15rem 0.55rem;
+  border-radius: var(--radius-full);
+  font-size: var(--text-xs);
+  font-weight: 600;
+  background: var(--color-surface-strong);
+  color: var(--color-text-muted);
+}
+
+.metricPillHighlight {
+  background: color-mix(in srgb, var(--color-highlight) 16%, transparent);
+  color: var(--color-highlight-strong);
+}
+
+.metricPillSuccess {
+  background: color-mix(in srgb, var(--color-success) 14%, transparent);
+  color: var(--color-success);
+}
+
+/* Real per-state coloring for a stat value (Reward activity's Issued/Pending/Failed/Didn't
+   qualify) — the number itself carries meaning, so it earns a real color instead of every
+   stat reading in the same neutral ink regardless of whether it's good, waiting, or bad. */
+.statValueSuccess {
+  color: var(--color-success);
+}
+
+.statValueWarning {
+  color: var(--color-warning);
+}
+
+.statValueDanger {
+  color: var(--color-danger);
 }
 
 .inlineActions {
@@ -164,4 +207,61 @@
    shared here since every Settings sub-page needs it identically. */
 .toastFrame :global(.Polaris-Frame) {
   display: contents;
+}
+
+/* Trust & Certification's elevated overall-status presentation — a tinted surface block, not
+   a small badge floating next to a heading. Additive only: used solely by
+   app.settings.trust.tsx, doesn't change any existing rule other Settings sub-pages rely on. */
+.statusHero {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--space-4);
+  padding: var(--space-5) var(--space-6);
+  border-radius: var(--radius-lg);
+  background: var(--color-surface-muted);
+}
+
+.statusHero > div {
+  display: grid;
+  gap: var(--space-2);
+}
+
+/* Each certification-requirement row: a real status icon (PillarStatusIcon) beside its own
+   content column, rather than a plain heading + paragraph with no visual hierarchy. */
+.pillarRowHeader {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-3);
+}
+
+.pillarRowBody {
+  display: grid;
+  gap: var(--space-2);
+  min-width: 0;
+  flex: 1;
+}
+
+/* Only rendered for the one certification requirement with a genuinely gradual real ratio
+   (Transparent Review Practices) — never a decorative bar for a binary/permission-gated one. */
+.pillarProgressTrack {
+  height: 0.35rem;
+  border-radius: var(--radius-full);
+  background: var(--color-surface-strong);
+  overflow: hidden;
+}
+
+.pillarProgressFill {
+  display: block;
+  height: 100%;
+  border-radius: var(--radius-full);
+  background: var(--color-highlight);
+  transition: width var(--transition-base);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .pillarProgressFill {
+    transition: none;
+  }
 }

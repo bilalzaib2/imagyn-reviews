@@ -3,23 +3,26 @@ import { useFetcher, useLoaderData, useRouteError } from "react-router";
 import type { ActionFunctionArgs, HeadersFunction, LoaderFunctionArgs } from "react-router";
 import { boundary } from "@shopify/shopify-app-react-router/server";
 import { Checkbox, Frame, Toast } from "@shopify/polaris";
-import { Section } from "../components/ui/Section";
-import { StatusBadge, type StatusBadgeTone } from "../components/ui/StatusBadge";
+import { StatusBadge } from "../components/ui/StatusBadge";
 import { authenticateAdminDeduped } from "../services/auth-dedupe.server";
 import { getOrCreateStore } from "../services/store.server";
 import { getStorePermissions } from "../services/permissions";
 import { getFeedReadiness, setGoogleFeedEnabled, type FeedReadiness } from "../services/googleReviewFeed.server";
 import { getReviewSiteUrl } from "../services/reviewSite.server";
 import buttonStyles from "../components/ui/button.module.css";
-import styles from "../styles/app.management.module.css";
+import managementStyles from "../styles/app.management.module.css";
+import styles from "../styles/app.settings.seo.module.css";
 
-// Settings > Growth > Google, SEO & AI — a real status page, not a settings form: every item
-// here either already works (structured data, AI summaries, the review feed below — all
-// genuinely shipped) or is honestly marked as not built. No toggle exists for anything
-// without a real backend, per the "never pretend" rule — a merchant reading this page should
-// never wonder if a switch here actually does anything. Copy here is merchant-facing only —
-// no file paths, service names, or other implementation details; that's what
-// DECISIONS.md/code comments are for.
+// Settings > Growth > Google, SEO & AI — IMAGYN's "growth command center": every card here
+// either already works (structured data, the review feed, AI summaries + AI reply drafting —
+// all genuinely shipped) or is honestly marked as not built yet under "Coming next." No
+// toggle exists for anything without a real backend, per the "never pretend" rule. Loader/
+// action shape is unchanged from before this visual pass — this file only changes how the
+// same real data is presented. Copy is merchant-facing only.
+//
+// "Search engine visibility" and "structured data / SEO status" are the same real fact
+// (the JSON-LD this app writes IS the rich-snippet markup) — presented as one honest card
+// below rather than two cards making the same claim differently.
 type LoaderData = {
   canUseAI: boolean;
   feed: FeedReadiness;
@@ -55,22 +58,53 @@ export const action = async ({ request }: ActionFunctionArgs): Promise<ActionDat
   }
 };
 
-const STATUS_TONE: Record<string, StatusBadgeTone> = {
-  Live: "success",
-  "Available on your plan": "success",
-  "Requires Pro": "pro",
-  "Not available yet": "neutral",
-};
-
-function StatusRow({ label, state, description }: { label: string; state: string; description: string }) {
+// Minimal inline line-icons — no external icon library, matching the "restrained, no
+// gratuitous decoration" direction. Single-color (currentColor), 20x20 viewBox.
+function SearchIcon() {
   return (
-    <div className={styles.fieldGroup}>
-      <div className={styles.cardHeader}>
-        <span className={styles.settingsGroupLabel}>{label}</span>
-        <StatusBadge tone={STATUS_TONE[state] ?? "neutral"}>{state}</StatusBadge>
-      </div>
-      <p className={styles.mutedText}>{description}</p>
-    </div>
+    <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" aria-hidden="true">
+      <circle cx="8.5" cy="8.5" r="5.5" />
+      <line x1="17" y1="17" x2="13" y2="13" />
+    </svg>
+  );
+}
+
+function ShoppingBagIcon() {
+  return (
+    <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <path d="M5 7h10l-.8 9.2a1 1 0 0 1-1 .8H6.8a1 1 0 0 1-1-.8L5 7z" />
+      <path d="M7.5 7V5.5a2.5 2.5 0 0 1 5 0V7" />
+    </svg>
+  );
+}
+
+function ShareNodesIcon() {
+  return (
+    <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" aria-hidden="true">
+      <circle cx="5" cy="10" r="2.2" />
+      <circle cx="15" cy="4.5" r="2.2" />
+      <circle cx="15" cy="15.5" r="2.2" />
+      <line x1="7" y1="9" x2="13" y2="5.5" />
+      <line x1="7" y1="11" x2="13" y2="14.5" />
+    </svg>
+  );
+}
+
+function GlobeIcon() {
+  return (
+    <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" aria-hidden="true">
+      <circle cx="10" cy="10" r="7.2" />
+      <ellipse cx="10" cy="10" rx="3.1" ry="7.2" />
+      <line x1="2.8" y1="10" x2="17.2" y2="10" />
+    </svg>
+  );
+}
+
+function SparkleIcon() {
+  return (
+    <svg viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
+      <path d="M10 2.2c.3 3 1.4 5 3.3 6.5 1.9 1.5 3.3 1.6 3.3 1.3s-1.4-.2-3.3 1.3c-1.9 1.5-3 3.5-3.3 6.5-.3-3-1.4-5-3.3-6.5C4.8 9.8 3.4 9.7 3.4 10s1.4.2 3.3-1.3c1.9-1.5 3-3.5 3.3-6.5z" />
+    </svg>
   );
 }
 
@@ -81,6 +115,9 @@ export default function SettingsSeoPage() {
   const [toast, setToast] = useState<{ content: string; error?: boolean } | null>(null);
   const feedUrl = fetcher.data?.ok ? fetcher.data.feedUrl : feed.feedUrl;
   const distributionFeedUrl = fetcher.data?.ok ? fetcher.data.distributionFeedUrl : feed.distributionFeedUrl;
+
+  const totalFeedReviews = feed.eligibleReviewCount + feed.excludedReviewCount;
+  const eligibleSharePercent = totalFeedReviews > 0 ? Math.round((feed.eligibleReviewCount / totalFeedReviews) * 100) : null;
 
   useEffect(() => {
     if (!fetcher.data) return;
@@ -102,114 +139,199 @@ export default function SettingsSeoPage() {
 
   return (
     <>
-      <Section
-        title="Search engine visibility"
-        description="Helps Google and other search engines show your star rating directly in search results."
-      >
-        <StatusRow
-          label="Review & rating rich snippets"
-          state="Live"
-          description={
-            'Every product page automatically publishes your real approved reviews and average rating in the format search engines look for — no setup needed. You can turn this off for a specific theme from the "Product Reviews Widget" block\'s "Include reviews in search engine markup" setting in the Shopify Theme Editor.'
-          }
-        />
-      </Section>
-
-      <Section
-        title="Google Shopping — review feed"
-        description="A live feed of your approved reviews, in the format Google Merchant Center accepts, ready for you to connect."
-      >
-        <Checkbox label="Turn on the review feed" checked={enabled} onChange={toggle} disabled={fetcher.state !== "idle"} />
-
-        {enabled && feedUrl ? (
-          <>
-            <p className={styles.mutedText}>
-              Feed URL: <code>{feedUrl}</code>
-            </p>
-            <div className={styles.inlineActions}>
-              <a href={feedUrl} target="_blank" rel="noreferrer" className={`${buttonStyles.button} ${buttonStyles.secondary}`}>
-                Preview feed
-              </a>
-            </div>
-            <p className={styles.mutedText}>
-              {feed.eligibleReviewCount} review{feed.eligibleReviewCount === 1 ? "" : "s"} included right now
-              {feed.excludedReviewCount > 0
-                ? ` (${feed.excludedReviewCount} excluded — ${feed.excludedReasons.noProductHandle} missing a storefront product link, ${feed.excludedReasons.missingContent} with no written content)`
-                : ""}
-              .
-            </p>
-            <p className={styles.mutedText}>
-              To show these on Google Shopping, add this URL as a scheduled fetch in Google Merchant Center under{" "}
-              <strong>Products &gt; Feeds</strong>. This requires a Google Merchant Center account, which is a separate step you
-              complete directly with Google — Imagyn doesn&apos;t create or manage that account for you.
-            </p>
-          </>
-        ) : null}
-
-        {!feed.hasStoreDomain ? (
-          <p className={styles.mutedText}>Your store needs a storefront domain on file before the feed can include any products.</p>
-        ) : null}
-      </Section>
-
-      <Section
-        title="Other distribution channels"
-        description="The same approved reviews as plain JSON, for any ad network, affiliate feed, or script that isn't Google Merchant Center specifically. Same on/off switch as the feed above — turning it on or off there controls this too."
-      >
-        {enabled && distributionFeedUrl ? (
-          <>
-            <p className={styles.mutedText}>
-              Feed URL: <code>{distributionFeedUrl}</code>
-            </p>
-            <div className={styles.inlineActions}>
-              <a
-                href={distributionFeedUrl}
-                target="_blank"
-                rel="noreferrer"
-                className={`${buttonStyles.button} ${buttonStyles.secondary}`}
-              >
-                Preview feed
-              </a>
-            </div>
-          </>
-        ) : (
-          <p className={styles.mutedText}>Turn on the review feed above to get a URL here.</p>
-        )}
-      </Section>
-
-      <Section
-        title="Public review page"
-        description="A shareable page listing your real approved reviews — link to it from an email signature, social bio, or ad landing page. Always available; no separate switch, since these are the same already-published reviews your storefront widgets show."
-      >
-        <p className={styles.mutedText}>
-          Page URL: <code>{reviewSiteUrl}</code>
+      <div className={styles.intro}>
+        <p className={styles.introEyebrow}>Growth</p>
+        <p className={styles.introText}>
+          How your real, approved reviews reach shoppers beyond your storefront — search engines, Google Shopping, AI
+          summaries, and anywhere else you choose to share them.
         </p>
-        <div className={styles.inlineActions}>
-          <a href={reviewSiteUrl} target="_blank" rel="noreferrer" className={`${buttonStyles.button} ${buttonStyles.secondary}`}>
-            View page
-          </a>
+      </div>
+
+      <div className={styles.grid}>
+        <div className={styles.card} data-tone="success">
+          <div className={styles.cardHeader}>
+            <div className={styles.cardHeaderLeft}>
+              <span className={styles.iconChip} data-tone="success">
+                <SearchIcon />
+              </span>
+              <p className={styles.cardTitle}>Search engine visibility</p>
+            </div>
+            <StatusBadge tone="success">Live</StatusBadge>
+          </div>
+          <p className={styles.cardDescription}>
+            Every product page automatically publishes real structured data (star rating + approved reviews, in the
+            format search engines look for) — no setup needed. Turn this off for a specific theme from the
+            &quot;Product Reviews Widget&quot; block&apos;s &quot;Include reviews in search engine markup&quot;
+            setting in the Shopify Theme Editor.
+          </p>
         </div>
-      </Section>
 
-      <Section
-        title="AI Review Summaries"
-        description="A short, AI-generated summary of what customers say about a product, shown in your admin and (where enabled) on your storefront."
-      >
-        <StatusRow
-          label="AI Review Summaries"
-          state={canUseAI ? "Available on your plan" : "Requires Pro"}
-          description="Generated from your store's own real, approved reviews — never fabricated. Regenerate it any time from a product's detail page."
-        />
-      </Section>
+        <div className={`${styles.card} ${styles.cardWide}`} data-tone="info">
+          <div className={styles.cardHeader}>
+            <div className={styles.cardHeaderLeft}>
+              <span className={styles.iconChip} data-tone="info">
+                <ShoppingBagIcon />
+              </span>
+              <p className={styles.cardTitle}>Google Shopping — review feed</p>
+            </div>
+            <StatusBadge tone={enabled ? "success" : "neutral"}>{enabled ? "On" : "Off"}</StatusBadge>
+          </div>
+          <p className={styles.cardDescription}>
+            A live feed of your approved reviews, in the format Google Merchant Center accepts, ready for you to
+            connect.
+          </p>
 
-      <Section title="Coming next" description="Ideas on our roadmap. Nothing below is available yet, and nothing on this page claims otherwise.">
-        <StatusRow
-          label="AI shopping assistant visibility"
-          state="Not available yet"
-          description="Making your review content easier for AI shopping assistants to reference when customers ask about your products."
-        />
-      </Section>
+          <Checkbox label="Turn on the review feed" checked={enabled} onChange={toggle} disabled={fetcher.state !== "idle"} />
 
-      <div className={styles.toastFrame}>
+          {enabled && feedUrl ? (
+            <>
+              {totalFeedReviews > 0 ? (
+                <div>
+                  <div className={styles.metricRow}>
+                    <p className={styles.metricValue}>{feed.eligibleReviewCount}</p>
+                    <p className={styles.metricLabel}>
+                      of {totalFeedReviews} review{totalFeedReviews === 1 ? "" : "s"} included right now
+                    </p>
+                  </div>
+                  <div className={styles.ratioTrack} role="presentation">
+                    <span className={styles.ratioFill} style={{ width: `${eligibleSharePercent ?? 0}%` }} />
+                  </div>
+                  {feed.excludedReviewCount > 0 ? (
+                    <p className={managementStyles.mutedText}>
+                      {feed.excludedReviewCount} excluded — {feed.excludedReasons.noProductHandle} missing a storefront
+                      product link, {feed.excludedReasons.missingContent} with no written content.
+                    </p>
+                  ) : null}
+                </div>
+              ) : (
+                <p className={managementStyles.mutedText}>No reviews are eligible for the feed yet.</p>
+              )}
+
+              <p className={managementStyles.mutedText}>
+                Feed URL: <code className={styles.codeUrl}>{feedUrl}</code>
+              </p>
+              <div className={styles.ctaRow}>
+                <a href={feedUrl} target="_blank" rel="noreferrer" className={`${buttonStyles.button} ${buttonStyles.secondary}`}>
+                  Preview feed
+                </a>
+              </div>
+              <p className={managementStyles.mutedText}>
+                To show these on Google Shopping, add this URL as a scheduled fetch in Google Merchant Center under{" "}
+                <strong>Products &gt; Feeds</strong>. This requires a Google Merchant Center account, which is a separate
+                step you complete directly with Google — Imagyn doesn&apos;t create or manage that account for you.
+              </p>
+            </>
+          ) : null}
+
+          {!feed.hasStoreDomain ? (
+            <p className={managementStyles.mutedText}>Your store needs a storefront domain on file before the feed can include any products.</p>
+          ) : null}
+        </div>
+
+        <div className={styles.card} data-tone="info">
+          <div className={styles.cardHeader}>
+            <div className={styles.cardHeaderLeft}>
+              <span className={styles.iconChip} data-tone="info">
+                <ShareNodesIcon />
+              </span>
+              <p className={styles.cardTitle}>Other distribution channels</p>
+            </div>
+          </div>
+          <p className={styles.cardDescription}>
+            The same approved reviews as plain JSON, for any ad network, affiliate feed, or script that isn&apos;t
+            Google Merchant Center specifically. Same on/off switch as the feed above.
+          </p>
+          {enabled && distributionFeedUrl ? (
+            <>
+              <p className={managementStyles.mutedText}>
+                Feed URL: <code className={styles.codeUrl}>{distributionFeedUrl}</code>
+              </p>
+              <div className={styles.ctaRow}>
+                <a
+                  href={distributionFeedUrl}
+                  target="_blank"
+                  rel="noreferrer"
+                  className={`${buttonStyles.button} ${buttonStyles.secondary}`}
+                >
+                  Preview feed
+                </a>
+              </div>
+            </>
+          ) : (
+            <p className={managementStyles.mutedText}>Turn on the review feed above to get a URL here.</p>
+          )}
+        </div>
+
+        <div className={styles.card} data-tone="success">
+          <div className={styles.cardHeader}>
+            <div className={styles.cardHeaderLeft}>
+              <span className={styles.iconChip} data-tone="success">
+                <GlobeIcon />
+              </span>
+              <p className={styles.cardTitle}>Public review page</p>
+            </div>
+            <StatusBadge tone="success">Live</StatusBadge>
+          </div>
+          <p className={styles.cardDescription}>
+            A shareable page listing your real approved reviews — link to it from an email signature, social bio, or ad
+            landing page. Always available; these are the same reviews your storefront widgets show.
+          </p>
+          <p className={managementStyles.mutedText}>
+            Page URL: <code className={styles.codeUrl}>{reviewSiteUrl}</code>
+          </p>
+          <div className={styles.ctaRow}>
+            <a href={reviewSiteUrl} target="_blank" rel="noreferrer" className={`${buttonStyles.button} ${buttonStyles.secondary}`}>
+              View page
+            </a>
+          </div>
+        </div>
+
+        <div className={`${styles.card} ${styles.cardWide}`} data-tone="ai">
+          <div className={styles.cardHeader}>
+            <div className={styles.cardHeaderLeft}>
+              <span className={styles.iconChip} data-tone="ai">
+                <SparkleIcon />
+              </span>
+              <p className={styles.cardTitle}>AI Review Intelligence</p>
+            </div>
+            <span className={`${styles.pill} ${styles.pillAi}`}>{canUseAI ? "Available on your plan" : "Requires Pro"}</span>
+          </div>
+          <p className={styles.cardDescription}>
+            Generated from your store&apos;s own real, approved reviews — never fabricated.
+          </p>
+
+          <div>
+            <div className={styles.aiFeatureRow}>
+              <div>
+                <p className={styles.aiFeatureName}>AI Review Summaries</p>
+                <p className={styles.aiFeatureDetail}>
+                  A short summary of what customers say about a product, shown in your admin and (where enabled) on
+                  your storefront. Regenerate any time from a product&apos;s detail page.
+                </p>
+              </div>
+            </div>
+            <div className={styles.aiFeatureRow}>
+              <div>
+                <p className={styles.aiFeatureName}>AI Reply Drafting</p>
+                <p className={styles.aiFeatureDetail}>
+                  Suggests a starting reply to a customer review, based on its real content — you always review and
+                  edit before sending. Available from a review&apos;s detail panel.
+                </p>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div className={styles.roadmapCard}>
+        <p className={styles.roadmapLabel}>Coming next</p>
+        <p className={styles.roadmapText}>
+          AI shopping assistant visibility — making your review content easier for AI shopping assistants to reference
+          when customers ask about your products. Not available yet; nothing on this page claims otherwise.
+        </p>
+      </div>
+
+      <div className={managementStyles.toastFrame}>
         <Frame>{toast ? <Toast content={toast.content} error={toast.error} onDismiss={() => setToast(null)} /> : null}</Frame>
       </div>
     </>

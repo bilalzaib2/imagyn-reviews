@@ -18,6 +18,12 @@ const reviewInclude = {
   media: {
     orderBy: { createdAt: "asc" },
   },
+  // Read-only, additive — surfaces the real Review Rewards outcome (see rewards.server.ts's
+  // real "issued"/"failed"/"ineligible" status strings) on the Reviews list/detail for display
+  // only. Never written from here; issuance still only ever happens via evaluateAndIssueReward.
+  reward: {
+    select: { status: true, discountCode: true, valueType: true, value: true },
+  },
 } satisfies Prisma.ReviewInclude;
 
 export type ReviewWithProduct = Prisma.ReviewGetPayload<{ include: typeof reviewInclude }>;

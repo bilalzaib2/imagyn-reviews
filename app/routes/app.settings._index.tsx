@@ -140,6 +140,11 @@ export default function SettingsOverviewPage() {
           description="Real-time verification of how trustworthy your store looks to shoppers, calculated from your own store data."
           action={{ label: "View", href: "/app/settings/trust" }}
         />
+        <ActionCard
+          title="Google, SEO & AI"
+          description="Search visibility, Google Shopping review feed, AI review intelligence, and where your reviews are distributed."
+          action={{ label: "Open", href: "/app/settings/seo" }}
+        />
       </div>
     </Section>
   );

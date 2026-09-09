@@ -14,6 +14,7 @@ import { EmptyState } from "../components/ui/EmptyState";
 import { StatusBadge } from "../components/ui/StatusBadge";
 import { AppReviewPrompt } from "../components/ui/AppReviewPrompt";
 import { StarRating } from "../components/reviews/StarRating";
+import { PillarStatusIcon } from "../components/ui/PillarStatusIcon";
 import { getStoreReviewStats } from "../services/review.server";
 import { reviewRequestService } from "../services/review-request.server";
 import { getLatestAiSummaryForStore } from "../services/aiSummary.server";
@@ -30,6 +31,8 @@ import {
   OVERALL_STATUS_TONE,
   PILLAR_STATUS_LABEL,
   PILLAR_STATUS_TONE,
+  MIN_VERIFIED_REVIEWS,
+  REVIEW_PRACTICES_THRESHOLD,
   buildPillarViews,
 } from "../services/trustCertification.presentation";
 import { ORDER_AUTOMATION_ENABLED, SHOPIFY_PROTECTED_CUSTOMER_DATA_APPROVED } from "../config/features";
@@ -121,6 +124,31 @@ const REWARDS_QUICK_ACTION = { label: "Manage Review Rewards", href: "/app/setti
 
 const RATING_VALUES = [5, 4, 3, 2, 1] as const;
 
+// Real, threshold-based status reads for a genuine percentage already on hand — never a
+// fabricated trend or comparison. "Good" and "needs attention" cutoffs are the same honest
+// bar a merchant would judge the number by themselves, just made visually explicit.
+type KpiTone = "positive" | "attention" | "neutral";
+
+function toneForShare(percent: number, goodAt: number, lowAt: number): KpiTone {
+  if (percent >= goodAt) return "positive";
+  if (percent < lowAt) return "attention";
+  return "neutral";
+}
+
+const KPI_TONE_CLASS: Record<KpiTone, string> = {
+  positive: "kpiTonePositive",
+  attention: "kpiToneAttention",
+  neutral: "",
+};
+
+// Real, existing ReviewStatus values only — a color cue on top of the text label already
+// shown, never a replacement for it.
+const ACTIVITY_STATUS_DOT_CLASS: Record<string, string> = {
+  APPROVED: "activityDotSuccess",
+  PENDING: "activityDotWarning",
+  REJECTED: "activityDotNeutral",
+};
+
 // One shared entrance animation (styles.reveal — see its own comment in app._index.module.css)
 // staggered by a plain inline custom property, so the page's major zones settle in as one
 // considered moment rather than popping in all at once. A CSSProperties cast is needed since
@@ -166,6 +194,20 @@ export default function Index() {
   const maxRatingCount = Math.max(...RATING_VALUES.map((value) => stats.ratingCounts[value]), 1);
   const completionPercent = Math.round(requestStats.completionRate * 100);
 
+  const verifiedTone = stats.publishedReviews > 0 ? toneForShare(verifiedPercent, 75, 40) : "neutral";
+  const completionTone = requestStats.totalCount > 0 ? toneForShare(completionPercent, 60, 25) : "neutral";
+
+  // Real, honest progress toward the one pillar with a genuinely gradual real ratio — the
+  // other three pillars are permission-gated or binary, so a progress bar there would be
+  // decorative, not truthful. Below the minimum count, progress is "how many of the 5
+  // required verified reviews exist"; once past it, progress is "how close to the 95%
+  // published threshold" — never both fabricated into one invented number.
+  const reviewPracticesPillar = trust.pillars.reviewPractices;
+  const reviewPracticesProgress =
+    reviewPracticesPillar.verifiedReviewCount < MIN_VERIFIED_REVIEWS
+      ? Math.round((reviewPracticesPillar.verifiedReviewCount / MIN_VERIFIED_REVIEWS) * 100)
+      : Math.min(100, Math.round(((reviewPracticesPillar.percent ?? 0) / REVIEW_PRACTICES_THRESHOLD) * 100));
+
   return (
     <Container as="main">
       <div className={`${shellStyles.page} ${styles.page}`}>
@@ -188,34 +230,39 @@ export default function Index() {
           }
         />
 
-        {/* The immediate "at a glance" read — Judge.me and every mature review-management
-            dashboard leads with this before anything else. Every number here already existed
-            elsewhere on this page (the old standalone "Trust Overview" card duplicated three
-            of these); consolidating them into one KPI strip right under the header means a
-            merchant never has to scroll to answer "how is my store doing right now," and nothing
-            real was removed — see the Trust & Certification card below for the two numbers that
-            specifically feed certification (verified review COUNT and verified AVERAGE RATING,
-            not the same thing as "share of reviews that are verified" shown here). */}
-        <div className={`${styles.kpiRow} ${styles.reveal}`} style={revealStyle(0)}>
-          <div className={styles.kpiCard}>
-            <p className={styles.kpiValue}>{stats.totalReviews}</p>
-            <p className={styles.kpiLabel}>Total reviews</p>
+        {/* Store reputation overview — the immediate "at a glance" read. Two hero stats
+            (identity-defining: how good, how much proof) get real visual weight; the rest are
+            secondary chips whose tone reflects a real, threshold-based read of the number
+            itself — never an invented trend or period-over-period comparison this app has no
+            historical snapshots to honestly support. */}
+        <div className={`${styles.reputationRow} ${styles.reveal}`} style={revealStyle(0)}>
+          <div className={styles.kpiHero}>
+            <p className={styles.kpiHeroValue}>{stats.publishedReviews > 0 ? stats.averageRating.toFixed(1) : "—"}</p>
+            {stats.publishedReviews > 0 ? (
+              <StarRating value={stats.averageRating} size={16} />
+            ) : (
+              <p className={styles.kpiHeroSub}>No published reviews yet</p>
+            )}
+            <p className={styles.kpiHeroLabel}>Average rating</p>
           </div>
-          <div className={styles.kpiCard}>
-            <p className={styles.kpiValue}>{stats.publishedReviews > 0 ? stats.averageRating.toFixed(1) : "—"}</p>
-            <p className={styles.kpiLabel}>Average rating</p>
+          <div className={styles.kpiHero}>
+            <p className={styles.kpiHeroValue}>{stats.totalReviews}</p>
+            <p className={styles.kpiHeroSub}>{stats.publishedReviews} published</p>
+            <p className={styles.kpiHeroLabel}>Total reviews</p>
           </div>
-          <div className={styles.kpiCard}>
-            <p className={styles.kpiValue}>{verifiedPercent}%</p>
-            <p className={styles.kpiLabel}>Verified share</p>
-          </div>
-          <div className={styles.kpiCard}>
-            <p className={styles.kpiValue}>{completionPercent}%</p>
-            <p className={styles.kpiLabel}>Request completion</p>
-          </div>
-          <div className={styles.kpiCard}>
-            <p className={styles.kpiValue}>{stats.autoPublishedToday}</p>
-            <p className={styles.kpiLabel}>Auto-published today</p>
+          <div className={styles.kpiRow}>
+            <div className={[styles.kpiCard, styles[KPI_TONE_CLASS[verifiedTone]]].filter(Boolean).join(" ")}>
+              <p className={styles.kpiValue}>{verifiedPercent}%</p>
+              <p className={styles.kpiLabel}>Verified share</p>
+            </div>
+            <div className={[styles.kpiCard, styles[KPI_TONE_CLASS[completionTone]]].filter(Boolean).join(" ")}>
+              <p className={styles.kpiValue}>{completionPercent}%</p>
+              <p className={styles.kpiLabel}>Request completion</p>
+            </div>
+            <div className={styles.kpiCard}>
+              <p className={styles.kpiValue}>{stats.autoPublishedToday}</p>
+              <p className={styles.kpiLabel}>Auto-published today</p>
+            </div>
           </div>
         </div>
 
@@ -265,7 +312,10 @@ export default function Index() {
               className={`${styles.attentionCard} ${item.value > 0 ? styles.attentionCardActive : ""}`}
             >
               <div className={styles.attentionCopy}>
-                <p className={styles.attentionLabel}>{item.label}</p>
+                <p className={styles.attentionLabel}>
+                  {item.value > 0 ? <span className={styles.attentionDot} aria-hidden="true" /> : null}
+                  {item.label}
+                </p>
                 <p className={styles.attentionValue}>{item.value}</p>
                 <p className={styles.attentionDescription}>
                   {item.value > 0 ? item.description : "All caught up."}
@@ -378,29 +428,40 @@ export default function Index() {
               <p className={styles.errorText}>{trustFetcher.data.error ?? "Unable to recheck Trust Certification."}</p>
             ) : null}
 
-            <div className={styles.trustCertHeader}>
-              <StatusBadge tone={OVERALL_STATUS_TONE[trust.status]}>{OVERALL_STATUS_LABEL[trust.status]}</StatusBadge>
-              <p className={styles.trustCertSummary}>{OVERALL_STATUS_SUMMARY[trust.status]}</p>
-            </div>
-
-            <div className={styles.trustRow}>
-              <div className={styles.trustStat}>
-                <p className={styles.trustValue}>{trust.verifiedReviewCount}</p>
-                <p className={styles.trustLabel}>Verified reviews</p>
+            <div className={styles.trustCertStatusBlock}>
+              <div className={styles.trustCertStatusMain}>
+                <StatusBadge tone={OVERALL_STATUS_TONE[trust.status]}>{OVERALL_STATUS_LABEL[trust.status]}</StatusBadge>
+                <p className={styles.trustCertSummary}>{OVERALL_STATUS_SUMMARY[trust.status]}</p>
               </div>
-              <div className={styles.trustStat}>
-                <p className={styles.trustValue}>
-                  {trust.verifiedReviewCount > 0 ? trust.verifiedAverageRating.toFixed(1) : "—"}
-                </p>
-                <p className={styles.trustLabel}>Verified average rating</p>
+              <div className={styles.trustRow}>
+                <div className={styles.trustStat}>
+                  <p className={styles.trustValue}>{trust.verifiedReviewCount}</p>
+                  <p className={styles.trustLabel}>Verified reviews</p>
+                </div>
+                <div className={styles.trustStat}>
+                  <p className={styles.trustValue}>
+                    {trust.verifiedReviewCount > 0 ? trust.verifiedAverageRating.toFixed(1) : "—"}
+                  </p>
+                  <p className={styles.trustLabel}>Verified average rating</p>
+                </div>
               </div>
             </div>
 
             <div className={styles.pillarGrid}>
               {pillarViews.map((pillar) => (
                 <div key={pillar.key} className={styles.pillarCard}>
-                  <StatusBadge tone={PILLAR_STATUS_TONE[pillar.status]}>{PILLAR_STATUS_LABEL[pillar.status]}</StatusBadge>
-                  <p className={styles.pillarTitle}>{pillar.title}</p>
+                  <div className={styles.pillarCardHeader}>
+                    <PillarStatusIcon status={pillar.status} />
+                    <div>
+                      <p className={styles.pillarTitle}>{pillar.title}</p>
+                      <StatusBadge tone={PILLAR_STATUS_TONE[pillar.status]}>{PILLAR_STATUS_LABEL[pillar.status]}</StatusBadge>
+                    </div>
+                  </div>
+                  {pillar.key === "reviewPractices" ? (
+                    <div className={styles.pillarProgressTrack} role="presentation">
+                      <div className={styles.pillarProgressFill} style={{ width: `${reviewPracticesProgress}%` }} />
+                    </div>
+                  ) : null}
                   <p className={styles.pillarDetail}>{pillar.detail}</p>
                   {pillar.actionHref ? (
                     <a
@@ -448,10 +509,11 @@ export default function Index() {
             </Section>
           </Card>
 
-          <Card>
+          <Card className={styles.aiCard}>
             <Section title="AI Spotlight" description="The latest AI summary generated for one of your products.">
               {aiSpotlight ? (
                 <div className={styles.aiSpotlight}>
+                  <span className={styles.aiBadge}>AI-generated</span>
                   <p className={styles.aiSpotlightProduct}>{aiSpotlight.productName}</p>
                   <p className={styles.aiSpotlightText}>{aiSpotlight.recommendation}</p>
                   <Link to={`/app/products/${aiSpotlight.productId}`} className={styles.spotlightLink}>
@@ -554,6 +616,12 @@ export default function Index() {
                         {review.reviewerName} &middot; {review.productTitle ?? review.product?.name ?? "Unassigned product"}
                       </p>
                       <p className={styles.activityMeta}>
+                        <span
+                          className={[styles.activityDot, styles[ACTIVITY_STATUS_DOT_CLASS[review.status]]]
+                            .filter(Boolean)
+                            .join(" ")}
+                          aria-hidden="true"
+                        />
                         {review.status.charAt(0) + review.status.slice(1).toLowerCase()} &middot; {formatDate(review.createdAt)}
                       </p>
                     </div>

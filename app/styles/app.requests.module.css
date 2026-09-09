@@ -272,8 +272,12 @@
   background-color: color-mix(in srgb, var(--color-text) 4%, transparent);
 }
 
+/* Recolored 2026-09-10 from --color-accent (black) to --color-highlight (IMAGYN's restrained
+   lime accent) for consistency with the identical single-selected-row treatment in
+   app.reviews.module.css's .trSelected — one real, singular, meaningful exception to the
+   no-default-black-rail rule, now using the same real brand accent everywhere it appears. */
 .trSelected td:first-child {
-  box-shadow: inset 3px 0 0 var(--color-accent);
+  box-shadow: inset 3px 0 0 var(--color-highlight);
 }
 
 @media (prefers-reduced-motion: reduce) {

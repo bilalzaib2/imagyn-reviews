@@ -169,15 +169,15 @@ export default function SettingsRewardsPage() {
         <div className={styles.card}>
           <div className={styles.statRow}>
             <div className={styles.stat}>
-              <p className={styles.statValue}>{stats.issued}</p>
+              <p className={`${styles.statValue} ${styles.statValueSuccess}`}>{stats.issued}</p>
               <p className={styles.statLabel}>Issued</p>
             </div>
             <div className={styles.stat}>
-              <p className={styles.statValue}>{stats.pending}</p>
+              <p className={`${styles.statValue} ${styles.statValueWarning}`}>{stats.pending}</p>
               <p className={styles.statLabel}>Pending</p>
             </div>
             <div className={styles.stat}>
-              <p className={styles.statValue}>{stats.failed}</p>
+              <p className={`${styles.statValue} ${styles.statValueDanger}`}>{stats.failed}</p>
               <p className={styles.statLabel}>Failed</p>
             </div>
             <div className={styles.stat}>

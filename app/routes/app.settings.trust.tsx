@@ -6,6 +6,7 @@ import { Checkbox, Frame, Toast } from "@shopify/polaris";
 import { Button } from "../components/ui/Button";
 import { Section } from "../components/ui/Section";
 import { StatusBadge } from "../components/ui/StatusBadge";
+import { PillarStatusIcon } from "../components/ui/PillarStatusIcon";
 import { authenticateAdminDeduped } from "../services/auth-dedupe.server";
 import { getOrCreateStore } from "../services/store.server";
 import {
@@ -19,6 +20,8 @@ import {
   OVERALL_STATUS_TONE,
   PILLAR_STATUS_LABEL,
   PILLAR_STATUS_TONE,
+  MIN_VERIFIED_REVIEWS,
+  REVIEW_PRACTICES_THRESHOLD,
   buildPillarViews,
 } from "../services/trustCertification.presentation";
 import styles from "../styles/app.management.module.css";
@@ -75,6 +78,15 @@ export default function SettingsTrustPage() {
   const [toast, setToast] = useState<{ content: string; error?: boolean } | null>(null);
   const pillarViews = buildPillarViews(trust, storeDomain);
 
+  // Real, honest progress toward the one pillar with a genuinely gradual real ratio — see the
+  // identical computation (and its own comment) in app._index.tsx's Dashboard card, which this
+  // page must stay visually consistent with.
+  const reviewPracticesPillar = trust.pillars.reviewPractices;
+  const reviewPracticesProgress =
+    reviewPracticesPillar.verifiedReviewCount < MIN_VERIFIED_REVIEWS
+      ? Math.round((reviewPracticesPillar.verifiedReviewCount / MIN_VERIFIED_REVIEWS) * 100)
+      : Math.min(100, Math.round(((reviewPracticesPillar.percent ?? 0) / REVIEW_PRACTICES_THRESHOLD) * 100));
+
   useEffect(() => {
     if (!fetcher.data) return;
     if (!fetcher.data.ok) {
@@ -109,12 +121,12 @@ export default function SettingsTrustPage() {
           </Button>
         }
       >
-        <div className={styles.card}>
-          <div className={styles.cardHeader}>
+        <div className={styles.statusHero}>
+          <div>
             <StatusBadge tone={OVERALL_STATUS_TONE[trust.status]}>{OVERALL_STATUS_LABEL[trust.status]}</StatusBadge>
-            <span className={styles.mutedText}>Last checked {formatTimestamp(trust.lastCheckedAt)}</span>
+            <p className={styles.mutedText}>{OVERALL_STATUS_SUMMARY[trust.status]}</p>
           </div>
-          <p className={styles.mutedText}>{OVERALL_STATUS_SUMMARY[trust.status]}</p>
+          <span className={styles.mutedText}>Last checked {formatTimestamp(trust.lastCheckedAt)}</span>
         </div>
 
         <p className={styles.settingsGroupLabel}>Trust score</p>
@@ -131,26 +143,36 @@ export default function SettingsTrustPage() {
           </div>
         </div>
 
-        <p className={styles.settingsGroupLabel}>Pillars</p>
+        <p className={styles.settingsGroupLabel}>Certification requirements</p>
         <div className={styles.cardList}>
           {pillarViews.map((pillar) => (
             <div key={pillar.key} className={styles.card}>
-              <div className={styles.cardHeader}>
-                <span>{pillar.title}</span>
-                <StatusBadge tone={PILLAR_STATUS_TONE[pillar.status]}>{PILLAR_STATUS_LABEL[pillar.status]}</StatusBadge>
-              </div>
-              <p className={styles.mutedText}>{pillar.detail}</p>
-              {pillar.actionHref ? (
-                <div className={styles.inlineActions}>
-                  <a
-                    href={pillar.actionHref}
-                    target={pillar.external ? "_blank" : undefined}
-                    rel={pillar.external ? "noreferrer" : undefined}
-                  >
-                    {pillar.actionLabel} &rarr;
-                  </a>
+              <div className={styles.pillarRowHeader}>
+                <PillarStatusIcon status={pillar.status} />
+                <div className={styles.pillarRowBody}>
+                  <div className={styles.cardHeader}>
+                    <span>{pillar.title}</span>
+                    <StatusBadge tone={PILLAR_STATUS_TONE[pillar.status]}>{PILLAR_STATUS_LABEL[pillar.status]}</StatusBadge>
+                  </div>
+                  {pillar.key === "reviewPractices" ? (
+                    <div className={styles.pillarProgressTrack} role="presentation">
+                      <div className={styles.pillarProgressFill} style={{ width: `${reviewPracticesProgress}%` }} />
+                    </div>
+                  ) : null}
+                  <p className={styles.mutedText}>{pillar.detail}</p>
+                  {pillar.actionHref ? (
+                    <div className={styles.inlineActions}>
+                      <a
+                        href={pillar.actionHref}
+                        target={pillar.external ? "_blank" : undefined}
+                        rel={pillar.external ? "noreferrer" : undefined}
+                      >
+                        {pillar.actionLabel} &rarr;
+                      </a>
+                    </div>
+                  ) : null}
                 </div>
-              ) : null}
+              </div>
             </div>
           ))}
         </div>

@@ -318,8 +318,13 @@
   background-color: color-mix(in srgb, var(--color-text) 4%, transparent);
 }
 
+/* One real, singular exception to the "no default black rail" rule (see
+   design-system.css's 2026-09-10 note): exactly one row can ever be selected at a time, and
+   marking it is a genuinely meaningful, momentary state — not a default card treatment. Uses
+   the restrained IMAGYN highlight accent rather than black, so even this one exception reads
+   as an intentional brand moment, not a leftover monochrome habit. */
 .trSelected td:first-child {
-  box-shadow: inset 3px 0 0 var(--color-accent);
+  box-shadow: inset 3px 0 0 var(--color-highlight);
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -328,11 +333,14 @@
   }
 }
 
+/* Warm amber, not near-black — a rating is a color-coded signal everywhere else on the web
+   (Google, Yelp, App Store); rendering it in the brand's structural black flattened a real,
+   expected piece of color hierarchy into monochrome for no reason. */
 .rating {
   display: flex;
   align-items: center;
   gap: 0.2rem;
-  color: var(--color-accent);
+  color: var(--color-warning);
   white-space: nowrap;
 }
 
@@ -397,6 +405,34 @@
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+/* Compact, icon-only signals — only ever rendered for a row that actually has that real
+   condition (see app.reviews.tsx), so a plain review with none of these shows none of these.
+   Progressive disclosure: the full richness (badges, thumbnails, reward amount) lives in the
+   detail panel; the list row only needs enough to catch the eye while scanning. */
+.metaSignals {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+  margin-left: 0.15rem;
+}
+
+.metaSignal {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.15rem;
+  color: var(--color-text-muted);
+  font-variant-numeric: tabular-nums;
+}
+
+.metaSignalHighlight {
+  color: var(--color-highlight-strong);
+}
+
+.metaSignalSuccess {
+  color: var(--color-success);
 }
 
 .tdStatus,
@@ -587,26 +623,38 @@
   padding-right: var(--space-1);
 }
 
-/* The one prominent, unmissable AI surface in the panel — a quiet tint plus a left accent
-   stripe (same restrained "accent stripe, not a bordered box" language as the Dashboard's own
-   .attentionCard), rendered only when this product actually has a generated summary (never
-   fabricated). */
+/* The one prominent, unmissable AI surface in the panel — tinted with --color-ai (IMAGYN's
+   restrained purple, reserved specifically for AI-generated content), never a black rail:
+   AI content gets a real, distinct color identity instead of the same monochrome treatment
+   as everything else. Rendered only when this product actually has a generated summary
+   (never fabricated). */
 .aiSummaryCallout {
   display: grid;
   gap: var(--space-2);
-  padding: var(--space-3) var(--space-4);
-  border-left: 2px solid var(--color-accent);
-  border-radius: var(--radius-sm);
-  background: color-mix(in srgb, var(--color-accent) 4%, var(--color-surface));
+  padding: var(--space-4);
+  border: 1px solid color-mix(in srgb, var(--color-ai) 20%, var(--color-border));
+  border-radius: var(--radius-md);
+  background: color-mix(in srgb, var(--color-ai) 6%, var(--color-surface));
 }
 
 .aiSummaryLabel {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
   margin: 0;
   font-size: var(--text-xs);
   font-weight: 600;
   letter-spacing: 0.08em;
   text-transform: uppercase;
-  color: var(--color-text-muted);
+  color: var(--color-ai);
+}
+
+.aiSummaryLabel::before {
+  content: "";
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--color-ai);
 }
 
 .aiSummaryText {
@@ -649,7 +697,7 @@
   display: flex;
   align-items: center;
   gap: 0.25rem;
-  color: var(--color-accent);
+  color: var(--color-warning);
 }
 
 .detailText {

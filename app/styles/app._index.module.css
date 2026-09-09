@@ -46,13 +46,51 @@
   font-size: var(--text-sm);
 }
 
-/* The "at a glance" KPI strip — the very first thing under the greeting, matching the
-   Judge.me-style convention of leading a dashboard with a compact vitals row before anything
-   else. Deliberately NOT boxed in individual Cards (see the Apple-inspired design skill's
-   "avoid decorative statistics" / "could a card be removed" guidance) — five bordered chips
-   in one continuous strip read as one coherent readout, not five competing panels. Replaces
-   the old standalone "Trust Overview" card (2026-09-09) — every number it showed is still
-   here, just consolidated instead of duplicated with the Trust & Certification card below. */
+/* Store reputation overview — the immediate "at a glance" read, leading the dashboard before
+   anything else. Two hero stats (rating, total reviews) get real visual weight since they're
+   the identity-defining numbers a shopper judges the store by; the rest are secondary chips.
+   Replaces the old standalone "Trust Overview" card (2026-09-09) — every number it showed is
+   still here, just consolidated instead of duplicated with the Trust & Certification card
+   below. Tone classes on the secondary chips reflect a real, threshold-based read of the
+   number itself (see toneForShare in app._index.tsx) — never an invented trend/comparison. */
+.reputationRow {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(160px, 220px)) 1fr;
+  gap: var(--space-4);
+  align-items: stretch;
+}
+
+.kpiHero {
+  display: grid;
+  align-content: start;
+  gap: var(--space-1);
+  padding: var(--space-5) var(--space-6);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  background: var(--color-surface);
+}
+
+.kpiHeroValue {
+  margin: 0;
+  font-size: clamp(2.25rem, 4vw, 2.75rem);
+  font-weight: 600;
+  letter-spacing: -0.03em;
+  font-variant-numeric: tabular-nums;
+}
+
+.kpiHeroSub {
+  margin: 0;
+  color: var(--color-text-muted);
+  font-size: var(--text-xs);
+}
+
+.kpiHeroLabel {
+  margin: var(--space-1) 0 0;
+  color: var(--color-text-muted);
+  font-size: var(--text-xs);
+  font-weight: 500;
+}
+
 .kpiRow {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
@@ -62,10 +100,32 @@
 .kpiCard {
   display: grid;
   gap: var(--space-1);
+  align-content: center;
   padding: var(--space-4) var(--space-5);
   border: 1px solid var(--color-border);
   border-radius: var(--radius-lg);
   background: var(--color-surface);
+}
+
+/* Real, threshold-based status tint — a tinted surface + colored value, never a border-left
+   rail. This is the pattern every "this number is genuinely good/needs attention" moment on
+   this page uses instead of the old black-rail motif. */
+.kpiTonePositive {
+  background: color-mix(in srgb, var(--color-success) 8%, var(--color-surface));
+  border-color: color-mix(in srgb, var(--color-success) 22%, var(--color-border));
+}
+
+.kpiTonePositive .kpiValue {
+  color: var(--color-success);
+}
+
+.kpiToneAttention {
+  background: color-mix(in srgb, var(--color-warning) 8%, var(--color-surface));
+  border-color: color-mix(in srgb, var(--color-warning) 22%, var(--color-border));
+}
+
+.kpiToneAttention .kpiValue {
+  color: var(--color-warning);
 }
 
 .kpiValue {
@@ -81,6 +141,22 @@
   color: var(--color-text-muted);
   font-size: var(--text-xs);
   font-weight: 500;
+}
+
+@media (max-width: 860px) {
+  .reputationRow {
+    grid-template-columns: 1fr 1fr;
+  }
+
+  .reputationRow .kpiRow {
+    grid-column: 1 / -1;
+  }
+}
+
+@media (max-width: 520px) {
+  .reputationRow {
+    grid-template-columns: 1fr;
+  }
 }
 
 /* Real, state-driven banners (no reviews yet / automation pending Shopify approval) — each is
@@ -154,27 +230,26 @@
   grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
 }
 
-/* No rectangular border at rest — just the left accent stripe and a whisper of background
-   tint, so this reads as a quiet, distinct zone rather than a boxed card. The border only
-   appears on hover, alongside the existing elevation, confirming "yes, this is clickable"
-   right when it matters. */
+/* A plain bordered card at rest. Hierarchy for the "this needs you" state comes from a
+   tinted warm surface + a small status dot + stronger value color (see .attentionCardActive
+   below) — deliberately NOT a black left-rail border, which read as a decorative default
+   rather than a real signal once applied broadly. The border only strengthens on hover,
+   confirming "yes, this is clickable" right when it matters. */
 .attentionCard {
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: var(--space-4);
   padding: var(--space-6);
-  border: 1px solid transparent;
-  border-left: 3px solid var(--color-border);
+  border: 1px solid var(--color-border);
   border-radius: var(--radius-lg);
-  background: color-mix(in srgb, var(--color-text) 2%, var(--color-surface));
+  background: var(--color-surface);
   transition: transform var(--transition-base), box-shadow var(--transition-base), border-color var(--transition-base), background-color var(--transition-base);
 }
 
 .attentionCard:hover {
   transform: translateY(-1px);
-  border-color: var(--color-border);
-  background: var(--color-surface);
+  border-color: var(--color-border-strong);
   box-shadow: var(--shadow-md);
 }
 
@@ -189,7 +264,21 @@
 }
 
 .attentionCardActive {
-  border-left-color: var(--color-accent);
+  background: color-mix(in srgb, var(--color-warning) 6%, var(--color-surface));
+  border-color: color-mix(in srgb, var(--color-warning) 24%, var(--color-border));
+}
+
+/* A small real status dot, not a border rail — appears only next to the label when the count
+   is genuinely > 0 (see app._index.tsx), so it reads as "this is currently true" rather than
+   permanent card chrome. */
+.attentionDot {
+  display: inline-block;
+  width: 0.4rem;
+  height: 0.4rem;
+  margin-right: var(--space-2);
+  border-radius: var(--radius-full);
+  background: var(--color-warning);
+  vertical-align: middle;
 }
 
 .attentionCopy {
@@ -199,6 +288,8 @@
 }
 
 .attentionLabel {
+  display: flex;
+  align-items: center;
   margin: 0;
   color: var(--color-text-muted);
   font-size: var(--text-xs);
@@ -216,7 +307,7 @@
 }
 
 .attentionCardActive .attentionValue {
-  color: var(--color-text);
+  color: var(--color-warning);
 }
 
 .attentionDescription {
@@ -351,7 +442,7 @@
   display: block;
   height: 100%;
   border-radius: var(--radius-full);
-  background: var(--color-accent);
+  background: var(--color-highlight);
 }
 
 .ratingBarCount {
@@ -361,17 +452,27 @@
   font-variant-numeric: tabular-nums;
 }
 
-/* Trust & Certification — overall status pill + one summary line, then the two trust-score
-   stats (reusing .trustRow/.trustStat), then the four pillar cards below. Deliberately no
-   colored gradients or "premium" chrome: the restrained IMAGYN identity (light surfaces, one
-   badge tone per real state) is the entire visual expression here, matching the site-wide
-   "no colorful Judge.me clone" rule. */
-.trustCertHeader {
+/* Trust & Certification — a confident, unmistakable overall status block, then the two
+   trust-score stats, then four real pillar "steps" each with its own status icon (see
+   PillarStatusIcon.tsx). Restrained IMAGYN identity throughout: real status colors carry the
+   meaning, never a decorative gradient — and never a black left-rail as the card's default
+   emphasis (see .pillarCard below, a plain bordered card; the icon + badge carry hierarchy). */
+.trustCertStatusBlock {
   display: flex;
-  align-items: center;
-  gap: var(--space-3);
   flex-wrap: wrap;
-  margin-bottom: var(--space-4);
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-6);
+  padding: var(--space-5) var(--space-6);
+  margin-bottom: var(--space-6);
+  border-radius: var(--radius-lg);
+  background: var(--color-surface-muted);
+}
+
+.trustCertStatusMain {
+  display: grid;
+  gap: var(--space-2);
+  max-width: 32rem;
 }
 
 .trustCertSummary {
@@ -384,17 +485,28 @@
   display: grid;
   gap: var(--space-4);
   grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
-  margin-top: var(--space-6);
 }
 
 .pillarCard {
   display: grid;
   align-content: start;
-  gap: var(--space-2);
+  gap: var(--space-3);
   padding: var(--space-4);
   border: 1px solid var(--color-border);
   border-radius: var(--radius-lg);
   background: var(--color-surface);
+}
+
+.pillarCardHeader {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-3);
+}
+
+.pillarCardHeader > div {
+  display: grid;
+  gap: var(--space-1);
+  align-content: start;
 }
 
 .pillarTitle {
@@ -411,10 +523,56 @@
   line-height: 1.5;
 }
 
+/* Only rendered for the one pillar with a genuinely gradual real ratio (see
+   reviewPracticesProgress in app._index.tsx) — never a decorative bar for a binary/
+   permission-gated pillar. */
+.pillarProgressTrack {
+  height: 0.35rem;
+  border-radius: var(--radius-full);
+  background: var(--color-surface-strong);
+  overflow: hidden;
+}
+
+.pillarProgressFill {
+  display: block;
+  height: 100%;
+  border-radius: var(--radius-full);
+  background: var(--color-highlight);
+  transition: width var(--transition-base);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .pillarProgressFill {
+    transition: none;
+  }
+}
+
 .aiSpotlight {
   display: grid;
   gap: var(--space-2);
   align-content: start;
+}
+
+/* AI Spotlight — the one card on this page presenting AI-generated content, so it's the one
+   place --color-ai (a subtle, restrained purple) is used, distinguishing "AI wrote this" from
+   every other real, directly-measured stat on the page. */
+.aiCard {
+  background: color-mix(in srgb, var(--color-ai) 4%, var(--color-surface));
+  border-color: color-mix(in srgb, var(--color-ai) 18%, var(--color-border));
+}
+
+.aiBadge {
+  display: inline-flex;
+  align-items: center;
+  width: fit-content;
+  padding: 0.15rem 0.5rem;
+  border-radius: var(--radius-full);
+  background: color-mix(in srgb, var(--color-ai) 14%, transparent);
+  color: var(--color-ai);
+  font-size: var(--text-xs);
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
 }
 
 .aiSpotlightProduct {
@@ -540,4 +698,26 @@
   margin: 0;
   color: var(--color-text-muted);
   font-size: var(--text-xs);
+}
+
+.activityDot {
+  display: inline-block;
+  width: 0.4rem;
+  height: 0.4rem;
+  margin-right: var(--space-1);
+  border-radius: var(--radius-full);
+  vertical-align: middle;
+  background: var(--color-text-muted);
+}
+
+.activityDotSuccess {
+  background: var(--color-success);
+}
+
+.activityDotWarning {
+  background: var(--color-warning);
+}
+
+.activityDotNeutral {
+  background: var(--color-text-muted);
 }
