@@ -66,7 +66,14 @@ api_version = "2026-07"
 # keep working exactly as before: fetchShopPolicies treats the resulting ACCESS_DENIED as an
 # expected, honest "needs_permission" outcome, never a crash and never an inferred pass — see
 # that function's own header comment. No other part of the app reads or requests this scope.
-scopes = "write_products,write_metaobjects,write_metaobject_definitions,write_files,read_files,read_orders,read_customers,read_fulfillments,read_legal_policies"
+# write_discounts (added 2026-09-10) is required for Coupons and Review Rewards' real discount
+# codes — discountCodeBasicCreate/Deactivate/Activate (see shopifyDiscount.server.ts) return a
+# real "Access denied ... write_discounts access scope" GraphQL error without it, confirmed live
+# against this store. This was missing from the very first Coupons/Rewards discount-creation
+# code, meaning no store could ever actually receive a real Shopify discount from either feature
+# until this scope is granted. Existing merchants need to re-consent once this deploys (Shopify
+# prompts automatically; webhooks.app.scopes_update above already handles the resulting webhook).
+scopes = "write_products,write_metaobjects,write_metaobject_definitions,write_files,read_files,read_orders,read_customers,read_fulfillments,read_legal_policies,write_discounts"
 
 [auth]
 redirect_urls = [

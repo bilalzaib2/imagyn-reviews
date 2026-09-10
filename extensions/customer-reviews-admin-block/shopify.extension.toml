@@ -3,6 +3,7 @@ api_version = "2025-10"
 [[extensions]]
 name = "t:name"
 handle = "customer-reviews-admin-block"
+uid = "0a1b0c42-ed25-3ac1-f5f7-1a66e17ad9dca9090306"
 type = "ui_extension"
 
 [[extensions.targeting]]

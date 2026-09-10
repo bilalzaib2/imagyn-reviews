@@ -28,12 +28,12 @@ interface CustomerEmailResponse {
 }
 
 export const loader = async ({ request }: LoaderFunctionArgs) => {
-  const { session, admin } = await authenticateAdminDeduped(request);
+  const { session, admin, cors } = await authenticateAdminDeduped(request);
   const store = await getOrCreateStore(session.shop);
 
   const customerId = new URL(request.url).searchParams.get("customerId");
   if (!customerId) {
-    return { ok: false, error: "customerId is required." };
+    return cors(Response.json({ ok: false, error: "customerId is required." }));
   }
 
   const response = await admin.graphql(CUSTOMER_EMAIL_QUERY, { variables: { id: customerId } });
@@ -41,9 +41,9 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
   const email = json.data?.customer?.email;
 
   if (!email) {
-    return { ok: true, reviewCount: 0, averageRating: null, mostRecent: null };
+    return cors(Response.json({ ok: true, reviewCount: 0, averageRating: null, mostRecent: null }));
   }
 
   const stats = await getCustomerReviewStatsByEmail(store.id, email);
-  return { ok: true, ...stats };
+  return cors(Response.json({ ok: true, ...stats }));
 };

@@ -2,6 +2,7 @@
 name = "Review Created"
 type = "flow_trigger"
 handle = "review-created"
+uid = "ba2b1735-6781-4a52-fc78-a47b90095e79823d1876"
 description = "Fires when a customer submits a new review — build a Flow to notify your team, log it, or kick off any other automation."
 
 [settings]
