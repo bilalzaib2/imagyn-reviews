@@ -28,6 +28,7 @@ import { VerifiedBadge } from "../components/reviews/VerifiedBadge";
 import { StarRating } from "../components/reviews/StarRating";
 import { authenticateAdminDeduped } from "../services/auth-dedupe.server";
 import { getOrCreateStore } from "../services/store.server";
+import { getStorePermissions } from "../services/permissions";
 import { getProductForStore } from "../services/product.server";
 import { getProductReviews, type ReviewWithProduct } from "../services/review.server";
 import { getAiSummary, regenerateAiSummary, type ProductAiSummaryRecord } from "../services/aiSummary.server";
@@ -56,13 +57,15 @@ export const loader = async ({ request, params }: LoaderFunctionArgs) => {
         reviews: [] as ReviewWithProduct[],
         reviewsTotalCount: 0,
         aiSummary: null as ProductAiSummaryRecord | null,
+        canUseAI: false,
         error: "Product not found.",
       };
     }
 
-    const [reviewResult, aiSummary] = await Promise.all([
+    const [reviewResult, aiSummary, permissions] = await Promise.all([
       getProductReviews(product.id, { limit: REVIEW_LIST_LIMIT }),
       getAiSummary(product.id),
+      getStorePermissions(store.id),
     ]);
 
     return {
@@ -70,6 +73,7 @@ export const loader = async ({ request, params }: LoaderFunctionArgs) => {
       reviews: reviewResult.reviews,
       reviewsTotalCount: reviewResult.totalCount,
       aiSummary,
+      canUseAI: permissions.canUseAI,
       error: null as string | null,
     };
   } catch (error) {
@@ -78,6 +82,7 @@ export const loader = async ({ request, params }: LoaderFunctionArgs) => {
       reviews: [] as ReviewWithProduct[],
       reviewsTotalCount: 0,
       aiSummary: null as ProductAiSummaryRecord | null,
+      canUseAI: false,
       error: error instanceof Error ? error.message : "Unable to load product.",
     };
   }
@@ -198,7 +203,7 @@ function RatingBreakdown({
 }
 
 export default function ProductDetailPage() {
-  const { product, reviews, reviewsTotalCount, aiSummary, error } = useLoaderData<typeof loader>();
+  const { product, reviews, reviewsTotalCount, aiSummary, canUseAI, error } = useLoaderData<typeof loader>();
   const navigation = useNavigation();
   const location = useLocation();
   const fetcher = useFetcher<ActionData>();
@@ -319,14 +324,16 @@ export default function ProductDetailPage() {
               <BlockStack gap="400">
                 <div className={styles.reviewsHeader}>
                   <Text as="h2" variant="headingMd">
-                    ✨ AI Review Summary
+                    AI Review Summary
                   </Text>
-                  <Button type="button" onClick={handleRegenerate} disabled={isRegenerating}>
+                  <Button type="button" onClick={handleRegenerate} disabled={isRegenerating || !canUseAI}>
                     {isRegenerating ? "Regenerating…" : "Regenerate AI Summary"}
                   </Button>
                 </div>
 
-                {isRegenerating ? (
+                {!canUseAI ? (
+                  <p className={styles.aiSummaryEmpty}>AI Review Summaries require the Pro plan.</p>
+                ) : isRegenerating ? (
                   <div className={styles.aiSummarySkeleton} aria-hidden="true">
                     <SkeletonBodyText lines={3} />
                   </div>
