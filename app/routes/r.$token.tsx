@@ -15,6 +15,7 @@ import {
   uploadReviewVideos,
 } from "../services/reviewMedia.server";
 import { unauthenticated } from "../shopify.server";
+import { checkAndRecordSubmission } from "../services/reviewSubmissionThrottle.server";
 import { Button } from "../components/ui/Button";
 import { StarRating } from "../components/reviews/StarRating";
 import styles from "../styles/review-link.module.css";
@@ -97,6 +98,17 @@ export const action = async ({ request, params }: ActionFunctionArgs) => {
     return data(
       { ok: false as const, error: "This review link is no longer linked to a product." },
       { status: 410 },
+    );
+  }
+
+  // Same IP-bucketed defense as api.reviews.tsx — this route is token-gated (bounded by how
+  // many real requests a merchant has issued), so the realistic abuse case is narrower, but a
+  // stolen/leaked link being replayed in a script is still worth the same cheap check.
+  const throttle = await checkAndRecordSubmission(result.request.store.id, request);
+  if (!throttle.allowed) {
+    return data(
+      { ok: false as const, error: "Too many review submissions from this connection. Please try again later." },
+      { status: 429 },
     );
   }
 

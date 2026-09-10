@@ -24,6 +24,7 @@ import { getStorefrontAppearance } from "../services/appearance.server";
 import { getEarnedMedalsForStorefront } from "../services/achievements.server";
 import { getStorePermissions } from "../services/permissions";
 import { evaluateReview, getModerationSettings, sendHeldReviewNotification } from "../services/moderationRules.server";
+import { checkAndRecordSubmission } from "../services/reviewSubmissionThrottle.server";
 
 // Shared with api.reviews.batch.tsx so the two public review endpoints respond identically.
 export function json(data: unknown, init?: ResponseInit) {
@@ -260,6 +261,14 @@ export const action = async ({ request }: ActionFunctionArgs) => {
 
   if (!product) {
     return json({ ok: false, error: "Product not found for this shop." }, { status: 404 });
+  }
+
+  const throttle = await checkAndRecordSubmission(store.id, request);
+  if (!throttle.allowed) {
+    return json(
+      { ok: false, error: "Too many review submissions from this connection. Please try again later." },
+      { status: 429 },
+    );
   }
 
   try {

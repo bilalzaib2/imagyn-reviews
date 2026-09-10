@@ -163,6 +163,8 @@ model Store {
   referrals           Referral[]
   referralConversions ReferralConversion[]
   productGroups       ProductGroup[]
+
+  reviewSubmissionThrottles ReviewSubmissionThrottle[]
 }
 
 model Product {
@@ -932,4 +934,25 @@ model ReferralConversion {
 
   @@index([storeId])
   @@index([referralId])
+}
+
+// Coarse abuse-prevention counter for the public, unauthenticated review-submission
+// endpoints (api.reviews.tsx's storefront widget, r.$token.tsx's review-link flow) — neither
+// requires a Shopify session, so nothing else in this schema limits how many times the same
+// visitor can submit. ipHash is a SHA-256 hash of the submitter's IP, never the raw address —
+// this table only ever needs to answer "how many hits from this bucket recently", never who
+// the visitor was (see reviewSubmissionThrottle.server.ts, the only reader/writer). Rows are
+// disposable once past the rate-limit window; nothing else in the app reads this table, and
+// there is no retention requirement on it.
+model ReviewSubmissionThrottle {
+  id String @id @default(cuid())
+
+  storeId String
+  store   Store  @relation(fields: [storeId], references: [id], onDelete: Cascade)
+
+  ipHash String
+
+  createdAt DateTime @default(now())
+
+  @@index([storeId, ipHash, createdAt])
 }
