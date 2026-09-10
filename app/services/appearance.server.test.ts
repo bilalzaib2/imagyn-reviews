@@ -60,7 +60,59 @@ vi.mock("../db.server", () => ({
   },
 }));
 
-const { appearanceService } = await import("./appearance.server");
+let overrideTokensByStoreAndSurface: Record<string, Record<string, unknown>>;
+vi.mock("./surfaceBrandOverride.server", async () => {
+  const actual = await vi.importActual<typeof import("./surfaceBrandOverride.server")>("./surfaceBrandOverride.server");
+  return {
+    ...actual,
+    getSurfaceOverrideTokens: vi.fn(async (storeId: string, surfaceKey: string) => overrideTokensByStoreAndSurface[storeId]?.[surfaceKey] ?? null),
+  };
+});
+
+const { appearanceService, getStorefrontAppearance } = await import("./appearance.server");
+
+describe("getStorefrontAppearance — Global Brand -> Surface Override", () => {
+  beforeEach(() => {
+    rows = [];
+    nextId = 1;
+    overrideTokensByStoreAndSurface = {};
+  });
+
+  it("returns pure global tokens (documented defaults) for a store that never configured Brand Studio", async () => {
+    const tokens = await getStorefrontAppearance("store_1");
+    expect(tokens).toEqual(getDefaultAppearanceTokens());
+  });
+
+  it("without a surfaceKey, ignores any override that happens to exist (existing call sites are unaffected)", async () => {
+    await appearanceService.upsertActive("store_1", { tokens: getDefaultAppearanceTokens() });
+    overrideTokensByStoreAndSurface.store_1 = { store_reviews: { colors: { starColor: "#00ff00" } } };
+
+    const tokens = await getStorefrontAppearance("store_1");
+    expect(tokens.colors.starColor).not.toBe("#00ff00");
+  });
+
+  it("with a surfaceKey but no override row for it, still returns pure global tokens", async () => {
+    await appearanceService.upsertActive("store_1", {
+      tokens: { ...getDefaultAppearanceTokens(), colors: { ...getDefaultAppearanceTokens().colors, starColor: "#123456" } },
+    });
+
+    const tokens = await getStorefrontAppearance("store_1", "review_carousel");
+    expect(tokens.colors.starColor).toBe("#123456");
+  });
+
+  it("with a surfaceKey AND a real override, the override wins for exactly the fields it sets", async () => {
+    await appearanceService.upsertActive("store_1", {
+      tokens: { ...getDefaultAppearanceTokens(), colors: { ...getDefaultAppearanceTokens().colors, starColor: "#123456" } },
+    });
+    overrideTokensByStoreAndSurface.store_1 = { store_reviews: { colors: { starColor: "#00ff00" } } };
+
+    const tokens = await getStorefrontAppearance("store_1", "store_reviews");
+    expect(tokens.colors.starColor).toBe("#00ff00");
+    // A sibling surface with no override for this store still gets the real global value.
+    const carouselTokens = await getStorefrontAppearance("store_1", "review_carousel");
+    expect(carouselTokens.colors.starColor).toBe("#123456");
+  });
+});
 
 describe("appearanceService", () => {
   beforeEach(() => {

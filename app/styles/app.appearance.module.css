@@ -302,6 +302,28 @@
   color: var(--color-danger);
 }
 
+.contrastWarning {
+  padding: var(--space-3) var(--space-4);
+  border: 1px solid color-mix(in srgb, var(--color-danger) 35%, transparent);
+  background: color-mix(in srgb, var(--color-danger) 6%, transparent);
+  border-radius: var(--radius-md);
+  margin-bottom: var(--space-3);
+}
+
+.contrastWarningTitle {
+  margin: 0 0 var(--space-1);
+  font-size: var(--text-sm);
+  font-weight: 600;
+  color: var(--color-danger);
+}
+
+.contrastWarningList {
+  margin: 0;
+  padding-left: 1.1em;
+  font-size: var(--text-sm);
+  color: var(--color-text);
+}
+
 .accentPreview {
   display: flex;
   align-items: center;

@@ -50,7 +50,7 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
     // this endpoint's own bug: getLatestAiSummaryForStore is actually "whichever single
     // product happened to get a ProductAiSummary most recently", despite its name).
     getStoreAiSummary(store.id),
-    getStorefrontAppearance(store.id),
+    getStorefrontAppearance(store.id, "trust_badge"),
   ]);
 
   // No calculation has ever run yet (e.g. a brand-new install whose Dashboard hasn't loaded

@@ -55,7 +55,7 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
     getFeaturedReviews(store.id, limit),
     getStorefrontCarouselSettings(store.id),
     // Same centralized Appearance System tokens every other widget on the page resolves.
-    getStorefrontAppearance(store.id),
+    getStorefrontAppearance(store.id, "review_carousel"),
   ]);
 
   return json({

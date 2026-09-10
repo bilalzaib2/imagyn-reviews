@@ -1,3 +1,4 @@
+import type { CSSProperties } from "react";
 import { data, Link, isRouteErrorResponse, useLoaderData, useRouteError } from "react-router";
 import type { LoaderFunctionArgs } from "react-router";
 
@@ -33,8 +34,27 @@ export const loader = async ({ params, request }: LoaderFunctionArgs) => {
 export default function ReviewSitePage() {
   const { slug, site } = useLoaderData<typeof loader>();
 
+  // Global Brand inheritance (Brand Studio) — real CSS custom property overrides, only ever
+  // emitted once a merchant has actually saved a configuration (see reviewSite.server.ts's
+  // `hasCustomBrand` for exactly why the gate exists: this page's own CSS defaults don't
+  // numerically match AppearanceTokens' defaults, so applying tokens unconditionally would
+  // re-skin an unconfigured store's page on day one). `--brand-text` is only set when the
+  // merchant chose a fixed text color — null means "inherit the page's own default", so it's
+  // simply omitted, never forced to a fabricated value.
+  const brandStyle: CSSProperties = site.hasCustomBrand
+    ? {
+        ...({
+          "--brand-accent": site.appearance.colors.starColor,
+          "--brand-border": site.appearance.colors.borderColor,
+          "--brand-surface": site.appearance.colors.surfaceColor,
+          "--brand-radius": `${site.appearance.corners.radius}px`,
+          ...(site.appearance.colors.textColor ? { "--brand-text": site.appearance.colors.textColor } : {}),
+        } as CSSProperties),
+      }
+    : {};
+
   return (
-    <div className={styles.page}>
+    <div className={styles.page} style={brandStyle}>
       <div className={styles.container}>
         <header className={styles.header}>
           <p className={styles.eyebrow}>Customer Reviews</p>

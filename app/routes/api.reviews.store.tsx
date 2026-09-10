@@ -41,7 +41,7 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
   const [summary, medals, appearance, storeAiSummary] = await Promise.all([
     getPublicStoreReviewSummary(store.id),
     getEarnedMedalsForStorefront(store.id),
-    getStorefrontAppearance(store.id),
+    getStorefrontAppearance(store.id, "store_reviews"),
     // Pure cache read (never generates) — only fetched at all when the merchant has actually
     // turned this surface on, and only ever the real persisted Store AI Summary, never a
     // per-product fallback. Omitted from the response entirely when the merchant hasn't

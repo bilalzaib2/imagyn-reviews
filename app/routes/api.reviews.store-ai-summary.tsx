@@ -33,7 +33,10 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
     return json({ ok: false, error: "Shop not found." }, { status: 404 });
   }
 
-  const [storeAiSummary, appearance] = await Promise.all([getStoreAiSummary(store.id), getStorefrontAppearance(store.id)]);
+  const [storeAiSummary, appearance] = await Promise.all([
+    getStoreAiSummary(store.id),
+    getStorefrontAppearance(store.id, "store_ai_summary"),
+  ]);
 
   return json({
     ok: true,

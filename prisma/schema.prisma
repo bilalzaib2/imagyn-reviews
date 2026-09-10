@@ -45,6 +45,7 @@ model Store {
   reviewRequests    ReviewRequest[]
   widgets           Widget[]
   appearances       Appearance[]
+  surfaceBrandOverrides SurfaceBrandOverride[]
   emailTemplates    EmailTemplate[]
   achievements       Achievement[]
   emailSuppressions  EmailSuppression[]
@@ -566,6 +567,37 @@ model Appearance {
   updatedAt DateTime @updatedAt
 
   @@index([storeId, isActive])
+}
+
+// Global Brand inheritance — Surface Default → Surface-Specific Override layer sitting on
+// top of Appearance (the Global Brand). A row here means a merchant has explicitly
+// diverged one surface (e.g. the Product Reviews widget) away from Brand Studio's global
+// tokens; its absence means that surface simply renders the current global tokens — the
+// "future widget automatically inherits the global brand" guarantee this exists to provide,
+// since a brand-new surface with no override row here needs zero new schema of its own.
+// `tokens` is a JSON-encoded Partial<AppearanceTokens> (appearance.shared.ts) — only the
+// categories/fields the merchant actually changed for this one surface, resolved via
+// mergeAppearanceTokens(override, globalTokens) at render time (see appearance.server.ts's
+// getStorefrontAppearance). Deleting the row (not zeroing its tokens) is how "Reset to Brand
+// Studio" actually works — see surfaceBrandOverride.server.ts.
+model SurfaceBrandOverride {
+  id      String @id @default(cuid())
+  storeId String
+  store   Store  @relation(fields: [storeId], references: [id], onDelete: Cascade)
+
+  // "store_reviews" | "product_reviews" | "review_carousel" | "trust_badge" |
+  // "store_ai_summary" | "public_review_site" — see appearance.shared.ts's SurfaceKey.
+  // A plain string (not a DB enum), matching this schema's existing JSON-as-String
+  // precedent, so a future surface key needs no migration.
+  surfaceKey String
+
+  tokens String
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([storeId, surfaceKey])
+  @@index([storeId])
 }
 
 // Email Studio — merchant-editable content for outbound review-request emails. Same shape as

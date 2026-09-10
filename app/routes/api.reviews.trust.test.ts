@@ -30,8 +30,9 @@ vi.mock("../services/reviewMedia.server", () => ({
   getVerifiedStoreMediaGallery: vi.fn(async () => []),
 }));
 
+const getStorefrontAppearanceMock = vi.fn(async () => ({}));
 vi.mock("../services/appearance.server", () => ({
-  getStorefrontAppearance: vi.fn(async () => ({})),
+  getStorefrontAppearance: getStorefrontAppearanceMock,
 }));
 
 const getStoreAiSummaryMock = vi.fn(async () => storeAiSummaryRecord);
@@ -71,9 +72,15 @@ beforeEach(() => {
     reviewCountUsed: 42,
   };
   getStoreAiSummaryMock.mockClear();
+  getStorefrontAppearanceMock.mockClear();
 });
 
 describe("api.reviews.trust loader — Trust Badge data", () => {
+  it("resolves brand tokens for the trust_badge surface (Global Brand -> Surface Override)", async () => {
+    await loader({ request: requestFor("verve.myshopify.com") } as never);
+    expect(getStorefrontAppearanceMock).toHaveBeenCalledWith("store_1", "trust_badge");
+  });
+
   it("returns real verified rating/count/pillars even for a not_certified store — the badge never depends on certification status", async () => {
     const response = await loader({ request: requestFor("verve.myshopify.com") } as never);
     const json = await response.json();

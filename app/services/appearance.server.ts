@@ -11,7 +11,9 @@ import {
   mergeAppearanceTokens,
   type AppearancePreset,
   type AppearanceTokens,
+  type SurfaceKey,
 } from "./appearance.shared";
+import { getSurfaceOverrideTokens, resolveSurfaceTokens } from "./surfaceBrandOverride.server";
 
 export interface AppearanceRecord {
   id: string;
@@ -146,9 +148,20 @@ export const appearanceService = {
   },
 };
 
-// Reused by both public storefront endpoints (api.reviews.tsx, api.reviews.batch.tsx) so
-// every widget resolves the exact same tokens the same way.
-export async function getStorefrontAppearance(storeId: string): Promise<AppearanceTokens> {
+// Reused by every public storefront endpoint so each widget resolves tokens the same way.
+// Global Brand → Surface Default → Surface Override → Final Rendered Style: passing a
+// `surfaceKey` resolves that surface's real override (if the merchant has ever set one) on
+// top of the real global tokens; omitting it (existing call sites that haven't been given a
+// surface identity yet) returns pure global tokens, unchanged from before this parameter
+// existed — this is why adding overrides to more surfaces later is additive, not a breaking
+// change to their existing callers.
+export async function getStorefrontAppearance(storeId: string, surfaceKey?: SurfaceKey): Promise<AppearanceTokens> {
   const active = await appearanceService.getActive(storeId);
-  return active?.tokens ?? getDefaultAppearanceTokens();
+  const globalTokens = active?.tokens ?? getDefaultAppearanceTokens();
+  if (!surfaceKey) {
+    return globalTokens;
+  }
+
+  const override = await getSurfaceOverrideTokens(storeId, surfaceKey);
+  return resolveSurfaceTokens(globalTokens, override);
 }

@@ -20,8 +20,9 @@ vi.mock("../services/store.server", () => ({
   getStoreBySlug: vi.fn(async () => ({ id: "store_1" })),
 }));
 
+const getStorefrontAppearanceMock = vi.fn(async () => ({}));
 vi.mock("../services/appearance.server", () => ({
-  getStorefrontAppearance: vi.fn(async () => ({})),
+  getStorefrontAppearance: getStorefrontAppearanceMock,
 }));
 
 const getStoreAiSummaryMock = vi.fn(async () => storeAiSummaryRecord);
@@ -41,9 +42,15 @@ beforeEach(() => {
     reviewCountUsed: 55,
   };
   getStoreAiSummaryMock.mockClear();
+  getStorefrontAppearanceMock.mockClear();
 });
 
 describe("api.reviews.store-ai-summary loader — Store AI Summary Theme Block data", () => {
+  it("resolves brand tokens for the store_ai_summary surface (Global Brand -> Surface Override)", async () => {
+    await loader({ request: requestFor("verve.myshopify.com") } as never);
+    expect(getStorefrontAppearanceMock).toHaveBeenCalledWith("store_1", "store_ai_summary");
+  });
+
   it("always reads the real, persisted Store AI Summary — no display-surface flag gates this block", async () => {
     const response = await loader({ request: requestFor("verve.myshopify.com") } as never);
     const json = await response.json();

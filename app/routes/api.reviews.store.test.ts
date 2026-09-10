@@ -28,8 +28,9 @@ vi.mock("../services/achievements.server", () => ({
   getEarnedMedalsForStorefront: vi.fn(async () => []),
 }));
 
+const getStorefrontAppearanceMock = vi.fn(async () => ({}));
 vi.mock("../services/appearance.server", () => ({
-  getStorefrontAppearance: vi.fn(async () => ({})),
+  getStorefrontAppearance: getStorefrontAppearanceMock,
 }));
 
 const getStoreAiSummaryMock = vi.fn(async () => storeAiSummaryRecord);
@@ -50,9 +51,15 @@ beforeEach(() => {
     reviewCountUsed: 55,
   };
   getStoreAiSummaryMock.mockClear();
+  getStorefrontAppearanceMock.mockClear();
 });
 
 describe("api.reviews.store loader — Store Reviews widget data", () => {
+  it("resolves brand tokens for the store_reviews surface (Global Brand -> Surface Override)", async () => {
+    await loader({ request: requestFor("verve.myshopify.com") } as never);
+    expect(getStorefrontAppearanceMock).toHaveBeenCalledWith("store_1", "store_reviews");
+  });
+
   it("never fetches or returns the Store AI Summary when this surface is disabled", async () => {
     const response = await loader({ request: requestFor("verve.myshopify.com") } as never);
     const json = await response.json();

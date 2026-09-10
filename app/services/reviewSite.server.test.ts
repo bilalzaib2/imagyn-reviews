@@ -63,6 +63,14 @@ vi.mock("./aiSummary.server", () => ({
   getStoreAiSummary: (...args: unknown[]) => getStoreAiSummaryMock(...(args as [])),
 }));
 
+const getStorefrontAppearanceMock = vi.fn(async () => ({ colors: { starColor: "#f5a623" } }));
+vi.mock("./appearance.server", () => ({
+  getStorefrontAppearance: (...args: unknown[]) => getStorefrontAppearanceMock(...(args as [])),
+  appearanceService: { getActive: (...args: unknown[]) => getActiveAppearanceMock(...(args as [])) },
+}));
+
+let getActiveAppearanceMock = vi.fn(async () => null as { id: string } | null);
+
 const { getReviewSiteData, getReviewSiteUrl } = await import("./reviewSite.server");
 
 beforeEach(() => {
@@ -71,6 +79,8 @@ beforeEach(() => {
   getStoreReviewStatsMock.mockClear();
   getStoreReviewsMock.mockClear();
   getStoreAiSummaryMock.mockClear();
+  getStorefrontAppearanceMock.mockClear();
+  getActiveAppearanceMock = vi.fn(async () => null);
 });
 
 describe("getReviewSiteData", () => {
@@ -117,6 +127,22 @@ describe("getReviewSiteData", () => {
     getStoreAiSummaryMock.mockResolvedValueOnce(null);
     const result = await getReviewSiteData("example-store");
     expect(result?.storeAiSummary).toBeNull();
+  });
+
+  it("resolves brand tokens for the public_review_site surface (Global Brand -> Surface Override)", async () => {
+    await getReviewSiteData("example-store");
+    expect(getStorefrontAppearanceMock).toHaveBeenCalledWith("store_1", "public_review_site");
+  });
+
+  it("reports hasCustomBrand: false when the merchant has never configured Brand Studio", async () => {
+    const result = await getReviewSiteData("example-store");
+    expect(result?.hasCustomBrand).toBe(false);
+  });
+
+  it("reports hasCustomBrand: true once the merchant has actually saved a configuration", async () => {
+    getActiveAppearanceMock = vi.fn(async () => ({ id: "appearance_1" }));
+    const result = await getReviewSiteData("example-store");
+    expect(result?.hasCustomBrand).toBe(true);
   });
 });
 

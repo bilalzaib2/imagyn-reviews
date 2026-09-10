@@ -59,12 +59,21 @@
 .input,
 .textarea {
   width: 100%;
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-md);
+  /* Global Brand inheritance (Brand Studio) — --brand-* is only defined inline when the
+     merchant has actually saved a configuration (see r.$token.tsx); otherwise these fall
+     through to the original design-system defaults untouched. */
+  border: 1px solid var(--brand-border, var(--color-border));
+  border-radius: var(--brand-radius, var(--radius-md));
   padding: var(--space-3) var(--space-4);
   font-size: var(--text-base);
   color: var(--color-text);
-  background: var(--color-surface);
+  background: var(--brand-surface, var(--color-surface));
+}
+
+.input:focus-visible,
+.textarea:focus-visible {
+  outline: 2px solid var(--brand-accent, var(--color-accent));
+  outline-offset: 1px;
 }
 
 .textarea {

@@ -141,8 +141,10 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
     getProductMediaGallery(product.id),
     // The centralized Appearance System's resolved tokens — every widget on this page
     // (this one, plus the Rating Badge fetching the same endpoint independently)
-    // consumes the same resolved value. See imagyn-appearance.js.
-    getStorefrontAppearance(store.id),
+    // consumes the same resolved value. See imagyn-appearance.js. Surface key
+    // "product_reviews" also covers the standalone Product AI Summary block, which hits
+    // this exact same endpoint/request shape — see appearance.shared.ts's SurfaceKey.
+    getStorefrontAppearance(store.id, "product_reviews"),
     // Store-wide (not product-scoped) earned Medals — a pure, cheap ledger read, never the
     // full evaluateAchievements computation (see that function's own comment for why).
     getEarnedMedalsForStorefront(store.id),

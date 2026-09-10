@@ -37,6 +37,41 @@
 
 export type AppearancePreset = "minimal" | "modern" | "editorial" | "luxury" | "custom";
 
+// Global Brand inheritance — every customer-facing surface this app renders, each a real,
+// independently-fetched backend call (see each key's own consumer below). A surface with no
+// SurfaceBrandOverride row for its key simply renders the current global Appearance tokens —
+// this is the whole mechanism behind "a future widget automatically inherits the global
+// brand": it needs a new entry in this union (a compile-time, not a schema, change) plus a
+// call to getStorefrontAppearance(storeId, key), never a new database table of its own.
+export type SurfaceKey =
+  | "store_reviews" // api.reviews.store.tsx
+  | "product_reviews" // api.reviews.tsx — also backs the standalone Product AI Summary block, same request
+  | "review_carousel" // api.reviews.featured.tsx
+  | "trust_badge" // api.reviews.trust.tsx
+  | "store_ai_summary" // api.reviews.store-ai-summary.tsx
+  | "public_review_site" // reviewSite.server.ts
+  | "review_request_landing"; // r.$token.tsx
+
+export const SURFACE_KEYS: SurfaceKey[] = [
+  "store_reviews",
+  "product_reviews",
+  "review_carousel",
+  "trust_badge",
+  "store_ai_summary",
+  "public_review_site",
+  "review_request_landing",
+];
+
+export const SURFACE_LABELS: Record<SurfaceKey, string> = {
+  store_reviews: "Store Reviews widget",
+  product_reviews: "Product Reviews widget",
+  review_carousel: "Review Carousel",
+  trust_badge: "Trust Badge",
+  store_ai_summary: "Store AI Summary block",
+  public_review_site: "Public Review Site",
+  review_request_landing: "Review request landing page",
+};
+
 export interface AppearanceTypographyTokens {
   /** 0.9–1.15 — multiplies every --imagyn-font-size-* at resolve time. One control, not
    *  seven, so the scale always stays internally proportional. */
@@ -216,3 +251,72 @@ export const mergeAppearanceTokens = (
     animation: { ...base.animation, ...partial.animation },
   };
 };
+
+// Accessibility — WCAG 2.x relative-luminance contrast ratio between two real hex colors a
+// merchant has actually set (never a heuristic/approximation). Used by Brand Studio to warn
+// (not block — a merchant may have a legitimate reason) when their own chosen accent/text
+// color against their own chosen surface color would render effectively unreadable text or
+// controls. Returns null for a color this can't parse (e.g. `null` textColor, which means
+// "inherit currentColor" and has no fixed contrast to check in the first place) rather than
+// fabricating a number.
+function hexToRgb(hex: string): [number, number, number] | null {
+  const match = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(hex.trim());
+  if (!match) return null;
+  return [parseInt(match[1], 16), parseInt(match[2], 16), parseInt(match[3], 16)];
+}
+
+function relativeLuminance([r, g, b]: [number, number, number]): number {
+  const channel = (value: number) => {
+    const srgb = value / 255;
+    return srgb <= 0.03928 ? srgb / 12.92 : Math.pow((srgb + 0.055) / 1.055, 2.4);
+  };
+  const [cr, cg, cb] = [channel(r), channel(g), channel(b)];
+  return 0.2126 * cr + 0.7152 * cg + 0.0722 * cb;
+}
+
+export function contrastRatio(hexA: string, hexB: string): number | null {
+  const rgbA = hexToRgb(hexA);
+  const rgbB = hexToRgb(hexB);
+  if (!rgbA || !rgbB) return null;
+
+  const lumA = relativeLuminance(rgbA);
+  const lumB = relativeLuminance(rgbB);
+  const lighter = Math.max(lumA, lumB);
+  const darker = Math.min(lumA, lumB);
+  return (lighter + 0.05) / (darker + 0.05);
+}
+
+// WCAG 2.x AA for normal-size text/UI components — the standard both this app's own
+// accessibility bar (docs/ACCESS_CONTROL.md is unrelated; see STOREFRONT_DESIGN_SYSTEM.md's
+// accessibility section) and Shopify's own theme requirements reference.
+export const WCAG_AA_MIN_CONTRAST = 4.5;
+
+export interface ContrastWarning {
+  pair: "text-on-surface" | "accent-on-surface";
+  ratio: number;
+}
+
+// Real validation, not a fake control — only ever checks color PAIRS this system actually
+// renders together (text over the review-card surface; the accent/star color over that same
+// surface, since a "boxed" card treatment renders the accent color as inline SVG/text against
+// the surface). Silently skips textColor when it's null ("inherit currentColor") since that
+// has no fixed value to check against — this system cannot know the merchant's theme
+// background at save time, so it never fabricates a pass or fail for that case.
+export function checkAppearanceContrast(tokens: AppearanceTokens): ContrastWarning[] {
+  const warnings: ContrastWarning[] = [];
+  const surface = tokens.colors.surfaceColor;
+
+  if (tokens.colors.textColor) {
+    const ratio = contrastRatio(tokens.colors.textColor, surface);
+    if (ratio !== null && ratio < WCAG_AA_MIN_CONTRAST) {
+      warnings.push({ pair: "text-on-surface", ratio });
+    }
+  }
+
+  const accentRatio = contrastRatio(tokens.colors.starColor, surface);
+  if (accentRatio !== null && accentRatio < WCAG_AA_MIN_CONTRAST) {
+    warnings.push({ pair: "accent-on-surface", ratio: accentRatio });
+  }
+
+  return warnings;
+}

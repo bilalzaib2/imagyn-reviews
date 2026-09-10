@@ -19,9 +19,19 @@ import { assertPermission, getStorePermissions } from "../services/permissions";
 import {
   getDefaultAppearanceTokens,
   mergeAppearanceTokens,
+  checkAppearanceContrast,
+  SURFACE_KEYS,
+  SURFACE_LABELS,
   type AppearancePreset,
   type AppearanceTokens,
+  type ContrastWarning,
+  type SurfaceKey,
 } from "../services/appearance.shared";
+import {
+  getSurfaceOverrideTokens,
+  setSurfaceOverride,
+  resetSurfaceOverride,
+} from "../services/surfaceBrandOverride.server";
 import shellStyles from "../styles/app.shell.module.css";
 import styles from "../styles/app.appearance.module.css";
 
@@ -33,6 +43,10 @@ type LoaderData = {
   // reset) is Free. See permissions.ts's canUseBrandStudio.
   canUseBrandStudio: boolean;
   savedThemes: AppearanceRecord[];
+  // Global Brand → Surface Default → Surface Override — which real surfaces currently have
+  // an explicit override saved (see surfaceBrandOverride.server.ts), so the Surface
+  // Overrides section below can show real state, never a guess.
+  surfaceOverrides: Partial<Record<SurfaceKey, Partial<AppearanceTokens>>>;
 };
 
 type ActionData =
@@ -42,6 +56,9 @@ type ActionData =
   | { ok: true; intent: "setActiveTheme"; tokens: AppearanceTokens; preset: AppearancePreset }
   | { ok: true; intent: "aiSuggestBrand"; suggestion: BrandSuggestion }
   | { ok: true; intent: "applyEmailBranding" }
+  | { ok: true; intent: "applyBrandEverywhere"; emailApplied: boolean }
+  | { ok: true; intent: "saveOverride"; surfaceKey: SurfaceKey; tokens: Partial<AppearanceTokens> }
+  | { ok: true; intent: "resetOverride"; surfaceKey: SurfaceKey }
   | { ok: false; intent: string; error: string };
 
 export const loader = async ({ request }: LoaderFunctionArgs): Promise<LoaderData> => {
@@ -49,17 +66,24 @@ export const loader = async ({ request }: LoaderFunctionArgs): Promise<LoaderDat
   const store = await getOrCreateStore(session.shop);
   const permissions = await getStorePermissions(store.id);
 
-  const [active, savedThemes] = await Promise.all([
+  const [active, savedThemes, overrideEntries] = await Promise.all([
     appearanceService.getActive(store.id),
     // Saved Themes is Pro-only — no point listing rows a Free store can't act on.
     permissions.canUseBrandStudio ? appearanceService.list(store.id) : Promise.resolve([]),
+    Promise.all(SURFACE_KEYS.map(async (key) => [key, await getSurfaceOverrideTokens(store.id, key)] as const)),
   ]);
+
+  const surfaceOverrides: Partial<Record<SurfaceKey, Partial<AppearanceTokens>>> = {};
+  for (const [key, tokens] of overrideEntries) {
+    if (tokens) surfaceOverrides[key] = tokens;
+  }
 
   return {
     tokens: active?.tokens ?? getDefaultAppearanceTokens(),
     preset: active?.preset ?? "editorial",
     canUseBrandStudio: permissions.canUseBrandStudio,
     savedThemes,
+    surfaceOverrides,
   };
 };
 
@@ -159,6 +183,68 @@ export const action = async ({ request }: ActionFunctionArgs): Promise<ActionDat
       return { ok: true, intent: "applyEmailBranding" };
     }
 
+    // The main CTA — "Apply Brand Everywhere". A real, two-part operation, not a relabeled
+    // Save: (1) persists the current draft as the store's one global Appearance record,
+    // which every live-fetching storefront surface (every widget/block's own backend route
+    // — see appearance.server.ts's getStorefrontAppearance) picks up on its very next page
+    // load with zero further action needed; (2) pushes the same accent color + logo into
+    // the three stored email templates, since email HTML is a snapshot, not something a
+    // shopper's inbox re-fetches live. Surface-specific overrides are deliberately left
+    // untouched — Apply Brand Everywhere sets the new global DEFAULT; a surface with its own
+    // explicit override keeps it, exactly as this page's own "Reset to Brand Studio" control
+    // describes.
+    if (intent === "applyBrandEverywhere") {
+      const tokens = JSON.parse(String(formData.get("tokens") || "{}")) as AppearanceTokens;
+      const preset = String(formData.get("preset") || "custom") as AppearancePreset;
+
+      const safeTokens: AppearanceTokens = permissions.canUseBrandStudio
+        ? tokens
+        : {
+            ...tokens,
+            layout: getDefaultAppearanceTokens().layout,
+            animation: getDefaultAppearanceTokens().animation,
+          };
+
+      await appearanceService.upsertActive(store.id, { tokens: safeTokens, preset });
+
+      let emailApplied = false;
+      if (permissions.canUseBrandStudio) {
+        await emailTemplateService.applyBrandingToAllTemplates(store.id, {
+          accentColor: safeTokens.colors.starColor,
+          logoUrl: safeTokens.images.logoUrl,
+        });
+        emailApplied = true;
+      }
+
+      return { ok: true, intent: "applyBrandEverywhere", emailApplied };
+    }
+
+    // Surface-Specific Override — the third tier of Global Brand → Surface Default →
+    // Surface Override → Final Rendered Style. `tokens` is a PARTIAL (only the categories
+    // this one surface actually diverges on); every other category keeps inheriting the
+    // live global value forever, even if the merchant changes it later.
+    if (intent === "saveOverride") {
+      const surfaceKey = String(formData.get("surfaceKey") || "") as SurfaceKey;
+      if (!SURFACE_KEYS.includes(surfaceKey)) {
+        return { ok: false, intent, error: "Unknown surface." };
+      }
+      const overrideTokens = JSON.parse(String(formData.get("tokens") || "{}")) as Partial<AppearanceTokens>;
+      await setSurfaceOverride(store.id, surfaceKey, overrideTokens);
+      return { ok: true, intent: "saveOverride", surfaceKey, tokens: overrideTokens };
+    }
+
+    // "Reset to Brand Studio" — deletes the override row so this surface goes back to pure
+    // global inheritance immediately, including any global change made while it was
+    // overridden.
+    if (intent === "resetOverride") {
+      const surfaceKey = String(formData.get("surfaceKey") || "") as SurfaceKey;
+      if (!SURFACE_KEYS.includes(surfaceKey)) {
+        return { ok: false, intent, error: "Unknown surface." };
+      }
+      await resetSurfaceOverride(store.id, surfaceKey);
+      return { ok: true, intent: "resetOverride", surfaceKey };
+    }
+
     return { ok: false, intent, error: "Unsupported action." };
   } catch (error) {
     return { ok: false, intent, error: error instanceof Error ? error.message : "Unable to save. Please try again." };
@@ -217,8 +303,13 @@ function ReservedNote({ label }: { label: string }) {
 type PreviewMode = "desktop" | "mobile";
 
 export default function AppearancePage() {
-  const { tokens: initialTokens, preset: initialPreset, canUseBrandStudio, savedThemes } =
-    useLoaderData<typeof loader>();
+  const {
+    tokens: initialTokens,
+    preset: initialPreset,
+    canUseBrandStudio,
+    savedThemes,
+    surfaceOverrides,
+  } = useLoaderData<typeof loader>();
   const location = useLocation();
   // Same real, allow-listed deep-link route the Widgets page's own "Add to Theme"/"Open Theme
   // Editor" actions use (app.widgets.add-to-theme.tsx) — reused here rather than duplicated,
@@ -235,10 +326,12 @@ export default function AppearancePage() {
   const themeFetcher = useFetcher<ActionData>();
   const aiSuggestFetcher = useFetcher<ActionData>();
   const emailBrandFetcher = useFetcher<ActionData>();
+  const overrideFetcher = useFetcher<ActionData>();
   const isSaving = fetcher.state !== "idle";
   const isThemeBusy = themeFetcher.state !== "idle";
   const isAiSuggesting = aiSuggestFetcher.state !== "idle";
   const isApplyingEmailBranding = emailBrandFetcher.state !== "idle";
+  const isOverrideBusy = overrideFetcher.state !== "idle";
 
   const [draftTokens, setDraftTokens] = useState<AppearanceTokens>(initialTokens);
   const [baselineTokens, setBaselineTokens] = useState<AppearanceTokens>(initialTokens);
@@ -248,6 +341,16 @@ export default function AppearancePage() {
   const [newThemeName, setNewThemeName] = useState("");
   const [aiSuggestion, setAiSuggestion] = useState<BrandSuggestion | null>(null);
   const [aiSuggestError, setAiSuggestError] = useState<string | null>(null);
+
+  // Surface Overrides — Global Brand → Surface Default → Surface Override. `overridesState`
+  // starts from the loader's real, persisted rows and only ever changes in response to a
+  // real saveOverride/resetOverride response below — never a purely local/optimistic value,
+  // since "does this surface have an override" is exactly the fact a merchant needs to trust.
+  const [overridesState, setOverridesState] =
+    useState<Partial<Record<SurfaceKey, Partial<AppearanceTokens>>>>(surfaceOverrides);
+  const [selectedSurface, setSelectedSurface] = useState<SurfaceKey>(SURFACE_KEYS[0]);
+  const selectedOverride = overridesState[selectedSurface] ?? null;
+  const [overrideDraft, setOverrideDraft] = useState<Partial<AppearanceTokens>>(selectedOverride ?? {});
 
   const previewFrameRef = useRef<HTMLIFrameElement>(null);
 
@@ -274,6 +377,13 @@ export default function AppearancePage() {
     }
     if (fetcher.data.intent === "save") {
       setToastState({ content: "Saved. Your storefront now reflects these changes." });
+      setBaselineTokens(draftTokens);
+    } else if (fetcher.data.intent === "applyBrandEverywhere") {
+      setToastState({
+        content: fetcher.data.emailApplied
+          ? "Applied everywhere — every widget, block, and page now reflects this brand, and your email templates were updated too."
+          : "Applied everywhere — every widget, block, and page now reflects this brand. (Email template sync requires Pro.)",
+      });
       setBaselineTokens(draftTokens);
     } else if (fetcher.data.intent === "reset") {
       setDraftTokens(fetcher.data.tokens);
@@ -332,9 +442,57 @@ export default function AppearancePage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [emailBrandFetcher.data]);
 
+  useEffect(() => {
+    if (!overrideFetcher.data) return;
+    if (!overrideFetcher.data.ok) {
+      setToastState({ content: overrideFetcher.data.error, error: true });
+      return;
+    }
+    if (overrideFetcher.data.intent === "saveOverride") {
+      const { surfaceKey, tokens } = overrideFetcher.data;
+      setOverridesState((current) => ({ ...current, [surfaceKey]: tokens }));
+      setToastState({ content: `Override saved for ${SURFACE_LABELS[surfaceKey]}.` });
+    } else if (overrideFetcher.data.intent === "resetOverride") {
+      const { surfaceKey } = overrideFetcher.data;
+      setOverridesState((current) => {
+        const next = { ...current };
+        delete next[surfaceKey];
+        return next;
+      });
+      setOverrideDraft({});
+      setToastState({ content: `${SURFACE_LABELS[surfaceKey]} reset to Brand Studio.` });
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [overrideFetcher.data]);
+
+  // Switching which surface is being inspected always shows THAT surface's real saved
+  // override (or a blank draft if it has none) — never carries over a draft from whichever
+  // surface was selected before.
+  useEffect(() => {
+    setOverrideDraft(overridesState[selectedSurface] ?? {});
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedSurface]);
+
+  const hasSelectedOverride = selectedSurface in overridesState;
+  const overrideResolvedTokens = useMemo(
+    () => mergeAppearanceTokens(overrideDraft, draftTokens),
+    [overrideDraft, draftTokens],
+  );
+
+  // Real validation over the merchant's own chosen colors, never a fabricated warning —
+  // see appearance.shared.ts's checkAppearanceContrast for exactly what pairs this checks.
+  const contrastWarnings: ContrastWarning[] = useMemo(() => checkAppearanceContrast(draftTokens), [draftTokens]);
+
   const update = <C extends keyof AppearanceTokens>(category: C, patch: Partial<AppearanceTokens[C]>) => {
     setPreset("custom");
     setDraftTokens((current) => ({ ...current, [category]: { ...current[category], ...patch } }));
+  };
+
+  const updateOverride = <C extends keyof AppearanceTokens>(category: C, patch: Partial<AppearanceTokens[C]>) => {
+    setOverrideDraft((current) => ({
+      ...current,
+      [category]: { ...(current[category] as AppearanceTokens[C] | undefined), ...patch },
+    }));
   };
 
   // A Widget Style preset only carries structural categories (typography scale, spacing,
@@ -385,9 +543,14 @@ export default function AppearancePage() {
     setToastState({ content: "Applied the AI suggestion — review the preview, then Save to publish." });
   };
 
-  const handleSave = () => {
+  // The main CTA. A real operation: persists the draft as the global brand (every
+  // live-fetching storefront surface reflects it on its next page load, automatically,
+  // with zero further action) and pushes accent color + logo into the stored email
+  // templates — see the action's own "applyBrandEverywhere" intent for exactly what this
+  // does and does not touch (surface overrides are left alone by design).
+  const handleApplyBrandEverywhere = () => {
     const formData = new FormData();
-    formData.append("_intent", "save");
+    formData.append("_intent", "applyBrandEverywhere");
     formData.append("tokens", JSON.stringify(draftTokens));
     formData.append("preset", preset);
     fetcher.submit(formData, { method: "post" });
@@ -401,6 +564,21 @@ export default function AppearancePage() {
     const formData = new FormData();
     formData.append("_intent", "reset");
     fetcher.submit(formData, { method: "post" });
+  };
+
+  const handleSaveOverride = () => {
+    const formData = new FormData();
+    formData.append("_intent", "saveOverride");
+    formData.append("surfaceKey", selectedSurface);
+    formData.append("tokens", JSON.stringify(overrideDraft));
+    overrideFetcher.submit(formData, { method: "post" });
+  };
+
+  const handleResetOverride = () => {
+    const formData = new FormData();
+    formData.append("_intent", "resetOverride");
+    formData.append("surfaceKey", selectedSurface);
+    overrideFetcher.submit(formData, { method: "post" });
   };
 
   const handleCreateTheme = () => {
@@ -430,8 +608,8 @@ export default function AppearancePage() {
               <SettingsBreadcrumb current="Brand Studio" />
               <h1 className={shellStyles.title}>Brand Studio</h1>
               <p className={shellStyles.subtitle}>
-                Design how reviews look on your storefront — no code, no theme editing. Changes preview instantly
-                on the right and apply the moment you save.
+                Configure your brand once, then click Apply Brand Everywhere — every IMAGYN widget, Theme App
+                Block, and email inherits it automatically. Changes preview instantly on the right.
               </p>
               <a className={styles.themeEditorShortcut} href={storeReviewsThemeEditorHref}>
                 Customize the Store Reviews widget in your Theme Editor →
@@ -447,8 +625,8 @@ export default function AppearancePage() {
                 <>
                 <div className={styles.heroSection}>
                 <Section
-                  title="Apply my brand to my emails"
-                  description="Uses your current Imagyn brand settings below (Accent Color and Logo) — applies them to your Review Request, Reminder #1, and Final Reminder email templates in one click."
+                  title="Re-sync email templates only"
+                  description="Apply Brand Everywhere (below) already does this — use this only if you want to push your current Accent Color and Logo into emails again without touching anything else."
                 >
                   <div className={styles.brandMatchCard}>
                     <div className={styles.brandMatchPreview}>
@@ -841,6 +1019,71 @@ export default function AppearancePage() {
                   billingHref={`/app/billing${location.search}`}
                 />
               )}
+
+              <GroupLabel>Surface Overrides</GroupLabel>
+
+              <Section
+                title="Override one surface"
+                description="Every surface inherits this global brand by default. Pick one below to give it its own look instead — the global brand keeps applying to everything else, and changing it later never touches an overridden surface."
+              >
+                <Select
+                  label="Surface"
+                  labelHidden
+                  options={SURFACE_KEYS.map((key) => ({
+                    label: key in overridesState ? `${SURFACE_LABELS[key]} — Overridden` : SURFACE_LABELS[key],
+                    value: key,
+                  }))}
+                  value={selectedSurface}
+                  onChange={(value) => setSelectedSurface(value as SurfaceKey)}
+                />
+
+                <p className={styles.mutedHint}>
+                  {hasSelectedOverride
+                    ? `${SURFACE_LABELS[selectedSurface]} is using its own override below.`
+                    : `${SURFACE_LABELS[selectedSurface]} is currently inheriting your global brand.`}
+                </p>
+
+                <div className={styles.fieldGrid}>
+                  <ColorField
+                    label="Accent color"
+                    value={overrideResolvedTokens.colors.starColor}
+                    onChange={(value) => updateOverride("colors", { starColor: value })}
+                  />
+                  <ColorField
+                    label="Background"
+                    value={overrideResolvedTokens.colors.surfaceColor}
+                    onChange={(value) => updateOverride("colors", { surfaceColor: value })}
+                  />
+                </div>
+                <Select
+                  label="Button style"
+                  options={[
+                    { label: "Filled", value: "solid" },
+                    { label: "Outline", value: "outline" },
+                    { label: "Ghost", value: "ghost" },
+                  ]}
+                  value={overrideResolvedTokens.buttons.style}
+                  onChange={(value) => updateOverride("buttons", { style: value as "solid" | "outline" | "ghost" })}
+                />
+                <ValueSlider
+                  label="Border radius"
+                  min={0}
+                  max={24}
+                  step={1}
+                  value={overrideResolvedTokens.corners.radius}
+                  format={(value) => `${value}px`}
+                  onChange={(value) => updateOverride("corners", { radius: value })}
+                />
+
+                <div className={styles.actionsBar}>
+                  <Button type="button" variant="primary" onClick={handleSaveOverride} disabled={isOverrideBusy}>
+                    {isOverrideBusy ? "Saving…" : `Save override for ${SURFACE_LABELS[selectedSurface]}`}
+                  </Button>
+                  <Button type="button" variant="ghost" onClick={handleResetOverride} disabled={!hasSelectedOverride || isOverrideBusy}>
+                    Reset to Brand Studio
+                  </Button>
+                </div>
+              </Section>
             </div>
 
             <div className={styles.previewColumn}>
@@ -878,9 +1121,24 @@ export default function AppearancePage() {
                 />
               </div>
 
+              {contrastWarnings.length > 0 ? (
+                <div className={styles.contrastWarning} role="alert">
+                  <p className={styles.contrastWarningTitle}>Low contrast — some text may be hard to read</p>
+                  <ul className={styles.contrastWarningList}>
+                    {contrastWarnings.map((warning) => (
+                      <li key={warning.pair}>
+                        {warning.pair === "text-on-surface"
+                          ? `Text color against your background is only ${warning.ratio.toFixed(1)}:1 (recommended: 4.5:1 or higher).`
+                          : `Your accent color against your background is only ${warning.ratio.toFixed(1)}:1 (recommended: 4.5:1 or higher).`}
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              ) : null}
+
               <div className={styles.actionsBar}>
-                <Button variant="primary" onClick={handleSave} disabled={!hasUnsavedChanges || isSaving}>
-                  Save
+                <Button variant="primary" onClick={handleApplyBrandEverywhere} disabled={!hasUnsavedChanges || isSaving}>
+                  {isSaving ? "Applying…" : "Apply Brand Everywhere"}
                 </Button>
                 <Button variant="secondary" onClick={handleDiscard} disabled={!hasUnsavedChanges || isSaving}>
                   Discard

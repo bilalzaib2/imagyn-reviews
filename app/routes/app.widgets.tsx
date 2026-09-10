@@ -143,11 +143,11 @@ const widgetCards: WidgetCardDef[] = [
   },
   {
     key: "ai-review-summary",
-    title: "AI Review Summary",
+    title: "Product AI Summary",
     description:
-      "The AI-generated summary and recommendation for a product, on its own — place it anywhere on the product page without needing the full Reviews widget there too. Generate a summary first from a product's page in Imagyn Reviews.",
+      "The AI-generated summary and recommendation for a product, on its own — place it anywhere on the product page without needing the full Reviews widget there too. Generate a summary first from a product's page in Imagyn Reviews. Separate from the store-wide Store AI Summary block below.",
     status: "theme-editor",
-    blockName: "AI Review Summary",
+    blockName: "Product AI Summary",
     blockHandle: "ai_review_summary",
   },
   {
@@ -490,7 +490,7 @@ function MedalsShowcaseThumbnailPreview() {
 function AiSummaryThumbnailPreview({ tokens }: { tokens: AppearanceTokens }) {
   return (
     <div className={styles.aiSummaryPreviewBlock}>
-      <span className={styles.aiSummaryPreviewLabel}>AI Review Summary</span>
+      <span className={styles.aiSummaryPreviewLabel}>Product AI Summary</span>
       <p className={styles.aiSummaryPreviewText} style={{ color: tokens.colors.textColor ?? "#111111" }}>
         Customers consistently praise the fit and fabric quality, with several noting it runs slightly small.
       </p>
@@ -508,7 +508,7 @@ function AiSummaryThumbnailPreview({ tokens }: { tokens: AppearanceTokens }) {
 function StoreAiSummaryThumbnailPreview({ tokens }: { tokens: AppearanceTokens }) {
   return (
     <div className={styles.aiSummaryPreviewBlock}>
-      <span className={styles.aiSummaryPreviewLabel}>AI Review Summary</span>
+      <span className={styles.aiSummaryPreviewLabel}>Store AI Summary</span>
       <p className={styles.aiSummaryPreviewText} style={{ color: tokens.colors.textColor ?? "#111111" }}>
         Customers across every product love the fast shipping and consistent quality, with a few requesting more
         size options.

@@ -88,6 +88,7 @@ export const loader = ({ request }: LoaderFunctionArgs) => {
 <link rel="stylesheet" href="/appearance-preview/imagyn-typography.css">
 <link rel="stylesheet" href="/appearance-preview/imagyn-component-badge.css">
 <link rel="stylesheet" href="/appearance-preview/imagyn-component-summary.css">
+<link rel="stylesheet" href="/appearance-preview/imagyn-component-ratings-section.css">
 <link rel="stylesheet" href="/appearance-preview/imagyn-component-review-card.css">
 <link rel="stylesheet" href="/appearance-preview/imagyn-component-button.css">
 <link rel="stylesheet" href="/appearance-preview/imagyn-component-tag.css">
@@ -125,6 +126,15 @@ export const loader = ({ request }: LoaderFunctionArgs) => {
     </div>
 
     <button type="button" class="imagyn-btn imagyn-btn--primary">Leave a review</button>
+
+    <div>
+      <p class="imagyn-preview-label">AI Review Summary (Store or Product)</p>
+      <div class="imagyn-ai-summary">
+        <p class="imagyn-ratings-section__label imagyn-ai-summary__heading">AI Review Summary</p>
+        <p class="imagyn-ai-summary__text">Customers consistently praise the fit and fabric quality, with several noting it runs slightly small.</p>
+        <p class="imagyn-ai-summary__recommendation">Based on 128 approved reviews</p>
+      </div>
+    </div>
 
     <ul class="imagyn-reviews__list imagyn-reviews--layout-list">
       ${reviewCardsHtml}

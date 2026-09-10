@@ -1,4 +1,5 @@
 import { useRef, useState } from "react";
+import type { CSSProperties } from "react";
 import { data, Form, isRouteErrorResponse, useActionData, useLoaderData, useNavigation, useRouteError } from "react-router";
 import type { ActionFunctionArgs, LoaderFunctionArgs } from "react-router";
 
@@ -16,6 +17,7 @@ import {
 } from "../services/reviewMedia.server";
 import { unauthenticated } from "../shopify.server";
 import { checkAndRecordSubmission } from "../services/reviewSubmissionThrottle.server";
+import { appearanceService, getStorefrontAppearance } from "../services/appearance.server";
 import { Button } from "../components/ui/Button";
 import { StarRating } from "../components/reviews/StarRating";
 import styles from "../styles/review-link.module.css";
@@ -62,6 +64,12 @@ export const loader = async ({ params }: LoaderFunctionArgs) => {
   // to call unconditionally rather than tracking "have we already recorded this" ourselves.
   await reviewRequestService.markRequestClicked(token);
 
+  const storeId = result.request.store.id;
+  const [appearance, activeAppearance] = await Promise.all([
+    getStorefrontAppearance(storeId, "review_request_landing"),
+    appearanceService.getActive(storeId),
+  ]);
+
   return {
     productName: result.request.product?.name ?? "your recent purchase",
     productImage: result.request.product?.featuredImage ?? null,
@@ -75,6 +83,11 @@ export const loader = async ({ params }: LoaderFunctionArgs) => {
     // server module out of the client bundle once client code depends on it too).
     maxVideoSizeBytes: MAX_VIDEO_SIZE_BYTES,
     maxVideoDurationSeconds: MAX_VIDEO_DURATION_MS / 1000,
+    // Global Brand inheritance (Brand Studio) — same gate as reviews-site.$slug.tsx: only
+    // apply real overrides once the merchant has actually saved a configuration, since this
+    // page's own CSS defaults weren't co-designed to match AppearanceTokens' defaults.
+    appearance,
+    hasCustomBrand: activeAppearance !== null,
   };
 };
 
@@ -257,7 +270,20 @@ export default function ReviewLinkPage() {
     maxPhotos,
     maxVideoSizeBytes,
     maxVideoDurationSeconds,
+    appearance,
+    hasCustomBrand,
   } = useLoaderData<typeof loader>();
+
+  // Global Brand inheritance (Brand Studio) — see reviews-site.$slug.tsx's identical pattern
+  // for why this is gated on hasCustomBrand.
+  const brandStyle: CSSProperties = hasCustomBrand
+    ? ({
+        "--brand-accent": appearance.colors.starColor,
+        "--brand-border": appearance.colors.borderColor,
+        "--brand-surface": appearance.colors.surfaceColor,
+        "--brand-radius": `${appearance.corners.radius}px`,
+      } as CSSProperties)
+    : {};
   const actionData = useActionData<typeof action>();
   const navigation = useNavigation();
   const isSubmitting = navigation.state === "submitting";
@@ -350,7 +376,7 @@ export default function ReviewLinkPage() {
 
   if (actionData?.ok) {
     return (
-      <div className={styles.page}>
+      <div className={styles.page} style={brandStyle}>
         <div className={styles.card}>
           <div className={styles.status}>
             <div className={styles.statusIcon} aria-hidden="true">
@@ -366,7 +392,7 @@ export default function ReviewLinkPage() {
   }
 
   return (
-    <div className={styles.page}>
+    <div className={styles.page} style={brandStyle}>
       <div className={styles.card}>
         {productImage ? (
           <img src={productImage} alt={productName} className={styles.productImage} />

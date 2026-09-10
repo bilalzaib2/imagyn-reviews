@@ -19,6 +19,7 @@ const FILES = [
   "imagyn-utilities.css",
   "imagyn-component-badge.css",
   "imagyn-component-summary.css",
+  "imagyn-component-ratings-section.css",
   "imagyn-component-review-card.css",
   "imagyn-component-button.css",
   "imagyn-component-tag.css",
