@@ -33,6 +33,7 @@ interface FakeProduct {
   id: string;
   storeId: string;
   name: string;
+  shopifyProductId: string | null;
 }
 
 let reviews: FakeReview[];
@@ -67,7 +68,7 @@ function seedReview(overrides: Partial<FakeReview> & { id: string; storeId: stri
 }
 
 function seedProduct(overrides: Partial<FakeProduct> & { id: string; storeId: string }): FakeProduct {
-  const product: FakeProduct = { name: "Test Product", ...overrides };
+  const product: FakeProduct = { name: "Test Product", shopifyProductId: null, ...overrides };
   products.push(product);
   return product;
 }
@@ -86,7 +87,18 @@ vi.mock("../db.server", () => ({
     product: {
       findFirst: vi.fn(async ({ where }: { where: { id: string; storeId: string } }) => {
         const product = products.find((p) => p.id === where.id && p.storeId === where.storeId);
-        return product ? { id: product.id, storeId: product.storeId, name: product.name } : null;
+        return product
+          ? {
+              id: product.id,
+              storeId: product.storeId,
+              name: product.name,
+              shopifyProductId: product.shopifyProductId,
+              // notifyReviewCreatedFlowTrigger is fire-and-forget and short-circuits without a
+              // real shopifyProductId (see its own guard) — every seedProduct in this file
+              // defaults to null, so this fake domain is never actually dereferenced further.
+              store: { domain: "store.myshopify.com" },
+            }
+          : null;
       }),
       update: vi.fn(async () => ({})),
     },

@@ -1,0 +1,30 @@
+[[extensions]]
+name = "Review Created"
+type = "flow_trigger"
+handle = "review-created"
+description = "Fires when a customer submits a new review — build a Flow to notify your team, log it, or kick off any other automation."
+
+[settings]
+
+  [[settings.fields]]
+  type = "product_reference"
+
+  [[settings.fields]]
+  type = "number_decimal"
+  key = "Rating"
+
+  [[settings.fields]]
+  type = "single_line_text_field"
+  key = "Review Title"
+
+  [[settings.fields]]
+  type = "single_line_text_field"
+  key = "Review Content"
+
+  [[settings.fields]]
+  type = "single_line_text_field"
+  key = "Reviewer Name"
+
+  [[settings.fields]]
+  type = "boolean"
+  key = "Verified Purchase"

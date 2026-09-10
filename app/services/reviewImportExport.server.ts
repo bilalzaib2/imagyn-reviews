@@ -255,6 +255,7 @@ async function importRow(
     externalId: row.externalId || null,
     reply: row.reply || null,
     repliedAt: parseDate(row.repliedAt ?? "") ?? null,
+    skipFlowTrigger: true,
   });
 
   return review.isPublished ? { kind: "imported", tier: match.tier } : { kind: "pending", tier: match.tier };

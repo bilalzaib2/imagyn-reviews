@@ -5,6 +5,7 @@ import { HelpfulVoteValue, ReviewStatus } from "./review.shared";
 import { getStorePermissions, PermissionError } from "./permissions";
 import { getStoreById } from "./store.server";
 import { evaluateAndIssueReward } from "./rewards.server";
+import { notifyReviewCreatedFlowTrigger } from "./shopifyFlowTrigger.server";
 
 export { HelpfulVoteValue, ReviewStatus };
 
@@ -81,6 +82,11 @@ export interface CreateReviewInput {
   externalId?: string | null;
   reply?: string | null;
   repliedAt?: Date | null;
+  // Set only by reviewImportExport.server.ts's CSV import — importing years of historical
+  // reviews from another platform should never fire thousands of "new review" Flow runs for a
+  // merchant's own workflow. Every genuine creation path (storefront submission, review-link
+  // token, manual admin creation) leaves this unset and fires normally.
+  skipFlowTrigger?: boolean;
 }
 
 export interface UpdateReviewInput {
@@ -520,7 +526,7 @@ export async function getReview(id: string) {
 export async function createReview(storeId: string, data: CreateReviewInput) {
   const product = await prisma.product.findFirst({
     where: { id: data.productId, storeId },
-    select: { id: true, storeId: true, name: true },
+    select: { id: true, storeId: true, name: true, shopifyProductId: true, store: { select: { domain: true } } },
   });
 
   if (!product) {
@@ -569,6 +575,18 @@ export async function createReview(storeId: string, data: CreateReviewInput) {
   });
 
   await recalculateProductStats(product.id);
+
+  if (!data.skipFlowTrigger && product.store.domain) {
+    void notifyReviewCreatedFlowTrigger({
+      storeDomain: product.store.domain,
+      shopifyProductId: product.shopifyProductId,
+      rating: review.rating,
+      title: review.title,
+      content: review.content,
+      reviewerName: review.reviewerName,
+      verifiedPurchase: review.verifiedPurchase,
+    });
+  }
 
   return review;
 }
