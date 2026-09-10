@@ -99,6 +99,13 @@ export interface PaymentMethodsResult {
 // shop.paymentSettings (confirmed via live introspection that field only exposes
 // autoCapture/supportedDigitalWallets, not which gateways are configured) and never assumes
 // manual/COD is secure just because it's present.
+//
+// This intentionally has no "needs_permission" state (unlike the Policy pillar): read_orders
+// is already an unconditionally-granted scope with no additional consent gate, so there is no
+// real scenario where this data is permission-blocked — inventing one here would itself be a
+// fabricated state. A store with COD *and* a real gateway is correctly "met", never penalized
+// for the COD orders alone — see calculatePaymentMethodsPillar's own `.some()` (not `.every()`)
+// below, and the explicit COD/mixed-provider regression tests in this file's test suite.
 export function calculatePaymentMethodsPillar(orderGatewayNames: string[][]): PaymentMethodsResult {
   if (orderGatewayNames.length === 0) {
     return { status: "pending", detail: "No orders yet to determine which payment methods customers actually use." };

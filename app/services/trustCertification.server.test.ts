@@ -111,6 +111,43 @@ describe("calculatePaymentMethodsPillar", () => {
     const result = calculatePaymentMethodsPillar([["bogus"]]);
     expect(result.status).toBe("not_met");
   });
+
+  // Explicit, self-documenting regression coverage for the exact scenarios called out after a
+  // real-world concern: this pillar must never penalize a merchant merely for accepting COD
+  // alongside a real payment method, and must never fabricate MET without real evidence.
+  describe("COD / qualifying-payment-provider scenarios (explicit regression coverage)", () => {
+    it("COD-only store: every real order used manual/COD — not_met, never fabricated as passing", () => {
+      const result = calculatePaymentMethodsPillar([["cod"], ["cash_on_delivery"], ["manual"]]);
+      expect(result.status).toBe("not_met");
+    });
+
+    it("card/payment-provider store: a real gateway alone — met", () => {
+      const result = calculatePaymentMethodsPillar([["shopify_payments"], ["shopify_payments"]]);
+      expect(result.status).toBe("met");
+    });
+
+    it("mixed COD + qualifying payment provider store: never penalized for the COD orders — met", () => {
+      // Real, common scenario: a store offers both a card processor and COD, and a shopper
+      // happened to pick COD for some orders. The store still has a genuine dispute/chargeback
+      // path available (the card processor), so it must qualify — COD coexisting with a real
+      // gateway is not a violation, only COD being the ONLY option is.
+      const result = calculatePaymentMethodsPillar([
+        ["cod"],
+        ["shopify_payments"],
+        ["cash_on_delivery"],
+        ["manual"],
+        ["shopify_payments"],
+      ]);
+      expect(result.status).toBe("met");
+    });
+
+    it("insufficient payment data (no orders yet): pending, never fabricated as met or not_met", () => {
+      const result = calculatePaymentMethodsPillar([]);
+      expect(result.status).toBe("pending");
+      // Never a false negative either — zero evidence must never read as a failure.
+      expect(result.status).not.toBe("not_met");
+    });
+  });
 });
 
 describe("calculatePolicyPillar", () => {
