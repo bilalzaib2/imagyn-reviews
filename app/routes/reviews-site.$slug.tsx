@@ -67,6 +67,17 @@ export default function ReviewSitePage() {
                   );
                 })}
               </div>
+
+              {site.storeAiSummary ? (
+                <div className={styles.aiSummary}>
+                  <p className={styles.aiSummaryLabel}>AI Review Summary</p>
+                  <p className={styles.aiSummaryText}>{site.storeAiSummary.summary}</p>
+                  <p className={styles.aiSummaryMeta}>
+                    Based on {site.storeAiSummary.reviewCountUsed} approved review
+                    {site.storeAiSummary.reviewCountUsed === 1 ? "" : "s"}
+                  </p>
+                </div>
+              ) : null}
             </div>
           ) : null}
         </header>

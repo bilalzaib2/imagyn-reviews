@@ -121,6 +121,40 @@
   }
 }
 
+/* Renders only when the merchant has both enabled this surface and generated a real Store
+   AI Summary (see reviewSite.server.ts) — never a per-product fallback, never fabricated. */
+.aiSummary {
+  display: grid;
+  justify-items: center;
+  gap: var(--space-2);
+  width: 100%;
+  max-width: 480px;
+  padding-top: var(--space-6);
+  border-top: 1px solid var(--color-border);
+  text-align: center;
+}
+
+.aiSummaryLabel {
+  margin: 0;
+  font-size: var(--text-xs);
+  font-weight: 600;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--color-text-muted);
+}
+
+.aiSummaryText {
+  margin: 0;
+  font-size: var(--text-base);
+  line-height: 1.5;
+}
+
+.aiSummaryMeta {
+  margin: 0;
+  font-size: var(--text-sm);
+  color: var(--color-text-muted);
+}
+
 .reviewList {
   display: grid;
   gap: var(--space-4);

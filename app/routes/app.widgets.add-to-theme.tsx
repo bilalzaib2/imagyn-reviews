@@ -34,6 +34,9 @@ const ALLOWED_BLOCKS: Record<string, { template: "product" | "collection" | "ind
   // homepage-placed.
   medals_showcase: { template: "index", kind: "section" },
   store_reviews: { template: "index", kind: "section" },
+  // Store-wide, placeable on any page — opens on the homepage template by default, same
+  // reasoning as review_carousel/medals_showcase/store_reviews above.
+  store_ai_summary: { template: "index", kind: "section" },
 };
 
 export const loader = async ({ request }: LoaderFunctionArgs) => {

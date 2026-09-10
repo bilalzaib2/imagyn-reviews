@@ -212,6 +212,15 @@
   border-top: var(--imagyn-border-width, 1px) solid var(--imagyn-color-border, rgba(0, 0, 0, 0.08));
 }
 
+/* Same "quiet divider above an optional section" treatment as .imagyn-store-reviews__medals
+   above — this section renders nothing at all (see store-reviews.js's renderAiSummary) until
+   a merchant has both enabled it and generated a real Store AI Summary, so there's never an
+   empty bordered box waiting for content that doesn't exist yet. */
+.imagyn-store-reviews__ai-summary {
+  padding-top: var(--imagyn-space-px-lg, 24px);
+  border-top: var(--imagyn-border-width, 1px) solid var(--imagyn-color-border, rgba(0, 0, 0, 0.08));
+}
+
 .imagyn-store-reviews__medals .imagyn-medals-showcase__list {
   padding: 0;
 }

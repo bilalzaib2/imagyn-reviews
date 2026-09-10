@@ -1,6 +1,7 @@
 import { getStoreBySlug } from "./store.server";
 import { getStoreReviewStats, getStoreReviews, type ReviewWithProduct } from "./review.server";
 import { ReviewStatus } from "./review.shared";
+import { getStoreAiSummary } from "./aiSummary.server";
 
 const PAGE_SIZE = 12;
 
@@ -15,6 +16,11 @@ export interface ReviewSiteData {
   reviews: ReviewWithProduct[];
   nextCursor: string | null;
   hasMore: boolean;
+  // The real, persisted Store AI Summary (never a per-product fallback) — only populated when
+  // the merchant has turned this surface on (Store.aiSummaryOnReviewSiteEnabled) AND a summary
+  // has actually been generated. null means either "disabled" or "not generated yet"; this
+  // page never needs to distinguish the two, since both render the same "nothing here" state.
+  storeAiSummary: { summary: string; reviewCountUsed: number } | null;
 }
 
 // The public, shareable "all our reviews" page (reviews-site.$slug.tsx) — a real, promotable
@@ -30,9 +36,12 @@ export async function getReviewSiteData(slug: string, cursor?: string | null): P
     return null;
   }
 
-  const [stats, page] = await Promise.all([
+  const [stats, page, storeAiSummary] = await Promise.all([
     getStoreReviewStats(store.id),
     getStoreReviews(store.id, { status: ReviewStatus.APPROVED, cursor: cursor ?? undefined, limit: PAGE_SIZE }),
+    // Pure cache read (never generates) — only fetched when the merchant has actually turned
+    // this surface on.
+    store.aiSummaryOnReviewSiteEnabled ? getStoreAiSummary(store.id) : Promise.resolve(null),
   ]);
 
   return {
@@ -43,6 +52,9 @@ export async function getReviewSiteData(slug: string, cursor?: string | null): P
     reviews: page.reviews,
     nextCursor: page.nextCursor,
     hasMore: page.hasMore,
+    storeAiSummary: storeAiSummary
+      ? { summary: storeAiSummary.summary, reviewCountUsed: storeAiSummary.reviewCountUsed }
+      : null,
   };
 }
 

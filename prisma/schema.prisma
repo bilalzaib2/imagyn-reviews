@@ -156,6 +156,18 @@ model Store {
   googleFeedEnabled Boolean @default(false)
   googleFeedToken   String? @unique
 
+  // Display-surface controls for the Store AI Summary (see aiSummary.server.ts's
+  // getStoreAiSummary/regenerateStoreAiSummary — the one persisted summary these two flags
+  // gate, never a second copy). Generation and display are deliberately separate concerns:
+  // a summary can exist without being shown anywhere, and turning a surface on/off never
+  // triggers (re)generation — see api.reviews.store.tsx and reviewSite.server.ts, the two
+  // real readers of these flags. The Store AI Summary Theme App Block has no flag here by
+  // design — like every other theme block in this app, adding/removing it in the Theme
+  // Editor *is* its own on/off control (see docs on the "one source of truth per surface"
+  // convention already established for Rating Badge, Review Carousel, etc.).
+  aiSummaryOnWidgetEnabled     Boolean @default(false)
+  aiSummaryOnReviewSiteEnabled Boolean @default(false)
+
   coupons           Coupon[]
   couponRedemptions CouponRedemption[]
 

@@ -195,6 +195,20 @@
   opacity: var(--imagyn-color-text-muted-opacity, 0.6);
 }
 
+/* Loading/error/empty text state for the standalone Store AI Summary block
+   (store-ai-summary.js) — this block, unlike the per-product AI Review Summary block above,
+   is placed on its own (no surrounding Reviews widget already showing a loading state), so
+   it needs a brief, honest "checking" moment of its own. Same muted-text-only treatment as
+   reviews-widget.css's .imagyn-reviews__loading — no spinner, no skeleton, matching this
+   section's own "text label, never a visual gimmick" convention. */
+.imagyn-ai-summary__status {
+  margin: 0;
+  font-size: var(--imagyn-font-size-base, 15px);
+  color: var(--imagyn-color-text, inherit);
+  opacity: var(--imagyn-color-text-muted-opacity, 0.6);
+  text-align: center;
+}
+
 /* Skeleton state — approximates the hero's real proportions rather than a generic box
    (STOREFRONT_DESIGN_SYSTEM.md §11). Shimmer/animation itself lives entirely in
    imagyn-component-skeleton.css; this only sizes the shared primitive to this layout. */

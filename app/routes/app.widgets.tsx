@@ -47,6 +47,7 @@ const fallbackInstallStatus: Record<WidgetInstallKey, WidgetInstallStatus> = {
   "medals-showcase": UNKNOWN_INSTALL_STATUS,
   "store-reviews": UNKNOWN_INSTALL_STATUS,
   "ai-review-summary": UNKNOWN_INSTALL_STATUS,
+  "store-ai-summary": UNKNOWN_INSTALL_STATUS,
 };
 
 type PageView = "gallery" | "customize";
@@ -148,6 +149,15 @@ const widgetCards: WidgetCardDef[] = [
     status: "theme-editor",
     blockName: "AI Review Summary",
     blockHandle: "ai_review_summary",
+  },
+  {
+    key: "store-ai-summary",
+    title: "Store AI Summary",
+    description:
+      "Your one store-wide AI summary — synthesized across every approved review in your store, not one product — on its own, placeable on any page. No product selection needed. Generate the summary first from Settings > Growth > AI Review Intelligence.",
+    status: "theme-editor",
+    blockName: "Store AI Summary",
+    blockHandle: "store_ai_summary",
   },
 ];
 
@@ -491,6 +501,23 @@ function AiSummaryThumbnailPreview({ tokens }: { tokens: AppearanceTokens }) {
   );
 }
 
+// Store AI Summary's gallery thumbnail — same visual component as AiSummaryThumbnailPreview
+// above, with store-level sample copy (no per-product recommendation line, matching the real
+// block's renderAiSummary in store-ai-summary.js) so this card can't be mistaken for the
+// per-product AI Review Summary card right above it.
+function StoreAiSummaryThumbnailPreview({ tokens }: { tokens: AppearanceTokens }) {
+  return (
+    <div className={styles.aiSummaryPreviewBlock}>
+      <span className={styles.aiSummaryPreviewLabel}>AI Review Summary</span>
+      <p className={styles.aiSummaryPreviewText} style={{ color: tokens.colors.textColor ?? "#111111" }}>
+        Customers across every product love the fast shipping and consistent quality, with a few requesting more
+        size options.
+      </p>
+      <p className={styles.aiSummaryPreviewRecommendation}>Based on 128 approved reviews</p>
+    </div>
+  );
+}
+
 function WidgetPreview({ tokens, settings }: { tokens: AppearanceTokens; settings: WidgetSettings }) {
   const layoutReviews = settings.layout === "grid" ? sampleReviews : sampleReviews.slice(0, settings.layout === "carousel" ? 2 : 3);
 
@@ -820,6 +847,10 @@ export default function WidgetsPage() {
                       ) : card.key === "ai-review-summary" ? (
                         <div className={styles.widgetCardThumbnailPlaceholder}>
                           <AiSummaryThumbnailPreview tokens={appearanceTokens} />
+                        </div>
+                      ) : card.key === "store-ai-summary" ? (
+                        <div className={styles.widgetCardThumbnailPlaceholder}>
+                          <StoreAiSummaryThumbnailPreview tokens={appearanceTokens} />
                         </div>
                       ) : null}
                       <div className={styles.widgetCardMeta}>

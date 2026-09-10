@@ -5,7 +5,7 @@ import { boundary } from "@shopify/shopify-app-react-router/server";
 import { Checkbox, Frame, Toast } from "@shopify/polaris";
 import { StatusBadge } from "../components/ui/StatusBadge";
 import { authenticateAdminDeduped } from "../services/auth-dedupe.server";
-import { getOrCreateStore } from "../services/store.server";
+import { getOrCreateStore, updateAiSummaryDisplaySurfaces } from "../services/store.server";
 import { getStorePermissions } from "../services/permissions";
 import { getFeedReadiness, setGoogleFeedEnabled, type FeedReadiness } from "../services/googleReviewFeed.server";
 import { getReviewSiteUrl } from "../services/reviewSite.server";
@@ -29,6 +29,8 @@ type LoaderData = {
   feed: FeedReadiness;
   reviewSiteUrl: string;
   storeAiSummary: StoreAiSummaryRecord | null;
+  aiSummaryOnWidgetEnabled: boolean;
+  aiSummaryOnReviewSiteEnabled: boolean;
 };
 
 type ActionData = {
@@ -37,6 +39,8 @@ type ActionData = {
   feedUrl?: string | null;
   distributionFeedUrl?: string | null;
   storeAiSummary?: StoreAiSummaryRecord;
+  aiSummaryOnWidgetEnabled?: boolean;
+  aiSummaryOnReviewSiteEnabled?: boolean;
 };
 
 export const loader = async ({ request }: LoaderFunctionArgs): Promise<LoaderData> => {
@@ -48,7 +52,14 @@ export const loader = async ({ request }: LoaderFunctionArgs): Promise<LoaderDat
     getStoreAiSummary(store.id),
   ]);
 
-  return { canUseAI: permissions.canUseAI, feed, reviewSiteUrl: getReviewSiteUrl(store.slug), storeAiSummary };
+  return {
+    canUseAI: permissions.canUseAI,
+    feed,
+    reviewSiteUrl: getReviewSiteUrl(store.slug),
+    storeAiSummary,
+    aiSummaryOnWidgetEnabled: store.aiSummaryOnWidgetEnabled,
+    aiSummaryOnReviewSiteEnabled: store.aiSummaryOnReviewSiteEnabled,
+  };
 };
 
 export const action = async ({ request }: ActionFunctionArgs): Promise<ActionData> => {
@@ -61,6 +72,18 @@ export const action = async ({ request }: ActionFunctionArgs): Promise<ActionDat
     if (intent === "generateStoreSummary") {
       const summary = await regenerateStoreAiSummary(store.id);
       return { ok: true, storeAiSummary: summary };
+    }
+
+    if (intent === "updateAiSummaryDisplaySurfaces") {
+      const updated = await updateAiSummaryDisplaySurfaces(store.id, {
+        aiSummaryOnWidgetEnabled: formData.get("aiSummaryOnWidgetEnabled") === "true",
+        aiSummaryOnReviewSiteEnabled: formData.get("aiSummaryOnReviewSiteEnabled") === "true",
+      });
+      return {
+        ok: true,
+        aiSummaryOnWidgetEnabled: updated.aiSummaryOnWidgetEnabled,
+        aiSummaryOnReviewSiteEnabled: updated.aiSummaryOnReviewSiteEnabled,
+      };
     }
 
     const enabled = formData.get("enabled") === "true";
@@ -129,11 +152,21 @@ function formatGeneratedAt(value: Date | string) {
 }
 
 export default function SettingsSeoPage() {
-  const { canUseAI, feed, reviewSiteUrl, storeAiSummary: loaderStoreAiSummary } = useLoaderData<typeof loader>();
+  const {
+    canUseAI,
+    feed,
+    reviewSiteUrl,
+    storeAiSummary: loaderStoreAiSummary,
+    aiSummaryOnWidgetEnabled: loaderAiSummaryOnWidgetEnabled,
+    aiSummaryOnReviewSiteEnabled: loaderAiSummaryOnReviewSiteEnabled,
+  } = useLoaderData<typeof loader>();
   const fetcher = useFetcher<ActionData>();
   const storeSummaryFetcher = useFetcher<ActionData>();
+  const displaySurfaceFetcher = useFetcher<ActionData>();
   const [enabled, setEnabled] = useState(feed.feedEnabled);
   const [toast, setToast] = useState<{ content: string; error?: boolean } | null>(null);
+  const [aiSummaryOnWidgetEnabled, setAiSummaryOnWidgetEnabled] = useState(loaderAiSummaryOnWidgetEnabled);
+  const [aiSummaryOnReviewSiteEnabled, setAiSummaryOnReviewSiteEnabled] = useState(loaderAiSummaryOnReviewSiteEnabled);
   const feedUrl = fetcher.data?.ok ? fetcher.data.feedUrl : feed.feedUrl;
   const distributionFeedUrl = fetcher.data?.ok ? fetcher.data.distributionFeedUrl : feed.distributionFeedUrl;
   const storeAiSummary = storeSummaryFetcher.data?.ok ? (storeSummaryFetcher.data.storeAiSummary ?? loaderStoreAiSummary) : loaderStoreAiSummary;
@@ -163,6 +196,18 @@ export default function SettingsSeoPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [storeSummaryFetcher.data]);
 
+  useEffect(() => {
+    if (!displaySurfaceFetcher.data) return;
+    if (!displaySurfaceFetcher.data.ok) {
+      setToast({ content: displaySurfaceFetcher.data.error || "Unable to update display settings.", error: true });
+      setAiSummaryOnWidgetEnabled(loaderAiSummaryOnWidgetEnabled);
+      setAiSummaryOnReviewSiteEnabled(loaderAiSummaryOnReviewSiteEnabled);
+      return;
+    }
+    setToast({ content: "Store AI Summary display settings updated." });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [displaySurfaceFetcher.data]);
+
   const toggle = (next: boolean) => {
     setEnabled(next);
     const formData = new FormData();
@@ -175,6 +220,19 @@ export default function SettingsSeoPage() {
     const formData = new FormData();
     formData.set("intent", "generateStoreSummary");
     storeSummaryFetcher.submit(formData, { method: "post" });
+  };
+
+  const toggleDisplaySurface = (surface: "widget" | "reviewSite", next: boolean) => {
+    const nextWidget = surface === "widget" ? next : aiSummaryOnWidgetEnabled;
+    const nextReviewSite = surface === "reviewSite" ? next : aiSummaryOnReviewSiteEnabled;
+    setAiSummaryOnWidgetEnabled(nextWidget);
+    setAiSummaryOnReviewSiteEnabled(nextReviewSite);
+
+    const formData = new FormData();
+    formData.set("intent", "updateAiSummaryDisplaySurfaces");
+    formData.set("aiSummaryOnWidgetEnabled", String(nextWidget));
+    formData.set("aiSummaryOnReviewSiteEnabled", String(nextReviewSite));
+    displaySurfaceFetcher.submit(formData, { method: "post" });
   };
 
   return (
@@ -394,6 +452,30 @@ export default function SettingsSeoPage() {
                   >
                     {isGeneratingStoreSummary ? "Generating…" : storeAiSummary ? "Regenerate" : "Generate summary"}
                   </button>
+                </div>
+
+                <div style={{ marginTop: "1rem" }}>
+                  <p className={styles.aiFeatureName}>Display on</p>
+                  <p className={styles.aiFeatureDetail}>
+                    Where this one store-wide summary is shown to shoppers. No product selection — every surface
+                    below shows the exact same summary.
+                  </p>
+                  <Checkbox
+                    label="Store Reviews Widget"
+                    checked={aiSummaryOnWidgetEnabled}
+                    onChange={(next) => toggleDisplaySurface("widget", next)}
+                    disabled={!canUseAI || displaySurfaceFetcher.state !== "idle"}
+                  />
+                  <Checkbox
+                    label="Public Review Site"
+                    checked={aiSummaryOnReviewSiteEnabled}
+                    onChange={(next) => toggleDisplaySurface("reviewSite", next)}
+                    disabled={!canUseAI || displaySurfaceFetcher.state !== "idle"}
+                  />
+                  <p className={managementStyles.mutedText} style={{ marginTop: "0.5rem" }}>
+                    The Store AI Summary Theme App Block has no switch here — add or remove it in the Shopify Theme
+                    Editor to control it, the same as any other Imagyn block.
+                  </p>
                 </div>
               </div>
             </div>

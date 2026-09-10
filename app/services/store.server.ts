@@ -82,6 +82,25 @@ export async function updateAutoRequestSettings(
   });
 }
 
+// Display-surface controls for the one persisted Store AI Summary (see aiSummary.server.ts) —
+// purely which surfaces show it, never a second summary and never a trigger to (re)generate
+// one. Read by api.reviews.store.tsx (Store Reviews Widget) and reviewSite.server.ts (Public
+// Review Site).
+export async function updateAiSummaryDisplaySurfaces(
+  id: string,
+  data: {
+    aiSummaryOnWidgetEnabled: boolean;
+    aiSummaryOnReviewSiteEnabled: boolean;
+  },
+) {
+  return prisma.store.update({
+    where: {
+      id,
+    },
+    data,
+  });
+}
+
 // Automatic Reminder Emails (app.settings.tsx). remindersEnabledAt is bumped forward only on
 // an off->on transition — never on a resave while already on — so re-enabling after a period
 // of being off starts the eligibility cutoff fresh rather than resurrecting whatever backlog

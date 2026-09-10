@@ -4,6 +4,7 @@ import { getPublicStoreReviewSummary } from "../services/review.server";
 import { getEarnedMedalsForStorefront } from "../services/achievements.server";
 import { getStoreBySlug } from "../services/store.server";
 import { getStorefrontAppearance } from "../services/appearance.server";
+import { getStoreAiSummary } from "../services/aiSummary.server";
 import { json, isPreflight, preflightResponse, storeSlugFromShop } from "./api.reviews";
 
 // Public, unauthenticated, App-Proxy-verified read for the Store Reviews widget
@@ -37,11 +38,25 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
     return json({ ok: false, error: "Shop not found." }, { status: 404 });
   }
 
-  const [summary, medals, appearance] = await Promise.all([
+  const [summary, medals, appearance, storeAiSummary] = await Promise.all([
     getPublicStoreReviewSummary(store.id),
     getEarnedMedalsForStorefront(store.id),
     getStorefrontAppearance(store.id),
+    // Pure cache read (never generates) — only fetched at all when the merchant has actually
+    // turned this surface on, and only ever the real persisted Store AI Summary, never a
+    // per-product fallback. Omitted from the response entirely when the merchant hasn't
+    // enabled it, so the widget's own "render nothing until present" check needs no separate
+    // enabled/disabled flag threaded through — the data's absence *is* the signal.
+    store.aiSummaryOnWidgetEnabled ? getStoreAiSummary(store.id) : Promise.resolve(null),
   ]);
 
-  return json({ ok: true, summary, medals, appearance });
+  return json({
+    ok: true,
+    summary,
+    medals,
+    appearance,
+    storeAiSummary: storeAiSummary
+      ? { summary: storeAiSummary.summary, reviewCountUsed: storeAiSummary.reviewCountUsed }
+      : null,
+  });
 };

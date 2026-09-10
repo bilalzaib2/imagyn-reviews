@@ -9,6 +9,7 @@ interface FakeStore {
   id: string;
   slug: string;
   name: string;
+  aiSummaryOnReviewSiteEnabled?: boolean;
 }
 
 let stores: FakeStore[];
@@ -43,6 +44,25 @@ vi.mock("./review.server", () => ({
 
 vi.mock("./review.shared", () => ({ ReviewStatus: { APPROVED: "APPROVED", PENDING: "PENDING" } }));
 
+interface FakeStoreAiSummary {
+  summary: string;
+  reviewCountUsed: number;
+  positives: string[];
+  negatives: string[];
+  generatedAt: Date;
+}
+
+const getStoreAiSummaryMock = vi.fn<() => Promise<FakeStoreAiSummary | null>>(async () => ({
+  summary: "Customers love the fast shipping and consistent quality.",
+  reviewCountUsed: 42,
+  positives: [],
+  negatives: [],
+  generatedAt: new Date("2026-01-01T00:00:00Z"),
+}));
+vi.mock("./aiSummary.server", () => ({
+  getStoreAiSummary: (...args: unknown[]) => getStoreAiSummaryMock(...(args as [])),
+}));
+
 const { getReviewSiteData, getReviewSiteUrl } = await import("./reviewSite.server");
 
 beforeEach(() => {
@@ -50,6 +70,7 @@ beforeEach(() => {
   getStoreBySlugMock.mockClear();
   getStoreReviewStatsMock.mockClear();
   getStoreReviewsMock.mockClear();
+  getStoreAiSummaryMock.mockClear();
 });
 
 describe("getReviewSiteData", () => {
@@ -72,6 +93,30 @@ describe("getReviewSiteData", () => {
   it("forwards a real cursor for pagination", async () => {
     await getReviewSiteData("example-store", "cursor_abc");
     expect(getStoreReviewsMock).toHaveBeenCalledWith("store_1", { status: "APPROVED", cursor: "cursor_abc", limit: 12 });
+  });
+
+  it("never fetches the Store AI Summary when the store hasn't enabled this surface", async () => {
+    stores[0].aiSummaryOnReviewSiteEnabled = false;
+    const result = await getReviewSiteData("example-store");
+    expect(getStoreAiSummaryMock).not.toHaveBeenCalled();
+    expect(result?.storeAiSummary).toBeNull();
+  });
+
+  it("returns the real, persisted Store AI Summary when the surface is enabled", async () => {
+    stores[0].aiSummaryOnReviewSiteEnabled = true;
+    const result = await getReviewSiteData("example-store");
+    expect(getStoreAiSummaryMock).toHaveBeenCalledWith("store_1");
+    expect(result?.storeAiSummary).toEqual({
+      summary: "Customers love the fast shipping and consistent quality.",
+      reviewCountUsed: 42,
+    });
+  });
+
+  it("returns null (never a per-product fallback) when the surface is enabled but no summary exists yet", async () => {
+    stores[0].aiSummaryOnReviewSiteEnabled = true;
+    getStoreAiSummaryMock.mockResolvedValueOnce(null);
+    const result = await getReviewSiteData("example-store");
+    expect(result?.storeAiSummary).toBeNull();
   });
 });
 

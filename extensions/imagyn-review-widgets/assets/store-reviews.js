@@ -81,6 +81,28 @@
     return html;
   }
 
+  // Same markup/classes as reviews-widget.js's own renderAiSummary (product-level) — one
+  // shared visual component, two independent data sources. data.storeAiSummary is the real,
+  // persisted Store AI Summary (see api.reviews.store.tsx) — never a per-product fallback,
+  // and never present at all unless the merchant has turned this surface on AND a summary has
+  // actually been generated, so this function only ever needs to check "is it here."
+  function renderAiSummary(aiSummary) {
+    if (!aiSummary || !aiSummary.summary) {
+      return "";
+    }
+
+    var html = '<div class="imagyn-ai-summary imagyn-store-reviews__ai-summary">';
+    html += '<p class="imagyn-ratings-section__label imagyn-ai-summary__heading">AI Review Summary</p>';
+    html += '<p class="imagyn-ai-summary__text">' + escapeHtml(aiSummary.summary) + "</p>";
+    html +=
+      '<p class="imagyn-ai-summary__recommendation">Based on ' +
+      aiSummary.reviewCountUsed +
+      (aiSummary.reviewCountUsed === 1 ? " approved review" : " approved reviews") +
+      "</p>";
+    html += "</div>";
+    return html;
+  }
+
   function renderEmptyState() {
     return (
       '<p class="imagyn-store-reviews__empty">No store reviews yet — reviews you approve on any product count toward your store rating.</p>'
@@ -166,6 +188,7 @@
     }
 
     html += renderSummaryGrid(summary, ctaLabel, ctaUrl, visibility);
+    html += renderAiSummary(data.storeAiSummary);
 
     var medalsHtml = visibility.achievements ? renderMedals(data.medals) : "";
     if (medalsHtml) {

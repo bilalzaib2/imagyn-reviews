@@ -1,0 +1,27 @@
+{{ 'imagyn-tokens.css' | asset_url | stylesheet_tag }}
+{{ 'imagyn-typography.css' | asset_url | stylesheet_tag }}
+{{ 'imagyn-component-ratings-section.css' | asset_url | stylesheet_tag }}
+{{ 'imagyn-component-summary.css' | asset_url | stylesheet_tag }}
+
+<div class="imagyn-store-ai-summary-block" data-imagyn-store-ai-summary hidden></div>
+
+{% comment %}
+  `defer` (not the blocking script_tag filter) — theme-check flags parser-blocking
+  scripts; both stay in document order so imagyn-appearance.js still finishes applying
+  tokens before store-ai-summary.js reads them (deferred scripts run in source order).
+{% endcomment %}
+<script src="{{ 'imagyn-appearance.js' | asset_url }}" defer></script>
+<script src="{{ 'store-ai-summary.js' | asset_url }}" defer></script>
+
+{% schema %}
+{
+  "name": "Store AI Summary",
+  "target": "section",
+  "settings": [
+    {
+      "type": "paragraph",
+      "content": "Shows your one store-wide AI summary — synthesized across every approved review in your store, not one product. No product selection needed; place this block on any page. Renders nothing until you've generated a Store AI Summary in Imagyn Reviews (Settings > Growth > AI Review Intelligence)."
+    }
+  ]
+}
+{% endschema %}
