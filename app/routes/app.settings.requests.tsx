@@ -4,6 +4,7 @@ import type { ActionFunctionArgs, HeadersFunction, LoaderFunctionArgs } from "re
 import { boundary } from "@shopify/shopify-app-react-router/server";
 import { Banner, Checkbox, Frame, Select, TextField, Toast } from "@shopify/polaris";
 import { Button } from "../components/ui/Button";
+import { ContextualSaveBar } from "../components/ui/ContextualSaveBar";
 import { Section } from "../components/ui/Section";
 import { authenticateAdminDeduped } from "../services/auth-dedupe.server";
 import { getOrCreateStore, updateAutoRequestSettings, updateReminderSettings } from "../services/store.server";
@@ -241,8 +242,38 @@ export default function SettingsRequestsPage() {
       }`
     : null;
 
+  // Two independent sections (automation, reminders), each with its own real Save action —
+  // one shared save bar covers both, since a merchant editing this page thinks of it as one
+  // "Request Scheduling" form, not two. Save only submits whichever section actually changed.
+  const hasAutomationChanges = enabled !== autoRequestEnabled || delayDays !== String(autoRequestDelayDays);
+  const hasReminderChanges =
+    remindersEnabled !== reminderEmailsEnabled ||
+    reminder1Days !== String(reminder1DelayDays) ||
+    reminderFinalDays !== String(reminderFinalDelayDays);
+  const hasUnsavedChanges = hasAutomationChanges || hasReminderChanges;
+
+  const handleSaveAll = () => {
+    if (hasAutomationChanges) handleSave();
+    if (hasReminderChanges) handleSaveReminders();
+  };
+
+  const handleDiscardAll = () => {
+    setEnabled(autoRequestEnabled);
+    setDelayDays(String(autoRequestDelayDays));
+    setRemindersEnabled(reminderEmailsEnabled);
+    setReminder1Days(String(reminder1DelayDays));
+    setReminderFinalDays(String(reminderFinalDelayDays));
+  };
+
   return (
     <>
+      <ContextualSaveBar
+        id="request-scheduling-save-bar"
+        open={hasUnsavedChanges}
+        saving={isSaving || isSavingReminders}
+        onSave={handleSaveAll}
+        onDiscard={handleDiscardAll}
+      />
       <Section
         title="Automatic review requests"
         description="Automatically create a Review Request for every fulfilled order line item, instead of creating them by hand."

@@ -4,6 +4,7 @@ import type { ActionFunctionArgs, HeadersFunction, LoaderFunctionArgs } from "re
 import { boundary } from "@shopify/shopify-app-react-router/server";
 import { Checkbox, Frame, Select, TextField, Toast } from "@shopify/polaris";
 import { Button } from "../components/ui/Button";
+import { ContextualSaveBar } from "../components/ui/ContextualSaveBar";
 import { Section } from "../components/ui/Section";
 import { authenticateAdminDeduped } from "../services/auth-dedupe.server";
 import { getOrCreateStore } from "../services/store.server";
@@ -118,8 +119,34 @@ export default function SettingsRewardsPage() {
     fetcher.submit(formData, { method: "post" });
   };
 
+  const hasUnsavedChanges =
+    enabled !== settings.enabled ||
+    valueType !== settings.valueType ||
+    value !== String(settings.value) ||
+    minRating !== String(settings.minRating) ||
+    requireVerified !== settings.requireVerified ||
+    requirePhoto !== settings.requirePhoto ||
+    requireVideo !== settings.requireVideo;
+
+  const handleDiscard = () => {
+    setEnabled(settings.enabled);
+    setValueType(settings.valueType);
+    setValue(String(settings.value));
+    setMinRating(String(settings.minRating));
+    setRequireVerified(settings.requireVerified);
+    setRequirePhoto(settings.requirePhoto);
+    setRequireVideo(settings.requireVideo);
+  };
+
   return (
     <>
+      <ContextualSaveBar
+        id="rewards-save-bar"
+        open={hasUnsavedChanges}
+        saving={isSaving}
+        onSave={handleSave}
+        onDiscard={handleDiscard}
+      />
       <Section
         title="Review Rewards"
         description="Automatically create a real Shopify discount code and email it to a customer once their review meets the conditions below. A conceptual flow, made real: purchase → review request → review submitted → conditions checked → discount created → customer emailed."

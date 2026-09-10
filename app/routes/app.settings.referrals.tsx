@@ -4,6 +4,7 @@ import type { ActionFunctionArgs, HeadersFunction, LoaderFunctionArgs } from "re
 import { boundary } from "@shopify/shopify-app-react-router/server";
 import { Checkbox, Frame, Select, TextField, Toast } from "@shopify/polaris";
 import { Button } from "../components/ui/Button";
+import { ContextualSaveBar } from "../components/ui/ContextualSaveBar";
 import { Section } from "../components/ui/Section";
 import { EmptyState } from "../components/ui/EmptyState";
 import { authenticateAdminDeduped } from "../services/auth-dedupe.server";
@@ -184,8 +185,35 @@ export default function SettingsReferralsPage() {
     createFetcher.submit(formData, { method: "post" });
   };
 
+  // Only the persisted program settings count as "unsaved changes" — referrerEmail/
+  // referrerName below are ephemeral inputs for the separate "create a referral" action, not
+  // a saved setting with a discard-to-previous-value contract.
+  const hasUnsavedChanges =
+    enabled !== program.enabled ||
+    referrerValueType !== program.referrerValueType ||
+    referrerValue !== String(program.referrerValue) ||
+    refereeValueType !== program.refereeValueType ||
+    refereeValue !== String(program.refereeValue) ||
+    minimumOrderAmount !== (program.minimumOrderAmount ? String(program.minimumOrderAmount) : "");
+
+  const handleDiscardProgram = () => {
+    setEnabled(program.enabled);
+    setReferrerValueType(program.referrerValueType);
+    setReferrerValue(String(program.referrerValue));
+    setRefereeValueType(program.refereeValueType);
+    setRefereeValue(String(program.refereeValue));
+    setMinimumOrderAmount(program.minimumOrderAmount ? String(program.minimumOrderAmount) : "");
+  };
+
   return (
     <>
+      <ContextualSaveBar
+        id="referrals-save-bar"
+        open={hasUnsavedChanges}
+        saving={programFetcher.state !== "idle"}
+        onSave={saveProgram}
+        onDiscard={handleDiscardProgram}
+      />
       <Section
         title="Referrals"
         description="Reward customers for bringing in new buyers. A referrer shares a real discount code; once a friend's real order uses it, the referrer gets their own reward automatically."

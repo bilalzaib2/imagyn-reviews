@@ -7,6 +7,7 @@ import { Button } from "../components/ui/Button";
 import { Card } from "../components/ui/Card";
 import { ColorField } from "../components/ui/ColorField";
 import { Container } from "../components/ui/Container";
+import { ContextualSaveBar } from "../components/ui/ContextualSaveBar";
 import { Section } from "../components/ui/Section";
 import { SettingsBreadcrumb } from "../components/ui/SettingsBreadcrumb";
 import { authenticateAdminDeduped } from "../services/auth-dedupe.server";
@@ -302,6 +303,14 @@ export default function EmailStudioPage() {
     resetFetcher.submit(formData, { method: "post" });
   };
 
+  // Restores the currently active template's own persisted content — a pure client-side
+  // revert, same contract as Brand Studio's handleDiscard. Distinct from handleReset above,
+  // which is a real server round-trip back to the pristine default template, not "undo my
+  // unsaved edits."
+  const handleDiscard = () => {
+    setDraft(initialContent);
+  };
+
   useEffect(() => {
     if (!saveFetcher.data) return;
     if (!saveFetcher.data.ok) {
@@ -357,6 +366,13 @@ export default function EmailStudioPage() {
 
   return (
     <>
+      <ContextualSaveBar
+        id="email-studio-save-bar"
+        open={hasUnsavedChanges}
+        saving={isSaving}
+        onSave={handleSave}
+        onDiscard={handleDiscard}
+      />
       <Container as="main">
         <div className={`${shellStyles.page} ${shellStyles.reveal}`}>
           <header className={shellStyles.header}>

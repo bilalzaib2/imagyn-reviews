@@ -4,6 +4,7 @@ import type { ActionFunctionArgs, HeadersFunction, LoaderFunctionArgs } from "re
 import { boundary } from "@shopify/shopify-app-react-router/server";
 import { Checkbox, Frame, Select, TextField, Toast } from "@shopify/polaris";
 import { Button } from "../components/ui/Button";
+import { ContextualSaveBar } from "../components/ui/ContextualSaveBar";
 import { Section } from "../components/ui/Section";
 import { authenticateAdminDeduped } from "../services/auth-dedupe.server";
 import { getOrCreateStore, updateModerationSettings } from "../services/store.server";
@@ -134,8 +135,40 @@ export default function SettingsModerationPage() {
     moderationFetcher.submit(formData, { method: "post" });
   };
 
+  // Direct comparison against the loader's own real, persisted values — the same contract as
+  // Email Studio's draft/initialContent pair. A successful save revalidates this route's loader
+  // (fetcher submissions do so by default), at which point `moderation.*` matches what was just
+  // submitted and this naturally reads false again — no separate "baseline" state to keep in sync.
+  const hasUnsavedChanges =
+    moderationEnabled !== moderation.enabled ||
+    minRating !== String(moderation.minRating) ||
+    requireVerified !== moderation.requireVerified ||
+    holdLinks !== moderation.holdLinks ||
+    holdProfanity !== moderation.holdProfanity ||
+    bannedWords !== moderation.bannedWords ||
+    notifyOnHold !== moderation.notifyOnHold ||
+    notifyEmail !== moderation.notifyEmail;
+
+  const handleDiscardModeration = () => {
+    setModerationEnabled(moderation.enabled);
+    setMinRating(String(moderation.minRating));
+    setRequireVerified(moderation.requireVerified);
+    setHoldLinks(moderation.holdLinks);
+    setHoldProfanity(moderation.holdProfanity);
+    setBannedWords(moderation.bannedWords);
+    setNotifyOnHold(moderation.notifyOnHold);
+    setNotifyEmail(moderation.notifyEmail);
+  };
+
   return (
     <>
+      <ContextualSaveBar
+        id="moderation-save-bar"
+        open={hasUnsavedChanges}
+        saving={isSavingModeration}
+        onSave={handleSaveModeration}
+        onDiscard={handleDiscardModeration}
+      />
       <Section
         title="Moderation Rules"
         description="Automatically publish trustworthy reviews and hold the rest for your review — reducing manual moderation without a complex rules builder."

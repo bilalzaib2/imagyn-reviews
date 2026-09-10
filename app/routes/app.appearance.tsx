@@ -6,6 +6,7 @@ import { RangeSlider, Select, TextField, Frame, Toast } from "@shopify/polaris";
 import { Button } from "../components/ui/Button";
 import { ColorField, toDisplayHex } from "../components/ui/ColorField";
 import { Container } from "../components/ui/Container";
+import { ContextualSaveBar } from "../components/ui/ContextualSaveBar";
 import { Section } from "../components/ui/Section";
 import { UpgradePrompt } from "../components/ui/UpgradePrompt";
 import { SettingsBreadcrumb } from "../components/ui/SettingsBreadcrumb";
@@ -601,6 +602,14 @@ export default function AppearancePage() {
 
   return (
     <>
+      <ContextualSaveBar
+        id="brand-studio-save-bar"
+        open={hasUnsavedChanges}
+        saving={isSaving}
+        saveLabel="Apply Brand Everywhere"
+        onSave={handleApplyBrandEverywhere}
+        onDiscard={handleDiscard}
+      />
       <Container as="main">
         <div className={`${shellStyles.page} ${styles.page} ${shellStyles.reveal}`}>
           <header className={shellStyles.header}>
