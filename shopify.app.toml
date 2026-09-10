@@ -73,7 +73,7 @@ api_version = "2026-07"
 # code, meaning no store could ever actually receive a real Shopify discount from either feature
 # until this scope is granted. Existing merchants need to re-consent once this deploys (Shopify
 # prompts automatically; webhooks.app.scopes_update above already handles the resulting webhook).
-scopes = "write_products,write_metaobjects,write_metaobject_definitions,write_files,read_files,read_orders,read_customers,read_fulfillments,read_legal_policies,write_discounts"
+scopes = "write_metaobjects,write_metaobject_definitions,write_files,read_files,read_orders,read_customers,read_fulfillments,read_legal_policies,write_discounts"
 
 [auth]
 redirect_urls = [
