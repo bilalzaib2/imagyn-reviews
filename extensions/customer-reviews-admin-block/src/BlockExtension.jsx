@@ -1,3 +1,9 @@
+// Registers the Preact bindings for Shopify's admin extension web components
+// (s-admin-block, s-stack, s-text, etc.) — without this, the custom elements mount but
+// their props/children never bind correctly. Missing this was the root cause of an earlier
+// bug where this block's heading rendered but its body never did (confirmed by diffing
+// against `shopify app generate extension -t admin_block`, the CLI's own known-good scaffold).
+import "@shopify/ui-extensions/preact";
 import { render } from "preact";
 import { useEffect, useState } from "preact/hooks";
 
