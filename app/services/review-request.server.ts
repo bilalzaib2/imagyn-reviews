@@ -1071,11 +1071,11 @@ export const reviewRequestService = {
   },
 
   // Retention purge for ReviewRequest's own personal-data fields (email/name) — see
-  // docs/DATA_RETENTION_POLICY.md for the full policy this implements. Deliberately NOT wired
-  // into the scheduler (reviewRequestScheduler.server.ts) or called anywhere yet: the actual
-  // retention window (retentionDays) is a business/legal decision, not an engineering one —
-  // see the policy doc for why this ships built and tested but dormant, the same pattern
-  // ORDER_AUTOMATION_ENABLED already established for a different pending decision.
+  // docs/DATA_RETENTION_POLICY.md for the full policy this implements. Wired into the
+  // scheduler (reviewRequestScheduler.server.ts's runRetentionPurgeSweep, called from
+  // startReviewRequestScheduler on every 5-minute sweep) using the 90-day retentionDays
+  // decision made 2026-09-08 — this business/legal decision is now made and enforced, not
+  // pending.
   //
   // Reuses the exact same redaction shape webhooks.compliance.tsx's handleCustomersRedact
   // already uses in production (null email, "Redacted customer" name) — this is the same

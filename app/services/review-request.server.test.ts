@@ -1129,7 +1129,7 @@ describe("createManyFromOrders — the Shopify Orders bulk send flow", () => {
 // review-request.server.ts for why: the retention window is a business decision, not an
 // engineering one) — this is coverage for the mechanism itself, so it's correct and ready
 // whenever that decision lands.
-describe("purgeStaleContactInfo — retention purge (dormant, not scheduled)", () => {
+describe("purgeStaleContactInfo — retention purge (scheduled via reviewRequestScheduler.server.ts)", () => {
   const DAY_MS = 24 * 60 * 60 * 1000;
   const now = new Date("2026-09-05T00:00:00Z");
 
