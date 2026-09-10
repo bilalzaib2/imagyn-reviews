@@ -49,6 +49,32 @@ const DISCOUNT_CODE_DEACTIVATE = `#graphql
   }
 `;
 
+interface DiscountCodeActivateResponse {
+  data?: {
+    discountCodeActivate?: {
+      codeDiscountNode?: { id: string } | null;
+      userErrors: Array<{ field: string[] | null; message: string }>;
+    };
+  };
+}
+
+// Real counterpart of deactivate — lets a merchant genuinely resume a paused coupon's shared
+// code (re-enabling the exact same Shopify discount, not minting a new one), instead of a local
+// status flip that would silently drift from Shopify's own real state.
+const DISCOUNT_CODE_ACTIVATE = `#graphql
+  mutation DiscountCodeActivate($id: ID!) {
+    discountCodeActivate(id: $id) {
+      codeDiscountNode {
+        id
+      }
+      userErrors {
+        field
+        message
+      }
+    }
+  }
+`;
+
 interface DiscountUsageCountResponse {
   data?: {
     codeDiscountNodeByCode?: {
@@ -85,6 +111,11 @@ export interface CreateDiscountInput extends DiscountValue {
   appliesOncePerCustomer?: boolean;
   minimumSubtotal?: number;
   endsAt?: Date | null;
+  // Real Shopify customerSelection — omitted (or explicit "all") means every customer can use
+  // the code, which is the correct default and never requires picking a customer. Only when a
+  // merchant explicitly restricts a coupon to specific real Shopify customers does this carry
+  // their GIDs — never fabricated, never required.
+  specificCustomerIds?: string[];
 }
 
 async function getAdminClient(storeDomain: string) {
@@ -108,12 +139,17 @@ export async function createShopifyDiscount(
       ? { value: { percentage: input.value / 100 }, items: { all: true } }
       : { value: { discountAmount: { amount: input.value, appliesOnEachItem: false } }, items: { all: true } };
 
+  const customerSelection =
+    input.specificCustomerIds && input.specificCustomerIds.length > 0
+      ? { customers: { add: input.specificCustomerIds } }
+      : { all: true };
+
   const basicCodeDiscount = {
     title: input.title,
     code: input.code,
     startsAt: new Date().toISOString(),
     ...(input.endsAt ? { endsAt: input.endsAt.toISOString() } : {}),
-    customerSelection: { all: true },
+    customerSelection,
     customerGets,
     ...(input.usageLimit !== undefined ? { usageLimit: input.usageLimit } : {}),
     ...(input.appliesOncePerCustomer !== undefined ? { appliesOncePerCustomer: input.appliesOncePerCustomer } : {}),
@@ -153,6 +189,27 @@ export async function deactivateShopifyDiscount(
 
   if (!result || result.userErrors.length > 0) {
     const message = result?.userErrors.map((error) => error.message).join(" ") || "Unable to deactivate the discount.";
+    return { ok: false, error: message };
+  }
+
+  return { ok: true };
+}
+
+// Reactivates a previously-paused discount — the real counterpart to deactivateShopifyDiscount,
+// so "resume" on a paused coupon genuinely re-enables the same Shopify discount instead of the
+// app's own status column silently drifting from what Shopify actually enforces.
+export async function activateShopifyDiscount(
+  storeDomain: string,
+  discountId: string,
+): Promise<{ ok: true } | { ok: false; error: string }> {
+  const admin = await getAdminClient(storeDomain);
+
+  const response = await admin.graphql(DISCOUNT_CODE_ACTIVATE, { variables: { id: discountId } });
+  const json = (await response.json()) as DiscountCodeActivateResponse;
+  const result = json.data?.discountCodeActivate;
+
+  if (!result || result.userErrors.length > 0) {
+    const message = result?.userErrors.map((error) => error.message).join(" ") || "Unable to reactivate the discount.";
     return { ok: false, error: message };
   }
 

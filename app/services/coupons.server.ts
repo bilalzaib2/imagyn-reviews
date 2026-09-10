@@ -5,12 +5,18 @@
 // actually returns a real discount id.
 
 import prisma from "../db.server";
-import { createShopifyDiscount, deactivateShopifyDiscount, getShopifyDiscountUsageCount } from "./shopifyDiscount.server";
+import {
+  activateShopifyDiscount,
+  createShopifyDiscount,
+  deactivateShopifyDiscount,
+  getShopifyDiscountUsageCount,
+} from "./shopifyDiscount.server";
 
 export type CouponStatus = "draft" | "active" | "paused" | "ended";
 export type CouponDiscountType = "percentage" | "fixed_amount";
 export type CouponEligibility = "all" | "new_customers";
 export type CouponRedemptionStatus = "issued" | "failed" | "revoked";
+export type CouponCustomerTargeting = "all" | "specific";
 
 export interface CouponInput {
   name: string;
@@ -22,6 +28,10 @@ export interface CouponInput {
   endsAt?: Date | null;
   usageLimit?: number | null;
   perCustomerLimit: number;
+  // Never required — "all" (the default) needs no customer at all. Only "specific" carries
+  // real Shopify customer GIDs, and only when a merchant explicitly chose that mode.
+  customerTargeting?: CouponCustomerTargeting;
+  specificCustomerIds?: string[];
 }
 
 export interface CouponRecord {
@@ -36,9 +46,25 @@ export interface CouponRecord {
   endsAt: Date | null;
   usageLimit: number | null;
   perCustomerLimit: number;
+  customerTargeting: CouponCustomerTargeting;
+  specificCustomerIds: string[];
+  // Real Shopify identity for this coupon's own shared, general code — null until activation
+  // has actually succeeded against Shopify. Never fabricated.
+  shopifyDiscountId: string | null;
+  discountCode: string | null;
   createdAt: Date;
   updatedAt: Date;
   issuedCount: number;
+}
+
+function safeParseCustomerIds(raw: string | null): string[] {
+  if (!raw) return [];
+  try {
+    const parsed = JSON.parse(raw);
+    return Array.isArray(parsed) ? parsed.filter((value): value is string => typeof value === "string") : [];
+  } catch {
+    return [];
+  }
 }
 
 function mapCoupon(coupon: {
@@ -53,6 +79,10 @@ function mapCoupon(coupon: {
   endsAt: Date | null;
   usageLimit: number | null;
   perCustomerLimit: number;
+  customerTargeting: string;
+  specificCustomerIds: string | null;
+  shopifyDiscountId: string | null;
+  discountCode: string | null;
   createdAt: Date;
   updatedAt: Date;
   _count?: { redemptions: number };
@@ -69,6 +99,10 @@ function mapCoupon(coupon: {
     endsAt: coupon.endsAt,
     usageLimit: coupon.usageLimit,
     perCustomerLimit: coupon.perCustomerLimit,
+    customerTargeting: coupon.customerTargeting as CouponCustomerTargeting,
+    specificCustomerIds: safeParseCustomerIds(coupon.specificCustomerIds),
+    shopifyDiscountId: coupon.shopifyDiscountId,
+    discountCode: coupon.discountCode,
     createdAt: coupon.createdAt,
     updatedAt: coupon.updatedAt,
     issuedCount: coupon._count?.redemptions ?? 0,
@@ -142,6 +176,12 @@ export const couponsService = {
   },
 
   async createCoupon(storeId: string, data: CouponInput): Promise<CouponRecord> {
+    const customerTargeting = data.customerTargeting ?? "all";
+    const specificCustomerIds =
+      customerTargeting === "specific" && data.specificCustomerIds && data.specificCustomerIds.length > 0
+        ? data.specificCustomerIds
+        : [];
+
     const created = await prisma.coupon.create({
       data: {
         storeId,
@@ -154,6 +194,8 @@ export const couponsService = {
         endsAt: data.endsAt ?? null,
         usageLimit: data.usageLimit ?? null,
         perCustomerLimit: Math.max(data.perCustomerLimit, 1),
+        customerTargeting,
+        specificCustomerIds: specificCustomerIds.length > 0 ? JSON.stringify(specificCustomerIds) : null,
         status: "draft",
       },
     });
@@ -186,18 +228,111 @@ export const couponsService = {
     return mapCoupon(updated);
   },
 
-  // "active"/"paused"/"ended" are the only transitions a merchant can make directly —
-  // "draft" is exit-only (a coupon becomes active, never returns to draft), matching the
-  // Reward/moderation convention in this codebase of one-directional real state machines.
-  async setCouponStatus(storeId: string, id: string, status: Exclude<CouponStatus, "draft">): Promise<CouponRecord> {
+  // Activates a coupon's own SHARED, general code — real Shopify discount, customer never
+  // required (the "all customers" default satisfies the exact concern this function exists to
+  // fix: a merchant should never have to name a customer just to turn a coupon on). Handles
+  // both real transitions: draft -> active (mints a brand-new real Shopify discount, once) and
+  // paused -> active (reactivates the SAME real discount that already exists — never mints a
+  // second one for the same coupon). Only ever flips local status to "active" once Shopify has
+  // actually confirmed success; a Shopify failure leaves the coupon exactly where it was and
+  // returns a real, specific error — never a fabricated "Created".
+  async activateCoupon(storeId: string, storeDomain: string, id: string): Promise<CouponRecord> {
+    const existing = await prisma.coupon.findFirst({ where: { id, storeId } });
+    if (!existing) {
+      throw new Error("Coupon not found.");
+    }
+    if (existing.status === "ended") {
+      throw new Error("This coupon has ended and can't be reactivated.");
+    }
+    if (existing.status === "active") {
+      const issuedCount = await prisma.couponRedemption.count({ where: { couponId: id, status: "issued" } });
+      return mapCoupon({ ...existing, _count: { redemptions: issuedCount } });
+    }
+
+    // Resuming an already-real discount reuses the exact same Shopify object — never mints a
+    // second code for the same coupon.
+    if (existing.shopifyDiscountId) {
+      const result = await activateShopifyDiscount(storeDomain, existing.shopifyDiscountId);
+      if (!result.ok) {
+        throw new Error(result.error);
+      }
+    } else {
+      const specificCustomerIds = safeParseCustomerIds(existing.specificCustomerIds);
+      const code = generateCouponCode(existing.name);
+
+      const result = await createShopifyDiscount(storeDomain, {
+        title: existing.name,
+        code,
+        valueType: existing.discountType as CouponDiscountType,
+        value: existing.discountValue,
+        appliesOncePerCustomer: existing.perCustomerLimit === 1,
+        ...(existing.minimumOrderAmount !== null ? { minimumSubtotal: existing.minimumOrderAmount } : {}),
+        ...(existing.endsAt ? { endsAt: existing.endsAt } : {}),
+        ...(existing.customerTargeting === "specific" && specificCustomerIds.length > 0 ? { specificCustomerIds } : {}),
+      });
+
+      if (!result.ok) {
+        throw new Error(result.error);
+      }
+
+      await prisma.coupon.update({
+        where: { id },
+        data: { discountCode: code, shopifyDiscountId: result.discountId },
+      });
+    }
+
+    const updated = await prisma.coupon.update({
+      where: { id },
+      data: { status: "active" },
+      include: { _count: { select: { redemptions: { where: { status: "issued" } } } } },
+    });
+
+    return mapCoupon(updated);
+  },
+
+  // Pauses a coupon's shared code — a real Shopify deactivation when one actually exists (a
+  // draft coupon that was never activated has nothing to deactivate; the local flip alone is
+  // honest in that case since there was never a real discount to begin with).
+  async pauseCoupon(storeId: string, storeDomain: string, id: string): Promise<CouponRecord> {
     const existing = await prisma.coupon.findFirst({ where: { id, storeId } });
     if (!existing) {
       throw new Error("Coupon not found.");
     }
 
+    if (existing.shopifyDiscountId) {
+      const result = await deactivateShopifyDiscount(storeDomain, existing.shopifyDiscountId);
+      if (!result.ok) {
+        throw new Error(result.error);
+      }
+    }
+
     const updated = await prisma.coupon.update({
       where: { id },
-      data: { status },
+      data: { status: "paused" },
+      include: { _count: { select: { redemptions: { where: { status: "issued" } } } } },
+    });
+
+    return mapCoupon(updated);
+  },
+
+  // Ends a coupon permanently — same real deactivation as pause, but a one-directional final
+  // state (matches the Reward/moderation convention of one-directional real state machines).
+  async endCoupon(storeId: string, storeDomain: string, id: string): Promise<CouponRecord> {
+    const existing = await prisma.coupon.findFirst({ where: { id, storeId } });
+    if (!existing) {
+      throw new Error("Coupon not found.");
+    }
+
+    if (existing.shopifyDiscountId) {
+      const result = await deactivateShopifyDiscount(storeDomain, existing.shopifyDiscountId);
+      if (!result.ok) {
+        throw new Error(result.error);
+      }
+    }
+
+    const updated = await prisma.coupon.update({
+      where: { id },
+      data: { status: "ended" },
       include: { _count: { select: { redemptions: { where: { status: "issued" } } } } },
     });
 

@@ -796,6 +796,23 @@ model Coupon {
   usageLimit       Int?
   perCustomerLimit Int  @default(1)
 
+  // Real Shopify discount identity for this coupon's own shared, general code — created once,
+  // the first time the coupon is activated, via the same real discountCodeBasicCreate mutation
+  // CouponRedemption's per-customer codes already use (see shopifyDiscount.server.ts). Null
+  // until activation actually succeeds; never set speculatively before Shopify confirms.
+  // Distinct from CouponRedemption.shopifyDiscountId — a merchant can ALSO issue individual
+  // personalized codes for this same campaign (unchanged, existing feature) independently of
+  // this shared one, once it exists.
+  shopifyDiscountId String?
+  discountCode      String?
+
+  // "all" (default) | "specific" — whether the coupon's shared code is restricted to specific
+  // real Shopify customers. specificCustomerIds is a JSON-encoded array of real Shopify
+  // customer GIDs, only meaningful when customerTargeting is "specific". Customer selection is
+  // NEVER required to create or activate a coupon — "all" is the default and the common case.
+  customerTargeting   String  @default("all")
+  specificCustomerIds String?
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 

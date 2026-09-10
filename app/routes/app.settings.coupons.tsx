@@ -25,6 +25,7 @@ import styles from "../styles/app.management.module.css";
 // shopifyDiscount.server.ts). No decorative toggle: every control here reads/writes a real row.
 type LoaderData = {
   coupons: CouponRecord[];
+  storeDomain: string;
 };
 
 type ActionData = {
@@ -38,7 +39,7 @@ export const loader = async ({ request }: LoaderFunctionArgs): Promise<LoaderDat
   const store = await getOrCreateStore(session.shop);
   const coupons = await couponsService.listCoupons(store.id);
 
-  return { coupons };
+  return { coupons, storeDomain: store.domain || session.shop };
 };
 
 export const action = async ({ request }: ActionFunctionArgs): Promise<ActionData> => {
@@ -91,6 +92,11 @@ export const action = async ({ request }: ActionFunctionArgs): Promise<ActionDat
         minimumOrderAmount,
         usageLimit,
         perCustomerLimit,
+        // "all" is the only mode this form currently exposes — customer selection is never
+        // required to create or activate a coupon. Real "specific customers" targeting is
+        // supported end-to-end in couponsService/createShopifyDiscount (see their own
+        // comments) but not yet wired into this form's UI.
+        customerTargeting: "all",
       });
 
       return { ok: true, message: "Coupon created as a draft." };
@@ -99,11 +105,21 @@ export const action = async ({ request }: ActionFunctionArgs): Promise<ActionDat
     if (intent === "setStatus") {
       const id = String(formData.get("id") || "");
       const status = String(formData.get("status") || "") as Exclude<CouponStatus, "draft">;
-      if (!["active", "paused", "ended"].includes(status)) {
-        return { ok: false, error: "Invalid status." };
+      const storeDomain = store.domain || session.shop;
+
+      if (status === "active") {
+        await couponsService.activateCoupon(store.id, storeDomain, id);
+        return { ok: true, message: "Coupon activated — a real Shopify discount code is now live." };
       }
-      await couponsService.setCouponStatus(store.id, id, status);
-      return { ok: true, message: `Coupon marked ${status}.` };
+      if (status === "paused") {
+        await couponsService.pauseCoupon(store.id, storeDomain, id);
+        return { ok: true, message: "Coupon paused." };
+      }
+      if (status === "ended") {
+        await couponsService.endCoupon(store.id, storeDomain, id);
+        return { ok: true, message: "Coupon ended." };
+      }
+      return { ok: false, error: "Invalid status." };
     }
 
     if (intent === "issue") {
@@ -149,10 +165,26 @@ function formatDiscount(coupon: CouponRecord): string {
   return coupon.discountType === "percentage" ? `${coupon.discountValue}% off` : `$${coupon.discountValue.toFixed(2)} off`;
 }
 
-function CouponRow({ coupon }: { coupon: CouponRecord }) {
+// Numeric id from a real Shopify GID (e.g. "gid://shopify/DiscountCodeNode/123456789") — the
+// Shopify Admin discounts page URL takes the plain numeric id, not the full GID.
+function discountAdminUrl(storeDomain: string, shopifyDiscountId: string): string {
+  const numericId = shopifyDiscountId.split("/").pop();
+  return `https://${storeDomain}/admin/discounts/${numericId}`;
+}
+
+function CouponRow({ coupon, storeDomain }: { coupon: CouponRecord; storeDomain: string }) {
   const statusFetcher = useFetcher<ActionData>();
   const issueFetcher = useFetcher<ActionData>();
   const [email, setEmail] = useState("");
+  const [copied, setCopied] = useState(false);
+
+  const copyCode = () => {
+    if (!coupon.discountCode) return;
+    navigator.clipboard.writeText(coupon.discountCode).then(() => {
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    });
+  };
 
   const setStatus = (status: Exclude<CouponStatus, "draft">) => {
     const formData = new FormData();
@@ -186,7 +218,11 @@ function CouponRow({ coupon }: { coupon: CouponRecord }) {
         <div className={styles.inlineActions}>
           {coupon.status !== "active" && coupon.status !== "ended" ? (
             <Button type="button" variant="secondary" onClick={() => setStatus("active")} disabled={statusFetcher.state !== "idle"}>
-              Activate
+              {statusFetcher.state !== "idle"
+                ? "Activating…"
+                : coupon.shopifyDiscountId
+                  ? "Resume"
+                  : "Activate"}
             </Button>
           ) : null}
           {coupon.status === "active" ? (
@@ -202,10 +238,31 @@ function CouponRow({ coupon }: { coupon: CouponRecord }) {
         </div>
       </div>
 
+      {statusFetcher.data && !statusFetcher.data.ok ? (
+        <p className={styles.mutedText}>{statusFetcher.data.error}</p>
+      ) : null}
+
+      {coupon.discountCode && coupon.shopifyDiscountId ? (
+        <div className={styles.inlineActions}>
+          <code>{coupon.discountCode}</code>
+          <Button type="button" variant="ghost" onClick={copyCode}>
+            {copied ? "Copied" : "Copy code"}
+          </Button>
+          <a
+            href={discountAdminUrl(storeDomain, coupon.shopifyDiscountId)}
+            target="_blank"
+            rel="noreferrer"
+            className={styles.mutedText}
+          >
+            View in Shopify →
+          </a>
+        </div>
+      ) : null}
+
       {coupon.status === "active" ? (
         <div className={styles.inlineActions}>
           <TextField
-            label="Issue to a customer"
+            label="Issue a separate personalized code to a customer"
             labelHidden
             placeholder="customer@example.com"
             autoComplete="off"
@@ -224,7 +281,7 @@ function CouponRow({ coupon }: { coupon: CouponRecord }) {
 }
 
 export default function SettingsCouponsPage() {
-  const { coupons } = useLoaderData<typeof loader>();
+  const { coupons, storeDomain } = useLoaderData<typeof loader>();
   const createFetcher = useFetcher<ActionData>();
   const isCreating = createFetcher.state !== "idle";
   const [toast, setToast] = useState<{ content: string; error?: boolean } | null>(null);
@@ -339,7 +396,7 @@ export default function SettingsCouponsPage() {
         ) : (
           <div className={styles.cardList}>
             {coupons.map((coupon) => (
-              <CouponRow key={coupon.id} coupon={coupon} />
+              <CouponRow key={coupon.id} coupon={coupon} storeDomain={storeDomain} />
             ))}
           </div>
         )}
