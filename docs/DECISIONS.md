@@ -37,30 +37,29 @@
     restored to `shopify.app.toml` and the flag flipped on. Manual review request creation is
     fully unaffected.
 
-## Shopify Billing (2026-07-26)
+## Shopify Billing (2026-07-26; architecture corrected 2026-09-11 — see below)
 
--   **Manual/legacy Billing API, not Shopify App Pricing.** Shopify now funnels new App Store
-    submissions toward "Shopify App Pricing" (plans configured in the Partner Dashboard, no
-    code) by default, with the classic Billing API (`appSubscriptionCreate` /
-    `authenticate.admin().billing`) relegated to "manual pricing." This app uses the classic
-    API deliberately: it's fully installed, typed, and documented in
-    `@shopify/shopify-app-react-router@1.2.1`, it's explicitly still sanctioned for App Store
-    distribution (not deprecated or banned), and it's the only option that lets billing logic
-    live in this codebase rather than a separate dashboard configuration step. Shopify's docs
-    don't describe an explicit opt-in/opt-out toggle for a not-yet-published app choosing
-    manual pricing — worth confirming directly in the Partner Dashboard's submission flow
-    before the actual App Store submission.
+-   **Correction (2026-09-11): this app now uses Shopify Managed Pricing, not the classic
+    Billing API described in the original 2026-07-26 entry below.** That migration happened
+    without this doc being updated at the time — confirmed by reading the real, current
+    `billing.server.ts`: there is no `billing.request()`/`appSubscriptionCreate` call anywhere
+    in this codebase. `app.billing.manage.tsx` is the single entry point for every paid-plan
+    action (upgrade/downgrade/cancel) and does a real top-level redirect (`getPricingPlansUrl`)
+    to Shopify's own hosted `charges/{appHandle}/pricing_plans` page — the app's own code
+    comment states plainly: "Shopify Managed Pricing apps can't create or cancel charges via
+    the Billing API — Shopify rejects appSubscriptionCreate/appPurchaseOneTimeCreate outright."
+    Only Free/Starter selection (`selectStarterPlan`) remains a local DB write with no Shopify
+    charge, unchanged from the description below, since Shopify has no free-subscription
+    concept either way. `syncBillingFromShopify` (a live `currentAppInstallation
+    .activeSubscriptions` GraphQL query) is the real reconciliation mechanism — run on every
+    billing-page load and via the `app_subscriptions/update` webhook — replacing the
+    `billing.check()`/`billing.cancel()` wrapper calls this entry originally described. Now
+    covered by real tests (`billing.server.test.ts`) for `syncBillingFromShopify`,
+    `selectStarterPlan`, and `getPricingPlansUrl` — previously all three had zero coverage.
 -   **A store must explicitly choose a plan, including the free one.** `Store.planStatus`
     defaults to `"pending"` (not `"active"`) — even Starter requires clicking "Select Starter"
     on the billing page. This matches the intended "Continue using Imagyn Reviews / choose a
     plan" onboarding moment rather than silently defaulting everyone into Starter.
--   **Upgrade/downgrade between paid tiers uses `replacementBehavior: ApplyImmediately`** on a
-    fresh `billing.request()` call, not cancel-then-recreate — this is the Billing API's own
-    documented mechanism for swapping a shop's subscription line items, and avoids a
-    momentary "no active subscription" gap that a manual cancel+recreate would create.
-    Downgrading to Starter (free) has no equivalent — Shopify's Billing API has no concept of
-    a free subscription — so that path is `billing.cancel()` followed by a local
-    `selectStarterPlan()` call.
 -   **Development-store bypass is not a Billing-API feature — it's built on top of it.** The
     SDK's `isTest` flag (used for `billing.request`/`check`/`cancel`) only controls whether a
     charge is a *test* charge; it does not detect or skip billing for development stores on

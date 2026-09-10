@@ -688,8 +688,8 @@ const SEND_SOURCE_TABS: Array<{ value: SendSource; label: string; disabled?: boo
 // "Choose source" step of the redesigned Send Request flow — Shopify Orders (real data) is the
 // default, matching the brief's explicit "default to Shopify Orders" requirement. Customer
 // Segment reuses the same real Shopify Orders table under preset filters (see
-// CUSTOMER_SEGMENT_OPTIONS). CSV still renders as a genuinely disabled tab (not
-// clickable-but-inert) since no request-specific CSV importer exists yet.
+// CUSTOMER_SEGMENT_OPTIONS). CSV is a fully live tab, wired to the real "create-from-csv"
+// intent (see reviewRequestCsvImport.server.ts) — none of SEND_SOURCE_TABS sets `disabled`.
 function SendSourceTabs({ value, onChange }: { value: SendSource; onChange: (value: SendSource) => void }) {
   return (
     <div className={styles.sendSourceTabs} role="tablist" aria-label="Send request from">
