@@ -150,6 +150,17 @@
   align-items: start;
 }
 
+/* Real fix (2026-09-10) for a genuine UX bug: the detail column used to be permanently
+   reserved (~35% of the workspace) even while just browsing the list with nothing selected,
+   since CSS Grid keeps a template's column tracks whether or not a child actually renders into
+   them. Applied only for the common "real requests loaded, nothing selected yet" case — the
+   table gets the full width by default; selecting a request re-introduces the detail column
+   (see the JSX's conditional className). Loading/empty/error states keep the original 2-column
+   layout unchanged (rare, transient states — not what the width complaint was about). */
+.splitLayoutFull {
+  grid-template-columns: 1fr;
+}
+
 /* No min-height here on purpose — .listColumn is a grid container with a single auto-sized
    row, so any min-height on it forces that row (and its stretch-by-default child,
    .tableWrap) to fill the extra space even when the real table content is much shorter,

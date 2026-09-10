@@ -268,59 +268,21 @@ export const action = async ({ request }: ActionFunctionArgs): Promise<ActionDat
   const intent = String(formData.get("_intent") || "");
 
   try {
-    if (intent === "create") {
-      const customerValue = String(formData.get("customer") || "");
-      const productId = String(formData.get("productId") || "");
-      const orderNumber = String(formData.get("orderNumber") || "");
-      const customMessage = String(formData.get("customMessage") || "");
-      const delayDays = Number(formData.get("delayDays") || "0");
-      const confirmDuplicate = String(formData.get("confirmDuplicate") || "") === "true";
-      const [name, email] = customerValue.split("||");
-
-      if (!email || !productId || !Number.isFinite(delayDays)) {
-        return { ok: false, error: "Customer, product, and delay are required.", intent };
-      }
-
-      // A one-time check, not a hard constraint — the merchant can always proceed by
-      // resubmitting with confirmDuplicate set (see the modal's "Send Anyway" action). This
-      // only runs on the first submit of a given (customer, product) pair; changing either
-      // field in the UI clears the confirmation so a genuinely different pair gets its own
-      // fresh check.
-      if (!confirmDuplicate) {
-        const context = await reviewRequestService.getExistingRequestContext(store.id, { email, productId });
-        const reasons: string[] = [];
-        if (context.hasExistingReview) {
-          reasons.push("this customer has already left a review for this product");
-        }
-        if (context.hasPendingRequest) {
-          reasons.push("a request for this customer and product is already pending or scheduled");
-        }
-        if (context.hasSentRequest) {
-          reasons.push("a request for this customer and product was already sent and hasn't been completed yet");
-        }
-
-        if (reasons.length > 0) {
-          return {
-            ok: false,
-            warning: true,
-            error: `${reasons.join("; ")}. Send this request anyway?`,
-            intent,
-          };
-        }
-      }
-
-      await reviewRequestService.createRequest(store.id, {
-        name: name || email,
-        email,
-        productId,
-        orderNumber,
-        customMessage,
-        delayDays,
-      });
-
-      return { ok: true, message: "Review request scheduled.", intent };
-    }
-
+    // REMOVED 2026-09-10 (real security/trust fix, found via live testing): this used to be
+    // `intent === "create"` — a free-text customer+product pairing with ZERO server-side
+    // verification that the customer had ever actually purchased the product. A merchant (or
+    // anyone who could POST to this action with a valid session) could request a review from
+    // any customer for any product, with only an optional, unverified `orderNumber` string.
+    // The "Individual Customer" UI tab that submitted this intent now renders the same
+    // real, order-verified ShopifyOrdersPicker every other create path uses (see
+    // handleModalSubmit) and submits through `create-from-orders` below instead, which
+    // requires a genuine shopifyOrderId + shopifyLineItemId from an actual Shopify order —
+    // reviewRequestService.createFromOrder/createManyFromOrders can't be called without them
+    // by construction (they're required fields on the input type, not optional strings).
+    // reviewRequestService.createRequest (the function this used to call) still exists and is
+    // still used by the CSV import path (reviewRequestCsvImport.server.ts), which is a
+    // different, already-understood trust model: CSV-imported rows are merchant-supplied data
+    // with no Shopify order to verify against, and are never marked as a verified purchase.
     if (intent === "create-from-orders") {
       const delayDays = Number(formData.get("delayDays") || "0");
       const selectionsRaw = String(formData.get("selections") || "[]");
@@ -1285,7 +1247,9 @@ export default function RequestsPage() {
   const isShopifyOrdersTabActive =
     requestModalOpen &&
     requestModalMode === "create" &&
-    (sendSource === "shopify-orders" || (sendSource === "segment" && Boolean(customerSegment)));
+    (sendSource === "shopify-orders" ||
+      sendSource === "individual" ||
+      (sendSource === "segment" && Boolean(customerSegment)));
   useEffect(() => {
     if (!isShopifyOrdersTabActive) return;
 
@@ -1629,7 +1593,18 @@ export default function RequestsPage() {
   };
 
   const handleModalSubmit = () => {
-    if (requestModalMode === "create" && (sendSource === "shopify-orders" || sendSource === "segment")) {
+    // Every "create" send source (Shopify Orders, Individual Customer, Customer Segment) now
+    // routes through the exact same real, order-verified selection table and the same
+    // create-from-orders action — see the 2026-09-10 fix removing the old free-text
+    // customer+product pairing path (formerly reachable via "individual"), which let a
+    // merchant request a review from a customer for a product they never purchased, with zero
+    // server-side purchase verification. There is no longer any "create" path that doesn't
+    // carry a real shopifyOrderId/shopifyLineItemId. Upload CSV has its own submit handler
+    // (submitCsvRequests) wired directly to the modal's primary action.
+    if (
+      requestModalMode === "create" &&
+      (sendSource === "shopify-orders" || sendSource === "individual" || sendSource === "segment")
+    ) {
       const selections = Object.values(selectedOrderLineItems);
       if (selections.length === 0) {
         return;
@@ -1650,21 +1625,6 @@ export default function RequestsPage() {
         setAttemptedSubmit(true);
         return;
       }
-    }
-
-    if (requestModalMode === "create") {
-      submitAction({
-        _intent: "create",
-        customer: formState.customer,
-        productId: formState.productId,
-        orderNumber: formState.orderNumber,
-        delayDays: formState.delayDays,
-        customMessage: formState.customMessage,
-        // Set once a warning has already been shown for this exact (customer, product) pair —
-        // this resubmit is the merchant explicitly choosing "Send Anyway".
-        confirmDuplicate: duplicateWarning ? "true" : "false",
-      });
-      return;
     }
 
     if (!selectedRequest) {
@@ -1894,7 +1854,11 @@ export default function RequestsPage() {
               )}
             </div>
 
-            <div className={styles.splitLayout}>
+            <div
+              className={`${styles.splitLayout} ${
+                !isLoading && !error && effectiveRequests.length > 0 && !selectedRequest ? styles.splitLayoutFull : ""
+              }`}
+            >
               {isLoading ? (
                 <>
                   <div className={styles.listColumn}>
@@ -2217,10 +2181,20 @@ export default function RequestsPage() {
       <Modal
         open={requestModalOpen}
         onClose={() => setRequestModalOpen(false)}
-        size={requestModalMode === "create" && (sendSource === "shopify-orders" || sendSource === "segment") ? "fullScreen" : undefined}
+        size="large" // ~980px, Polaris's widest non-custom size. Previously this branched to
+        // "fullScreen" for the order-picker tabs, on the assumption that "fullScreen" meant
+        // "widest" — but Polaris's Dialog.css only has `sizeFullScreen { height: 100% }`; it
+        // never sets a width/max-width rule, so with no width-affecting size class applied the
+        // modal silently fell back to the *unsized* default max-width (38.75rem / 620px), which
+        // is exactly the "modal is too small" bug reported. "large" is the only Polaris size
+        // that actually widens the dialog (max-width: 61.25rem/980px at >=65em viewports), so it
+        // is now used for every mode. Not a custom pixel width: Polaris only exposes
+        // small/large/fullScreen, and an arbitrary CSS override would fight Shopify's own modal
+        // chrome — "large" is the closest genuinely Shopify-native size to the ~720-900px target.
         title={requestModalMode === "create" ? "Send Review Request" : requestModalMode === "edit" ? "Edit Review Request" : "Reschedule Review Request"}
         primaryAction={
-          requestModalMode === "create" && (sendSource === "shopify-orders" || sendSource === "segment")
+          requestModalMode === "create" &&
+          (sendSource === "shopify-orders" || sendSource === "individual" || sendSource === "segment")
             ? {
                 content:
                   isMutating && activeIntent === "create-from-orders"
@@ -2236,20 +2210,16 @@ export default function RequestsPage() {
                 disabled: isMutating || !csvFileContent,
               }
             : {
+                // Only reachable for "edit" or "reschedule" now — every "create" send source is
+                // handled by the two branches above (order-verified picker, or CSV).
                 content:
-                  requestModalMode === "create"
-                    ? isMutating && activeIntent === "create"
-                      ? "Scheduling..."
-                      : duplicateWarning
-                        ? "Send Anyway"
-                        : "Schedule Request"
-                    : requestModalMode === "edit"
-                      ? isMutating && activeIntent === "edit"
-                        ? "Saving..."
-                        : "Save Changes"
-                      : isMutating && activeIntent === "reschedule"
-                        ? "Rescheduling..."
-                        : "Reschedule",
+                  requestModalMode === "edit"
+                    ? isMutating && activeIntent === "edit"
+                      ? "Saving..."
+                      : "Save Changes"
+                    : isMutating && activeIntent === "reschedule"
+                      ? "Rescheduling..."
+                      : "Reschedule",
                 onAction: handleModalSubmit,
                 disabled:
                   isMutating ||
@@ -2315,7 +2285,17 @@ export default function RequestsPage() {
               />
             ) : null}
 
-            {requestModalMode === "create" && (sendSource === "shopify-orders" || (sendSource === "segment" && customerSegment)) ? (
+            {requestModalMode === "create" && sendSource === "individual" ? (
+              <p className={styles.feedbackMuted}>
+                Search by customer name or email below — only real purchases from this store&apos;s actual Shopify
+                orders are eligible, so a request can never be sent for a product a customer didn&apos;t buy.
+              </p>
+            ) : null}
+
+            {requestModalMode === "create" &&
+            (sendSource === "shopify-orders" ||
+              sendSource === "individual" ||
+              (sendSource === "segment" && customerSegment)) ? (
               <ShopifyOrdersPicker
                 orders={loadedOrders}
                 isLoading={ordersFetcher.state !== "idle"}
@@ -2360,7 +2340,11 @@ export default function RequestsPage() {
               />
             ) : null}
 
-            {!(requestModalMode === "create" && sendSource !== "individual") && requestModalMode !== "reschedule" ? (
+            {/* Only ever shown for "edit" now — every "create" send source (including
+                Individual Customer) routes through the real, order-verified ShopifyOrdersPicker
+                above instead. This free-text customer+product pairing is what previously let a
+                merchant request a review for a product a customer never purchased. */}
+            {requestModalMode === "edit" ? (
               <>
                 <p className={styles.modalSectionLabel}>Customer</p>
                 <CustomerPicker
@@ -2398,8 +2382,7 @@ export default function RequestsPage() {
               </>
             ) : null}
 
-            {!(requestModalMode === "create" && sendSource !== "individual") &&
-            (requestModalMode === "edit" || requestModalMode === "reschedule" || (customerEmailValue && formState.productId)) ? (
+            {requestModalMode === "edit" || requestModalMode === "reschedule" ? (
               <>
                 <p className={styles.modalSectionLabel}>Schedule</p>
                 <Select
