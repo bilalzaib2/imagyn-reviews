@@ -722,3 +722,34 @@
   color: var(--color-text-muted);
   text-align: center;
 }
+
+/* AI Review Summary thumbnail — the same centered, editorial text block the real block
+   renders, sized down to card-thumbnail scale. */
+.aiSummaryPreviewBlock {
+  display: grid;
+  justify-items: center;
+  gap: var(--space-2);
+  text-align: center;
+  max-width: 22rem;
+}
+
+.aiSummaryPreviewLabel {
+  font-size: 0.65rem;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--color-text-muted);
+}
+
+.aiSummaryPreviewText {
+  margin: 0;
+  font-size: 0.8rem;
+  line-height: 1.5;
+}
+
+.aiSummaryPreviewRecommendation {
+  margin: 0;
+  font-size: 0.7rem;
+  line-height: 1.5;
+  color: var(--color-text-muted);
+}

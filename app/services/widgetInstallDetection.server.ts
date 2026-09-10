@@ -25,7 +25,8 @@ export type WidgetInstallKey =
   | "collection-rating-badge"
   | "review-carousel"
   | "medals-showcase"
-  | "store-reviews";
+  | "store-reviews"
+  | "ai-review-summary";
 
 const FETCH_TIMEOUT_MS = 6000;
 const UNREACHABLE_REASON = "Couldn't reach your storefront to verify this automatically.";
@@ -189,6 +190,7 @@ export async function detectWidgetInstallStatus(
   const result: Record<WidgetInstallKey, WidgetInstallStatus> = {
     "product-reviews-widget": productStatus("data-imagyn-reviews"),
     "product-rating-badge": productStatus("data-imagyn-rating-badge"),
+    "ai-review-summary": productStatus("data-imagyn-ai-summary-block"),
     "collection-rating-badge": resolveEmbedWidget(
       "data-imagyn-collection-badges",
       home,

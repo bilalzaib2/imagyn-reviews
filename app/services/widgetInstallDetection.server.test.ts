@@ -77,6 +77,18 @@ describe("detectWidgetInstallStatus — section-target widgets (product page)", 
     expect(result["product-reviews-widget"].state).toBe("unknown");
     expect(result["product-reviews-widget"].reason).toMatch(/password protection/);
   });
+
+  it("detects the standalone AI Review Summary block by its own marker, independent of the other product-page blocks", async () => {
+    (fetch as unknown as ReturnType<typeof vi.fn>).mockImplementation(async (url: string) =>
+      url.includes("/products/")
+        ? htmlResponse('<div data-imagyn-ai-summary-block="true"></div>')
+        : htmlResponse("<html></html>"),
+    );
+
+    const result = await detectWidgetInstallStatus("shop.example.com", "store_1");
+    expect(result["ai-review-summary"].state).toBe("installed");
+    expect(result["product-rating-badge"].state).toBe("not-installed");
+  });
 });
 
 describe("detectWidgetInstallStatus — embed widget (collection rating badge)", () => {

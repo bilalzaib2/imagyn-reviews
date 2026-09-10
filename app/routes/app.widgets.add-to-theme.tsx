@@ -25,6 +25,7 @@ type BlockKind = "section" | "embed";
 const ALLOWED_BLOCKS: Record<string, { template: "product" | "collection" | "index"; kind: BlockKind }> = {
   star_rating: { template: "product", kind: "section" },
   rating_badge: { template: "product", kind: "section" },
+  ai_review_summary: { template: "product", kind: "section" },
   collection_rating_badges: { template: "collection", kind: "embed" },
   // Store-wide, not per-product — opens on the homepage template, matching this block's
   // own default placement ("homepage-featured" in widget.shared.ts's defaultSettingsByType).

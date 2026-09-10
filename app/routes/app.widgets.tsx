@@ -46,6 +46,7 @@ const fallbackInstallStatus: Record<WidgetInstallKey, WidgetInstallStatus> = {
   "review-carousel": UNKNOWN_INSTALL_STATUS,
   "medals-showcase": UNKNOWN_INSTALL_STATUS,
   "store-reviews": UNKNOWN_INSTALL_STATUS,
+  "ai-review-summary": UNKNOWN_INSTALL_STATUS,
 };
 
 type PageView = "gallery" | "customize";
@@ -138,6 +139,15 @@ const widgetCards: WidgetCardDef[] = [
     status: "theme-editor",
     blockName: "Store Reviews",
     blockHandle: "store_reviews",
+  },
+  {
+    key: "ai-review-summary",
+    title: "AI Review Summary",
+    description:
+      "The AI-generated summary and recommendation for a product, on its own — place it anywhere on the product page without needing the full Reviews widget there too. Generate a summary first from a product's page in Imagyn Reviews.",
+    status: "theme-editor",
+    blockName: "AI Review Summary",
+    blockHandle: "ai_review_summary",
   },
 ];
 
@@ -460,6 +470,23 @@ function MedalsShowcaseThumbnailPreview() {
           <span className={styles.medalsShowcasePreviewName}>{sample.name}</span>
         </div>
       ))}
+    </div>
+  );
+}
+
+// AI Review Summary's gallery thumbnail — the same two-line summary/recommendation copy
+// the real block renders (ai-review-summary.js's renderAiSummary), with representative
+// sample text standing in for a merchant's real generated summary.
+function AiSummaryThumbnailPreview({ tokens }: { tokens: AppearanceTokens }) {
+  return (
+    <div className={styles.aiSummaryPreviewBlock}>
+      <span className={styles.aiSummaryPreviewLabel}>AI Review Summary</span>
+      <p className={styles.aiSummaryPreviewText} style={{ color: tokens.colors.textColor ?? "#111111" }}>
+        Customers consistently praise the fit and fabric quality, with several noting it runs slightly small.
+      </p>
+      <p className={styles.aiSummaryPreviewRecommendation}>
+        <strong>Recommended for:</strong> everyday wear, sized up
+      </p>
     </div>
   );
 }
@@ -789,6 +816,10 @@ export default function WidgetsPage() {
                       ) : card.key === "medals-showcase" ? (
                         <div className={styles.widgetCardThumbnailPlaceholder}>
                           <MedalsShowcaseThumbnailPreview />
+                        </div>
+                      ) : card.key === "ai-review-summary" ? (
+                        <div className={styles.widgetCardThumbnailPlaceholder}>
+                          <AiSummaryThumbnailPreview tokens={appearanceTokens} />
                         </div>
                       ) : null}
                       <div className={styles.widgetCardMeta}>
