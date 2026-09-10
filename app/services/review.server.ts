@@ -403,6 +403,45 @@ export async function getStoreReviewStats(storeId: string, options: { recentLimi
   };
 }
 
+export interface CustomerReviewStats {
+  reviewCount: number;
+  averageRating: number | null;
+  mostRecent: {
+    rating: number;
+    title: string | null;
+    productTitle: string | null;
+    status: string;
+    createdAt: Date;
+  } | null;
+}
+
+// Backs the Customer Detail Admin Block extension (see
+// extensions/customer-reviews-admin-block) — a merchant looking at a customer in Shopify
+// Admin sees that customer's real review history at this store, matched by email since
+// Review has no direct Shopify customer id column (a review can be genuinely anonymous/
+// guest, or imported from another platform with no linked Shopify account at all).
+// Case-insensitive: a review's reviewerEmail is merchant/customer-submitted free text, not
+// guaranteed to match Shopify's own stored casing for the same address.
+export async function getCustomerReviewStatsByEmail(storeId: string, email: string): Promise<CustomerReviewStats> {
+  const where = { storeId, deletedAt: null, reviewerEmail: { equals: email, mode: "insensitive" as const } };
+
+  const [reviewCount, aggregate, mostRecent] = await Promise.all([
+    prisma.review.count({ where }),
+    prisma.review.aggregate({ where, _avg: { rating: true } }),
+    prisma.review.findFirst({
+      where,
+      orderBy: [{ createdAt: "desc" }, { id: "desc" }],
+      select: { rating: true, title: true, productTitle: true, status: true, createdAt: true },
+    }),
+  ]);
+
+  return {
+    reviewCount,
+    averageRating: aggregate._avg.rating !== null ? Number(aggregate._avg.rating.toFixed(1)) : null,
+    mostRecent,
+  };
+}
+
 export interface PublicReviewSummary {
   averageRating: number;
   totalReviews: number;
