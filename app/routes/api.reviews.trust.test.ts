@@ -1,8 +1,10 @@
 // Exercises api.reviews.trust.tsx's loader — the storefront Trust Badge's data source.
 // Regression coverage for two real bugs: (1) the AI section used to show a random single
 // product's summary labeled as "what customers are saying" about the store, and (2) the Trust
-// Badge itself must never be gated behind certification status — a COD-only store with real
-// verified reviews still gets a real badge, just never a "Certified" pill.
+// Badge itself must never be gated behind certification status — a store with real verified
+// reviews still gets a real badge regardless of certification outcome, and regardless of
+// whether that outcome depends on COD (COD is an accepted IMAGYN payment method as of the
+// 2026-09-10 correction — see trustCertification.server.ts's calculatePaymentMethodsPillar).
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 let trustRecord: { status: string; paused: boolean; verifiedReviewCount: number; verifiedAverageRating: number } | null;
@@ -45,7 +47,7 @@ vi.mock("../services/trustCertification.presentation", () => ({
   PILLAR_STATUS_LABEL: { met: "Met", not_met: "Not met", pending: "Calculating", needs_permission: "Pending" },
   buildPillarViews: vi.fn(() => [
     { key: "reviewPractices", title: "Review Practices", status: "met" },
-    { key: "paymentMethods", title: "Secure Payment Methods", status: "not_met" },
+    { key: "paymentMethods", title: "Payment & Checkout Availability", status: "not_met" },
   ]),
 }));
 
@@ -72,7 +74,7 @@ beforeEach(() => {
 });
 
 describe("api.reviews.trust loader — Trust Badge data", () => {
-  it("returns real verified rating/count/pillars even for a COD-only (not_certified) store — the badge never depends on certification status", async () => {
+  it("returns real verified rating/count/pillars even for a not_certified store — the badge never depends on certification status", async () => {
     const response = await loader({ request: requestFor("verve.myshopify.com") } as never);
     const json = await response.json();
 

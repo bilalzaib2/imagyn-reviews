@@ -102,7 +102,7 @@ export function buildPillarViews(trust: TrustCertificationSnapshot, storeDomain:
     },
     {
       key: "paymentMethods",
-      title: "Secure Payment Methods",
+      title: "Payment & Checkout Availability",
       status: paymentMethods.status,
       detail: paymentMethods.detail ?? "Waiting on order data.",
       actionLabel: paymentMethods.status !== "met" && paymentSettingsHref ? "Review payment settings" : undefined,

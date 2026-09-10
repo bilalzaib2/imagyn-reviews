@@ -92,12 +92,7 @@ describe("calculatePaymentMethodsPillar", () => {
     expect(result.status).toBe("pending");
   });
 
-  it("is not_met when every order only used manual/COD gateways", () => {
-    const result = calculatePaymentMethodsPillar([["manual"], ["cash_on_delivery"], ["Manual"]]);
-    expect(result.status).toBe("not_met");
-  });
-
-  it("is met when a real gateway with a dispute path is present", () => {
+  it("is met when a real gateway is present", () => {
     const result = calculatePaymentMethodsPillar([["shopify_payments"], ["manual"]]);
     expect(result.status).toBe("met");
   });
@@ -112,25 +107,36 @@ describe("calculatePaymentMethodsPillar", () => {
     expect(result.status).toBe("not_met");
   });
 
-  // Explicit, self-documenting regression coverage for the exact scenarios called out after a
-  // real-world concern: this pillar must never penalize a merchant merely for accepting COD
-  // alongside a real payment method, and must never fabricate MET without real evidence.
-  describe("COD / qualifying-payment-provider scenarios (explicit regression coverage)", () => {
-    it("COD-only store: every real order used manual/COD — not_met, never fabricated as passing", () => {
+  // IMAGYN's own Trust Certification criterion (not Shopify's Built for Shopify/App Store
+  // requirements, which this pillar never touches): COD is a fully legitimate, Shopify-
+  // supported payment method for IMAGYN's heavily-COD target market, so it is an ACCEPTED
+  // payment method here, never a disqualifying one — the pillar only asks "did a customer
+  // ever complete a real purchase," never "which specific gateway did they use." See the
+  // 2026-09-10 correction to this pillar's logic for the full rationale.
+  describe("COD / payment-availability scenarios (explicit regression coverage)", () => {
+    it("1. COD-only store: Secure Payment Methods pillar is MET", () => {
       const result = calculatePaymentMethodsPillar([["cod"], ["cash_on_delivery"], ["manual"]]);
-      expect(result.status).toBe("not_met");
+      expect(result.status).toBe("met");
     });
 
-    it("card/payment-provider store: a real gateway alone — met", () => {
+    it("3. COD-heavy recent orders (COD vastly outnumbering the one card order) do not cause a failure", () => {
+      const result = calculatePaymentMethodsPillar([
+        ["cod"],
+        ["cod"],
+        ["cod"],
+        ["cod"],
+        ["cash_on_delivery"],
+        ["shopify_payments"],
+      ]);
+      expect(result.status).toBe("met");
+    });
+
+    it("4. Shopify Payments / card gateway alone — MET", () => {
       const result = calculatePaymentMethodsPillar([["shopify_payments"], ["shopify_payments"]]);
       expect(result.status).toBe("met");
     });
 
-    it("mixed COD + qualifying payment provider store: never penalized for the COD orders — met", () => {
-      // Real, common scenario: a store offers both a card processor and COD, and a shopper
-      // happened to pick COD for some orders. The store still has a genuine dispute/chargeback
-      // path available (the card processor), so it must qualify — COD coexisting with a real
-      // gateway is not a violation, only COD being the ONLY option is.
+    it("5. Mixed COD + online payment gateway — MET", () => {
       const result = calculatePaymentMethodsPillar([
         ["cod"],
         ["shopify_payments"],
@@ -141,10 +147,14 @@ describe("calculatePaymentMethodsPillar", () => {
       expect(result.status).toBe("met");
     });
 
-    it("insufficient payment data (no orders yet): pending, never fabricated as met or not_met", () => {
+    it("6. No legitimate checkout/payment configuration (only Shopify's test-mode gateway) — NOT MET", () => {
+      const result = calculatePaymentMethodsPillar([["bogus"], ["free"]]);
+      expect(result.status).toBe("not_met");
+    });
+
+    it("10. Never fabricates evidence: zero orders is pending, never a false MET or false NOT MET", () => {
       const result = calculatePaymentMethodsPillar([]);
       expect(result.status).toBe("pending");
-      // Never a false negative either — zero evidence must never read as a failure.
       expect(result.status).not.toBe("not_met");
     });
   });
@@ -281,6 +291,23 @@ describe("deriveOverallStatus", () => {
     expect(deriveOverallStatus(pillars({ storeHistory: needsPermission }), false, false)).not.toBe("certified");
     expect(met.status).toBe("met"); // sanity: fixture itself is well-formed
   });
+
+  // 2026-09-10 correction: explicit end-to-end coverage that a COD-only store, once every
+  // other IMAGYN pillar genuinely passes, reaches full CERTIFIED status — COD alone must
+  // never be the thing standing between a merchant and certification.
+  it("2. COD-only store + all other pillars met — CERTIFIED", () => {
+    const codPaymentPillar = calculatePaymentMethodsPillar([["cod"], ["cash_on_delivery"], ["manual"]]);
+    expect(deriveOverallStatus(pillars({ paymentMethods: codPaymentPillar }), false, false)).toBe("certified");
+  });
+
+  // 8. The Shipping & Refund Policy pillar stays fully independent of the payment pillar —
+  // a COD store with a genuinely missing/incomplete shipping policy must NOT be certified
+  // just because payment is now met.
+  it("8. Shipping policy can independently remain NOT MET even when payment is MET (COD store)", () => {
+    const codPaymentPillar = calculatePaymentMethodsPillar([["cod"]]);
+    const result = deriveOverallStatus(pillars({ paymentMethods: codPaymentPillar, policy: notMet }), false, false);
+    expect(result).toBe("not_certified");
+  });
 });
 
 describe("isTrustCertificationStale", () => {
@@ -405,7 +432,7 @@ describe("recalculateTrustCertification", () => {
     // Same store, now failing the payment-methods pillar.
     const second = await recalculateTrustCertification("store-2", {
       verifiedReviews: VERIFIED_REVIEWS_ALL_PUBLISHED,
-      orderGatewayNames: [["manual"]],
+      orderGatewayNames: [["bogus"]],
       policies: REAL_POLICIES,
       shopCreatedAt: OLD_ENOUGH_SHOP,
     });
@@ -417,7 +444,7 @@ describe("recalculateTrustCertification", () => {
   it("never marks everCertified for a store that has never actually passed every pillar", async () => {
     const snapshot = await recalculateTrustCertification("store-3", {
       verifiedReviews: VERIFIED_REVIEWS_ALL_PUBLISHED,
-      orderGatewayNames: [["manual"]],
+      orderGatewayNames: [["bogus"]],
       policies: REAL_POLICIES,
       shopCreatedAt: OLD_ENOUGH_SHOP,
     });
@@ -639,14 +666,14 @@ describe("getOrRefreshTrustCertification", () => {
     const staleTime = new Date(Date.now() - TRUST_CERTIFICATION_STALE_MS - 1000);
     await recalculateTrustCertification(
       "store-stale",
-      { verifiedReviews: VERIFIED_REVIEWS_ALL_PUBLISHED, orderGatewayNames: [["manual"]], policies: REAL_POLICIES, shopCreatedAt: OLD_ENOUGH_SHOP },
+      { verifiedReviews: VERIFIED_REVIEWS_ALL_PUBLISHED, orderGatewayNames: [["bogus"]], policies: REAL_POLICIES, shopCreatedAt: OLD_ENOUGH_SHOP },
       staleTime,
     );
 
     const admin = fakeAdmin([REAL_ORDERS_RESPONSE, OLD_SHOP_RESPONSE, REAL_POLICIES_RESPONSE]);
     const result = await getOrRefreshTrustCertification(admin, "store-stale");
 
-    // The returned value is the stale snapshot itself (not_certified, from the manual-only
+    // The returned value is the stale snapshot itself (not_certified, from the test-mode-only
     // gateway set above) — the refresh happens in the background for *next* time, it must
     // never block or silently replace what this call returns.
     expect(result.status).toBe("not_certified");

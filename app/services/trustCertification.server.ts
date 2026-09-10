@@ -71,57 +71,60 @@ export function calculateReviewPracticesPillar(
   };
 }
 
-// Gateway names Shopify orders can report that do NOT give a customer any dispute/chargeback
-// path — matched case-insensitively against Order.paymentGatewayNames. Deliberately a
-// denylist, not an allowlist: a denylist degrades safely (an unfamiliar real gateway name is
-// treated as secure, which is usually correct — card networks/PayPal/BNPL providers all
-// support disputes), whereas an allowlist would incorrectly fail every gateway not already on
-// it. "bogus"/"free" are Shopify's own test-mode gateways — excluded so a development store
-// never reads as falsely secure from test orders.
-const NO_DISPUTE_PATH_GATEWAYS = new Set([
-  "manual",
-  "cash on delivery (cod)",
-  "cash_on_delivery",
-  "cod",
-  "bank_deposit",
-  "money_order",
-  "bogus",
-  "free",
-]);
+// Gateway names that do NOT represent a legitimate way for a real customer to have completed
+// a purchase — matched case-insensitively against Order.paymentGatewayNames. This is IMAGYN's
+// OWN shopper-facing Trust Certification criterion, deliberately distinct
+// from (and not a substitute for) Shopify's own Built for Shopify / App Store review
+// requirements, which this pillar never touches. IMAGYN's target merchants are heavily
+// COD-based — Cash on Delivery is a fully legitimate, Shopify-supported payment method for
+// them, not a red flag, so it is never treated as disqualifying here. Only Shopify's own
+// test-mode placeholder gateways ("bogus"/"free") are excluded, since those never represent
+// a real customer completing a real purchase — a development store's test orders must never
+// read as evidence of a working checkout. Deliberately a denylist of exactly those two, not
+// an allowlist: an allowlist would incorrectly fail every real gateway not already on it,
+// while this denylist only ever excludes Shopify's own known-fake test gateways.
+const NON_LEGITIMATE_TEST_GATEWAYS = new Set(["bogus", "free"]);
 
 export interface PaymentMethodsResult {
   status: PillarStatus;
   detail: string | null;
 }
 
-// Pillar 2 — Secure Payment Methods. Real signal only: Order.paymentGatewayNames from actual
-// orders (existing read_orders scope — no new permission). Never infers anything from
-// shop.paymentSettings (confirmed via live introspection that field only exposes
-// autoCapture/supportedDigitalWallets, not which gateways are configured) and never assumes
-// manual/COD is secure just because it's present.
+// Pillar 2 — Payment & Checkout Availability. Real signal only: Order.paymentGatewayNames
+// from actual orders (existing read_orders scope — no new permission). Never infers anything
+// from shop.paymentSettings (confirmed via live introspection that field only exposes
+// autoCapture/supportedDigitalWallets, not which gateways are configured) — Shopify's Admin
+// GraphQL API exposes no authoritative "which payment methods are configured" field to apps,
+// so real completed orders are the only honest signal available.
 //
-// This intentionally has no "needs_permission" state (unlike the Policy pillar): read_orders
-// is already an unconditionally-granted scope with no additional consent gate, so there is no
-// real scenario where this data is permission-blocked — inventing one here would itself be a
-// fabricated state. A store with COD *and* a real gateway is correctly "met", never penalized
-// for the COD orders alone — see calculatePaymentMethodsPillar's own `.some()` (not `.every()`)
-// below, and the explicit COD/mixed-provider regression tests in this file's test suite.
+// This pillar answers one question: "have customers actually been able to complete a real
+// purchase through this store's checkout?" — not "which specific gateway did they use." COD,
+// Shopify Payments, card gateways, and every other real-world gateway all count equally
+// toward MET; the pillar never depends on which one customers happened to pick, so a
+// COD-heavy or COD-only store is never penalized for that distribution (see this file's own
+// COD regression tests). This intentionally has no "needs_permission" state (unlike the
+// Policy pillar): read_orders is already an unconditionally-granted scope with no additional
+// consent gate, so there is no real scenario where this data is permission-blocked —
+// inventing one here would itself be a fabricated state.
 export function calculatePaymentMethodsPillar(orderGatewayNames: string[][]): PaymentMethodsResult {
   if (orderGatewayNames.length === 0) {
-    return { status: "pending", detail: "No orders yet to determine which payment methods customers actually use." };
+    return { status: "pending", detail: "No orders yet to confirm customers have a working way to check out." };
   }
 
   const allNames = orderGatewayNames.flat().map((name) => name.trim().toLowerCase());
   const distinctNames = Array.from(new Set(allNames)).filter(Boolean);
-  const hasDisputablePath = distinctNames.some((name) => !NO_DISPUTE_PATH_GATEWAYS.has(name));
+  const hasLegitimateGateway = distinctNames.some((name) => !NON_LEGITIMATE_TEST_GATEWAYS.has(name));
 
-  if (hasDisputablePath) {
-    return { status: "met", detail: "At least one payment method with a real dispute/chargeback path is in use." };
+  if (hasLegitimateGateway) {
+    return {
+      status: "met",
+      detail: "Customers have a real, working way to complete checkout (Cash on Delivery, card, or any other supported payment method).",
+    };
   }
 
   return {
     status: "not_met",
-    detail: "Every recent order used a payment method with no dispute/chargeback path (e.g. manual or cash on delivery).",
+    detail: "No real completed order exists yet through a working payment method — only Shopify's test-mode gateway has been used.",
   };
 }
 
