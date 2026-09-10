@@ -141,12 +141,17 @@
     html += '<p class="imagyn-trust-modal__section-title">IMAGYN Trust Certification</p>';
     html += '<ul class="imagyn-trust-modal__pillars">' + trust.pillars.map(renderPillarRow).join("") + "</ul>";
 
-    if (data.aiSpotlight) {
+    if (data.storeAiSummary) {
       html += '<p class="imagyn-trust-modal__section-title">What customers are saying</p>';
-      html += '<p class="imagyn-trust-modal__summary-text">' + escapeHtml(data.aiSpotlight.recommendation) + "</p>";
+      html += '<p class="imagyn-trust-modal__summary-text">' + escapeHtml(data.storeAiSummary.summary) + "</p>";
+      html +=
+        '<p class="imagyn-trust-modal__stat-label">Based on ' +
+        data.storeAiSummary.reviewCountUsed +
+        (data.storeAiSummary.reviewCountUsed === 1 ? " approved review" : " approved reviews") +
+        "</p>";
 
-      var positives = data.aiSpotlight.positives || [];
-      var negatives = data.aiSpotlight.negatives || [];
+      var positives = data.storeAiSummary.positives || [];
+      var negatives = data.storeAiSummary.negatives || [];
       if (positives.length > 0 || negatives.length > 0) {
         html += '<div class="imagyn-trust-modal__sentiment">';
         if (positives.length > 0) {

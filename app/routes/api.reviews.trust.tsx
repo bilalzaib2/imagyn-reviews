@@ -2,7 +2,7 @@ import type { LoaderFunctionArgs } from "react-router";
 import { authenticate } from "../shopify.server";
 import { getPublicStoreReviewSummary } from "../services/review.server";
 import { getVerifiedStoreMediaGallery } from "../services/reviewMedia.server";
-import { getLatestAiSummaryForStore } from "../services/aiSummary.server";
+import { getStoreAiSummary } from "../services/aiSummary.server";
 import { getTrustCertification } from "../services/trustCertification.server";
 import { PILLAR_STATUS_LABEL, buildPillarViews } from "../services/trustCertification.presentation";
 import { getStoreBySlug } from "../services/store.server";
@@ -41,11 +41,15 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
     return json({ ok: false, error: "Shop not found." }, { status: 404 });
   }
 
-  const [trust, summary, media, aiSpotlight, appearance] = await Promise.all([
+  const [trust, summary, media, storeAiSummary, appearance] = await Promise.all([
     getTrustCertification(store.id),
     getPublicStoreReviewSummary(store.id),
     getVerifiedStoreMediaGallery(store.id),
-    getLatestAiSummaryForStore(store.id),
+    // Genuinely store-level — synthesized across every approved review in the store, never
+    // one product's summary standing in for "what customers say about the store" (that was
+    // this endpoint's own bug: getLatestAiSummaryForStore is actually "whichever single
+    // product happened to get a ProductAiSummary most recently", despite its name).
+    getStoreAiSummary(store.id),
     getStorefrontAppearance(store.id),
   ]);
 
@@ -74,12 +78,12 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
     },
     ratingDistribution: summary.ratingCounts,
     media,
-    aiSpotlight: aiSpotlight
+    storeAiSummary: storeAiSummary
       ? {
-          productName: aiSpotlight.productName,
-          recommendation: aiSpotlight.recommendation,
-          positives: aiSpotlight.positives,
-          negatives: aiSpotlight.negatives,
+          summary: storeAiSummary.summary,
+          positives: storeAiSummary.positives,
+          negatives: storeAiSummary.negatives,
+          reviewCountUsed: storeAiSummary.reviewCountUsed,
         }
       : null,
     appearance,

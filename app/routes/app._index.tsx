@@ -17,7 +17,7 @@ import { StarRating } from "../components/reviews/StarRating";
 import { PillarStatusIcon } from "../components/ui/PillarStatusIcon";
 import { getStoreReviewStats } from "../services/review.server";
 import { reviewRequestService } from "../services/review-request.server";
-import { getLatestAiSummaryForStore } from "../services/aiSummary.server";
+import { getStoreAiSummary } from "../services/aiSummary.server";
 import { getProductReviewCoverage } from "../services/product.server";
 import { getRewardStats } from "../services/rewards.server";
 import { getSetupGuideItems } from "../services/setupGuide.server";
@@ -43,10 +43,13 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
   const { session, admin } = await authenticateAdminDeduped(request);
   const store = await getOrCreateStore(session.shop);
 
-  const [stats, requestStats, aiSpotlight, productCoverage, permissions, setupGuide, trust] = await Promise.all([
+  const [stats, requestStats, storeAiSummary, productCoverage, permissions, setupGuide, trust] = await Promise.all([
     getStoreReviewStats(store.id, { recentLimit: 5 }),
     reviewRequestService.getRequestStats(store.id),
-    getLatestAiSummaryForStore(store.id),
+    // Genuinely store-level — synthesized across every approved review in the store, not one
+    // product's summary. See api.reviews.trust.tsx's own comment for the bug this replaced
+    // (getLatestAiSummaryForStore is actually "whichever product got a summary most recently").
+    getStoreAiSummary(store.id),
     getProductReviewCoverage(store.id),
     getStorePermissions(store.id),
     getSetupGuideItems(store.id),
@@ -66,7 +69,7 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
     storeDomain: store.domain,
     stats,
     requestStats,
-    aiSpotlight,
+    storeAiSummary,
     productCoverage,
     rewardStats,
     setupGuide,
@@ -156,7 +159,7 @@ const ACTIVITY_STATUS_DOT_CLASS: Record<string, string> = {
 const revealStyle = (stepIndex: number): CSSProperties => ({ "--reveal-delay": `${stepIndex * 60}ms` }) as CSSProperties;
 
 export default function Index() {
-  const { storeName, storeDomain, stats, requestStats, aiSpotlight, productCoverage, rewardStats, setupGuide, trust, automation } =
+  const { storeName, storeDomain, stats, requestStats, storeAiSummary, productCoverage, rewardStats, setupGuide, trust, automation } =
     useLoaderData<typeof loader>();
   const incompleteSetupItems = setupGuide.filter((item) => !item.done);
 
@@ -510,24 +513,26 @@ export default function Index() {
           </Card>
 
           <Card className={styles.aiCard}>
-            <Section title="AI Spotlight" description="The latest AI summary generated for one of your products.">
-              {aiSpotlight ? (
+            <Section title="AI Spotlight" description="What customers say about your store overall, from every approved review — never one product standing in for the whole store.">
+              {storeAiSummary ? (
                 <div className={styles.aiSpotlight}>
                   <span className={styles.aiBadge}>AI-generated</span>
-                  <p className={styles.aiSpotlightProduct}>{aiSpotlight.productName}</p>
-                  <p className={styles.aiSpotlightText}>{aiSpotlight.recommendation}</p>
-                  <Link to={`/app/products/${aiSpotlight.productId}`} className={styles.spotlightLink}>
-                    View full summary &rarr;
+                  <p className={styles.aiSpotlightText}>{storeAiSummary.summary}</p>
+                  <p className={styles.mutedText}>
+                    Based on {storeAiSummary.reviewCountUsed} approved review{storeAiSummary.reviewCountUsed === 1 ? "" : "s"}
+                  </p>
+                  <Link to="/app/settings/seo" className={styles.spotlightLink}>
+                    Manage AI summaries &rarr;
                   </Link>
                 </div>
               ) : (
                 <div className={styles.aiSpotlight}>
                   <p className={styles.mutedText}>
-                    AI summaries surface what customers love (and don&apos;t) about a product, generated from its
-                    approved reviews.
+                    Your store summary will be generated from your approved customer reviews, across every product —
+                    no product selection needed.
                   </p>
-                  <Link to="/app/products" className={styles.spotlightLink}>
-                    Visit a product to generate one &rarr;
+                  <Link to="/app/settings/seo" className={styles.spotlightLink}>
+                    Generate your store summary &rarr;
                   </Link>
                 </div>
               )}

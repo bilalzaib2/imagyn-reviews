@@ -210,6 +210,22 @@ describe("getStoreAiSummary", () => {
     const result = await getStoreAiSummary("store_1");
     expect(result).toBeNull();
   });
+
+  it("is a pure cache read — never calls the AI provider, so a storefront read can never trigger generation", async () => {
+    await getStoreAiSummary("store_1");
+    expect(generateReviewSummaryMock).not.toHaveBeenCalled();
+  });
+
+  it("returns the cached summary on repeated reads without regenerating", async () => {
+    await regenerateStoreAiSummary("store_1");
+    generateReviewSummaryMock.mockClear();
+
+    const first = await getStoreAiSummary("store_1");
+    const second = await getStoreAiSummary("store_1");
+
+    expect(first?.summary).toBe(second?.summary);
+    expect(generateReviewSummaryMock).not.toHaveBeenCalled();
+  });
 });
 
 describe("regenerateStoreAiSummary", () => {
@@ -239,6 +255,22 @@ describe("regenerateStoreAiSummary", () => {
     // Only product_1's review (store_1) should have been counted — product_2's review
     // (store_2) must never contribute, even though both exist in the same fake table.
     expect(storeSummaries.get("store_1")?.reviewCountUsed).toBe(1);
+  });
+
+  it("aggregates approved reviews across every product in the store, not just one", async () => {
+    products.push({ id: "product_1b", storeId: "store_1", name: "A Second Own Product" });
+    reviews.push({ productId: "product_1b", rating: 4, title: "Also great", content: "Solid.", status: "APPROVED", deletedAt: null });
+
+    await regenerateStoreAiSummary("store_1");
+
+    // Both product_1's and product_1b's reviews belong to store_1 — a real multi-product
+    // aggregation, never scoped to a single productId (regenerateStoreAiSummary's signature
+    // takes only storeId; there is no productId parameter to narrow it).
+    expect(storeSummaries.get("store_1")?.reviewCountUsed).toBe(2);
+  });
+
+  it("does not require or accept a productId — the function's own signature is storeId-only", () => {
+    expect(regenerateStoreAiSummary.length).toBe(1);
   });
 
   it("excludes rejected reviews from the store summary review count", async () => {
