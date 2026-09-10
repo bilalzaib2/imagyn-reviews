@@ -54,6 +54,15 @@ api_version = "2026-07"
 
 [access_scopes]
 # Learn more at https://shopify.dev/docs/apps/tools/cli/configuration#access_scopes
+# write_products is NOT called by any application code (grepped app/ for productUpdate/
+# productCreate/etc. — zero hits) but IS a genuine, Shopify-enforced platform requirement:
+# `shopify app deploy` hard-rejects this app's version with "[product]: Requires the
+# following access scope: write_products" because the review-created-flow-trigger
+# extension's settings declare a `product_reference` field (see that extension's
+# shopify.extension.toml). This was removed once (2026-09-11) based on an app-code-only
+# grep that didn't account for extension-level scope requirements, then restored the same
+# day after a real deploy attempt failed validation — do not remove it again without first
+# confirming `shopify app deploy` still succeeds without it.
 # read_orders/read_customers power the real Shopify order/customer data layer used by both
 # the manual Send Request picker and the automatic request engine — see
 # app/services/shopifyOrders.server.ts. read_fulfillments (required specifically for the
@@ -73,7 +82,7 @@ api_version = "2026-07"
 # code, meaning no store could ever actually receive a real Shopify discount from either feature
 # until this scope is granted. Existing merchants need to re-consent once this deploys (Shopify
 # prompts automatically; webhooks.app.scopes_update above already handles the resulting webhook).
-scopes = "write_metaobjects,write_metaobject_definitions,write_files,read_files,read_orders,read_customers,read_fulfillments,read_legal_policies,write_discounts"
+scopes = "write_products,write_metaobjects,write_metaobject_definitions,write_files,read_files,read_orders,read_customers,read_fulfillments,read_legal_policies,write_discounts"
 
 [auth]
 redirect_urls = [
