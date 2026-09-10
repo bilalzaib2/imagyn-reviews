@@ -86,6 +86,7 @@ describe("emailTemplateService", () => {
       displayName: null,
       showStoreName: true,
       showPoweredBy: true,
+      replyToEmail: null,
     };
 
     await emailTemplateService.upsertActive("store_1", { content });

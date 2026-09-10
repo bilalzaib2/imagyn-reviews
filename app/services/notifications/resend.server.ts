@@ -59,6 +59,7 @@ export function createResendEmailProvider(): EmailProvider {
         subject: request.subject,
         html: request.html,
         text: request.text,
+        ...(request.replyTo ? { replyTo: request.replyTo } : {}),
         // Echoed back verbatim on every delivery webhook event (see webhooks.resend.tsx) —
         // this is how that endpoint correlates an event back to a ReviewRequest without a
         // separate stored-message-id column.

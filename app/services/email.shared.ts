@@ -44,6 +44,14 @@ export interface EmailTemplateContent {
    *  true for any store without canUseCustomBranding, regardless of what's persisted here or
    *  what a direct POST claims. Pro stores may set this false to remove it. */
   showPoweredBy: boolean;
+  /** null = replies go nowhere useful (Resend's default is the shared, unverified-per-merchant
+   *  From address). When set, a real customer reply lands in an inbox the merchant actually
+   *  reads — see notifications/resend.server.ts's own comment for why this, not a full custom
+   *  From address, is what's actually offered without per-merchant domain verification. Never
+   *  changes what inbox clients show as the sender's avatar/identity — that genuinely requires
+   *  a verified sending domain (BIMI etc.), which this app does not yet support; Email Studio's
+   *  own copy must say so honestly rather than implying a logo upload changes it. */
+  replyToEmail: string | null;
 }
 
 export const DEFAULT_ACCENT_COLOR = "#111111";
@@ -69,6 +77,7 @@ export function getDefaultEmailTemplateContent(type: EmailTemplateType = "review
       displayName: null,
       showStoreName: true,
       showPoweredBy: true,
+      replyToEmail: null,
     };
   }
 
@@ -83,6 +92,7 @@ export function getDefaultEmailTemplateContent(type: EmailTemplateType = "review
       displayName: null,
       showStoreName: true,
       showPoweredBy: true,
+      replyToEmail: null,
     };
   }
 
@@ -97,6 +107,7 @@ export function getDefaultEmailTemplateContent(type: EmailTemplateType = "review
       displayName: null,
       showStoreName: true,
       showPoweredBy: true,
+      replyToEmail: null,
     };
   }
 
@@ -110,6 +121,7 @@ export function getDefaultEmailTemplateContent(type: EmailTemplateType = "review
     displayName: null,
     showStoreName: true,
     showPoweredBy: true,
+    replyToEmail: null,
   };
 }
 
@@ -153,6 +165,7 @@ export function sanitizeEmailTemplateContentForPlan(
     displayName: content.displayName,
     showStoreName: content.showStoreName,
     showPoweredBy: permissions.canUseCustomBranding ? content.showPoweredBy : true,
+    replyToEmail: content.replyToEmail?.trim() || null,
   };
 }
 

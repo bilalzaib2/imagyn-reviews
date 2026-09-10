@@ -72,6 +72,7 @@ describe("buildReviewRequestEmail — with a saved Email Studio template", () =>
         displayName: null,
         showStoreName: true,
         showPoweredBy: true,
+        replyToEmail: null,
       },
     });
 

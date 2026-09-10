@@ -104,6 +104,7 @@ describe("sanitizeEmailTemplateContentForPlan", () => {
     displayName: "Custom Display Name",
     showStoreName: false,
     showPoweredBy: false,
+    replyToEmail: "custom@example.com",
   };
 
   const freePermissions = { canUseAdvancedEmailStudio: false, canUseCustomBranding: false };

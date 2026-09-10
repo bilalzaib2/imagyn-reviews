@@ -267,6 +267,10 @@ export const dispatchRequestEmail = async (request: ReviewRequestRecord): Promis
         // Customer-facing send — reads as coming from the store, not Imagyn (see
         // resend.server.ts's fromName handling).
         fromName: request.store.name,
+        // Merchant-configured in Email Studio (email.shared.ts's replyToEmail) — a real
+        // customer reply lands in an inbox the merchant actually reads. Omitted entirely when
+        // not configured, same as fromName's own optionality.
+        ...(template.replyToEmail ? { replyTo: template.replyToEmail } : {}),
         // Lets webhooks.resend.tsx correlate a delivery event back to this exact row via the
         // existing unique requestToken column — no new schema column needed for that lookup.
         tags: { request_token: request.requestToken },

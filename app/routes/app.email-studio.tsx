@@ -73,7 +73,10 @@ const readContentFromForm = (formData: FormData): EmailTemplateContent => ({
   // app already serializes this way (e.g. app.settings.tsx's reminderEmailsEnabled).
   showStoreName: formData.get("showStoreName") !== "false",
   showPoweredBy: formData.get("showPoweredBy") !== "false",
+  replyToEmail: String(formData.get("replyToEmail") || "").trim() || null,
 });
+
+const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 const readTypeFromForm = (formData: FormData): EmailTemplateType => {
   const raw = String(formData.get("type") || "review_request");
@@ -86,6 +89,7 @@ const validateContent = (content: EmailTemplateContent): string | null => {
   if (!content.bodyText) return "Email content can't be empty.";
   if (!content.buttonText) return "The review button needs text.";
   if (!/^#[0-9a-fA-F]{6}$/.test(content.accentColor)) return "Accent color must be a valid hex color.";
+  if (content.replyToEmail && !EMAIL_PATTERN.test(content.replyToEmail)) return "Reply-to must be a valid email address.";
   return null;
 };
 
@@ -467,6 +471,26 @@ export default function EmailStudioPage() {
                   sender, not Imagyn Reviews. They&apos;re delivered through Imagyn&apos;s email infrastructure;
                   sending from your own domain isn&apos;t available yet.
                 </p>
+
+                <div className={styles.fieldGroup}>
+                  <label className={styles.fieldLabel} htmlFor="replyToEmail">
+                    Reply-to email
+                  </label>
+                  <input
+                    id="replyToEmail"
+                    className={styles.textInput}
+                    type="email"
+                    placeholder="you@yourstore.com"
+                    value={draft.replyToEmail ?? ""}
+                    onChange={(event) => updateField("replyToEmail", event.target.value || null)}
+                    disabled={isBusy}
+                  />
+                  <p className={styles.fieldHint}>
+                    Optional — when a customer replies, it lands here instead of nowhere. This doesn&apos;t
+                    change what inbox apps show as the sender (that requires verifying your own sending
+                    domain, which isn&apos;t available yet) — only where replies actually go.
+                  </p>
+                </div>
 
                 <div className={styles.fieldGroup}>
                   <label className={styles.fieldLabel} htmlFor="logoUpload">
