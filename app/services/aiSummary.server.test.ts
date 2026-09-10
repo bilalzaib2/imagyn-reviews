@@ -144,7 +144,7 @@ vi.mock("./ai/provider.server", () => ({
   }),
 }));
 
-const { regenerateAiSummary, regenerateStoreAiSummary, getStoreAiSummary, maybeAutoRegenerateStoreAiSummary } =
+const { regenerateAiSummary, getAiSummary, regenerateStoreAiSummary, getStoreAiSummary, maybeAutoRegenerateStoreAiSummary } =
   await import("./aiSummary.server");
 
 beforeEach(() => {
@@ -202,6 +202,57 @@ describe("regenerateAiSummary — cross-tenant isolation", () => {
     expect(result.productId).toBe("product_1");
     expect(result.summary).toBe("Customers love it.");
     expect(summaries.get("product_1")?.summary).toBe("Customers love it.");
+  });
+});
+
+// Regression coverage for the exact requirements the Product AI Summary Theme App Block
+// depends on: genuinely product-specific, never mixed with the store-level summary, a pure
+// cache read (never generates), and requires a real product context — see
+// extensions/imagyn-review-widgets/blocks/ai_review_summary.liquid (schema name "Product AI
+// Summary") and its backing route, api.reviews.tsx, which 400s without a productId.
+describe("getAiSummary — Product AI Summary (product-scoped, cache-only)", () => {
+  it("returns null when this exact product has never had a summary generated", async () => {
+    expect(await getAiSummary("product_1")).toBeNull();
+  });
+
+  it("is a pure cache read — never calls the AI provider, so a storefront read can never trigger generation", async () => {
+    await getAiSummary("product_1");
+    expect(generateReviewSummaryMock).not.toHaveBeenCalled();
+  });
+
+  it("returns exactly this product's own summary, never a different product's", async () => {
+    await regenerateAiSummary("store_1", "product_1");
+
+    const result = await getAiSummary("product_1");
+    expect(result?.productId).toBe("product_1");
+    expect(result?.summary).toBe("Customers love it.");
+  });
+
+  it("never returns another product's summary when queried by a different productId", async () => {
+    summaries.set("product_2", {
+      id: "summary_2",
+      productId: "product_2",
+      summary: "A completely different product's summary.",
+      positives: "[]",
+      negatives: "[]",
+      recommendation: "N/A",
+      reviewCountUsed: 1,
+      provider: "openai",
+      modelUsed: "fake-model",
+      generatedAt: new Date(),
+      updatedAt: new Date(),
+    });
+
+    const result = await getAiSummary("product_1");
+    expect(result).toBeNull();
+    // The other product's summary is real and present, just never returned for product_1.
+    expect((await getAiSummary("product_2"))?.summary).toBe("A completely different product's summary.");
+  });
+
+  it("returns the persisted recommendation field — a shape Store AI Summary never has, confirming the two are genuinely separate records", async () => {
+    await regenerateAiSummary("store_1", "product_1");
+    const result = await getAiSummary("product_1");
+    expect(result?.recommendation).toBe("Anyone who wants a reliable product.");
   });
 });
 
