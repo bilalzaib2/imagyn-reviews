@@ -1,5 +1,5 @@
-import type { Importer, ParsedImport } from "./types";
-import { parseDelimitedReviewFile, type FieldAliases } from "./delimitedParser.server";
+import type { Importer, ParsedImport, HeaderOverrides } from "./types";
+import { parseDelimitedReviewFile, detectColumns, type FieldAliases } from "./delimitedParser.server";
 
 // Stamped.io's own documented CSV import-template spec (stampedsupport.stamped.io, "Managing
 // Reviews: Import reviews into Stamped"): product_id, product_handle, productUrl,
@@ -54,8 +54,11 @@ export function createStampedImporter(): Importer {
   return {
     name: "Stamped.io",
     source: "stamped",
-    parse(fileContent: string): ParsedImport {
-      return parseDelimitedReviewFile(fileContent, FIELD_ALIASES, REQUIRED_FIELDS);
+    parse(fileContent: string, overrides?: HeaderOverrides): ParsedImport {
+      return parseDelimitedReviewFile(fileContent, FIELD_ALIASES, REQUIRED_FIELDS, undefined, overrides);
+    },
+    detectColumns(fileContent: string) {
+      return detectColumns(fileContent, FIELD_ALIASES, REQUIRED_FIELDS);
     },
   };
 }

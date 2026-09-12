@@ -1,5 +1,5 @@
-import type { Importer, ParsedImport } from "./types";
-import { parseDelimitedReviewFile, type FieldAliases } from "./delimitedParser.server";
+import type { Importer, ParsedImport, HeaderOverrides } from "./types";
+import { parseDelimitedReviewFile, detectColumns, type FieldAliases } from "./delimitedParser.server";
 
 // Ali Reviews' own documented CSV import template (help.alireviews.io, "Importing reviews from
 // a CSV file"): Product handle, Customer country code (Alpha-2), Customer name, Star rating,
@@ -53,8 +53,11 @@ export function createAliReviewsImporter(): Importer {
   return {
     name: "Ali Reviews",
     source: "alireviews",
-    parse(fileContent: string): ParsedImport {
-      return parseDelimitedReviewFile(fileContent, FIELD_ALIASES, REQUIRED_FIELDS);
+    parse(fileContent: string, overrides?: HeaderOverrides): ParsedImport {
+      return parseDelimitedReviewFile(fileContent, FIELD_ALIASES, REQUIRED_FIELDS, undefined, overrides);
+    },
+    detectColumns(fileContent: string) {
+      return detectColumns(fileContent, FIELD_ALIASES, REQUIRED_FIELDS);
     },
   };
 }

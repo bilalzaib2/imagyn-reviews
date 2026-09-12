@@ -5,7 +5,7 @@ import prisma from "../db.server";
 import { createReview, updateReview } from "./review.server";
 import { getImporter } from "./importers/provider.server";
 import { ProductMatcher, type ProductMatchTier } from "./importers/productMatcher.server";
-import type { ImportSource, ParsedReviewRow } from "./importers/types";
+import type { ImportSource, ParsedReviewRow, HeaderOverrides, ColumnDetectionResult } from "./importers/types";
 import { recordDataAccess } from "./auditLog.server";
 import { parseImportedMediaUrls, validateImportedMediaUrl, MAX_IMPORTED_MEDIA_PER_REVIEW } from "./reviewMedia.server";
 
@@ -416,6 +416,15 @@ function emptyResult(totalRows: number, dryRun: boolean): ImportResult {
   };
 }
 
+// Cheap, DB-free first step of the wizard ("ANALYZE FILE") — reads only the header row via the
+// chosen source's own Importer.detectColumns, so a merchant sees exactly which columns were
+// auto-detected (and which required fields are still missing) before any product-matching or
+// duplicate-checking work runs. No storeId needed at this stage — nothing here touches the
+// database.
+export function detectImportColumns(source: ImportSource, fileContent: string): ColumnDetectionResult {
+  return getImporter(source).detectColumns(fileContent);
+}
+
 // The only DB-aware entry point for imports — parses via whichever Importer the source maps to
 // (see importers/provider.server.ts), then matches, validates, dedupes, and creates one row at
 // a time so a single bad row never aborts the batch. `admin` is optional: when present, the
@@ -432,10 +441,11 @@ export async function importReviews(
   admin: AdminApiContext | null = null,
   dryRun: boolean = false,
   filename: string | null = null,
+  columnOverrides?: HeaderOverrides,
 ): Promise<ImportResult> {
   const logPrefix = `[import:${source}]${dryRun ? "[dry-run]" : ""} store=${storeId}`;
   const importer = getImporter(source);
-  const { rows, fileErrors } = importer.parse(fileContent);
+  const { rows, fileErrors } = importer.parse(fileContent, columnOverrides);
 
   if (fileErrors.length > 0) {
     // File-level rejection (e.g. a required column genuinely missing) — logged distinctly from

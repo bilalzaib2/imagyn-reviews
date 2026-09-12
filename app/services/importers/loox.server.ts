@@ -1,5 +1,5 @@
-import type { Importer, ParsedImport } from "./types";
-import { parseDelimitedReviewFile, type FieldAliases } from "./delimitedParser.server";
+import type { Importer, ParsedImport, HeaderOverrides } from "./types";
+import { parseDelimitedReviewFile, detectColumns, type FieldAliases } from "./delimitedParser.server";
 
 // Loox's own documented CSV column spec (help.loox.io, "Import Reviews to Loox Using a Custom
 // CSV File"): product_handle, product_Id, rating, author, email, body, created_at, photo_url,
@@ -49,8 +49,11 @@ export function createLooxImporter(): Importer {
   return {
     name: "Loox",
     source: "loox",
-    parse(fileContent: string): ParsedImport {
-      return parseDelimitedReviewFile(fileContent, FIELD_ALIASES, REQUIRED_FIELDS);
+    parse(fileContent: string, overrides?: HeaderOverrides): ParsedImport {
+      return parseDelimitedReviewFile(fileContent, FIELD_ALIASES, REQUIRED_FIELDS, undefined, overrides);
+    },
+    detectColumns(fileContent: string) {
+      return detectColumns(fileContent, FIELD_ALIASES, REQUIRED_FIELDS);
     },
   };
 }

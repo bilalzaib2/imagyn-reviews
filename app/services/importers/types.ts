@@ -52,10 +52,25 @@ export interface ParsedImport {
   fileErrors: string[];
 }
 
+// Forward-declared here (not imported from delimitedParser.server.ts) to avoid this shared,
+// non-.server type file depending on a .server-only module purely for a type alias — the
+// two are kept structurally identical by convention, checked by every adapter's own tests.
+export type HeaderOverrides = Partial<Record<keyof Omit<ParsedReviewRow, "row">, string>>;
+
+export interface ColumnDetectionResult {
+  headers: string[];
+  detected: Partial<Record<keyof ParsedReviewRow, string>>;
+  requiredFields: Array<keyof Omit<ParsedReviewRow, "row">>;
+  missingRequired: Array<keyof Omit<ParsedReviewRow, "row">>;
+}
+
 export interface Importer {
   readonly name: string;
   readonly source: ImportSource;
-  parse(fileContent: string): ParsedImport;
+  parse(fileContent: string, overrides?: HeaderOverrides): ParsedImport;
+  // Cheap, header-only analysis for the "here's what we detected" preview step — every
+  // delimited-file importer implements this via delimitedParser.server.ts's detectColumns.
+  detectColumns(fileContent: string): ColumnDetectionResult;
 }
 
 export class ImportSourceNotSupportedError extends Error {

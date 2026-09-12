@@ -1,5 +1,5 @@
-import type { Importer, ParsedImport, ParsedReviewRow } from "./types";
-import { parseDelimitedReviewFile, type FieldAliases } from "./delimitedParser.server";
+import type { Importer, ParsedImport, ParsedReviewRow, HeaderOverrides } from "./types";
+import { parseDelimitedReviewFile, detectColumns, type FieldAliases } from "./delimitedParser.server";
 
 // Judge.me's own CSV export column names, layered on top of the generic aliases (a Judge.me
 // export is still just a CSV — buildHeaderMap in delimitedParser.server.ts matches whichever
@@ -113,8 +113,11 @@ export function createJudgemeImporter(): Importer {
   return {
     name: "Judge.me",
     source: "judgeme",
-    parse(fileContent: string): ParsedImport {
-      return parseDelimitedReviewFile(fileContent, FIELD_ALIASES, REQUIRED_FIELDS, applyJudgemeConventions);
+    parse(fileContent: string, overrides?: HeaderOverrides): ParsedImport {
+      return parseDelimitedReviewFile(fileContent, FIELD_ALIASES, REQUIRED_FIELDS, applyJudgemeConventions, overrides);
+    },
+    detectColumns(fileContent: string) {
+      return detectColumns(fileContent, FIELD_ALIASES, REQUIRED_FIELDS);
     },
   };
 }

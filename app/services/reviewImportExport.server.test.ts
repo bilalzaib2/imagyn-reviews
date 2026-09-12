@@ -245,6 +245,7 @@ const {
   importReviews,
   undoImportBatch,
   listImportBatches,
+  detectImportColumns,
   MAX_EXPORT_ROWS,
   EXPORT_RATE_LIMIT_MAX,
   ExportRateLimitError,
@@ -276,6 +277,71 @@ beforeEach(() => {
 });
 
 const GENERIC_CSV_HEADER = "product,rating,content,reviewer_name\n";
+
+describe("detectImportColumns — the 'ANALYZE FILE' step, header-only, no DB access", () => {
+  it("reports every raw header and the auto-detected mapping for a well-formed generic CSV", () => {
+    const csv = "Product Name,Stars,Body,Customer Name\nWidget,5,Great,Jane\n";
+    const result = detectImportColumns("csv", csv);
+
+    expect(result.headers).toEqual(["Product Name", "Stars", "Body", "Customer Name"]);
+    expect(result.detected.product).toBe("Product Name");
+    expect(result.detected.rating).toBe("Stars");
+    expect(result.detected.content).toBe("Body");
+    expect(result.detected.reviewerName).toBe("Customer Name");
+    expect(result.missingRequired).toHaveLength(0);
+  });
+
+  it("reports missingRequired for a file whose header row has no recognizable required column", () => {
+    const csv = "foo,bar,baz\n1,2,3\n";
+    const result = detectImportColumns("csv", csv);
+
+    expect(result.missingRequired).toEqual(expect.arrayContaining(["rating", "content"]));
+  });
+
+  it("never touches the database — reads only the header row, works with zero products seeded", () => {
+    // No seedProduct call at all in this test — if detectImportColumns touched the DB in any
+    // way that required a product catalog, this would be the test to catch it.
+    const csv = "product,rating,content,reviewer_name\nWidget,5,Great,Jane\n";
+    const result = detectImportColumns("csv", csv);
+
+    expect(result.detected.product).toBe("product");
+  });
+});
+
+describe("importReviews — manual column-mapping overrides", () => {
+  it("lets a merchant correct a field the auto-detection got wrong", async () => {
+    seedProduct({ id: "db_1", name: "Widget" });
+    // "notes" isn't a recognized alias for "content" — without an override this column would
+    // never be read.
+    const csv = "product,rating,notes,reviewer_name\nWidget,5,Great review here,Jane\n";
+
+    const withoutOverride = await importReviews("store_1", "csv", csv);
+    expect(withoutOverride.errors.length + withoutOverride.missingProducts.length).toBeGreaterThan(0);
+
+    const withOverride = await importReviews("store_1", "csv", csv, null, false, null, { content: "notes" });
+    expect(withOverride.imported).toBe(1);
+    expect(fakeReviews[0].content).toBe("Great review here");
+  });
+
+  it("lets a merchant explicitly force a field to unmapped even when an alias would have matched", async () => {
+    seedProduct({ id: "db_1", name: "Widget" });
+    const csv = "product,rating,content,reviewer_name,external_id\nWidget,5,Great,Jane,should-be-ignored\n";
+
+    const result = await importReviews("store_1", "csv", csv, null, false, null, { externalId: "" });
+
+    expect(result.imported).toBe(1);
+    expect(fakeReviews[0].externalId).toBeNull();
+  });
+
+  it("an override naming a column that doesn't exist in the file is safely ignored, not a crash", async () => {
+    seedProduct({ id: "db_1", name: "Widget" });
+    const csv = "product,rating,content,reviewer_name\nWidget,5,Great,Jane\n";
+
+    const result = await importReviews("store_1", "csv", csv, null, false, null, { title: "nonexistent_column" });
+
+    expect(result.imported).toBe(1);
+  });
+});
 
 describe("importReviews — generic CSV", () => {
   it("imports a well-formed row end to end", async () => {
