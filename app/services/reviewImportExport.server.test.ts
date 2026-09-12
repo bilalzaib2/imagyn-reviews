@@ -27,11 +27,45 @@ interface FakeReview {
   status: string;
   isPublished: boolean;
   verifiedPurchase: boolean;
+  sourceVerified: boolean | null;
+  importSource: string | null;
+  importBatchId: string | null;
   deletedAt: Date | null;
+}
+
+interface FakeImportBatch {
+  id: string;
+  storeId: string;
+  source: string;
+  filename: string | null;
+  totalRows: number;
+  imported: number;
+  duplicates: number;
+  heldForModeration: number;
+  unmatchedRows: number;
+  invalidRows: number;
+  status: string;
+  errorDetail: unknown;
+  undoneAt: Date | null;
+}
+
+interface FakeReviewMedia {
+  reviewId: string;
+  url: string;
+  type: string;
 }
 
 let fakeProducts: FakeProduct[];
 let fakeReviews: FakeReview[];
+let fakeImportBatches: FakeImportBatch[];
+let fakeReviewMedia: FakeReviewMedia[];
+let nextImportBatchId: number;
+// Forces the NEXT prisma.review.create call to throw a real P2002 error, regardless of whether
+// a genuine unique-constraint clash exists — simulates a true concurrent-request race (two
+// imports of the same file running at once) that a single-threaded, sequential fake harness
+// can't otherwise reproduce naturally, since findExistingReview's own check-before-create
+// already catches every same-process duplicate before create is ever called.
+let forceP2002OnNextCreate = false;
 // Controls exportReviewsToCsv's own rate-limit check (prisma.auditLog.count) — a plain
 // number is enough here since the tests only need to control "how many recent exports does
 // the mock report," not model real AuditLog rows.
@@ -82,12 +116,25 @@ vi.mock("../db.server", () => ({
       aggregate: vi.fn(async () => ({ _avg: { rating: null } })),
       groupBy: vi.fn(async () => []),
       create: vi.fn(async ({ data }: { data: Record<string, unknown> }) => {
+        if (forceP2002OnNextCreate) {
+          forceP2002OnNextCreate = false;
+          const { Prisma } = await import("@prisma/client");
+          throw new Prisma.PrismaClientKnownRequestError("Unique constraint failed", {
+            code: "P2002",
+            clientVersion: "test",
+          });
+        }
+
+        const storeId = data.storeId as string;
+        const importSource = (data.importSource as string | null) ?? null;
+        const externalId = (data.externalId as string | null) ?? null;
+
         const review: FakeReview = {
           id: `review_${nextReviewId++}`,
-          storeId: data.storeId as string,
+          storeId,
           productId: data.productId as string,
           productTitle: (data.productTitle as string | null) ?? null,
-          externalId: (data.externalId as string | null) ?? null,
+          externalId,
           reviewerName: data.reviewerName as string,
           content: data.content as string,
           title: (data.title as string | null) ?? null,
@@ -95,10 +142,20 @@ vi.mock("../db.server", () => ({
           status: (data.status as string) ?? "PENDING",
           isPublished: (data.isPublished as boolean) ?? false,
           verifiedPurchase: (data.verifiedPurchase as boolean) ?? false,
+          sourceVerified: (data.sourceVerified as boolean | null) ?? null,
+          importSource,
+          importBatchId: (data.importBatchId as string | null) ?? null,
           deletedAt: null,
         };
         fakeReviews.push(review);
         return review;
+      }),
+      updateMany: vi.fn(async ({ where, data }: { where: Record<string, unknown>; data: Record<string, unknown> }) => {
+        const matches = fakeReviews.filter((review) => matchesWhere(review, where));
+        for (const review of matches) {
+          if (data.deletedAt !== undefined) review.deletedAt = data.deletedAt as Date | null;
+        }
+        return { count: matches.length };
       }),
       // Backs updateReview (called by the import pipeline's own title-repair path — see
       // reviewImportExport.server.ts's importRow). Only applies the fields updateReview
@@ -121,7 +178,7 @@ vi.mock("../db.server", () => ({
         async ({ where, take }: { where: Record<string, unknown>; take?: number }) => {
           const rows = fakeReviews
             .filter((review) => matchesWhere(review, where))
-            .map((review) => ({ ...review, product: null, title: null, createdAt: new Date(), repliedAt: null }));
+            .map((review) => ({ ...review, product: null, title: review.title ?? null, createdAt: new Date(), repliedAt: null }));
           return typeof take === "number" ? rows.slice(0, take) : rows;
         },
       ),
@@ -130,6 +187,48 @@ vi.mock("../db.server", () => ({
     // full fake table, since the tests only need to control the number this reports.
     auditLog: {
       count: vi.fn(async () => fakeRecentExportCount),
+    },
+    reviewMedia: {
+      createMany: vi.fn(async ({ data }: { data: Array<{ reviewId: string; url: string; type: string }> }) => {
+        fakeReviewMedia.push(...data);
+        return { count: data.length };
+      }),
+    },
+    importBatch: {
+      create: vi.fn(async ({ data }: { data: Record<string, unknown> }) => {
+        const batch: FakeImportBatch = {
+          id: `batch_${nextImportBatchId++}`,
+          storeId: data.storeId as string,
+          source: data.source as string,
+          filename: (data.filename as string | null) ?? null,
+          totalRows: (data.totalRows as number) ?? 0,
+          imported: 0,
+          duplicates: 0,
+          heldForModeration: 0,
+          unmatchedRows: 0,
+          invalidRows: 0,
+          status: (data.status as string) ?? "processing",
+          errorDetail: (data.errorDetail as unknown) ?? null,
+          undoneAt: null,
+        };
+        fakeImportBatches.push(batch);
+        return batch;
+      }),
+      update: vi.fn(async ({ where, data }: { where: { id: string }; data: Record<string, unknown> }) => {
+        const batch = fakeImportBatches.find((b) => b.id === where.id);
+        if (!batch) throw new Error("Import batch not found");
+        Object.assign(batch, data);
+        return batch;
+      }),
+      findFirst: vi.fn(async ({ where }: { where: { id: string; storeId?: string } }) => {
+        const batch = fakeImportBatches.find(
+          (b) => b.id === where.id && (where.storeId === undefined || b.storeId === where.storeId),
+        );
+        return batch ?? null;
+      }),
+      findMany: vi.fn(async ({ where }: { where: { storeId: string } }) =>
+        fakeImportBatches.filter((b) => b.storeId === where.storeId),
+      ),
     },
   },
 }));
@@ -141,8 +240,15 @@ vi.mock("./auditLog.server", () => ({
   recordDataAccess: recordDataAccessMock,
 }));
 
-const { exportReviewsToCsv, importReviews, MAX_EXPORT_ROWS, EXPORT_RATE_LIMIT_MAX, ExportRateLimitError } =
-  await import("./reviewImportExport.server");
+const {
+  exportReviewsToCsv,
+  importReviews,
+  undoImportBatch,
+  listImportBatches,
+  MAX_EXPORT_ROWS,
+  EXPORT_RATE_LIMIT_MAX,
+  ExportRateLimitError,
+} = await import("./reviewImportExport.server");
 
 function seedProduct(overrides: Partial<FakeProduct>): FakeProduct {
   const product: FakeProduct = {
@@ -160,8 +266,13 @@ function seedProduct(overrides: Partial<FakeProduct>): FakeProduct {
 beforeEach(() => {
   fakeProducts = [];
   fakeReviews = [];
+  fakeImportBatches = [];
+  fakeReviewMedia = [];
+  forceP2002OnNextCreate = false;
   fakeRecentExportCount = 0;
   nextReviewId = 1;
+  nextImportBatchId = 1;
+  recordDataAccessMock.mockClear();
 });
 
 const GENERIC_CSV_HEADER = "product,rating,content,reviewer_name\n";
@@ -404,7 +515,11 @@ describe("importReviews — Judge.me", () => {
     expect(result.errors[0].reason).toMatch(/content is required/i);
   });
 
-  it("infers verified purchase from source === 'email', not from other sources", async () => {
+  // Judge.me's source==="email" inference is a real, useful signal but never reliable enough
+  // to become IMAGYN's own verifiedPurchase — see the dedicated "verification safety" describe
+  // block below for the full policy. Confirms this importer's inference still flows into
+  // sourceVerified (audit-only) rather than silently disappearing.
+  it("infers sourceVerified from source === 'email', not from other sources — never touches verifiedPurchase", async () => {
     seedProduct({ id: "db_7", shopifyProductId: "gid://shopify/Product/1", name: "P1" });
 
     const csv =
@@ -417,8 +532,13 @@ describe("importReviews — Judge.me", () => {
     expect(result.imported).toBe(2);
     const viaEmail = fakeReviews.find((r) => r.reviewerName === "A");
     const viaWeb = fakeReviews.find((r) => r.reviewerName === "B");
-    expect(viaEmail?.verifiedPurchase).toBe(true);
+    expect(viaEmail?.verifiedPurchase).toBe(false);
+    expect(viaEmail?.sourceVerified).toBe(true);
     expect(viaWeb?.verifiedPurchase).toBe(false);
+    // "web" produces no claim at all in Judge.me's export (no explicit column, and the
+    // email-inference only ever yields a positive signal) — null ("unknown"), not a fabricated
+    // explicit "false" the source never actually stated.
+    expect(viaWeb?.sourceVerified).toBeNull();
   });
 
   it("imports a row with an empty review title — title is optional, body is what's required", async () => {
@@ -544,7 +664,10 @@ describe("importReviews — Loox", () => {
     expect(fakeReviews[0].productId).toBe("db_2");
   });
 
-  it("reads the explicit verified_purchase column directly, no inference needed", async () => {
+  // Loox's own verified_purchase column is a real signal, preserved as sourceVerified for
+  // transparency — but, same policy as every other source, never becomes IMAGYN's own
+  // verifiedPurchase. See "verification safety" describe block below for the full rationale.
+  it("reads the explicit verified_purchase column into sourceVerified only, never verifiedPurchase", async () => {
     seedProduct({ id: "db_3", handle: "blue-widget" });
 
     const csv =
@@ -554,8 +677,10 @@ describe("importReviews — Loox", () => {
     const result = await importReviews("store_1", "loox", csv);
 
     expect(result.imported).toBe(2);
-    expect(fakeReviews.find((r) => r.reviewerName === "A")?.verifiedPurchase).toBe(true);
+    expect(fakeReviews.find((r) => r.reviewerName === "A")?.verifiedPurchase).toBe(false);
+    expect(fakeReviews.find((r) => r.reviewerName === "A")?.sourceVerified).toBe(true);
     expect(fakeReviews.find((r) => r.reviewerName === "B")?.verifiedPurchase).toBe(false);
+    expect(fakeReviews.find((r) => r.reviewerName === "B")?.sourceVerified).toBe(false);
   });
 });
 
@@ -805,7 +930,16 @@ describe("importReviews — review title mapping (regression: 'Untitled review' 
 // the data was never missing, only never displayed. These tests lock down that moderation
 // status (curated/status) and verification status (source-derived) are independent facts that
 // must never be conflated, in either direction.
-describe("importReviews — verification status (regression: 'Verified' badge investigation)", () => {
+// POLICY CORRECTION (2026-09-11, see docs/IMPORT_VERIFICATION_POLICY.md): this describe block
+// previously locked in a real fabrication bug — an email-sourced Judge.me import was allowed to
+// set Review.verifiedPurchase directly, the exact field Trust Certification and the storefront
+// "Verified Buyer" badge read as real, IMAGYN-checked evidence. A source's own claim/inference
+// is a real, useful signal, but it is not IMAGYN's own evidence — a merchant migrating from
+// Judge.me should never see their Trust Certification verified-review count inflate purely
+// because a competing platform's CSV said so. The corrected, permanent policy: imported reviews
+// always get verifiedPurchase=false; the source's claim is preserved separately in
+// sourceVerified for transparency/audit only. Not deleted — rewritten to lock in the fix.
+describe("importReviews — verification safety (imported reviews never fabricate IMAGYN verification)", () => {
   const JUDGEME_HEADER =
     '"title","body","rating","review_date","source","curated","reviewer_name","reviewer_email","product_id","product_handle","reply","reply_date","picture_urls","ip_address","location","metaobject_handle"\n';
 
@@ -839,8 +973,8 @@ describe("importReviews — verification status (regression: 'Verified' badge in
     return cols.map((value) => `"${value}"`).join(",") + "\n";
   }
 
-  // 1. Verified imported review
-  it("marks an email-sourced, approved import as verified", async () => {
+  // 1. An email-sourced (Judge.me's strongest signal) import still never becomes IMAGYN-verified.
+  it("never sets verifiedPurchase=true even for an email-sourced import — only sourceVerified reflects it", async () => {
     seedProduct({ id: "db_1", shopifyProductId: "gid://shopify/Product/1", name: "P1" });
 
     const csv =
@@ -849,11 +983,12 @@ describe("importReviews — verification status (regression: 'Verified' badge in
     const result = await importReviews("store_1", "judgeme", csv);
 
     expect(result.imported).toBe(1);
-    expect(fakeReviews[0].verifiedPurchase).toBe(true);
+    expect(fakeReviews[0].verifiedPurchase).toBe(false);
+    expect(fakeReviews[0].sourceVerified).toBe(true);
   });
 
-  // 2. Non-verified imported review
-  it("marks a web-sourced import as not verified", async () => {
+  // 2. A web-sourced import: no positive claim, sourceVerified reflects that honestly.
+  it("marks a web-sourced import as sourceVerified=null (no claim made) and verifiedPurchase=false", async () => {
     seedProduct({ id: "db_1", shopifyProductId: "gid://shopify/Product/1", name: "P1" });
 
     const csv =
@@ -863,10 +998,14 @@ describe("importReviews — verification status (regression: 'Verified' badge in
 
     expect(result.imported).toBe(1);
     expect(fakeReviews[0].verifiedPurchase).toBe(false);
+    // Judge.me's export makes no explicit verification claim for a non-email source — null
+    // ("unknown"), not a fabricated explicit "false" the source never actually stated.
+    expect(fakeReviews[0].sourceVerified).toBeNull();
   });
 
-  // 3. Approved but non-verified review — proves moderation status never implies verification
-  it("approves a web-sourced review while correctly leaving it unverified", async () => {
+  // 3. Approval (moderation outcome) and verification are independent facts — approving a
+  // review must never imply or require verifiedPurchase in either direction.
+  it("approves a web-sourced review while correctly leaving verifiedPurchase false and sourceVerified unknown", async () => {
     seedProduct({ id: "db_1", shopifyProductId: "gid://shopify/Product/1", name: "P1" });
 
     const csv =
@@ -877,25 +1016,36 @@ describe("importReviews — verification status (regression: 'Verified' badge in
     expect(result.imported).toBe(1);
     expect(fakeReviews[0].status).toBe("APPROVED");
     expect(fakeReviews[0].verifiedPurchase).toBe(false);
+    expect(fakeReviews[0].sourceVerified).toBeNull();
   });
 
-  // 4. Verified + approved review — both facts true at once, neither inferred from the other
-  it("approves an email-sourced review and marks it verified, as two independent facts", async () => {
-    seedProduct({ id: "db_1", shopifyProductId: "gid://shopify/Product/1", name: "P1" });
-
-    const csv =
-      JUDGEME_HEADER +
-      judgemeRow({ body: "Perfect", rating: "5", reviewerName: "D", source: "email", curated: "ok", productId: "1", metaobjectHandle: "review-approved-verified" });
-    const result = await importReviews("store_1", "judgeme", csv);
+  // 4. Every generic-CSV/Loox/Stamped import path shares the same importRow code — confirms
+  // the safety fix isn't Judge.me-specific.
+  it("also never fabricates verifiedPurchase for a generic CSV import with an explicit verified_purchase=true column", async () => {
+    seedProduct({ id: "db_1", name: "P1" });
+    const csv = "product,rating,content,reviewer_name,verified_purchase\nP1,5,Great,Casey,true\n";
+    const result = await importReviews("store_1", "csv", csv);
 
     expect(result.imported).toBe(1);
-    expect(fakeReviews[0].status).toBe("APPROVED");
-    expect(fakeReviews[0].verifiedPurchase).toBe(true);
+    expect(fakeReviews[0].verifiedPurchase).toBe(false);
+    expect(fakeReviews[0].sourceVerified).toBe(true);
   });
 
-  // 5. Verification status preserved on re-import/update — the title-repair path must never
-  // touch verifiedPurchase, in either direction.
-  it("never changes verifiedPurchase when a duplicate row is re-imported (title-repair path)", async () => {
+  // 5. A source with no verification column/claim at all reports sourceVerified as null (
+  // "unknown"), never coerced to an explicit false claim the source never made.
+  it("leaves sourceVerified null when the source made no verification claim at all", async () => {
+    seedProduct({ id: "db_1", name: "P1" });
+    const csv = "product,rating,content,reviewer_name\nP1,5,Great,Casey\n";
+    const result = await importReviews("store_1", "csv", csv);
+
+    expect(result.imported).toBe(1);
+    expect(fakeReviews[0].verifiedPurchase).toBe(false);
+    expect(fakeReviews[0].sourceVerified).toBeNull();
+  });
+
+  // 6. Verification status preserved on re-import/update — the title-repair path must never
+  // touch verifiedPurchase or sourceVerified, in either direction.
+  it("never changes verifiedPurchase/sourceVerified when a duplicate row is re-imported (title-repair path)", async () => {
     seedProduct({ id: "db_1", shopifyProductId: "gid://shopify/Product/1", name: "P1" });
 
     const firstCsv =
@@ -903,11 +1053,12 @@ describe("importReviews — verification status (regression: 'Verified' badge in
       judgemeRow({ body: "Body text", rating: "5", reviewerName: "E", source: "email", curated: "ok", productId: "1", metaobjectHandle: "review-stable-verified" });
     const first = await importReviews("store_1", "judgeme", firstCsv);
     expect(first.imported).toBe(1);
-    expect(fakeReviews[0].verifiedPurchase).toBe(true);
+    expect(fakeReviews[0].verifiedPurchase).toBe(false);
+    expect(fakeReviews[0].sourceVerified).toBe(true);
 
-    // Re-imported as a duplicate (same metaobject_handle) with source now "web" — if this were
-    // wrongly re-applied on every duplicate, a verified review would silently lose that status
-    // on a routine re-import. The existing row's verifiedPurchase must stay exactly as it was.
+    // Re-imported as a duplicate (same metaobject_handle) with source now "web" — the existing
+    // row's sourceVerified must stay exactly as it was; a duplicate re-import only ever
+    // backfills a missing title, never re-derives verification.
     const secondCsv =
       JUDGEME_HEADER +
       judgemeRow({ body: "Body text", rating: "5", reviewerName: "E", source: "web", curated: "ok", productId: "1", metaobjectHandle: "review-stable-verified" });
@@ -915,23 +1066,191 @@ describe("importReviews — verification status (regression: 'Verified' badge in
 
     expect(second.duplicates).toBe(1);
     expect(fakeReviews).toHaveLength(1);
-    expect(fakeReviews[0].verifiedPurchase).toBe(true);
+    expect(fakeReviews[0].verifiedPurchase).toBe(false);
+    expect(fakeReviews[0].sourceVerified).toBe(true);
   });
 
-  // 6 & 7. Reviews list / detail display: both read through getStoreReviews/getProductReviews
-  // → prisma.review with `include` (not a narrowing `select`), so verifiedPurchase is never
-  // dropped between the DB and the loader — same guarantee already locked down for `title` in
-  // the earlier regression suite. This documents the verified case survives the same path.
-  it("a verified review's status survives the same store-wide query the Reviews page and detail panel use", async () => {
+  // 7. Source-platform provenance is retained on every imported review, auditable but never a
+  // shopper-facing verification claim on its own.
+  it("retains importSource on every created review", async () => {
     seedProduct({ id: "db_1", shopifyProductId: "gid://shopify/Product/1", name: "P1" });
 
     const csv =
       JUDGEME_HEADER +
-      judgemeRow({ body: "Shows a Verified badge", rating: "5", reviewerName: "F", source: "email", curated: "ok", productId: "1", metaobjectHandle: "review-ui-verified" });
+      judgemeRow({ body: "Shows source metadata", rating: "5", reviewerName: "F", source: "email", curated: "ok", productId: "1", metaobjectHandle: "review-ui-verified" });
     const result = await importReviews("store_1", "judgeme", csv);
 
     expect(result.imported).toBe(1);
-    expect(fakeReviews[0].verifiedPurchase).toBe(true);
+    expect(fakeReviews[0].importSource).toBe("judgeme");
+  });
+});
+
+describe("Import History — listImportBatches / undoImportBatch", () => {
+  it("creates a real ImportBatch row with accurate final counts for a real (non-dry-run) import", async () => {
+    seedProduct({ id: "db_1", name: "P1" });
+    const csv = "product,rating,content,reviewer_name\nP1,5,Great,Casey\nP1,4,Fine,Jordan\n";
+
+    const result = await importReviews("store_1", "csv", csv, null, false, "my-export.csv");
+
+    expect(result.importBatchId).toBeDefined();
+    const batches = await listImportBatches("store_1");
+    expect(batches).toHaveLength(1);
+    expect(batches[0]).toMatchObject({ source: "csv", filename: "my-export.csv", imported: 2, status: "completed" });
+  });
+
+  it("never creates an ImportBatch row for a dry run", async () => {
+    seedProduct({ id: "db_1", name: "P1" });
+    const csv = "product,rating,content,reviewer_name\nP1,5,Great,Casey\n";
+
+    const result = await importReviews("store_1", "csv", csv, null, true);
+
+    expect(result.importBatchId).toBeUndefined();
+    expect(await listImportBatches("store_1")).toHaveLength(0);
+  });
+
+  it("undoImportBatch soft-deletes only that batch's own reviews, scoped by storeId", async () => {
+    seedProduct({ id: "db_1", name: "P1" });
+    const batchOneCsv = "product,rating,content,reviewer_name\nP1,5,From batch one,Casey\n";
+    const batchOneResult = await importReviews("store_1", "csv", batchOneCsv);
+
+    const batchTwoCsv = "product,rating,content,reviewer_name\nP1,4,From batch two,Jordan\n";
+    await importReviews("store_1", "csv", batchTwoCsv);
+
+    expect(fakeReviews).toHaveLength(2);
+
+    const { restored } = await undoImportBatch("store_1", batchOneResult.importBatchId!);
+
+    expect(restored).toBe(1);
+    const batchOneReview = fakeReviews.find((r) => r.content === "From batch one");
+    const batchTwoReview = fakeReviews.find((r) => r.content === "From batch two");
+    expect(batchOneReview?.deletedAt).not.toBeNull();
+    expect(batchTwoReview?.deletedAt).toBeNull();
+  });
+
+  it("refuses to undo a batch that doesn't belong to the calling store", async () => {
+    seedProduct({ id: "db_1", name: "P1" });
+    const csv = "product,rating,content,reviewer_name\nP1,5,Great,Casey\n";
+    const result = await importReviews("store_1", "csv", csv);
+
+    await expect(undoImportBatch("store_2", result.importBatchId!)).rejects.toThrow("not found");
+  });
+
+  it("refuses to undo an already-undone batch a second time", async () => {
+    seedProduct({ id: "db_1", name: "P1" });
+    const csv = "product,rating,content,reviewer_name\nP1,5,Great,Casey\n";
+    const result = await importReviews("store_1", "csv", csv);
+
+    await undoImportBatch("store_1", result.importBatchId!);
+    await expect(undoImportBatch("store_1", result.importBatchId!)).rejects.toThrow("already been undone");
+  });
+});
+
+describe("importReviews — DB-level duplicate constraint as a race-condition backstop", () => {
+  it("treats a real P2002 unique-constraint violation from prisma.review.create as a duplicate, not a hard row failure", async () => {
+    seedProduct({ id: "db_1", name: "P1" });
+    forceP2002OnNextCreate = true;
+
+    const csv = "product,rating,content,reviewer_name,external_id\nP1,5,Great,Casey,ext-123\n";
+    const result = await importReviews("store_1", "csv", csv);
+
+    expect(result.imported).toBe(0);
+    expect(result.duplicates).toBe(1);
+    expect(result.errors).toHaveLength(0);
+    expect(fakeReviews).toHaveLength(0);
+  });
+
+  it("still throws a genuinely unrelated database error rather than swallowing it as a duplicate", async () => {
+    seedProduct({ id: "db_1", name: "P1" });
+    const db = (await import("../db.server")).default as unknown as {
+      review: { create: (...args: unknown[]) => Promise<unknown> };
+    };
+    const originalCreate = db.review.create;
+    db.review.create = vi.fn(async () => {
+      throw new Error("Connection reset");
+    });
+
+    const csv = "product,rating,content,reviewer_name\nP1,5,Great,Casey\n";
+    await expect(importReviews("store_1", "csv", csv)).rejects.toThrow("Connection reset");
+
+    db.review.create = originalCreate;
+  });
+});
+
+describe("importReviews — media (never fetched/downloaded, only validated and referenced)", () => {
+  it("creates ReviewMedia rows for valid https image URLs", async () => {
+    seedProduct({ id: "db_1", name: "P1" });
+    const csv = "product,rating,content,reviewer_name,images\nP1,5,Great,Casey,https://cdn.example.com/photo1.jpg;https://cdn.example.com/photo2.png\n";
+    const result = await importReviews("store_1", "csv", csv);
+
+    expect(result.imported).toBe(1);
+    expect(result.importedMedia).toBe(2);
+    expect(fakeReviewMedia).toHaveLength(2);
+    expect(fakeReviewMedia.map((m) => m.url)).toEqual([
+      "https://cdn.example.com/photo1.jpg",
+      "https://cdn.example.com/photo2.png",
+    ]);
+  });
+
+  it("skips a non-https URL with a clear reason, never creates a ReviewMedia row for it", async () => {
+    seedProduct({ id: "db_1", name: "P1" });
+    const csv = "product,rating,content,reviewer_name,images\nP1,5,Great,Casey,http://cdn.example.com/photo.jpg\n";
+    const result = await importReviews("store_1", "csv", csv);
+
+    expect(result.imported).toBe(1);
+    expect(result.importedMedia).toBe(0);
+    expect(fakeReviewMedia).toHaveLength(0);
+    expect(result.skippedMedia).toHaveLength(1);
+    expect(result.skippedMedia[0].reason).toMatch(/https/i);
+  });
+
+  it("skips a URL pointing at a private/internal address — refuses to store an SSRF vector", async () => {
+    seedProduct({ id: "db_1", name: "P1" });
+    const csv = "product,rating,content,reviewer_name,images\nP1,5,Great,Casey,https://127.0.0.1/photo.jpg\n";
+    const result = await importReviews("store_1", "csv", csv);
+
+    expect(result.importedMedia).toBe(0);
+    expect(result.skippedMedia[0].reason).toMatch(/private|internal/i);
+  });
+
+  it("skips a URL with no recognizable image extension", async () => {
+    seedProduct({ id: "db_1", name: "P1" });
+    const csv = "product,rating,content,reviewer_name,images\nP1,5,Great,Casey,https://cdn.example.com/not-an-image\n";
+    const result = await importReviews("store_1", "csv", csv);
+
+    expect(result.importedMedia).toBe(0);
+    expect(result.skippedMedia[0].reason).toMatch(/image/i);
+  });
+
+  it("never fetches/downloads the URL — only prisma.reviewMedia.createMany is ever called, no network mock exists for it to call", async () => {
+    seedProduct({ id: "db_1", name: "P1" });
+    const csv = "product,rating,content,reviewer_name,images\nP1,5,Great,Casey,https://cdn.example.com/photo.jpg\n";
+    // If importReviews ever tried a real fetch() to this fake host, it would throw/reject in
+    // the test environment (no network access) and this test would fail with that error
+    // instead of passing — the absence of any fetch mock is itself the safety guarantee here.
+    const result = await importReviews("store_1", "csv", csv);
+
+    expect(result.imported).toBe(1);
+    expect(result.importedMedia).toBe(1);
+  });
+
+  it("a row with no media column at all imports cleanly with zero media, no error", async () => {
+    seedProduct({ id: "db_1", name: "P1" });
+    const csv = "product,rating,content,reviewer_name\nP1,5,Great,Casey\n";
+    const result = await importReviews("store_1", "csv", csv);
+
+    expect(result.imported).toBe(1);
+    expect(result.importedMedia).toBe(0);
+    expect(result.skippedMedia).toHaveLength(0);
+  });
+
+  it("a dry run reports accurate media counts without creating any ReviewMedia rows", async () => {
+    seedProduct({ id: "db_1", name: "P1" });
+    const csv = "product,rating,content,reviewer_name,images\nP1,5,Great,Casey,https://cdn.example.com/photo.jpg\n";
+    const result = await importReviews("store_1", "csv", csv, null, true);
+
+    expect(result.dryRun).toBe(true);
+    expect(result.importedMedia).toBe(1);
+    expect(fakeReviewMedia).toHaveLength(0);
   });
 });
 
@@ -950,6 +1269,9 @@ describe("exportReviewsToCsv — audit trail for a bulk contact-field export", (
         status: "APPROVED",
         isPublished: true,
         verifiedPurchase: true,
+        sourceVerified: null,
+        importSource: null,
+        importBatchId: null,
         deletedAt: null,
       },
       {
@@ -963,6 +1285,9 @@ describe("exportReviewsToCsv — audit trail for a bulk contact-field export", (
         status: "APPROVED",
         isPublished: true,
         verifiedPurchase: false,
+        sourceVerified: null,
+        importSource: null,
+        importBatchId: null,
         deletedAt: null,
       },
     );
@@ -986,6 +1311,62 @@ describe("exportReviewsToCsv — audit trail for a bulk contact-field export", (
   });
 });
 
+describe("exportReviewsToCsv — CSV/formula injection protection (OWASP)", () => {
+  function seedReviewWithContent(overrides: { reviewerName?: string; content?: string; title?: string | null }) {
+    fakeReviews.push({
+      id: "review_injection",
+      storeId: "store_1",
+      productId: "product_1",
+      externalId: null,
+      reviewerName: overrides.reviewerName ?? "Normal Name",
+      content: overrides.content ?? "Normal content",
+      title: overrides.title ?? null,
+      rating: 5,
+      status: "APPROVED",
+      isPublished: true,
+      verifiedPurchase: true,
+      sourceVerified: null,
+      importSource: null,
+      importBatchId: null,
+      deletedAt: null,
+    });
+  }
+
+  it.each(["=cmd|'/c calc'!A1", "+1+1", "-2+3", "@SUM(1+1)"])(
+    "prefixes a formula-triggering content value (%s) with a leading apostrophe",
+    async (payload) => {
+      seedReviewWithContent({ content: payload });
+      const result = await exportReviewsToCsv("store_1");
+
+      expect(result.csv).toContain(`'${payload}`);
+      // Never emitted raw — a spreadsheet app would otherwise execute it as a formula.
+      expect(result.csv).not.toMatch(new RegExp(`[^']${payload.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}`));
+    },
+  );
+
+  it("prefixes a formula-triggering reviewer name the same way", async () => {
+    seedReviewWithContent({ reviewerName: "=HYPERLINK(\"http://evil.example\")", content: "Fine" });
+    const result = await exportReviewsToCsv("store_1");
+
+    expect(result.csv).toContain("'=HYPERLINK");
+  });
+
+  it("prefixes a formula-triggering title the same way", async () => {
+    seedReviewWithContent({ title: "=1+1", content: "Fine" });
+    const result = await exportReviewsToCsv("store_1");
+
+    expect(result.csv).toContain("'=1+1");
+  });
+
+  it("never touches ordinary content that merely contains a mid-string special character", async () => {
+    seedReviewWithContent({ content: "Cost was $5 = a bargain" });
+    const result = await exportReviewsToCsv("store_1");
+
+    expect(result.csv).toContain("Cost was $5 = a bargain");
+    expect(result.csv).not.toContain("'Cost");
+  });
+});
+
 describe("exportReviewsToCsv — DLP export cap", () => {
   function seedReviews(count: number) {
     for (let i = 0; i < count; i += 1) {
@@ -1000,6 +1381,9 @@ describe("exportReviewsToCsv — DLP export cap", () => {
         status: "APPROVED",
         isPublished: true,
         verifiedPurchase: true,
+        sourceVerified: null,
+        importSource: null,
+        importBatchId: null,
         deletedAt: null,
       });
     }
@@ -1054,6 +1438,9 @@ describe("exportReviewsToCsv — DLP export cap", () => {
       status: "APPROVED",
       isPublished: true,
       verifiedPurchase: true,
+      sourceVerified: null,
+      importSource: null,
+      importBatchId: null,
       deletedAt: null,
     });
 
@@ -1077,6 +1464,9 @@ describe("exportReviewsToCsv — DLP rate limit (per-call cap defeated by repeat
       status: "APPROVED",
       isPublished: true,
       verifiedPurchase: true,
+      sourceVerified: null,
+      importSource: null,
+      importBatchId: null,
       deletedAt: null,
     });
     fakeRecentExportCount = EXPORT_RATE_LIMIT_MAX - 1;
@@ -1098,6 +1488,9 @@ describe("exportReviewsToCsv — DLP rate limit (per-call cap defeated by repeat
       status: "APPROVED",
       isPublished: true,
       verifiedPurchase: true,
+      sourceVerified: null,
+      importSource: null,
+      importBatchId: null,
       deletedAt: null,
     });
     fakeRecentExportCount = EXPORT_RATE_LIMIT_MAX;
@@ -1133,6 +1526,9 @@ describe("exportReviewsToCsv — DLP rate limit (per-call cap defeated by repeat
       status: "APPROVED",
       isPublished: true,
       verifiedPurchase: true,
+      sourceVerified: null,
+      importSource: null,
+      importBatchId: null,
       deletedAt: null,
     });
     // The mock's auditLog.count doesn't distinguish stores (see its own comment) — this test

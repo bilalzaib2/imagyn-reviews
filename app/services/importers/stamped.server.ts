@@ -39,6 +39,9 @@ const FIELD_ALIASES: FieldAliases = {
   externalId: ["review_id", "id"],
   reply: ["reply"],
   repliedAt: ["replied_at", "reply_date"],
+  // Stamped's documented template lists filenames (photoFilenames), not URLs — real exports
+  // may differ; generous aliases absorb either shape the same way every other field here does.
+  mediaUrls: ["photofilenames", "photo_filenames", "image_url", "image_urls", "picture_urls"],
 };
 
 // "product" isn't required — Stamped rows can identify their product via product_id/

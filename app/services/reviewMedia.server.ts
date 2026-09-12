@@ -440,6 +440,67 @@ export async function getVerifiedStoreMediaGallery(storeId: string, limit = 12):
   });
 }
 
+// Import-time media: unlike a real customer upload (readImageFilesFromFormData →
+// uploadReviewImages, real bytes re-hosted through Shopify Files), a migrated review's photo
+// is just a URL sitting in someone else's CSV export. Deliberately never fetched/downloaded
+// server-side — that would mean this app's own server making outbound requests to arbitrary,
+// merchant-supplied URLs (a real SSRF surface) to re-host content whose licensing/availability
+// this app has no way to verify anyway. Instead: validate the URL's shape only (scheme,
+// obvious-image extension, not an internal/private address), then store it as-is — the
+// storefront's own <img> tag is what actually loads it, in the shopper's browser, exactly the
+// same trust boundary a hand-typed image URL in any CMS already crosses.
+const IMAGE_EXTENSION_PATTERN = /\.(jpe?g|png|gif|webp|avif)(\?.*)?$/i;
+
+// Blocks the obvious SSRF-via-image-URL targets (loopback, link-local, private ranges, and
+// bare "localhost") without needing a DNS lookup at import time — a determined attacker could
+// still register a public hostname that resolves to a private IP later, but that's a general
+// SSRF problem no URL-shape check can fully solve, and this app never actually fetches the URL
+// server-side regardless (see comment above), which is what actually closes that gap here.
+const BLOCKED_HOSTNAME_PATTERN = /^(localhost|127\.|0\.|10\.|192\.168\.|169\.254\.|::1$|fc00:|fd00:)/i;
+function isPrivateHostname(hostname: string): boolean {
+  if (BLOCKED_HOSTNAME_PATTERN.test(hostname)) return true;
+  const octets = hostname.match(/^172\.(\d{1,3})\./);
+  return octets !== null && Number(octets[1]) >= 16 && Number(octets[1]) <= 31;
+}
+
+// Returns a human-readable skip reason, or null when the URL is safe to store as-is.
+export function validateImportedMediaUrl(rawUrl: string): string | null {
+  const url = rawUrl.trim();
+  if (!url) return "Empty URL.";
+
+  let parsed: URL;
+  try {
+    parsed = new URL(url);
+  } catch {
+    return `"${url}" is not a valid URL.`;
+  }
+
+  if (parsed.protocol !== "https:") {
+    return `"${url}" must be a real https:// URL (got "${parsed.protocol}").`;
+  }
+
+  if (isPrivateHostname(parsed.hostname)) {
+    return `"${url}" points at a private/internal address — refusing to store it.`;
+  }
+
+  if (!IMAGE_EXTENSION_PATTERN.test(parsed.pathname) && !IMAGE_EXTENSION_PATTERN.test(url)) {
+    return `"${url}" doesn't look like an image file (expected .jpg, .png, .gif, .webp, or .avif).`;
+  }
+
+  return null;
+}
+
+// A source's own delimited multi-image column (Judge.me's picture_urls, Ali Reviews' "Image
+// link") — split on the common separators real exports use, never assume just one.
+export function parseImportedMediaUrls(raw: string): string[] {
+  return raw
+    .split(/[,;|\n]+/)
+    .map((url) => url.trim())
+    .filter(Boolean);
+}
+
+export const MAX_IMPORTED_MEDIA_PER_REVIEW = MAX_IMAGES_PER_REVIEW;
+
 // Admin-only moderation action: deletes a single media item independently of its review
 // (the review itself, and any other photos on it, are untouched). Scoped through the parent
 // review's storeId (ReviewMedia carries no storeId of its own) — a mediaId belonging to

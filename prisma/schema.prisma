@@ -34,24 +34,25 @@ model Session {
 }
 
 model Store {
-  id                String             @id @default(cuid())
-  name              String
-  slug              String             @unique
-  domain            String?
-  createdAt         DateTime           @default(now())
-  updatedAt         DateTime           @updatedAt
-  products          Product[]
-  reviews           Review[]
-  reviewRequests    ReviewRequest[]
-  widgets           Widget[]
-  appearances       Appearance[]
+  id                    String                 @id @default(cuid())
+  name                  String
+  slug                  String                 @unique
+  domain                String?
+  createdAt             DateTime               @default(now())
+  updatedAt             DateTime               @updatedAt
+  products              Product[]
+  reviews               Review[]
+  reviewRequests        ReviewRequest[]
+  widgets               Widget[]
+  appearances           Appearance[]
   surfaceBrandOverrides SurfaceBrandOverride[]
-  emailTemplates    EmailTemplate[]
-  achievements       Achievement[]
-  emailSuppressions  EmailSuppression[]
-  auditLogs          AuditLog[]
-  trustCertification TrustCertification?
-  storeAiSummary     StoreAiSummary?
+  emailTemplates        EmailTemplate[]
+  achievements          Achievement[]
+  emailSuppressions     EmailSuppression[]
+  auditLogs             AuditLog[]
+  trustCertification    TrustCertification?
+  storeAiSummary        StoreAiSummary?
+  importBatches         ImportBatch[]
 
   // Order-lifecycle automation settings (see review-request.server.ts's createFromOrder and
   // webhooks.fulfillments.create.tsx). autoRequestTrigger is a plain string, not an enum, so
@@ -303,6 +304,22 @@ model Review {
   // rest of this pipeline, so a constraint violation is never a code path this app relies on.
   externalId String?
 
+  // Migration/import provenance — all three null for an organic, customer-submitted review.
+  // importSource records which platform a review was migrated from ("judgeme"/"loox"/
+  // "stamped"/"alireviews"/"csv"), kept forever as auditable metadata (never shown to
+  // shoppers as a trust signal on its own — see docs/IMPORT_VERIFICATION_POLICY.md).
+  importSource  String?
+  importBatch   ImportBatch? @relation(fields: [importBatchId], references: [id], onDelete: SetNull)
+  importBatchId String?
+
+  // The SOURCE PLATFORM's own verified-purchase claim (or inference from it — e.g. Judge.me's
+  // source=="email"), stored purely for transparency/audit. Deliberately never read by Trust
+  // Certification, the storefront "Verified Buyer" badge, or any other IMAGYN-verification
+  // consumer — see verifiedPurchase's own comment and docs/IMPORT_VERIFICATION_POLICY.md for
+  // why the two fields must never be conflated. Null = the source made no verification claim
+  // at all (most platforms' documented export/import schemas don't have one).
+  sourceVerified Boolean?
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
@@ -319,6 +336,56 @@ model Review {
   @@index([featured])
   @@index([helpfulCount])
   @@index([storeId, externalId])
+  @@index([importBatchId])
+  // Real, DB-enforced defense-in-depth on top of the application-level check-before-create in
+  // findExistingReview — a genuinely unique (storeId, importSource, externalId) combination can
+  // never be inserted twice, closing the race-condition gap a check-then-insert always has
+  // (two concurrent imports of the same file). Safe for every other row: Postgres treats each
+  // NULL as distinct from every other NULL, so this never blocks organic reviews (importSource
+  // always null) or any import source with no per-row externalId (Loox/Stamped/Ali Reviews) —
+  // it only ever fires for the exact case it's meant to catch.
+  @@unique([storeId, importSource, externalId])
+}
+
+// One row per merchant-initiated review migration/import — created before the first row is
+// processed, updated with final counts when it finishes. Exists specifically so a merchant can
+// browse import history and, where safe, undo exactly this batch's own rows — see
+// reviewImportExport.server.ts's undoImportBatch, which only ever touches Review rows carrying
+// this exact id as their importBatchId, scoped additionally by storeId, never a broader delete.
+model ImportBatch {
+  id String @id @default(cuid())
+
+  storeId String
+  store   Store  @relation(fields: [storeId], references: [id], onDelete: Cascade)
+
+  source   String
+  filename String?
+
+  totalRows         Int @default(0)
+  imported          Int @default(0)
+  duplicates        Int @default(0)
+  heldForModeration Int @default(0)
+  unmatchedRows     Int @default(0)
+  invalidRows       Int @default(0)
+
+  // "processing" while a large file is still chunking through, "completed" once every row has
+  // been attempted, "failed" only for a file-level rejection (see importReviews's fileErrors
+  // branch) where zero rows were ever attempted, "undone" once undoImportBatch has run.
+  status String @default("completed")
+
+  // Bounded, real error detail for a merchant's "Download Error Report" — same shape as
+  // ImportResult's own errors/missingProducts arrays, persisted so it's still inspectable after
+  // the request/response that ran the import has long since ended.
+  errorDetail Json?
+
+  reviews Review[]
+
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  undoneAt  DateTime?
+
+  @@index([storeId, createdAt])
+  @@index([storeId, status])
 }
 
 // One row per review that was ever *evaluated* for a reward (not just the ones that

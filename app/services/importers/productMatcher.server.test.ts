@@ -189,3 +189,75 @@ describe("ProductMatcher", () => {
     expect(result.tier).toBe("shopify_product_id");
   });
 });
+
+describe("ProductMatcher — ambiguous matches (never auto-attach an uncertain guess)", () => {
+  it("reports exact_title as ambiguous when two products in the catalog share the identical title", async () => {
+    fakeProducts = [
+      makeProduct({ id: "db_dup_1", name: "Classic White Tee" }),
+      makeProduct({ id: "db_dup_2", name: "Classic White Tee" }),
+    ];
+    const matcher = await ProductMatcher.forStore("store_1");
+
+    const result = await matcher.match({ title: "Classic White Tee" }, null);
+
+    expect(result.productId).toBeNull();
+    expect(result.ambiguous).toBe(true);
+    expect(result.tier).toBe("exact_title");
+    expect(result.candidateProductIds).toEqual(expect.arrayContaining(["db_dup_1", "db_dup_2"]));
+  });
+
+  it("reports normalized_title as ambiguous when two products only collide after normalization", async () => {
+    fakeProducts = [
+      makeProduct({ id: "db_norm_1", name: "Classic White Tee!" }),
+      makeProduct({ id: "db_norm_2", name: "classic white tee" }),
+    ];
+    const matcher = await ProductMatcher.forStore("store_1");
+
+    const result = await matcher.match({ title: "Classic  White   Tee" }, null);
+
+    expect(result.productId).toBeNull();
+    expect(result.ambiguous).toBe(true);
+    expect(result.tier).toBe("normalized_title");
+  });
+
+    it("reports fuzzy matches as ambiguous when two candidates score within the ambiguity margin of each other", async () => {
+    fakeProducts = [
+      makeProduct({ id: "db_fuzzy_1", name: "Blue Cotton Summer Dress Small" }),
+      makeProduct({ id: "db_fuzzy_2", name: "Blue Cotton Summer Dress Large" }),
+    ];
+    const matcher = await ProductMatcher.forStore("store_1");
+
+    // Shares every token with both candidates except the size word — near-identical fuzzy
+    // scores against both, which is exactly the "too close to call" case.
+    const result = await matcher.match({ title: "Blue Cotton Summer Dress Medium" }, null);
+
+    expect(result.productId).toBeNull();
+    expect(result.ambiguous).toBe(true);
+    expect(result.tier).toBe("fuzzy");
+    expect(result.candidateProductIds?.length).toBeGreaterThanOrEqual(2);
+  });
+
+  it("still resolves a clear fuzzy winner (no near-tie) without flagging it ambiguous", async () => {
+    fakeProducts = [
+      makeProduct({ id: "db_clear_1", name: "Grace S1560 Embroidered 2pc Lawn Dress With Chiffon Dupatta" }),
+      makeProduct({ id: "db_clear_2", name: "Completely Different Product Entirely" }),
+    ];
+    const matcher = await ProductMatcher.forStore("store_1");
+
+    const result = await matcher.match({ title: "Embroidered Grace S1560 2pc Lawn Dress" }, null);
+
+    expect(result.productId).toBe("db_clear_1");
+    expect(result.ambiguous).toBe(false);
+    expect(result.tier).toBe("fuzzy");
+  });
+
+  it("a single unique exact-title match is never flagged ambiguous", async () => {
+    fakeProducts = [makeProduct({ id: "db_unique", name: "One Of A Kind Product" })];
+    const matcher = await ProductMatcher.forStore("store_1");
+
+    const result = await matcher.match({ title: "One Of A Kind Product" }, null);
+
+    expect(result.productId).toBe("db_unique");
+    expect(result.ambiguous).toBe(false);
+  });
+});

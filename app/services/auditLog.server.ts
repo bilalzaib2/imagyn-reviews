@@ -18,11 +18,16 @@ export type AuditActor =
   | "webhook:customers_redact"
   | "webhook:shop_redact"
   | "admin:csv_export"
-  | "system:retention_purge";
+  | "system:retention_purge"
+  | "admin:import_undo";
 
-export type AuditAction = "data_request" | "redact" | "export" | "purge";
+export type AuditAction = "data_request" | "redact" | "export" | "purge" | "undo";
 
-export type AuditResource = "review.contact_fields" | "reviewRequest.contact_fields" | "store.all_data";
+export type AuditResource =
+  | "review.contact_fields"
+  | "reviewRequest.contact_fields"
+  | "store.all_data"
+  | "review.import_batch";
 
 export async function recordDataAccess(entry: {
   storeId: string | null;

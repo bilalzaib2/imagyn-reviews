@@ -2,6 +2,7 @@ import { createCsvImporter } from "./csv.server";
 import { createJudgemeImporter } from "./judgeme.server";
 import { createLooxImporter } from "./loox.server";
 import { createStampedImporter } from "./stamped.server";
+import { createAliReviewsImporter } from "./alireviews.server";
 import { ImportSourceNotSupportedError, type Importer, type ImportSource } from "./types";
 
 // The single place that maps a source id to its Importer — adding a new source later is a new
@@ -18,6 +19,8 @@ export function getImporter(source: ImportSource): Importer {
       return createLooxImporter();
     case "stamped":
       return createStampedImporter();
+    case "alireviews":
+      return createAliReviewsImporter();
     default:
       throw new ImportSourceNotSupportedError(source);
   }

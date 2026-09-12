@@ -4,7 +4,7 @@
 // (reviewImportExport.server.ts) needs to change, since both only ever depend on this
 // interface. Mirrors the AI/Storage/Notification/Billing provider pattern already used
 // throughout this codebase.
-export type ImportSource = "csv" | "judgeme" | "loox" | "stamped" | "ryviu";
+export type ImportSource = "csv" | "judgeme" | "loox" | "stamped" | "alireviews" | "ryviu";
 
 export interface ParsedReviewRow {
   // 1-based row number as it appeared in the source file, for error messages a merchant can
@@ -38,6 +38,10 @@ export interface ParsedReviewRow {
   externalId?: string;
   reply?: string;
   repliedAt?: string;
+  // Raw, source-delimited list of image URLs (Judge.me's picture_urls, Ali Reviews' "Image
+  // link", etc.) — see reviewMedia.server.ts's parseImportedMediaUrls/validateImportedMediaUrl
+  // for how this gets split and validated. Never fetched/downloaded, only referenced.
+  mediaUrls?: string;
 }
 
 export interface ParsedImport {
@@ -64,18 +68,20 @@ export class ImportSourceNotSupportedError extends Error {
 // What the UI's "Import from" selector offers today. Lives here (not provider.server.ts) so
 // route components can import it without pulling in a .server-only module.
 //
-// Loox and Stamped are built against each platform's own officially documented CSV
-// import-template column spec (see loox.server.ts / stamped.server.ts's own comments) — real,
-// tested importers, not stubs — but neither has been verified against a live export file from
-// a real account, since neither platform publishes its raw export column names separately from
-// that template. Ryviu stays unavailable: public documentation only confirms a partial column
-// set (product_handle, rating, photo_urls, created_at) with no confirmed reviewer-name/content/
-// email columns, which isn't enough to build a real importer without guessing field mappings —
-// exactly the kind of silent mis-mapping this app's import pipeline is built to avoid.
+// Loox, Stamped, and Ali Reviews are built against each platform's own officially documented
+// CSV import-template column spec (see loox.server.ts / stamped.server.ts / alireviews.server.ts's
+// own comments) — real, tested importers, not stubs — but none has been verified against a live
+// export file from a real account, since none of the three platforms publishes its raw export
+// column names separately from that template. Ryviu stays unavailable: public documentation only
+// confirms a partial column set (product_handle, rating, photo_urls, created_at) with no
+// confirmed reviewer-name/content/email columns, which isn't enough to build a real importer
+// without guessing field mappings — exactly the kind of silent mis-mapping this app's import
+// pipeline is built to avoid.
 export const IMPORT_SOURCES: Array<{ value: ImportSource; label: string; available: boolean }> = [
   { value: "csv", label: "Generic CSV", available: true },
   { value: "judgeme", label: "Judge.me", available: true },
   { value: "loox", label: "Loox", available: true },
   { value: "stamped", label: "Stamped", available: true },
+  { value: "alireviews", label: "Ali Reviews", available: true },
   { value: "ryviu", label: "Ryviu", available: false },
 ];

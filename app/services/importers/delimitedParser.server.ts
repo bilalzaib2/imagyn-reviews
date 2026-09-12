@@ -88,6 +88,7 @@ export function parseDelimitedReviewFile(
       externalId: get("externalId") || undefined,
       reply: get("reply") || undefined,
       repliedAt: get("repliedAt") || undefined,
+      mediaUrls: get("mediaUrls") || undefined,
     };
 
     return postProcess ? postProcess(row, record) : row;

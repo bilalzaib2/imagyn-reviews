@@ -87,6 +87,14 @@ export interface CreateReviewInput {
   // merchant's own workflow. Every genuine creation path (storefront submission, review-link
   // token, manual admin creation) leaves this unset and fires normally.
   skipFlowTrigger?: boolean;
+  // Migration provenance — set only by reviewImportExport.server.ts, both null for every
+  // genuine creation path. See docs/IMPORT_VERIFICATION_POLICY.md.
+  importSource?: string | null;
+  importBatchId?: string | null;
+  // The SOURCE PLATFORM's own verified-purchase claim/inference, kept purely for audit — NEVER
+  // a substitute for `verifiedPurchase` itself, which importers must always pass `false` (see
+  // reviewImportExport.server.ts's importRow and docs/IMPORT_VERIFICATION_POLICY.md for why).
+  sourceVerified?: boolean | null;
 }
 
 export interface UpdateReviewInput {
@@ -607,6 +615,9 @@ export async function createReview(storeId: string, data: CreateReviewInput) {
       externalId: data.externalId || null,
       reply: data.reply || null,
       repliedAt: data.repliedAt ?? null,
+      importSource: data.importSource || null,
+      importBatchId: data.importBatchId || null,
+      sourceVerified: data.sourceVerified ?? null,
       ...(data.createdAt ? { createdAt: data.createdAt } : {}),
       ...(approveNow ? { status: ReviewStatus.APPROVED, isPublished: true } : {}),
     },

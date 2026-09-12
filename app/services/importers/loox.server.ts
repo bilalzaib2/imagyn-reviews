@@ -35,6 +35,9 @@ const FIELD_ALIASES: FieldAliases = {
   externalId: ["review_id", "id"],
   reply: ["reply"],
   repliedAt: ["replied_at", "reply_date"],
+  // Loox's documented import-template column (see the header comment above) is singular
+  // (photo_url), but real exports may pluralize or delimit multiple — both are accepted.
+  mediaUrls: ["photo_url", "photo_urls", "image_url", "image_urls", "picture_urls"],
 };
 
 // Deliberately excludes "product" — like Judge.me, Loox's schema identifies the product by

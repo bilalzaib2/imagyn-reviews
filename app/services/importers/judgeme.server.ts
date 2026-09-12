@@ -50,6 +50,9 @@ const FIELD_ALIASES: FieldAliases = {
   externalId: ["metaobject_handle", "review_id", "id"],
   reply: ["reply"],
   repliedAt: ["reply_date"],
+  // Judge.me's real, confirmed export column (see the header comment above) — a
+  // pipe/comma-delimited list when a review has more than one photo.
+  mediaUrls: ["picture_urls", "image_url", "image_urls", "photo_urls"],
 };
 
 // Deliberately excludes "product" — a genuine Judge.me export has no product title/name

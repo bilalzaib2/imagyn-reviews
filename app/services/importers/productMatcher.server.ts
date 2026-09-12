@@ -37,8 +37,19 @@ export interface ProductMatchInput {
 }
 
 export interface ProductMatchResult {
+  // Null whenever ambiguous is true — an uncertain match is never auto-attached, only
+  // reported (see reviewImportExport.server.ts's importRow). Also null for a genuine
+  // no-match.
   productId: string | null;
   tier: ProductMatchTier | null;
+  // True when more than one product in the catalog is a plausible candidate for this row and
+  // no single one is clearly the best — e.g. two products share the exact same title, or two
+  // fuzzy-title candidates score within FUZZY_AMBIGUITY_MARGIN of each other. Never silently
+  // resolved by picking one; the caller must leave the row unmatched and ask the merchant.
+  ambiguous: boolean;
+  // Present only when ambiguous — the plausible candidates, for diagnostics ("could be X or
+  // Y").
+  candidateProductIds?: string[];
 }
 
 function toVariantGid(variantId: string): string {
@@ -88,6 +99,13 @@ function titleSimilarity(a: string, b: string): number {
 // and reported.
 const FUZZY_MATCH_THRESHOLD = 0.75;
 
+// Two fuzzy candidates within this margin of each other are "too close to call" — reported as
+// ambiguous rather than silently picking whichever happened to score marginally higher. A
+// single-digit-percent margin, not a large one: this only needs to catch genuine near-ties
+// (e.g. 0.80 vs 0.82 for two very similarly-named products), not turn every fuzzy match with
+// any second candidate at all into an ambiguous one.
+const FUZZY_AMBIGUITY_MARGIN = 0.05;
+
 // Loaded once per import run (not once per row) — a store's product catalog is read once via
 // getProducts, then every row matches against in-memory maps. The two Admin API tiers (variant
 // id, SKU) are the only per-row network calls, and only run when every local tier has already
@@ -96,8 +114,12 @@ export class ProductMatcher {
   private byGid = new Map<string, Product>();
   private byHandle = new Map<string, Product>();
   private bySlug = new Map<string, Product>();
-  private byExactTitle = new Map<string, Product>();
-  private byNormalizedTitle = new Map<string, Product>();
+  // Arrays, not a single Product — lets exact/normalized title lookups detect the rare but
+  // real case of two products in the same catalog sharing an identical (or identically
+  // normalized) title, e.g. the same product name reused across two collections. A Map keyed
+  // to a single Product would silently let the last-inserted one shadow the other.
+  private byExactTitle = new Map<string, Product[]>();
+  private byNormalizedTitle = new Map<string, Product[]>();
   private products: Product[];
   private variantGidCache = new Map<string, string | null>();
   private skuGidCache = new Map<string, string | null>();
@@ -115,8 +137,10 @@ export class ProductMatcher {
       if (product.slug) {
         this.bySlug.set(product.slug.trim().toLowerCase(), product);
       }
-      this.byExactTitle.set(product.name.trim().toLowerCase(), product);
-      this.byNormalizedTitle.set(normalizeTitle(product.name), product);
+      const exactKey = product.name.trim().toLowerCase();
+      this.byExactTitle.set(exactKey, [...(this.byExactTitle.get(exactKey) ?? []), product]);
+      const normalizedKey = normalizeTitle(product.name);
+      this.byNormalizedTitle.set(normalizedKey, [...(this.byNormalizedTitle.get(normalizedKey) ?? []), product]);
     }
   }
 
@@ -127,55 +151,87 @@ export class ProductMatcher {
   async match(input: ProductMatchInput, admin: AdminApiContext | null): Promise<ProductMatchResult> {
     if (input.productId) {
       const product = this.byGid.get(toProductGid(input.productId));
-      if (product) return { productId: product.id, tier: "shopify_product_id" };
+      if (product) return { productId: product.id, tier: "shopify_product_id", ambiguous: false };
     }
 
     if (input.variantId && admin) {
       const productGid = await this.resolveVariantToProductGid(input.variantId, admin);
       const product = productGid ? this.byGid.get(productGid) : undefined;
-      if (product) return { productId: product.id, tier: "variant_id" };
+      if (product) return { productId: product.id, tier: "variant_id", ambiguous: false };
     }
 
     if (input.handle) {
       const product = this.byHandle.get(input.handle.trim().toLowerCase());
-      if (product) return { productId: product.id, tier: "handle" };
+      if (product) return { productId: product.id, tier: "handle", ambiguous: false };
     }
 
     if (input.url) {
       const handle = extractHandleFromUrl(input.url);
       const product = handle ? this.byHandle.get(handle) : undefined;
-      if (product) return { productId: product.id, tier: "url" };
+      if (product) return { productId: product.id, tier: "url", ambiguous: false };
     }
 
     if (input.slug) {
       const product = this.bySlug.get(input.slug.trim().toLowerCase());
-      if (product) return { productId: product.id, tier: "slug" };
+      if (product) return { productId: product.id, tier: "slug", ambiguous: false };
     }
 
     if (input.sku && admin) {
       const productGid = await this.resolveSkuToProductGid(input.sku, admin);
       const product = productGid ? this.byGid.get(productGid) : undefined;
-      if (product) return { productId: product.id, tier: "sku" };
+      if (product) return { productId: product.id, tier: "sku", ambiguous: false };
     }
 
     if (input.title) {
       const exact = this.byExactTitle.get(input.title.trim().toLowerCase());
-      if (exact) return { productId: exact.id, tier: "exact_title" };
+      if (exact) {
+        if (exact.length > 1) {
+          return { productId: null, tier: "exact_title", ambiguous: true, candidateProductIds: exact.map((p) => p.id) };
+        }
+        return { productId: exact[0].id, tier: "exact_title", ambiguous: false };
+      }
 
       const normalized = this.byNormalizedTitle.get(normalizeTitle(input.title));
-      if (normalized) return { productId: normalized.id, tier: "normalized_title" };
+      if (normalized) {
+        if (normalized.length > 1) {
+          return {
+            productId: null,
+            tier: "normalized_title",
+            ambiguous: true,
+            candidateProductIds: normalized.map((p) => p.id),
+          };
+        }
+        return { productId: normalized[0].id, tier: "normalized_title", ambiguous: false };
+      }
 
-      let best: { product: Product; score: number } | null = null;
+      // Every candidate at/above threshold, not just the single best — needed to detect a
+      // near-tie, not just to pick a winner.
+      const candidates: Array<{ product: Product; score: number }> = [];
       for (const product of this.products) {
         const score = titleSimilarity(input.title, product.name);
-        if (score >= FUZZY_MATCH_THRESHOLD && (!best || score > best.score)) {
-          best = { product, score };
+        if (score >= FUZZY_MATCH_THRESHOLD) {
+          candidates.push({ product, score });
         }
       }
-      if (best) return { productId: best.product.id, tier: "fuzzy" };
+
+      if (candidates.length > 0) {
+        candidates.sort((a, b) => b.score - a.score);
+        const [best, runnerUp] = candidates;
+        if (runnerUp && best.score - runnerUp.score < FUZZY_AMBIGUITY_MARGIN) {
+          return {
+            productId: null,
+            tier: "fuzzy",
+            ambiguous: true,
+            candidateProductIds: candidates
+              .filter((c) => best.score - c.score < FUZZY_AMBIGUITY_MARGIN)
+              .map((c) => c.product.id),
+          };
+        }
+        return { productId: best.product.id, tier: "fuzzy", ambiguous: false };
+      }
     }
 
-    return { productId: null, tier: null };
+    return { productId: null, tier: null, ambiguous: false };
   }
 
   private async resolveVariantToProductGid(variantId: string, admin: AdminApiContext): Promise<string | null> {

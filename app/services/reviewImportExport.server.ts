@@ -1,4 +1,5 @@
 import Papa from "papaparse";
+import { Prisma } from "@prisma/client";
 import type { AdminApiContext } from "@shopify/shopify-app-react-router/server";
 import prisma from "../db.server";
 import { createReview, updateReview } from "./review.server";
@@ -6,6 +7,7 @@ import { getImporter } from "./importers/provider.server";
 import { ProductMatcher, type ProductMatchTier } from "./importers/productMatcher.server";
 import type { ImportSource, ParsedReviewRow } from "./importers/types";
 import { recordDataAccess } from "./auditLog.server";
+import { parseImportedMediaUrls, validateImportedMediaUrl, MAX_IMPORTED_MEDIA_PER_REVIEW } from "./reviewMedia.server";
 
 export interface ImportRowIssue {
   row: number;
@@ -21,6 +23,24 @@ export interface MissingProductIssue {
   productHandle: string | null;
   productUrl: string | null;
   productTitle: string | null;
+  reason: string;
+}
+
+// Genuinely distinct from MissingProductIssue: the row DID find plausible product matches, but
+// more than one, with no reliable way to pick between them (see productMatcher.server.ts's
+// ambiguous detection). Never auto-attached to either candidate — a merchant must resolve
+// these manually (e.g. by adding a product_id/handle column, or editing the review after a
+// deliberate choice), the same "leave it and ask, never guess" contract missingProducts uses.
+export interface AmbiguousProductIssue {
+  row: number;
+  productTitle: string | null;
+  candidateProductIds: string[];
+  reason: string;
+}
+
+export interface SkippedMediaIssue {
+  row: number;
+  url: string;
   reason: string;
 }
 
@@ -42,6 +62,15 @@ export interface ImportResult {
   // Genuinely distinct from `errors`: the row was well-formed, but no product in this store
   // matched any of the identifiers productMatcher.server.ts tried, in priority order.
   missingProducts: MissingProductIssue[];
+  // Genuinely distinct from missingProducts: the row matched MORE than one plausible product
+  // with no reliable way to choose — never auto-attached to either. See
+  // productMatcher.server.ts's ambiguous detection and AmbiguousProductIssue's own comment.
+  ambiguousProducts: AmbiguousProductIssue[];
+  // Real ReviewMedia rows created (or, in a dry run, that would be created) referencing a
+  // validated external URL — see reviewMedia.server.ts's validateImportedMediaUrl. Never a
+  // server-side download; the URL is stored as-is.
+  importedMedia: number;
+  skippedMedia: SkippedMediaIssue[];
   // Recoverable, non-blocking signals worth a merchant's attention — currently just "this row
   // only matched by fuzzy title similarity, double-check it landed on the right product."
   warnings: ImportRowIssue[];
@@ -49,10 +78,15 @@ export interface ImportResult {
   errors: ImportRowIssue[];
   // True when no Review rows were actually written — see importReviews's dryRun parameter.
   dryRun: boolean;
+  // The real ImportBatch row this import created — undefined for a dry run (no batch is ever
+  // created for a preview) or for a file-level rejection. Lets the caller link straight to
+  // Import History / offer Undo without a second lookup.
+  importBatchId?: string;
   // Derived, top-level counts mirroring the arrays above — computed once here so callers (the
   // route, this file's own report) don't each re-derive the same arithmetic from the arrays.
   matchedRows: number;
   unmatchedRows: number;
+  ambiguousRows: number;
   duplicateRows: number;
   invalidRows: number;
   // What importing this exact file for real would create (or did create, outside a dry run) —
@@ -116,19 +150,23 @@ interface ExistingReviewMatch {
 // Stable-ID-based dedup when the source provides one (Judge.me's metaobject_handle), falling
 // back to the same content-based check used when it doesn't. ID-based matching is strictly
 // more reliable: a review whose title/body was edited between two exports would slip past a
-// content-only check, but never past its own stable ID. Returns the existing row's own title
-// (not just whether a match exists) so importRow can decide whether a safe title-backfill
-// applies — see its own comment for that logic.
+// content-only check, but never past its own stable ID. Scoped by importSource in addition to
+// externalId — an id string is only guaranteed unique within its own source platform's id
+// space, so two different platforms could coincidentally export the same externalId for two
+// genuinely different reviews. Returns the existing row's own title (not just whether a match
+// exists) so importRow can decide whether a safe title-backfill applies — see its own comment
+// for that logic.
 async function findExistingReview(
   storeId: string,
   productId: string,
   reviewerName: string,
   content: string,
   externalId: string | undefined,
+  importSource: string,
 ): Promise<ExistingReviewMatch | null> {
   if (externalId) {
     const existingById = await prisma.review.findFirst({
-      where: { storeId, externalId, deletedAt: null },
+      where: { storeId, externalId, importSource, deletedAt: null },
       select: { id: true, title: true },
     });
     if (existingById) return existingById;
@@ -140,6 +178,19 @@ async function findExistingReview(
   });
 
   return existingByContent ?? null;
+}
+
+// The source platform's own verified-purchase claim/inference (see e.g. judgeme.server.ts's
+// inferVerifiedFromSource) is a real, useful signal worth preserving for transparency — but it
+// is NEVER reliable enough to become IMAGYN's own verifiedPurchase flag, which Trust
+// Certification and the storefront "Verified Buyer" badge both read as real, IMAGYN-checked
+// evidence. See docs/IMPORT_VERIFICATION_POLICY.md. An empty string means the source made no
+// claim at all (most platforms' documented schemas have no verified column) — kept as `null`,
+// not coerced to `false`, so "unknown" is never displayed as an explicit "not verified" claim.
+function parseSourceVerified(raw: string): boolean | null {
+  const trimmed = raw.trim();
+  if (trimmed === "") return null;
+  return parseBoolean(trimmed);
 }
 
 function buildMissingProductIssue(row: ParsedReviewRow): MissingProductIssue {
@@ -167,13 +218,55 @@ function buildMissingProductIssue(row: ParsedReviewRow): MissingProductIssue {
   };
 }
 
+function buildAmbiguousProductIssue(row: ParsedReviewRow, candidateProductIds: string[]): AmbiguousProductIssue {
+  return {
+    row: row.row,
+    productTitle: row.product || null,
+    candidateProductIds,
+    reason: `"${row.product || "This row"}" matches ${candidateProductIds.length} products in your catalog with no reliable way to tell which one — add a product_id, handle, or SKU column to this row, or edit the review after import.`,
+  };
+}
+
 type RowOutcome =
-  | { kind: "imported"; tier: ProductMatchTier | null }
-  | { kind: "pending"; tier: ProductMatchTier | null }
+  | { kind: "imported"; tier: ProductMatchTier | null; mediaImported: number; mediaSkipped: SkippedMediaIssue[] }
+  | { kind: "pending"; tier: ProductMatchTier | null; mediaImported: number; mediaSkipped: SkippedMediaIssue[] }
   | { kind: "duplicate"; tier: ProductMatchTier | null }
   | { kind: "repaired"; tier: ProductMatchTier | null }
   | { kind: "missing_product" }
+  | { kind: "ambiguous_product"; candidateProductIds: string[] }
   | { kind: "error"; reason: string; tier: ProductMatchTier | null };
+
+// Validates every URL in a row's media column (works identically for a dry run and a real
+// import — validation is pure, no writes) and splits them into what's safe to store vs. what
+// must be skipped and why. See reviewMedia.server.ts's validateImportedMediaUrl for the actual
+// safety rules (https-only, no private/internal hosts, looks like an image).
+function validateRowMedia(row: ParsedReviewRow): { valid: string[]; skipped: SkippedMediaIssue[] } {
+  if (!row.mediaUrls) return { valid: [], skipped: [] };
+
+  const urls = parseImportedMediaUrls(row.mediaUrls).slice(0, MAX_IMPORTED_MEDIA_PER_REVIEW * 2);
+  const valid: string[] = [];
+  const skipped: SkippedMediaIssue[] = [];
+
+  for (const url of urls) {
+    const reason = validateImportedMediaUrl(url);
+    if (reason) {
+      skipped.push({ row: row.row, url, reason });
+    } else {
+      valid.push(url);
+    }
+  }
+
+  // Cap AFTER validation, not before — a merchant should see every genuinely invalid URL
+  // reported, not have some silently disappear into an early slice.
+  const overflow = valid.length - MAX_IMPORTED_MEDIA_PER_REVIEW;
+  if (overflow > 0) {
+    for (const url of valid.splice(MAX_IMPORTED_MEDIA_PER_REVIEW)) {
+      skipped.push({ row: row.row, url, reason: `Exceeds the ${MAX_IMPORTED_MEDIA_PER_REVIEW}-image-per-review limit.` });
+    }
+  }
+
+  return { valid, skipped };
+}
 
 async function importRow(
   storeId: string,
@@ -181,6 +274,8 @@ async function importRow(
   matcher: ProductMatcher,
   admin: AdminApiContext | null,
   dryRun: boolean,
+  source: ImportSource,
+  importBatchId: string | null,
 ): Promise<RowOutcome> {
   const match = await matcher.match(
     {
@@ -194,6 +289,10 @@ async function importRow(
     },
     admin,
   );
+
+  if (match.ambiguous) {
+    return { kind: "ambiguous_product", candidateProductIds: match.candidateProductIds ?? [] };
+  }
 
   if (!match.productId) {
     return { kind: "missing_product" };
@@ -214,7 +313,7 @@ async function importRow(
 
   const reviewerName = row.reviewerName || "Anonymous";
 
-  const existing = await findExistingReview(storeId, match.productId, reviewerName, row.content, row.externalId);
+  const existing = await findExistingReview(storeId, match.productId, reviewerName, row.content, row.externalId, source);
   if (existing) {
     // A safe, narrow repair: this row is a duplicate of a review already in the database, but
     // that existing row has no title and this file's row does. This is exactly the shape a
@@ -233,32 +332,64 @@ async function importRow(
     return { kind: "duplicate", tier: match.tier };
   }
 
+  const media = validateRowMedia(row);
+
   // A dry run must never write anything — every check above (matching, validation, duplicate
   // detection) already ran for real against the live database, so the reported outcome is
-  // exactly what a real import would do; only the actual Review row is skipped.
+  // exactly what a real import would do; only the actual Review/ReviewMedia rows are skipped.
   if (dryRun) {
     const willAutoApprove = parseAutoApprove(row.status);
-    return willAutoApprove ? { kind: "imported", tier: match.tier } : { kind: "pending", tier: match.tier };
+    return willAutoApprove
+      ? { kind: "imported", tier: match.tier, mediaImported: media.valid.length, mediaSkipped: media.skipped }
+      : { kind: "pending", tier: match.tier, mediaImported: media.valid.length, mediaSkipped: media.skipped };
   }
 
-  const review = await createReview(storeId, {
-    productId: match.productId,
-    rating,
-    title: row.title || null,
-    content: row.content,
-    reviewerName,
-    reviewerEmail: row.reviewerEmail || null,
-    reviewerLocation: row.reviewerLocation || null,
-    verifiedPurchase: parseBoolean(row.verifiedPurchase),
-    createdAt: parseDate(row.createdAt),
-    autoApprove: parseAutoApprove(row.status),
-    externalId: row.externalId || null,
-    reply: row.reply || null,
-    repliedAt: parseDate(row.repliedAt ?? "") ?? null,
-    skipFlowTrigger: true,
-  });
+  let review;
+  try {
+    review = await createReview(storeId, {
+      productId: match.productId,
+      rating,
+      title: row.title || null,
+      content: row.content,
+      reviewerName,
+      reviewerEmail: row.reviewerEmail || null,
+      reviewerLocation: row.reviewerLocation || null,
+      // NEVER set true from imported data — see docs/IMPORT_VERIFICATION_POLICY.md and
+      // parseSourceVerified's own comment. A source's claim/inference is preserved separately
+      // below as sourceVerified for transparency, never fed into IMAGYN's own verified-purchase
+      // flag, which Trust Certification and the storefront badge read as real, checked evidence.
+      verifiedPurchase: false,
+      sourceVerified: parseSourceVerified(row.verifiedPurchase),
+      createdAt: parseDate(row.createdAt),
+      autoApprove: parseAutoApprove(row.status),
+      externalId: row.externalId || null,
+      reply: row.reply || null,
+      repliedAt: parseDate(row.repliedAt ?? "") ?? null,
+      skipFlowTrigger: true,
+      importSource: source,
+      importBatchId,
+    });
+  } catch (error) {
+    // The real DB-level unique constraint (storeId, importSource, externalId) is a
+    // defense-in-depth backstop behind findExistingReview's own check-before-create — it should
+    // only ever fire on a genuine race (two imports of the same file running concurrently), but
+    // when it does, that's still just a duplicate, not a hard failure the whole row should error
+    // out on.
+    if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2002") {
+      return { kind: "duplicate", tier: match.tier };
+    }
+    throw error;
+  }
 
-  return review.isPublished ? { kind: "imported", tier: match.tier } : { kind: "pending", tier: match.tier };
+  if (media.valid.length > 0) {
+    await prisma.reviewMedia.createMany({
+      data: media.valid.map((url) => ({ reviewId: review.id, url, type: "IMAGE" as const })),
+    });
+  }
+
+  return review.isPublished
+    ? { kind: "imported", tier: match.tier, mediaImported: media.valid.length, mediaSkipped: media.skipped }
+    : { kind: "pending", tier: match.tier, mediaImported: media.valid.length, mediaSkipped: media.skipped };
 }
 
 function emptyResult(totalRows: number, dryRun: boolean): ImportResult {
@@ -269,11 +400,15 @@ function emptyResult(totalRows: number, dryRun: boolean): ImportResult {
     duplicates: 0,
     titlesRepaired: 0,
     missingProducts: [],
+    ambiguousProducts: [],
+    importedMedia: 0,
+    skippedMedia: [],
     warnings: [],
     errors: [],
     dryRun,
     matchedRows: 0,
     unmatchedRows: 0,
+    ambiguousRows: 0,
     duplicateRows: 0,
     invalidRows: 0,
     expectedImportedCount: 0,
@@ -296,6 +431,7 @@ export async function importReviews(
   fileContent: string,
   admin: AdminApiContext | null = null,
   dryRun: boolean = false,
+  filename: string | null = null,
 ): Promise<ImportResult> {
   const logPrefix = `[import:${source}]${dryRun ? "[dry-run]" : ""} store=${storeId}`;
   const importer = getImporter(source);
@@ -304,11 +440,27 @@ export async function importReviews(
   if (fileErrors.length > 0) {
     // File-level rejection (e.g. a required column genuinely missing) — logged distinctly from
     // per-row rejections below, since this means zero rows were even attempted, not that some
-    // rows individually failed.
+    // rows individually failed. Recorded in Import History too (a "failed" batch is still real
+    // history a merchant benefits from seeing, not just a transient error message) — but only
+    // for a real attempt, never for a dry run.
     console.error(`${logPrefix} file rejected before any row was processed:`, fileErrors);
     const result = emptyResult(0, dryRun);
     result.errors = fileErrors.map((reason) => ({ row: 0, reason }));
     result.invalidRows = result.errors.length;
+
+    if (!dryRun) {
+      await prisma.importBatch.create({
+        data: {
+          storeId,
+          source,
+          filename,
+          totalRows: 0,
+          status: "failed",
+          errorDetail: JSON.parse(JSON.stringify({ fileErrors })),
+        },
+      });
+    }
+
     return result;
   }
 
@@ -317,16 +469,28 @@ export async function importReviews(
   const matcher = await ProductMatcher.forStore(storeId);
   const result = emptyResult(rows.length, dryRun);
 
-  for (const row of rows) {
-    const outcome = await importRow(storeId, row, matcher, admin, dryRun);
+  // A dry run is a preview, not a real event worth appearing in Import History — only a real,
+  // committed import creates a batch record. Created before any row is processed so every
+  // review created below can carry a real importBatchId from the moment it exists, rather than
+  // a second pass to backfill it after the fact.
+  const batch = dryRun
+    ? null
+    : await prisma.importBatch.create({
+        data: { storeId, source, filename, totalRows: rows.length, status: "processing" },
+      });
 
-    if (outcome.kind !== "missing_product" && outcome.tier) {
+  for (const row of rows) {
+    const outcome = await importRow(storeId, row, matcher, admin, dryRun, source, batch?.id ?? null);
+
+    if (outcome.kind !== "missing_product" && outcome.kind !== "ambiguous_product" && outcome.tier) {
       result.matchTierCounts[outcome.tier] += 1;
     }
 
     switch (outcome.kind) {
       case "imported":
         result.imported += 1;
+        result.importedMedia += outcome.mediaImported;
+        result.skippedMedia.push(...outcome.mediaSkipped);
         if (outcome.tier === "fuzzy") {
           result.warnings.push({ row: row.row, reason: `Matched "${row.product}" by approximate title similarity — verify this landed on the right product.` });
         }
@@ -334,6 +498,8 @@ export async function importReviews(
       case "pending":
         result.imported += 1;
         result.heldForModeration += 1;
+        result.importedMedia += outcome.mediaImported;
+        result.skippedMedia.push(...outcome.mediaSkipped);
         if (outcome.tier === "fuzzy") {
           result.warnings.push({ row: row.row, reason: `Matched "${row.product}" by approximate title similarity — verify this landed on the right product.` });
         }
@@ -353,6 +519,12 @@ export async function importReviews(
         console.warn(`${logPrefix} row ${issue.row} unmatched: ${issue.reason}`);
         break;
       }
+      case "ambiguous_product": {
+        const issue = buildAmbiguousProductIssue(row, outcome.candidateProductIds);
+        result.ambiguousProducts.push(issue);
+        console.warn(`${logPrefix} row ${issue.row} ambiguous: ${issue.reason}`);
+        break;
+      }
       case "error":
         result.errors.push({ row: row.row, reason: outcome.reason });
         console.warn(`${logPrefix} row ${row.row} invalid: ${outcome.reason}`);
@@ -361,6 +533,7 @@ export async function importReviews(
   }
 
   result.unmatchedRows = result.missingProducts.length;
+  result.ambiguousRows = result.ambiguousProducts.length;
   result.invalidRows = result.errors.length;
   // A repaired row is a duplicate that got its title backfilled — still counted as a
   // duplicate for the merchant-facing "X duplicates" total (it created no new review), with
@@ -376,7 +549,99 @@ export async function importReviews(
       `tiers=${JSON.stringify(result.matchTierCounts)}`,
   );
 
+  if (batch) {
+    await prisma.importBatch.update({
+      where: { id: batch.id },
+      data: {
+        imported: result.imported,
+        duplicates: result.duplicateRows,
+        heldForModeration: result.heldForModeration,
+        unmatchedRows: result.unmatchedRows,
+        invalidRows: result.invalidRows,
+        status: "completed",
+        // Plain-object interfaces don't structurally satisfy Prisma's InputJsonValue type
+        // (it wants an index signature); a JSON round-trip is the standard, safe way to hand
+        // an already-JSON-safe value (no Date/undefined/class instances here) to a Json column.
+        errorDetail: JSON.parse(
+          JSON.stringify({
+            missingProducts: result.missingProducts,
+            ambiguousProducts: result.ambiguousProducts,
+            skippedMedia: result.skippedMedia,
+            errors: result.errors,
+            warnings: result.warnings,
+          }),
+        ),
+      },
+    });
+    result.importBatchId = batch.id;
+  }
+
   return result;
+}
+
+// Undoes exactly one import batch's own rows — never a broader delete. Scoped by both
+// importBatchId AND storeId (a defense-in-depth belt-and-suspenders check: importBatchId alone
+// is already globally unique, but requiring storeId too means a cross-tenant id can never be
+// undone even if one were somehow guessed/leaked). Soft-deletes via the same deletedAt
+// mechanism every other review deletion in this app already uses — an undone import is
+// recoverable in principle (support could un-soft-delete), not a hard, unrecoverable erase.
+// Refuses to run a second time on an already-undone batch (status stays authoritative), and
+// refuses entirely once real merchant activity (approve/reject/reply/helpful vote) could have
+// happened — see the isSafeToUndo check in the caller for that decision; this function itself
+// only performs the mechanical part once a caller has already decided it's safe.
+export async function undoImportBatch(storeId: string, importBatchId: string): Promise<{ restored: number }> {
+  const batch = await prisma.importBatch.findFirst({ where: { id: importBatchId, storeId } });
+  if (!batch) {
+    throw new Error("Import batch not found.");
+  }
+  if (batch.status === "undone") {
+    throw new Error("This import has already been undone.");
+  }
+
+  const { count } = await prisma.review.updateMany({
+    where: { storeId, importBatchId, deletedAt: null },
+    data: { deletedAt: new Date() },
+  });
+
+  await prisma.importBatch.update({
+    where: { id: importBatchId },
+    data: { status: "undone", undoneAt: new Date() },
+  });
+
+  await recordDataAccess({
+    storeId,
+    actor: "admin:import_undo",
+    action: "undo",
+    resource: "review.import_batch",
+    success: true,
+    detail: `batch ${importBatchId}: ${count} review(s) soft-deleted`,
+  });
+
+  return { restored: count };
+}
+
+export async function listImportBatches(storeId: string, limit: number = 50) {
+  return prisma.importBatch.findMany({
+    where: { storeId },
+    orderBy: { createdAt: "desc" },
+    take: limit,
+  });
+}
+
+export async function getImportBatch(storeId: string, importBatchId: string) {
+  return prisma.importBatch.findFirst({ where: { id: importBatchId, storeId } });
+}
+
+// CSV injection (aka "formula injection") protection — OWASP's standard mitigation: a cell
+// value that OPENS with a character a spreadsheet application treats as a formula prefix
+// (=, +, -, @, or a raw tab/carriage-return that can smuggle one after a delimiter) gets a
+// leading apostrophe, which every major spreadsheet app renders as literal text, not a
+// formula. Applied to every free-text field a merchant or the source platform authored — the
+// content/reviewer fields the exact "IMAGYN Reviews > Export > merchant re-opens their own
+// file in Excel" path a malicious review could otherwise exploit.
+const FORMULA_PREFIX_PATTERN = /^[=+\-@\t\r]/;
+function sanitizeCsvCell(value: string): string {
+  return FORMULA_PREFIX_PATTERN.test(value) ? `'${value}` : value;
 }
 
 const EXPORT_COLUMNS = [
@@ -467,20 +732,20 @@ export async function exportReviewsToCsv(storeId: string, now: Date = new Date()
   ]);
 
   const data = reviews.map((review) => ({
-    product: review.product?.name ?? review.productTitle ?? "",
+    product: sanitizeCsvCell(review.product?.name ?? review.productTitle ?? ""),
     product_id: review.product?.shopifyProductId ?? "",
     product_handle: review.product?.handle ?? "",
     rating: review.rating,
-    title: review.title ?? "",
-    content: review.content,
-    reviewer_name: review.reviewerName,
+    title: sanitizeCsvCell(review.title ?? ""),
+    content: sanitizeCsvCell(review.content),
+    reviewer_name: sanitizeCsvCell(review.reviewerName),
     reviewer_email: review.reviewerEmail ?? "",
-    reviewer_location: review.reviewerLocation ?? "",
+    reviewer_location: sanitizeCsvCell(review.reviewerLocation ?? ""),
     verified_purchase: review.verifiedPurchase ? "true" : "false",
     created_at: review.createdAt.toISOString(),
     status: review.status,
     external_id: review.externalId ?? "",
-    reply: review.reply ?? "",
+    reply: sanitizeCsvCell(review.reply ?? ""),
     reply_date: review.repliedAt?.toISOString() ?? "",
   }));
 

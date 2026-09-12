@@ -26,6 +26,7 @@ const FIELD_ALIASES: FieldAliases = {
   externalId: ["external_id", "review_id", "id"],
   reply: ["reply", "merchant_reply", "response"],
   repliedAt: ["reply_date", "replied_at", "response_date"],
+  mediaUrls: ["images", "image_url", "image_urls", "photo_url", "photo_urls", "picture_urls"],
 };
 
 const REQUIRED_FIELDS: Array<keyof FieldAliases> = ["product", "rating", "content"];
