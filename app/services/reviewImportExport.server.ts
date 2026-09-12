@@ -434,6 +434,13 @@ export function detectImportColumns(source: ImportSource, fileContent: string): 
 // duplicate detection) runs for real against the live database, but no Review row is ever
 // created — see importRow's dryRun branch. Used to produce an accurate "what would happen"
 // report before committing to a real import.
+//
+// Untrusted-file-size guard: a merchant-uploaded export is arbitrary external input long
+// before it reaches this function (this app never generated it) — bounding it here stops a
+// pathological or malicious file from parsing millions of rows into memory in one request,
+// independent of whatever limit (if any) the upload UI itself enforces client-side.
+export const MAX_IMPORT_FILE_SIZE_BYTES = 25 * 1024 * 1024;
+
 export async function importReviews(
   storeId: string,
   source: ImportSource,
@@ -444,6 +451,16 @@ export async function importReviews(
   columnOverrides?: HeaderOverrides,
 ): Promise<ImportResult> {
   const logPrefix = `[import:${source}]${dryRun ? "[dry-run]" : ""} store=${storeId}`;
+
+  if (Buffer.byteLength(fileContent, "utf-8") > MAX_IMPORT_FILE_SIZE_BYTES) {
+    const sizeMb = (MAX_IMPORT_FILE_SIZE_BYTES / (1024 * 1024)).toFixed(0);
+    console.error(`${logPrefix} rejected — file exceeds the ${sizeMb}MB import limit`);
+    const result = emptyResult(0, dryRun);
+    result.errors = [{ row: 0, reason: `This file is larger than the ${sizeMb}MB import limit. Split it into smaller files and import each separately.` }];
+    result.invalidRows = 1;
+    return result;
+  }
+
   const importer = getImporter(source);
   const { rows, fileErrors } = importer.parse(fileContent, columnOverrides);
 

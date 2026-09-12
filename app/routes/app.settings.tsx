@@ -69,6 +69,7 @@ export default function SettingsWorkspace() {
         { label: "Email Studio", href: "/app/email-studio" },
         { label: "Product Management", href: "/app/products" },
         { label: "Product Groups", href: "/app/settings/productGroups", internal: true },
+        { label: "Import Reviews", href: "/app/settings/import", internal: true },
       ],
     },
     {

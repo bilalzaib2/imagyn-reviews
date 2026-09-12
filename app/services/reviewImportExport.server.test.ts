@@ -247,6 +247,7 @@ const {
   listImportBatches,
   detectImportColumns,
   MAX_EXPORT_ROWS,
+  MAX_IMPORT_FILE_SIZE_BYTES,
   EXPORT_RATE_LIMIT_MAX,
   ExportRateLimitError,
 } = await import("./reviewImportExport.server");
@@ -340,6 +341,28 @@ describe("importReviews — manual column-mapping overrides", () => {
     const result = await importReviews("store_1", "csv", csv, null, false, null, { title: "nonexistent_column" });
 
     expect(result.imported).toBe(1);
+  });
+});
+
+describe("importReviews — untrusted-file-size guard", () => {
+  it("rejects a file larger than MAX_IMPORT_FILE_SIZE_BYTES before any parsing occurs", async () => {
+    seedProduct({ id: "db_1", name: "Widget" });
+    const oversized = GENERIC_CSV_HEADER + "x".repeat(MAX_IMPORT_FILE_SIZE_BYTES + 1);
+
+    const result = await importReviews("store_1", "csv", oversized);
+
+    expect(result.totalRows).toBe(0);
+    expect(result.errors[0].reason).toMatch(/limit/i);
+    expect(fakeReviews).toHaveLength(0);
+  });
+
+  it("accepts a file right at the boundary", async () => {
+    seedProduct({ id: "db_1", name: "Widget" });
+    const csv = GENERIC_CSV_HEADER + '"Widget",5,"Fine",Jane\n';
+
+    const result = await importReviews("store_1", "csv", csv);
+
+    expect(result.errors).toHaveLength(0);
   });
 });
 
