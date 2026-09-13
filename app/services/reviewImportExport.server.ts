@@ -5,7 +5,7 @@ import prisma from "../db.server";
 import { createReview, updateReview } from "./review.server";
 import { getImporter } from "./importers/provider.server";
 import { ProductMatcher, type ProductMatchTier } from "./importers/productMatcher.server";
-import type { ImportSource, ParsedReviewRow, HeaderOverrides, ColumnDetectionResult } from "./importers/types";
+import type { ImportSource, ParsedReviewRow, HeaderOverrides, ColumnDetectionResult, PublicationMode } from "./importers/types";
 import { recordDataAccess } from "./auditLog.server";
 import { parseImportedMediaUrls, validateImportedMediaUrl, MAX_IMPORTED_MEDIA_PER_REVIEW } from "./reviewMedia.server";
 
@@ -142,6 +142,17 @@ function parseAutoApprove(raw: string): boolean {
   return normalized === "" || normalized === "approved" || normalized === "published" || parseBoolean(raw);
 }
 
+// The merchant's explicit choice (see PublicationMode's own comment) always wins over a row's
+// own status column for "approved"/"pending" — those two modes are a deliberate uniform
+// override, not a fallback. Only "preserve" (the default) defers to parseAutoApprove's
+// per-row, source-driven logic. Never silently ignores the merchant's choice, and never
+// auto-publishes without one — "preserve" is itself a choice the wizard shows and defaults to.
+function resolveAutoApprove(raw: string, mode: PublicationMode): boolean {
+  if (mode === "approved") return true;
+  if (mode === "pending") return false;
+  return parseAutoApprove(raw);
+}
+
 interface ExistingReviewMatch {
   id: string;
   title: string | null;
@@ -276,6 +287,7 @@ async function importRow(
   dryRun: boolean,
   source: ImportSource,
   importBatchId: string | null,
+  publicationMode: PublicationMode,
 ): Promise<RowOutcome> {
   const match = await matcher.match(
     {
@@ -338,7 +350,7 @@ async function importRow(
   // detection) already ran for real against the live database, so the reported outcome is
   // exactly what a real import would do; only the actual Review/ReviewMedia rows are skipped.
   if (dryRun) {
-    const willAutoApprove = parseAutoApprove(row.status);
+    const willAutoApprove = resolveAutoApprove(row.status, publicationMode);
     return willAutoApprove
       ? { kind: "imported", tier: match.tier, mediaImported: media.valid.length, mediaSkipped: media.skipped }
       : { kind: "pending", tier: match.tier, mediaImported: media.valid.length, mediaSkipped: media.skipped };
@@ -361,7 +373,7 @@ async function importRow(
       verifiedPurchase: false,
       sourceVerified: parseSourceVerified(row.verifiedPurchase),
       createdAt: parseDate(row.createdAt),
-      autoApprove: parseAutoApprove(row.status),
+      autoApprove: resolveAutoApprove(row.status, publicationMode),
       externalId: row.externalId || null,
       reply: row.reply || null,
       repliedAt: parseDate(row.repliedAt ?? "") ?? null,
@@ -449,6 +461,7 @@ export async function importReviews(
   dryRun: boolean = false,
   filename: string | null = null,
   columnOverrides?: HeaderOverrides,
+  publicationMode: PublicationMode = "preserve",
 ): Promise<ImportResult> {
   const logPrefix = `[import:${source}]${dryRun ? "[dry-run]" : ""} store=${storeId}`;
 
@@ -507,7 +520,7 @@ export async function importReviews(
       });
 
   for (const row of rows) {
-    const outcome = await importRow(storeId, row, matcher, admin, dryRun, source, batch?.id ?? null);
+    const outcome = await importRow(storeId, row, matcher, admin, dryRun, source, batch?.id ?? null, publicationMode);
 
     if (outcome.kind !== "missing_product" && outcome.kind !== "ambiguous_product" && outcome.tier) {
       result.matchTierCounts[outcome.tier] += 1;

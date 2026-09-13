@@ -588,3 +588,90 @@
     Claude Code's own safety classifier as fabricating verified-review data, which this
     feature's entire premise forbids. The empty-state path (zero verified reviews → badge
     hidden) *is* live-confirmed.
+
+## Review Import & Migration Engine — verification-fabrication fix, ambiguous matching, Import History/Undo, publication-mode choice, security hardening (2026-09-13)
+
+-   **Root problem found during the mandatory pre-build audit**: the existing importer wrote a
+    source platform's own verification claim (e.g. Judge.me's `source === "email"` inference)
+    directly onto `Review.verifiedPurchase` — the exact field Trust Certification's verified
+    count and the storefront "Verified Buyer" badge treat as real, checked evidence (see the
+    2026-09-09 Trust Certification entry above, whose entire premise depends on that field
+    never being fabricated). A migration could silently inflate a store's verified-review count
+    with reviews IMAGYN never actually checked. Fixed at three layers: schema (`Review` gained
+    `sourceVerified Boolean?`, structurally separate from `verifiedPurchase`), the write path
+    (`importRow()` now hardcodes `verifiedPurchase: false` for every imported review,
+    unconditionally — not a default, not overridable by a column mapping), and tests (rewrote
+    two pre-existing Judge.me/Loox tests that had asserted the old, unsafe behavior). Confirmed
+    by grep that `sourceVerified` is written in exactly one place and read in zero trust/AI/
+    storefront call sites. Full policy in the new `docs/IMPORT_VERIFICATION_POLICY.md`, which
+    several code comments in `reviewImportExport.server.ts` reference by name.
+-   **Ambiguous product matches are now a real, reported third outcome** (`productMatcher.
+    server.ts`), not silently resolved by whichever candidate happened to be found or scored
+    first: an exact/normalized-title collision (two products sharing a title) or a fuzzy match
+    where the top two scores land within 0.05 of each other both return `ambiguous: true` with
+    every candidate product ID, and `importRow()` refuses to attach the review to either —
+    reported in `ImportResult.ambiguousProducts`, same "leave it and ask, never guess" contract
+    `missingProducts` already used.
+-   **Real Import History, not a log line**: a new `ImportBatch` model records every real
+    (non-dry-run) import — source, filename, row counts, status, and a soft-delete-based
+    `undoImportBatch` scoped to that batch's own reviews and that store's `storeId` only (two
+    regression tests confirm it refuses a batch belonging to another store and refuses a
+    second undo of an already-undone batch). `Review` gained `importBatchId`/`importSource` and
+    a real DB-level `@@unique([storeId, importSource, externalId])` constraint as
+    defense-in-depth behind the pre-existing application-level duplicate check, closing the
+    race-condition gap a check-then-insert always leaves open; a constraint violation (`P2002`)
+    is caught and reported as an ordinary duplicate, never a hard row failure.
+-   **Publication state is now an explicit merchant choice, not just source-derived**: a new
+    `PublicationMode` (`preserve` / `approved` / `pending`), shown and defaulted in the import
+    wizard, threaded through `importReviews()`/`importRow()` via `resolveAutoApprove()`.
+    `preserve` (the pre-existing behavior) still trusts each row's own status column; the other
+    two apply uniformly regardless of what the source claims. Never a silent auto-publish —
+    `preserve` is itself a shown, selected default.
+-   **Merchant-correctable column mapping before any row is committed**: `detectColumns()`
+    (header-only `Papa.parse` with `preview: 1`, no DB access) powers a new "Analyze file" step
+    in the import wizard; a merchant can override any auto-detected mapping (or force a field
+    unmapped) via `HeaderOverrides`, which every existing adapter (`csv`/`judgeme`/`loox`/
+    `stamped`, plus the new `alireviews`) now accepts identically through the shared
+    `delimitedParser.server.ts` core — no per-adapter duplication.
+-   **New Ali Reviews adapter** (`alireviews.server.ts`), built against Ali Reviews' own
+    documented CSV import template (`help.alireviews.io`, quoted verbatim in the file's header
+    comment) — real code and real tests, explicitly **not** verified against a live export, the
+    same honest status Loox and Stamped already carried. Rivyo/Ryviu remains unbuilt —
+    insufficient public documentation to build without guessing column names.
+-   **Media import stays validate-only, never-fetch** (`reviewMedia.server.ts` gained
+    `validateImportedMediaUrl`/`parseImportedMediaUrls`): https-only, blocks loopback/private/
+    link-local hosts (full RFC1918 range), requires a recognizable image extension. Closes an
+    SSRF surface a "re-host every imported image" design would have opened; the tradeoff is an
+    imported image becomes unavailable if the source's own CDN URL later goes offline — an
+    explicit, accepted limitation, not an oversight.
+-   **OWASP CSV/formula-injection protection added to CSV export** (`sanitizeCsvCell`): any
+    cell value starting with `=`, `+`, `-`, `@`, tab, or CR gets a leading apostrophe so a
+    malicious imported review's content can never execute as a spreadsheet formula when a
+    merchant opens their own exported CSV. A 25MB untrusted-file-size guard was added to the
+    import side, checked before any parsing.
+-   **Conservative customer matching required no new code, only verification**: the `Review`
+    model has no `customerId`/`shopifyCustomerId` column at all, for organic or imported
+    reviews, and the import pipeline never calls the Shopify Admin API for a customer lookup
+    (`admin` is used exclusively by the two live product-matching tiers). Locked in with new
+    tests rather than left as an implicit, undocumented property.
+-   **Live-verified against the real dev store (verveonline) via direct script execution, not
+    interactive browser clicking**: the embedded admin's iframe content is invisible to this
+    session's browser-automation accessibility tree (a previously-documented, environment-level
+    limitation, re-confirmed here), so the real `.server.ts` functions were exercised directly
+    against the real local database instead — a dry run against a real (but different
+    merchant's) Judge.me export correctly reported all rows unmatched with zero writes, and one
+    small synthetic test row was really imported, verified field-by-field
+    (`verifiedPurchase: false`, `sourceVerified: true`, correct `importBatchId`/media count),
+    and then removed via the real `undoImportBatch` — exercising the actual production code
+    path, not a mocked unit test.
+-   **10,000-row scale test added** (`reviewImportExport.server.test.ts`) against the mocked
+    Prisma layer used throughout this test file — confirms no crash, correct aggregate counts,
+    and idempotency at scale (re-importing the identical 10,000-row file produces zero new
+    rows). A real-Postgres load test at this scale was intentionally not run against any shared
+    database, consistent with this project's database-safety rules (`CLAUDE.md`: assume
+    `DATABASE_URL` is production unless proven otherwise).
+-   **Corrected a stale, now-dangerous roadmap item**: `PROJECT_STATE.md`'s "Next" list
+    previously asked to show a Verified Buyer badge on the storefront for any imported review
+    the source claimed was verified — exactly the fabrication this phase's verification model
+    now structurally prevents. Marked superseded rather than silently deleted, with an
+    explanation of what replaced it, so the reasoning isn't lost.

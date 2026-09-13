@@ -6,6 +6,32 @@
 // throughout this codebase.
 export type ImportSource = "csv" | "judgeme" | "loox" | "stamped" | "alireviews" | "ryviu";
 
+// How a merchant wants imported reviews' published/pending state decided. "preserve" (the
+// default) trusts each row's own status column where the source provides one; "approved" and
+// "pending" are an explicit merchant override applied uniformly to every row in the file,
+// regardless of what (if anything) the source claims. Never auto-publish silently — the
+// merchant always makes this choice, even implicitly by accepting the "preserve" default shown
+// in the import wizard. See reviewImportExport.server.ts's resolveAutoApprove.
+export type PublicationMode = "preserve" | "approved" | "pending";
+
+export const PUBLICATION_MODES: Array<{ value: PublicationMode; label: string; description: string }> = [
+  {
+    value: "preserve",
+    label: "Preserve source status",
+    description: "Use each review's own approved/pending status from the source file where it provides one.",
+  },
+  {
+    value: "approved",
+    label: "Import all as approved",
+    description: "Publish every imported review immediately, regardless of its source status.",
+  },
+  {
+    value: "pending",
+    label: "Import all as pending",
+    description: "Hold every imported review for your own moderation before it publishes.",
+  },
+];
+
 export interface ParsedReviewRow {
   // 1-based row number as it appeared in the source file, for error messages a merchant can
   // actually act on ("Row 14: ...") rather than an opaque array index.

@@ -9,7 +9,14 @@ import { Section } from "../components/ui/Section";
 import { EmptyState } from "../components/ui/EmptyState";
 import { authenticateAdminDeduped } from "../services/auth-dedupe.server";
 import { getOrCreateStore } from "../services/store.server";
-import { IMPORT_SOURCES, type ImportSource, type HeaderOverrides, type ColumnDetectionResult } from "../services/importers/types";
+import {
+  IMPORT_SOURCES,
+  PUBLICATION_MODES,
+  type ImportSource,
+  type HeaderOverrides,
+  type ColumnDetectionResult,
+  type PublicationMode,
+} from "../services/importers/types";
 import {
   importReviews,
   detectImportColumns,
@@ -70,12 +77,16 @@ export const action = async ({ request }: ActionFunctionArgs): Promise<ActionDat
         // Malformed override payload — proceed with no overrides rather than failing the
         // whole import over a client-side JSON bug.
       }
+      const publicationModeRaw = String(formData.get("publicationMode") || "preserve");
+      const publicationMode: PublicationMode = PUBLICATION_MODES.some((mode) => mode.value === publicationModeRaw)
+        ? (publicationModeRaw as PublicationMode)
+        : "preserve";
 
       if (!fileContent.trim()) {
         return { ok: false, intent, error: "The file is empty." };
       }
 
-      const result = await importReviews(store.id, source, fileContent, admin, intent === "preview", filename, overrides);
+      const result = await importReviews(store.id, source, fileContent, admin, intent === "preview", filename, overrides, publicationMode);
       return { ok: true, intent, result };
     }
 
@@ -138,6 +149,7 @@ export default function ImportReviewsPage() {
   const [fileContent, setFileContent] = useState<string | null>(null);
   const [isDragging, setIsDragging] = useState(false);
   const [overrides, setOverrides] = useState<HeaderOverrides>({});
+  const [publicationMode, setPublicationMode] = useState<PublicationMode>("preserve");
   const [toast, setToast] = useState<{ content: string; error?: boolean } | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -207,6 +219,7 @@ export default function ImportReviewsPage() {
     formData.append("fileContent", fileContent);
     formData.append("filename", fileName || "");
     formData.append("overrides", JSON.stringify(overrides));
+    formData.append("publicationMode", publicationMode);
     previewFetcher.submit(formData, { method: "post" });
   };
 
@@ -218,6 +231,7 @@ export default function ImportReviewsPage() {
     formData.append("fileContent", fileContent);
     formData.append("filename", fileName || "");
     formData.append("overrides", JSON.stringify(overrides));
+    formData.append("publicationMode", publicationMode);
     importFetcher.submit(formData, { method: "post" });
   };
 
@@ -340,6 +354,23 @@ export default function ImportReviewsPage() {
                   })}
                 </tbody>
               </table>
+            </div>
+
+            <p className={managementStyles.settingsGroupLabel}>Publication status</p>
+            <div className={styles.sourceGrid} role="radiogroup" aria-label="Publication status for imported reviews">
+              {PUBLICATION_MODES.map((mode) => (
+                <button
+                  key={mode.value}
+                  type="button"
+                  role="radio"
+                  aria-checked={publicationMode === mode.value}
+                  className={`${styles.sourceCard} ${publicationMode === mode.value ? styles.sourceCardActive : ""}`}
+                  onClick={() => setPublicationMode(mode.value)}
+                >
+                  <span className={styles.sourceCardLabel}>{mode.label}</span>
+                  <span className={managementStyles.mutedText}>{mode.description}</span>
+                </button>
+              ))}
             </div>
 
             <div className={styles.actionsBar}>

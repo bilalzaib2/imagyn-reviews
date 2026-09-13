@@ -1419,6 +1419,20 @@ export default function ReviewsPage() {
                             <span className={styles.detailMetaValue}>{selectedReview.moderationReason}</span>
                           </div>
                         ) : null}
+                        {selectedReview.importSource ? (
+                          <div className={styles.detailMetaRow}>
+                            <span className={styles.detailMetaLabel}>Source</span>
+                            <span className={styles.detailMetaValue}>
+                              {IMPORT_SOURCES.find((s) => s.value === selectedReview.importSource)?.label ??
+                                selectedReview.importSource}
+                              {selectedReview.sourceVerified === null
+                                ? " · verification not claimed by source"
+                                : selectedReview.sourceVerified
+                                  ? " · source claimed verified purchase (not IMAGYN-verified)"
+                                  : " · source did not claim a verified purchase"}
+                            </span>
+                          </div>
+                        ) : null}
                       </div>
 
                       <div className={styles.detailSection}>

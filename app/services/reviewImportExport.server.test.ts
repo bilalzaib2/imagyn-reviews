@@ -457,6 +457,69 @@ describe("importReviews — generic CSV", () => {
   });
 });
 
+describe("importReviews — publication-state mapping options (merchant choice, never silent)", () => {
+  const STATUS_CSV_HEADER = "product,rating,content,reviewer_name,status\n";
+
+  it("default ('preserve') respects each row's own status column", async () => {
+    seedProduct({ id: "db_1", name: "P1" });
+    const csv =
+      STATUS_CSV_HEADER +
+      'P1,5,"Approved row",Jane,approved\n' +
+      'P1,4,"Pending row",John,pending\n';
+
+    const result = await importReviews("store_1", "csv", csv);
+
+    expect(result.imported).toBe(2);
+    expect(fakeReviews[0].status).toBe("APPROVED");
+    expect(fakeReviews[0].isPublished).toBe(true);
+    expect(fakeReviews[1].status).toBe("PENDING");
+    expect(fakeReviews[1].isPublished).toBe(false);
+  });
+
+  it("'approved' mode publishes every row immediately, even ones the source marked pending", async () => {
+    seedProduct({ id: "db_1", name: "P1" });
+    const csv =
+      STATUS_CSV_HEADER +
+      'P1,5,"Was approved",Jane,approved\n' +
+      'P1,4,"Was pending",John,pending\n';
+
+    const result = await importReviews("store_1", "csv", csv, null, false, null, undefined, "approved");
+
+    expect(result.imported).toBe(2);
+    expect(fakeReviews[0].status).toBe("APPROVED");
+    expect(fakeReviews[0].isPublished).toBe(true);
+    expect(fakeReviews[1].status).toBe("APPROVED");
+    expect(fakeReviews[1].isPublished).toBe(true);
+  });
+
+  it("'pending' mode holds every row for moderation, even ones the source marked approved", async () => {
+    seedProduct({ id: "db_1", name: "P1" });
+    const csv =
+      STATUS_CSV_HEADER +
+      'P1,5,"Was approved",Jane,approved\n' +
+      'P1,4,"Was pending",John,pending\n';
+
+    const result = await importReviews("store_1", "csv", csv, null, false, null, undefined, "pending");
+
+    expect(result.imported).toBe(2);
+    expect(result.heldForModeration).toBe(2);
+    expect(fakeReviews[0].status).toBe("PENDING");
+    expect(fakeReviews[0].isPublished).toBe(false);
+    expect(fakeReviews[1].status).toBe("PENDING");
+    expect(fakeReviews[1].isPublished).toBe(false);
+  });
+
+  it("a dry run's preview counts reflect the chosen publication mode, not the source status", async () => {
+    seedProduct({ id: "db_1", name: "P1" });
+    const csv = STATUS_CSV_HEADER + 'P1,5,"Was pending",Jane,pending\n';
+
+    const preview = await importReviews("store_1", "csv", csv, null, true, null, undefined, "approved");
+
+    expect(preview.expectedImportedCount).toBe(1);
+    expect(fakeReviews).toHaveLength(0);
+  });
+});
+
 describe("importReviews — Judge.me", () => {
   const JUDGEME_HEADER =
     '"title","body","rating","review_date","source","curated","reviewer_name","reviewer_email","product_id","product_handle","reply","reply_date","picture_urls","ip_address","location","metaobject_handle"\n';
@@ -1171,6 +1234,143 @@ describe("importReviews — verification safety (imported reviews never fabricat
 
     expect(result.imported).toBe(1);
     expect(fakeReviews[0].importSource).toBe("judgeme");
+  });
+});
+
+describe("importReviews — reply import (never fabricate a merchant reply or its date)", () => {
+  it("imports a merchant reply and its date exactly as the source provides them", async () => {
+    seedProduct({ id: "db_1", name: "P1" });
+    const csv =
+      "product,rating,content,reviewer_name,reply,reply_date\n" +
+      'P1,5,Great,Casey,"Thanks for the kind words!",2026-01-15\n';
+
+    const result = await importReviews("store_1", "csv", csv);
+
+    expect(result.imported).toBe(1);
+    const db = (await import("../db.server")).default as unknown as {
+      review: { create: { mock: { calls: Array<[{ data: Record<string, unknown> }]> } } };
+    };
+    const createdData = db.review.create.mock.calls[db.review.create.mock.calls.length - 1][0].data;
+    expect(createdData.reply).toBe("Thanks for the kind words!");
+    expect(createdData.repliedAt).toBeInstanceOf(Date);
+    expect((createdData.repliedAt as Date).getFullYear()).toBe(2026);
+  });
+
+  it("leaves reply and repliedAt null when the source provides neither — never fabricates one", async () => {
+    seedProduct({ id: "db_1", name: "P1" });
+    const csv = "product,rating,content,reviewer_name\nP1,5,Great,Casey\n";
+
+    const result = await importReviews("store_1", "csv", csv);
+
+    expect(result.imported).toBe(1);
+    const db = (await import("../db.server")).default as unknown as {
+      review: { create: { mock: { calls: Array<[{ data: Record<string, unknown> }]> } } };
+    };
+    const createdData = db.review.create.mock.calls[db.review.create.mock.calls.length - 1][0].data;
+    expect(createdData.reply).toBeNull();
+    expect(createdData.repliedAt).toBeNull();
+  });
+
+  it("imports a reply's text without inventing a date when the source has no reply-date column", async () => {
+    seedProduct({ id: "db_1", name: "P1" });
+    const csv = "product,rating,content,reviewer_name,reply\nP1,5,Great,Casey,Thanks!\n";
+
+    const result = await importReviews("store_1", "csv", csv);
+
+    expect(result.imported).toBe(1);
+    const db = (await import("../db.server")).default as unknown as {
+      review: { create: { mock: { calls: Array<[{ data: Record<string, unknown> }]> } } };
+    };
+    const createdData = db.review.create.mock.calls[db.review.create.mock.calls.length - 1][0].data;
+    expect(createdData.reply).toBe("Thanks!");
+    expect(createdData.repliedAt).toBeNull();
+  });
+});
+
+describe("importReviews — large-scale import (10,000 rows, chunked row-by-row processing)", () => {
+  it("imports a real-shaped 10,000-row CSV correctly, with accurate counts and no crash or timeout", async () => {
+    seedProduct({ id: "db_1", name: "Blue Widget" });
+    seedProduct({ id: "db_2", name: "Red Gadget" });
+
+    let csv = "product,rating,content,reviewer_name,reviewer_email,external_id\n";
+    for (let i = 0; i < 10_000; i += 1) {
+      const product = i % 2 === 0 ? "Blue Widget" : "Red Gadget";
+      csv += `"${product}",${(i % 5) + 1},"Review number ${i}",Reviewer${i},reviewer${i}@example.com,ext-${i}\n`;
+    }
+
+    const startedAt = Date.now();
+    const result = await importReviews("store_1", "csv", csv);
+    const durationMs = Date.now() - startedAt;
+
+    expect(result.totalRows).toBe(10_000);
+    expect(result.imported).toBe(10_000);
+    expect(result.errors).toHaveLength(0);
+    expect(result.missingProducts).toHaveLength(0);
+    expect(fakeReviews).toHaveLength(10_000);
+    // Loose upper bound only — this test's in-memory fake Prisma does a real O(n) linear
+    // `.filter()` scan per duplicate-check call (see findFirst's mock above), so its own
+    // overhead grows with the fixture size in a way real Postgres (which uses the
+    // (storeId, importSource, externalId) and (storeId, deletedAt, createdAt) indexes) does
+    // not. This bound exists only to catch a genuine runaway (e.g. accidental O(n^2) in the
+    // real import code itself, not the test's own mock), not as a production throughput claim.
+    expect(durationMs).toBeLessThan(60_000);
+
+    // Re-running the identical 10,000-row file must not create 20,000 rows — idempotency has
+    // to hold at scale, not just for the small fixtures used elsewhere in this file.
+    const second = await importReviews("store_1", "csv", csv);
+    expect(second.duplicates).toBe(10_000);
+    expect(second.imported).toBe(0);
+    expect(fakeReviews).toHaveLength(10_000);
+  }, 120_000);
+});
+
+describe("importReviews — conservative customer matching (never fabricate a Shopify customer link)", () => {
+  it("stores the imported reviewer's email as opaque free text, unmodified, with no customer lookup performed", async () => {
+    seedProduct({ id: "db_1", name: "P1" });
+
+    const csv = "product,rating,content,reviewer_name,reviewer_email\nP1,5,Great,Casey,casey@example.com\n";
+    const result = await importReviews("store_1", "csv", csv);
+
+    expect(result.imported).toBe(1);
+    const db = (await import("../db.server")).default as unknown as {
+      review: { create: { mock: { calls: Array<[{ data: Record<string, unknown> }]> } } };
+    };
+    const createdData = db.review.create.mock.calls[db.review.create.mock.calls.length - 1][0].data;
+    expect(createdData.reviewerEmail).toBe("casey@example.com");
+    // No field on the create payload ever attaches a Shopify customer record — the Review
+    // model has no customerId/shopifyCustomerId column at all (see schema.prisma), so there is
+    // no mechanism by which an import could fabricate or infer a verified-customer link even
+    // from a real-looking email address.
+    expect(createdData).not.toHaveProperty("customerId");
+    expect(createdData).not.toHaveProperty("shopifyCustomerId");
+  });
+
+  it("imports a row with no email at all without inventing one", async () => {
+    seedProduct({ id: "db_1", name: "P1" });
+
+    const csv = "product,rating,content,reviewer_name\nP1,5,Great,Casey\n";
+    const result = await importReviews("store_1", "csv", csv);
+
+    expect(result.imported).toBe(1);
+    const db = (await import("../db.server")).default as unknown as {
+      review: { create: { mock: { calls: Array<[{ data: Record<string, unknown> }]> } } };
+    };
+    const createdData = db.review.create.mock.calls[db.review.create.mock.calls.length - 1][0].data;
+    expect(createdData.reviewerEmail).toBeNull();
+  });
+
+  it("never calls the Shopify Admin API while importing a row (product matching only, never customer lookup)", async () => {
+    seedProduct({ id: "db_1", name: "P1" });
+    const adminQuerySpy = vi.fn();
+    const fakeAdmin = { graphql: adminQuerySpy } as unknown as import("@shopify/shopify-app-react-router/server").AdminApiContext;
+
+    const csv = "product,rating,content,reviewer_name,reviewer_email\nP1,5,Great,Casey,casey@example.com\n";
+    const result = await importReviews("store_1", "csv", csv, fakeAdmin, false);
+
+    expect(result.imported).toBe(1);
+    // Generic CSV rows match by title/handle only — never trigger a live Admin API call, and
+    // certainly never one keyed on the reviewer's email to look up or attach a customer.
+    expect(adminQuerySpy).not.toHaveBeenCalled();
   });
 });
 

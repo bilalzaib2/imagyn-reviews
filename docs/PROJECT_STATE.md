@@ -603,6 +603,24 @@ relabeled.** **Nothing was committed or pushed.**
     list. CSV export includes `product_id`/`product_handle` alongside the display title, so
     a re-import always resolves at the top of the priority chain. See
     [DECISIONS.md](./DECISIONS.md).
+-   **Review Import & Migration Engine (2026-09-13)** — evolved the V2 importer above into a
+    real migration destination for merchants leaving Judge.me/Loox/Stamped/Ali Reviews/
+    generic CSV platforms, not a replacement. Full detail in
+    [IMPORT_VERIFICATION_POLICY.md](./IMPORT_VERIFICATION_POLICY.md); summary: a strict
+    separation between IMAGYN's own `verifiedPurchase` (always `false` on import) and a
+    source's own claim (`sourceVerified`, audit-only, never read by Trust/AI/storefront
+    logic) so migration can never fabricate or inflate verified reviews; ambiguous product
+    matches (title collisions, fuzzy near-ties) are reported and never auto-attached; a real
+    `ImportBatch`-backed Import History with safe, store-scoped Undo; a merchant-facing
+    column-mapping/correction step before any row is committed; a merchant choice between
+    preserving each row's source publication status vs. importing all-approved or
+    all-pending; a DB-level unique constraint as race-condition defense-in-depth behind
+    existing application-level duplicate detection; validate-only (never-fetch) media import
+    to close an SSRF surface; OWASP CSV/formula-injection protection on export; and new Loox/
+    Stamped/Ali Reviews adapters (real code, unverified against a live export — see the
+    policy doc for what that does and doesn't mean). ~85 new/updated tests in
+    `reviewImportExport.server.test.ts` plus `productMatcher.server.test.ts`'s ambiguous-match
+    coverage.
 -   **Video Reviews** (2026-08-24) — one video per review (MP4/MOV, up to 100MB, up to 60
     seconds) alongside existing photo uploads, generalizing the same Shopify Files storage
     provider and review-media service rather than duplicating them
@@ -647,14 +665,15 @@ relabeled.** **Nothing was committed or pushed.**
     update pricing/feature copy entered directly in the Partner Dashboard to match the
     Free/Pro lineup and its "Coming soon" tags once the listing text exists
 4.  Resend inbound webhook (populates `delivered` / `opened` statuses)
-5.  **BLOCKED — NEEDS REAL EXPORT SAMPLE.** Loox (JSON export, needs its own `Importer`, not
-    `delimitedParser.server.ts`) / Stamped / Ryviu / Ali Reviews importer parsers. Audited
-    2026-08-17: no real or sample export file for any of the four sources exists anywhere in
-    this repo — only architectural placeholders (`ImportSource` type, `IMPORT_SOURCES` picker
-    entries marked `available: false`, a comment noting the extension point). Do not build
-    against a guessed/invented format — this is exactly what caused Judge.me's importer to
-    reject every real file until it was rebuilt against an actual 2,540-row export. Needs a
-    real export sample from each source before implementation starts on that source.
+5.  **PARTIALLY UNBLOCKED (2026-09-13).** Loox, Stamped, and Ali Reviews now have real,
+    tested `Importer` adapters built against each platform's own documented CSV
+    import-template column spec (Ali Reviews' verified via `help.alireviews.io`) — see
+    `docs/IMPORT_VERIFICATION_POLICY.md` §2. None of the three has been verified against a
+    real merchant export file yet (still no real sample available for any of them) — do not
+    describe them as production-verified until that changes, the same standard Judge.me was
+    held to before its 2,540-row real-export rebuild. Ryviu remains unbuilt: public
+    documentation only confirms a partial column set with no confirmed reviewer-name/content
+    columns, not enough to build without guessing.
 6.  Brand Studio V2 — remaining scope, now that deterministic Brand Match AND the AI
     suggestion layer (accent color + typography) have both shipped (see Completed above):
     URL analysis (extract brand signals from a merchant-supplied URL — no existing
@@ -671,8 +690,16 @@ relabeled.** **Nothing was committed or pushed.**
     a further set (white label, custom email domain/SMTP, API access, webhooks, unlimited
     team members) that has no path to any merchant today since Scale isn't public — decide
     whether those fold into Pro or wait for a future tier before building them.
-9.  Preserve verified-review provenance on Judge.me import and show a Verified Buyer /
-    Verified Review badge on the storefront for imported reviews that were originally
-    verified. Discovered during the Requests UX pass (2026-08-16): reviews imported from
-    Judge.me that were verified at the source currently render with no Verified badge on our
-    storefront — the importer isn't capturing/mapping that flag today.
+9.  **SUPERSEDED (2026-09-13) — do not implement as originally worded.** This item
+    previously asked to show a Verified Buyer badge on the storefront for any imported review
+    the source claimed was verified. The Review Import & Migration Engine phase (see Completed
+    below and `docs/IMPORT_VERIFICATION_POLICY.md`) deliberately built the opposite of this:
+    a source's verification claim is now captured (`Review.sourceVerified`) but is
+    **structurally never** read by the storefront badge, Trust Certification, or any other
+    IMAGYN-verification consumer — only IMAGYN's own `verifiedPurchase` (always `false` for
+    every imported review) drives that badge. Auto-promoting a source claim to a real
+    verified badge would let a migration inflate "verified reviews" with no actual evidence,
+    which is exactly what this phase's brief prohibited. If a future feature wants a
+    merchant-initiated way to promote a specific source-verified import to a real
+    IMAGYN-verified review, it needs its own deliberate, auditable action — not an automatic
+    mapping from `sourceVerified`.
