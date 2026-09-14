@@ -142,6 +142,23 @@
     html += '<div class="imagyn-carousel__content">';
     html += '<div class="imagyn-carousel__text">';
 
+    // One deliberate hierarchy, matching the reading order a shopper actually wants: the
+    // review itself first, then exactly one rating (the review's own — never a second,
+    // unrelated rating; see collection-rating-badges.js's [class*="imagyn-"] exclusion guard
+    // for a real cross-widget collision that used to inject a second one here), then who
+    // wrote it, then what it's about. Grouped inside .imagyn-carousel__text (not the product
+    // row) so this whole cluster — not just the excerpt — shares the centering treatment
+    // .imagyn-component-carousel.css applies to non-media cards.
+    if (review.title) {
+      html += '<p class="imagyn-review-card__title">' + escapeHtml(review.title) + "</p>";
+    }
+    html += '<p class="imagyn-review-card__body">' + escapeHtml(review.content) + "</p>";
+
+    if (settings.showRating) {
+      html += '<span class="imagyn-review-card__stars" aria-hidden="true">' + renderStars(review.rating) + "</span>";
+      html += '<span class="imagyn-visually-hidden">Rated ' + review.rating + " out of 5 stars</span>";
+    }
+
     var identity = "";
     if (settings.showName) {
       identity += '<span class="imagyn-review-card__name">' + escapeHtml(review.reviewerName) + "</span>";
@@ -158,16 +175,6 @@
       }
       html += "</div>";
     }
-
-    if (settings.showRating) {
-      html += '<span class="imagyn-review-card__stars" aria-hidden="true">' + renderStars(review.rating) + "</span>";
-      html += '<span class="imagyn-visually-hidden">Rated ' + review.rating + " out of 5 stars</span>";
-    }
-
-    if (review.title) {
-      html += '<p class="imagyn-review-card__title">' + escapeHtml(review.title) + "</p>";
-    }
-    html += '<p class="imagyn-review-card__body">' + escapeHtml(review.content) + "</p>";
     html += "</div>";
 
     if (settings.showProduct && review.product) {

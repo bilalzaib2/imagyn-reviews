@@ -32,7 +32,16 @@
      so it costs nothing either way. */
   align-content: start;
   gap: var(--imagyn-space-px-md, 16px);
-  font-family: var(--imagyn-font-family);
+  /* Unlike every other Imagyn widget (which deliberately locks to Helvetica/system fonts,
+     see imagyn-tokens.css), this carousel is a large, editorial, storefront-facing section —
+     the same category of surface a competing app's own review carousel already inherits the
+     theme's real typography for, and looking distinctly "off-brand" from the merchant's own
+     site there reads as a bolted-on widget rather than a native section. Modern Shopify
+     themes (Dawn and its derivatives, confirmed on a real installed premium theme) expose
+     --font-body-family on :root for exactly this kind of integration; falling back to
+     Imagyn's own token when a theme doesn't define it keeps today's behavior unchanged on
+     any theme that doesn't opt in. */
+  font-family: var(--font-body-family, var(--imagyn-font-family));
   color: var(--imagyn-color-text, inherit);
   width: 100%;
   max-width: var(--imagyn-carousel-max-width, 1200px);
@@ -235,6 +244,7 @@
 
 .imagyn-carousel__slide .imagyn-review-card:not(.imagyn-review-card--media) .imagyn-review-card__body {
   -webkit-line-clamp: 6;
+  max-height: 9em;
 }
 
 .imagyn-carousel__content {
@@ -269,18 +279,31 @@
    hardcoded pixel guess. This is what keeps every card's title/stars/product row landing in
    the same place regardless of review length. Media cards clamp tighter (2 lines) than
    text-only cards (3): the photo is already carrying most of the card's visual weight, so
-   the excerpt only needs to supply context, not the full review. */
+   the excerpt only needs to supply context, not the full review.
+
+   !important on display/box-orient/overflow: confirmed via a real merchant theme that a
+   host page's own CSS can win the cascade on just the `display` property here (observed
+   computed display: flow-root instead of -webkit-box, even though this rule's own
+   -webkit-line-clamp value still applied) — display is what makes -webkit-line-clamp's box
+   layout actually clip the text; without it the body renders full-height and visually runs
+   into the product row below. This widget runs inside arbitrary, uncontrolled host themes,
+   so !important here is a deliberate defensive boundary, not a specificity shortcut. The
+   max-height alongside each -webkit-line-clamp value is a second, non-negotiable backstop
+   using the same em math as line-height — even a browser/theme combination that ignores
+   line-clamp entirely still can't visually overflow past this height. */
 .imagyn-carousel__slide .imagyn-review-card__body {
-  display: -webkit-box;
-  -webkit-box-orient: vertical;
+  display: -webkit-box !important;
+  -webkit-box-orient: vertical !important;
   -webkit-line-clamp: 3;
-  overflow: hidden;
+  overflow: hidden !important;
   min-height: 4.5em;
+  max-height: 4.5em;
 }
 
 .imagyn-review-card--media .imagyn-review-card__body {
   -webkit-line-clamp: 2;
   min-height: 3em;
+  max-height: 3em;
 }
 
 /* "Review length" Theme Editor setting — medium is the two defaults set above; small/large
@@ -289,19 +312,23 @@
 .imagyn-carousel[data-review-length="small"] .imagyn-review-card--media .imagyn-review-card__body {
   -webkit-line-clamp: 1;
   min-height: 1.5em;
+  max-height: 1.5em;
 }
 
 .imagyn-carousel[data-review-length="large"] .imagyn-review-card--media .imagyn-review-card__body {
   -webkit-line-clamp: 4;
   min-height: 6em;
+  max-height: 6em;
 }
 
 .imagyn-carousel[data-review-length="small"] .imagyn-review-card:not(.imagyn-review-card--media) .imagyn-review-card__body {
   -webkit-line-clamp: 3;
+  max-height: 4.5em;
 }
 
 .imagyn-carousel[data-review-length="large"] .imagyn-review-card:not(.imagyn-review-card--media) .imagyn-review-card__body {
   -webkit-line-clamp: 10;
+  max-height: 15em;
 }
 
 /* "Text size" Theme Editor setting — medium (unset) keeps the shared design-system tokens;

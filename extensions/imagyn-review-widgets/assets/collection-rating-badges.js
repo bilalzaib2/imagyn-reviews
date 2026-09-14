@@ -58,6 +58,13 @@
         return;
       }
 
+      // Never badge an Imagyn widget's own markup as if it were a theme product-grid card —
+      // see the matching guard in findFallbackCards below for the concrete collision this
+      // prevents (the Review Carousel's own per-review "which product" link).
+      if (card.closest('[class*="imagyn-"]')) {
+        return;
+      }
+
       // Dawn renders .card__heading twice per card (a hidden alternate-layout copy plus the
       // visible one); picking the one with a non-null offsetParent selects the rendered one.
       var headingCandidates = card.querySelectorAll(".card__heading");
@@ -139,6 +146,19 @@
 
     links.forEach(function (link) {
       if (link.closest("[" + PROCESSED_ATTR + "]")) {
+        return;
+      }
+
+      // The confirmed real-world collision this guards against: the Review Carousel's own
+      // per-review "which product" link (.imagyn-carousel__product, an <a href="/products/
+      // ...">) matches this fallback's generic product-link heuristic just as well as a real
+      // theme grid card would, so without this exclusion every review card on a real
+      // merchant storefront ended up with a second, unrelated rating badge (this product's
+      // own aggregate rating, from a completely different endpoint) injected into it — see
+      // imagyn-component-carousel.css's card layout for what that second badge visually
+      // collided with. Any current or future Imagyn widget's own markup is excluded the
+      // same way, not just the carousel specifically.
+      if (link.closest('[class*="imagyn-"]')) {
         return;
       }
 
