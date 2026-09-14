@@ -15,11 +15,14 @@
   section wrapper setting ("Make section margins the same as theme"), not duplicated here.
 {% endcomment %}
 <div
-  class="imagyn-carousel{% if block.settings.text_align == 'center' %} imagyn-carousel--align-center{% endif %}"
+  class="imagyn-carousel imagyn-carousel--align-{{ block.settings.text_align }}"
   data-imagyn-carousel
   data-heading="{{ block.settings.heading }}"
   data-review-count="{{ block.settings.review_count }}"
   data-cards-mobile="{{ block.settings.cards_mobile }}"
+  data-review-length="{{ block.settings.review_length }}"
+  data-text-size="{{ block.settings.text_size }}"
+  data-no-image-fallback="{{ block.settings.no_image_fallback }}"
   data-show-rating="{{ block.settings.show_rating }}"
   data-show-date="{{ block.settings.show_date }}"
   data-show-name="{{ block.settings.show_name }}"
@@ -30,7 +33,7 @@
   data-show-dots="{{ block.settings.show_dots }}"
   data-autoplay="{{ block.settings.autoplay }}"
   data-autoplay-speed="{{ block.settings.autoplay_speed }}"
-  style="--imagyn-carousel-cards-desktop: {{ block.settings.cards_desktop }}; --imagyn-carousel-cards-tablet: {{ block.settings.cards_tablet }}; --imagyn-carousel-cards-mobile: {{ block.settings.cards_mobile }}; --imagyn-carousel-gap: {{ block.settings.card_spacing }}px;"
+  style="--imagyn-carousel-cards-desktop: {{ block.settings.cards_desktop }}; --imagyn-carousel-cards-tablet: {{ block.settings.cards_tablet }}; --imagyn-carousel-cards-mobile: {{ block.settings.cards_mobile }}; --imagyn-carousel-gap: {{ block.settings.card_spacing }}px; --imagyn-carousel-image-ratio: {{ block.settings.image_ratio | replace: ':', ' / ' }};"
 >
   <div class="imagyn-carousel__viewport" data-imagyn-carousel-viewport>
     <ul class="imagyn-carousel__track" data-imagyn-carousel-track></ul>
@@ -65,13 +68,26 @@
     { "type": "range", "id": "card_spacing", "label": "Spacing between cards", "min": 8, "max": 32, "step": 2, "unit": "px", "default": 16 },
     {
       "type": "select",
+      "id": "image_ratio",
+      "label": "Image ratio",
+      "options": [
+        { "value": "4:3", "label": "4:3" },
+        { "value": "1:1", "label": "1:1" },
+        { "value": "3:4", "label": "3:4" }
+      ],
+      "default": "4:3"
+    },
+    { "type": "header", "content": "Alignment" },
+    {
+      "type": "select",
       "id": "text_align",
       "label": "Text alignment",
       "options": [
         { "value": "left", "label": "Left" },
-        { "value": "center", "label": "Center" }
+        { "value": "center", "label": "Center" },
+        { "value": "right", "label": "Right" }
       ],
-      "default": "left"
+      "default": "center"
     },
     { "type": "header", "content": "Card content" },
     { "type": "checkbox", "id": "show_rating", "label": "Show star rating", "default": true },
@@ -80,6 +96,40 @@
     { "type": "checkbox", "id": "show_images", "label": "Show review photos", "default": true },
     { "type": "checkbox", "id": "show_video", "label": "Show review videos", "default": true },
     { "type": "checkbox", "id": "show_product", "label": "Show product info", "default": true },
+    { "type": "header", "content": "Content" },
+    {
+      "type": "select",
+      "id": "review_length",
+      "label": "Review length",
+      "options": [
+        { "value": "small", "label": "Small" },
+        { "value": "medium", "label": "Medium" },
+        { "value": "large", "label": "Large" }
+      ],
+      "default": "medium"
+    },
+    {
+      "type": "select",
+      "id": "text_size",
+      "label": "Text size",
+      "options": [
+        { "value": "small", "label": "Small" },
+        { "value": "medium", "label": "Medium" },
+        { "value": "large", "label": "Large" }
+      ],
+      "default": "medium"
+    },
+    {
+      "type": "select",
+      "id": "no_image_fallback",
+      "label": "No image fallback",
+      "info": "What to do with a real review that has no photo or video.",
+      "options": [
+        { "value": "text", "label": "Show review text only" },
+        { "value": "hide", "label": "Hide from this carousel" }
+      ],
+      "default": "text"
+    },
     { "type": "header", "content": "Navigation" },
     { "type": "checkbox", "id": "show_arrows", "label": "Show navigation arrows", "default": true },
     { "type": "checkbox", "id": "show_dots", "label": "Show pagination dots", "default": false },

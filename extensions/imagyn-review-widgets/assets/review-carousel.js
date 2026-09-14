@@ -79,6 +79,7 @@
       showDots: bool("data-show-dots", false),
       autoplay: bool("data-autoplay", false),
       autoplaySpeed: isFinite(autoplaySpeed) && autoplaySpeed > 0 ? autoplaySpeed : 5,
+      noImageFallback: container.getAttribute("data-no-image-fallback") || "text",
     };
   }
 
@@ -93,14 +94,21 @@
   // text-only variant otherwise. This is a deliberate two-layout system, not one layout
   // with an optional image bolted on: imagyn-component-carousel.css keys off the
   // imagyn-review-card--media class to size/order each variant completely differently.
+  // show_images/show_video are independent toggles, so a review with both photo and video
+  // media respects whichever of the two the merchant left enabled. Shared by renderSlide (to
+  // pick the one media item a slide shows) and the no_image_fallback "hide" filter (to decide
+  // whether a review counts as having media at all).
+  function getEligibleMedia(review, settings) {
+    return (review.media || []).filter(function (item) {
+      return item.type === "VIDEO" ? settings.showVideo : settings.showImages;
+    });
+  }
+
   function renderSlide(review, settings) {
     // At most one photo/video per slide — a carousel card is a compact preview, not the
     // full review detail (the Product Reviews Widget's gallery/lightbox already covers
-    // that). show_images/show_video are independent toggles, so a review with both photo
-    // and video media respects whichever of the two the merchant left enabled.
-    var eligibleMedia = (review.media || []).filter(function (item) {
-      return item.type === "VIDEO" ? settings.showVideo : settings.showImages;
-    });
+    // that).
+    var eligibleMedia = getEligibleMedia(review, settings);
     var media = eligibleMedia.length > 0 ? eligibleMedia[0] : null;
 
     var html = '<li class="imagyn-carousel__slide" data-review-id="' + escapeHtml(review.id) + '">';
@@ -235,6 +243,16 @@
         }
 
         var reviews = data.reviews || [];
+
+        // "Hide from this carousel": this widget's whole point is showcasing real photo/
+        // video reviews, so a merchant can choose to only ever show reviews that actually
+        // have media rather than mixing in text-only ones. Filtered here (not on the server)
+        // since eligibility depends on this instance's own show_images/show_video settings.
+        if (settings.noImageFallback === "hide") {
+          reviews = reviews.filter(function (review) {
+            return getEligibleMedia(review, settings).length > 0;
+          });
+        }
 
         // Empty state: hide the whole section rather than showing a fake/locked
         // placeholder — matches renderAiSummary/renderMedals's own convention in

@@ -51,7 +51,10 @@
 /* Text alignment is a Theme Editor setting on this block specifically (not a Brand Studio
    token — Brand Studio owns color/typography/card-style globally; alignment is a
    structural layout choice scoped to this one section, the same category heading/
-   review_count already are). Left (default) changes nothing from the original markup. */
+   review_count already are). Left changes nothing from the original markup; center is the
+   default (a Judge.me-style centered card composition reads best for this widget's dominant-
+   image treatment). Media stays visually centered/cropped via object-fit regardless of this
+   setting — it only ever affects text content. */
 .imagyn-carousel--align-center .imagyn-review-card {
   text-align: center;
 }
@@ -63,6 +66,19 @@
 
 .imagyn-carousel--align-center .imagyn-carousel__product {
   justify-content: center;
+}
+
+.imagyn-carousel--align-right .imagyn-review-card {
+  text-align: right;
+}
+
+.imagyn-carousel--align-right .imagyn-review-card__header {
+  justify-content: flex-end;
+  flex-wrap: wrap;
+}
+
+.imagyn-carousel--align-right .imagyn-carousel__product {
+  justify-content: flex-end;
 }
 
 /* The true clipping boundary (the "viewport" in viewport/track separation): the track's
@@ -267,6 +283,49 @@
   min-height: 3em;
 }
 
+/* "Review length" Theme Editor setting — medium is the two defaults set above; small/large
+   scale each variant's own clamp proportionally rather than sharing one absolute value,
+   since a media card's excerpt and a text-only card's full review serve different roles. */
+.imagyn-carousel[data-review-length="small"] .imagyn-review-card--media .imagyn-review-card__body {
+  -webkit-line-clamp: 1;
+  min-height: 1.5em;
+}
+
+.imagyn-carousel[data-review-length="large"] .imagyn-review-card--media .imagyn-review-card__body {
+  -webkit-line-clamp: 4;
+  min-height: 6em;
+}
+
+.imagyn-carousel[data-review-length="small"] .imagyn-review-card:not(.imagyn-review-card--media) .imagyn-review-card__body {
+  -webkit-line-clamp: 3;
+}
+
+.imagyn-carousel[data-review-length="large"] .imagyn-review-card:not(.imagyn-review-card--media) .imagyn-review-card__body {
+  -webkit-line-clamp: 10;
+}
+
+/* "Text size" Theme Editor setting — medium (unset) keeps the shared design-system tokens;
+   small/large scale the card's own reading text (title, body, reviewer name) by a fixed
+   ratio rather than swapping to different absolute tokens, so relative hierarchy between
+   them is preserved at every size. */
+.imagyn-carousel[data-text-size="small"] .imagyn-review-card__title,
+.imagyn-carousel[data-text-size="small"] .imagyn-review-card__name {
+  font-size: calc(var(--imagyn-font-size-md, 17px) * 0.85);
+}
+
+.imagyn-carousel[data-text-size="small"] .imagyn-review-card__body {
+  font-size: calc(var(--imagyn-font-size-base, 15px) * 0.85);
+}
+
+.imagyn-carousel[data-text-size="large"] .imagyn-review-card__title,
+.imagyn-carousel[data-text-size="large"] .imagyn-review-card__name {
+  font-size: calc(var(--imagyn-font-size-md, 17px) * 1.15);
+}
+
+.imagyn-carousel[data-text-size="large"] .imagyn-review-card__body {
+  font-size: calc(var(--imagyn-font-size-base, 15px) * 1.15);
+}
+
 /* margin-top: auto pins this to the bottom of the (now equal-height, see .imagyn-carousel__
    slide .imagyn-review-card above) card — every card's product row lands at the same
    vertical position regardless of whether that card also has a title or photo. This is
@@ -315,31 +374,22 @@
 /* Media-first treatment: the photo/video is the card's primary visual content, not a
    supporting thumbnail (this is the actual fix for "review images aren't showing
    prominently" — the data was always there, see review-carousel.js history; the image was
-   just capped small and placed after the text). 4:5 is a deliberate portrait-leaning ratio
-   that reads as real UGC photography rather than a cropped product shot, and gives the
-   image real visual weight even at the narrower per-card widths a 3-4-across desktop
-   carousel produces. No max-height cap: with align-items: stretch removed from the height
-   equation by the media-wrap owning a fixed aspect-ratio (not the whole card), every card in
-   a row can size to its own content without one photo inflating the rest — the same failure
-   mode the old cap was defending against no longer exists at its root. */
+   just capped small and placed after the text). The ratio itself is the merchant's own
+   "Image ratio" Theme Editor setting (--imagyn-carousel-image-ratio, set inline by
+   review_carousel.liquid), so the same one configured value applies at every breakpoint —
+   a merchant who wants a taller/shorter photo controls that directly instead of it being a
+   hardcoded, breakpoint-specific guess. 4:3 (the schema default) keeps the photo genuinely
+   large and dominant while keeping overall card height reasonable on a real phone viewport.
+   No max-height cap: with align-items: stretch removed from the height equation by the
+   media-wrap owning a fixed aspect-ratio (not the whole card), every card in a row can size
+   to its own content without one photo inflating the rest. */
 .imagyn-carousel__media-wrap {
   position: relative;
   width: 100%;
-  aspect-ratio: 4 / 5;
+  aspect-ratio: var(--imagyn-carousel-image-ratio, 4 / 3);
   flex: none;
   background: var(--imagyn-color-border, rgba(0, 0, 0, 0.06));
   overflow: hidden;
-}
-
-/* At the mobile single-card width, a 4:5 image plus the text block below runs noticeably
-   taller than a normal-feeling card — most of it sits below the fold on a real phone
-   viewport. 4:3 keeps the photo genuinely large and dominant (still far bigger than the
-   old 140px cap) while bringing the overall card back to a size that reads as a review
-   card, not a full-screen photo. */
-@media (max-width: 640px) {
-  .imagyn-carousel__media-wrap {
-    aspect-ratio: 4 / 3;
-  }
 }
 
 .imagyn-carousel__media {
