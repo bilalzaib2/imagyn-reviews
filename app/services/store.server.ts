@@ -82,14 +82,17 @@ export async function updateAutoRequestSettings(
   });
 }
 
-// Display-surface controls for the one persisted Store AI Summary (see aiSummary.server.ts) —
-// purely which surfaces show it, never a second summary and never a trigger to (re)generate
-// one. Read by api.reviews.store.tsx (Store Reviews Widget) and reviewSite.server.ts (Public
-// Review Site).
+// Per-surface display controls for the two persisted AI summaries (ProductAiSummary,
+// StoreAiSummary — see aiSummary.server.ts) — purely which surfaces show them, never a
+// second summary and never a trigger to (re)generate one. Read by api.reviews.tsx (Product
+// Reviews Widget), api.reviews.store.tsx (Store Reviews Widget), api.reviews.featured.tsx
+// (Review Carousel), and reviewSite.server.ts (Public Review Site).
 export async function updateAiSummaryDisplaySurfaces(
   id: string,
   data: {
-    aiSummaryOnWidgetEnabled: boolean;
+    aiSummaryOnProductReviewsEnabled: boolean;
+    aiSummaryOnStoreReviewsEnabled: boolean;
+    aiSummaryOnCarouselEnabled: boolean;
     aiSummaryOnReviewSiteEnabled: boolean;
   },
 ) {

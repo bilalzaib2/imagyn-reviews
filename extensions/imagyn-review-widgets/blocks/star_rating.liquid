@@ -30,6 +30,7 @@
       data-show-average-rating="{{ block.settings.show_average_rating }}"
       data-show-review-count="{{ block.settings.show_review_count }}"
       data-show-write-review-button="{{ block.settings.show_write_review_button }}"
+      data-show-ai-summary="{{ block.settings.show_ai_summary }}"
       data-reviews-per-page="{{ block.settings.reviews_per_page }}"
       data-star-color="{{ block.settings.star_color }}"
       data-button-color="{{ block.settings.button_color }}"
@@ -92,6 +93,13 @@
     { "type": "checkbox", "id": "show_average_rating", "label": "Show average rating", "default": true },
     { "type": "checkbox", "id": "show_review_count", "label": "Show review count", "default": true },
     { "type": "checkbox", "id": "show_write_review_button", "label": "Show write review button", "default": true },
+    {
+      "type": "checkbox",
+      "id": "show_ai_summary",
+      "label": "Show AI Summary",
+      "default": true,
+      "info": "This product's own real AI-generated summary, when one has been generated and AI Review Summaries are enabled for this surface in Settings > Growth > Google, SEO & AI."
+    },
     { "type": "range", "id": "reviews_per_page", "label": "Reviews per page", "min": 1, "max": 50, "step": 1, "default": 10 },
 
     { "type": "header", "content": "Appearance" },

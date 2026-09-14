@@ -134,8 +134,11 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
     getProductReviews(reviewProductIds, { status: ReviewStatus.APPROVED, limit: 50 }),
     getStorefrontWidgetSettings(store.id, product.id, "review-list", permissions.canUseMultipleWidgetThemes),
     // Pure cache read — never triggers generation, so this can never slow down or block a
-    // storefront page view. Returns null until a merchant has generated one at least once.
-    getAiSummary(product.id),
+    // storefront page view. Returns null until a merchant has generated one at least once,
+    // and is never even fetched when the merchant has this display surface turned off (see
+    // Store.aiSummaryOnProductReviewsEnabled's own schema comment) — same "omit the data
+    // entirely when disabled" convention api.reviews.store.tsx already uses.
+    store.aiSummaryOnProductReviewsEnabled ? getAiSummary(product.id) : Promise.resolve(null),
     // The aggregated, product-level Media Gallery — every customer photo across this
     // product's approved reviews, independent of which review page/sort is showing.
     getProductMediaGallery(product.id),

@@ -191,6 +191,7 @@
       distribution: isOn(container.getAttribute("data-show-distribution")),
       cta: isOn(container.getAttribute("data-show-cta")),
       achievements: isOn(container.getAttribute("data-show-achievements")),
+      aiSummary: isOn(container.getAttribute("data-show-ai-summary")),
     };
 
     if (maxWidth) {
@@ -204,7 +205,11 @@
     }
 
     html += renderSummaryGrid(summary, ctaLabel, ctaUrl, visibility);
-    html += renderAiSummary(data.storeAiSummary);
+    // Two independent gates, same pattern as the Product Reviews widget: the server only
+    // includes data.storeAiSummary at all when Store.aiSummaryOnStoreReviewsEnabled is on
+    // (see api.reviews.store.tsx), and visibility.aiSummary is this block's own Theme
+    // Editor "Show AI Summary" setting for this specific instance.
+    html += visibility.aiSummary ? renderAiSummary(data.storeAiSummary) : "";
 
     var medalsHtml = visibility.achievements ? renderMedals(data.medals) : "";
     if (medalsHtml) {

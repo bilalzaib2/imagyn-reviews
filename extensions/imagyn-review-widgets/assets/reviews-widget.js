@@ -130,6 +130,11 @@
       overrides.showWriteReviewButton = showWriteReviewButton === "true";
     }
 
+    var showAiSummary = root.getAttribute("data-show-ai-summary");
+    if (showAiSummary === "true" || showAiSummary === "false") {
+      overrides.showAiSummary = showAiSummary === "true";
+    }
+
     var showLoadMoreButton = root.getAttribute("data-show-load-more-button");
     if (showLoadMoreButton === "true" || showLoadMoreButton === "false") {
       overrides.showLoadMoreButton = showLoadMoreButton === "true";
@@ -427,8 +432,13 @@
 
     // Cache-only: aiSummary is whatever the reviews endpoint already had stored (see
     // getAiSummary — a pure read, never a generation trigger), so this never adds latency
-    // or blocks rendering. Renders nothing at all until a merchant has generated one.
-    html += renderAiSummary(aiSummary);
+    // or blocks rendering. Renders nothing at all until a merchant has generated one. Two
+    // independent gates decide whether this ever shows: the server only includes aiSummary
+    // in the response at all when Store.aiSummaryOnProductReviewsEnabled is on (see
+    // api.reviews.tsx), and s.showAiSummary is this block's own Theme Editor "Show AI
+    // Summary" setting — a merchant can turn this specific block instance off without
+    // touching the admin-level surface setting other surfaces still use.
+    html += s.showAiSummary !== false ? renderAiSummary(aiSummary) : "";
     html += renderMedals(medals);
 
     html += "</div>"; // summary

@@ -47,7 +47,7 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
     // per-product fallback. Omitted from the response entirely when the merchant hasn't
     // enabled it, so the widget's own "render nothing until present" check needs no separate
     // enabled/disabled flag threaded through — the data's absence *is* the signal.
-    store.aiSummaryOnWidgetEnabled ? getStoreAiSummary(store.id) : Promise.resolve(null),
+    store.aiSummaryOnStoreReviewsEnabled ? getStoreAiSummary(store.id) : Promise.resolve(null),
   ]);
 
   return json({

@@ -158,17 +158,32 @@ model Store {
   googleFeedEnabled Boolean @default(false)
   googleFeedToken   String? @unique
 
-  // Display-surface controls for the Store AI Summary (see aiSummary.server.ts's
-  // getStoreAiSummary/regenerateStoreAiSummary — the one persisted summary these two flags
-  // gate, never a second copy). Generation and display are deliberately separate concerns:
-  // a summary can exist without being shown anywhere, and turning a surface on/off never
-  // triggers (re)generation — see api.reviews.store.tsx and reviewSite.server.ts, the two
-  // real readers of these flags. The Store AI Summary Theme App Block has no flag here by
-  // design — like every other theme block in this app, adding/removing it in the Theme
-  // Editor *is* its own on/off control (see docs on the "one source of truth per surface"
-  // convention already established for Rating Badge, Review Carousel, etc.).
-  aiSummaryOnWidgetEnabled     Boolean @default(false)
-  aiSummaryOnReviewSiteEnabled Boolean @default(false)
+  // Per-surface display controls for the two persisted AI summaries (ProductAiSummary,
+  // StoreAiSummary — see aiSummary.server.ts). Generation and display are deliberately
+  // separate concerns: a summary can exist without being shown anywhere, and turning a
+  // surface on/off never triggers (re)generation. Real readers: api.reviews.tsx
+  // (aiSummaryOnProductReviewsEnabled), api.reviews.store.tsx
+  // (aiSummaryOnStoreReviewsEnabled), api.reviews.featured.tsx (aiSummaryOnCarouselEnabled
+  // — one flag covers the Review Carousel regardless of whether a given instance ends up
+  // showing the product or store summary; which of the two it shows is decided by Liquid
+  // render context, not a separate setting, per the "no third AI summary type" rule), and
+  // reviewSite.server.ts (aiSummaryOnReviewSiteEnabled). The two standalone AI Summary
+  // Theme App Blocks have no flag here by design — like every other theme block in this
+  // app, adding/removing one in the Theme Editor *is* its own on/off control.
+  //
+  // aiSummaryOnProductReviewsEnabled defaults to true: before this field existed, the
+  // Product Reviews widget showed its product's AI summary unconditionally whenever one
+  // was generated, and this default preserves that behavior for every existing store
+  // rather than silently turning summaries off. aiSummaryOnStoreReviewsEnabled replaces
+  // the old, confusingly-named aiSummaryOnWidgetEnabled (which — despite its generic name —
+  // only ever gated the Store Reviews widget, never the Product Reviews widget); its
+  // migration backfills every store's existing aiSummaryOnWidgetEnabled value so no
+  // store's actual on/off state changes. aiSummaryOnCarouselEnabled is a genuinely new
+  // capability and defaults to false, opt-in like every other new display surface.
+  aiSummaryOnProductReviewsEnabled Boolean @default(true)
+  aiSummaryOnStoreReviewsEnabled   Boolean @default(false)
+  aiSummaryOnCarouselEnabled       Boolean @default(false)
+  aiSummaryOnReviewSiteEnabled     Boolean @default(false)
 
   coupons           Coupon[]
   couponRedemptions CouponRedemption[]

@@ -29,7 +29,9 @@ type LoaderData = {
   feed: FeedReadiness;
   reviewSiteUrl: string;
   storeAiSummary: StoreAiSummaryRecord | null;
-  aiSummaryOnWidgetEnabled: boolean;
+  aiSummaryOnProductReviewsEnabled: boolean;
+  aiSummaryOnStoreReviewsEnabled: boolean;
+  aiSummaryOnCarouselEnabled: boolean;
   aiSummaryOnReviewSiteEnabled: boolean;
 };
 
@@ -39,7 +41,9 @@ type ActionData = {
   feedUrl?: string | null;
   distributionFeedUrl?: string | null;
   storeAiSummary?: StoreAiSummaryRecord;
-  aiSummaryOnWidgetEnabled?: boolean;
+  aiSummaryOnProductReviewsEnabled?: boolean;
+  aiSummaryOnStoreReviewsEnabled?: boolean;
+  aiSummaryOnCarouselEnabled?: boolean;
   aiSummaryOnReviewSiteEnabled?: boolean;
 };
 
@@ -57,7 +61,9 @@ export const loader = async ({ request }: LoaderFunctionArgs): Promise<LoaderDat
     feed,
     reviewSiteUrl: getReviewSiteUrl(store.slug),
     storeAiSummary,
-    aiSummaryOnWidgetEnabled: store.aiSummaryOnWidgetEnabled,
+    aiSummaryOnProductReviewsEnabled: store.aiSummaryOnProductReviewsEnabled,
+    aiSummaryOnStoreReviewsEnabled: store.aiSummaryOnStoreReviewsEnabled,
+    aiSummaryOnCarouselEnabled: store.aiSummaryOnCarouselEnabled,
     aiSummaryOnReviewSiteEnabled: store.aiSummaryOnReviewSiteEnabled,
   };
 };
@@ -76,12 +82,16 @@ export const action = async ({ request }: ActionFunctionArgs): Promise<ActionDat
 
     if (intent === "updateAiSummaryDisplaySurfaces") {
       const updated = await updateAiSummaryDisplaySurfaces(store.id, {
-        aiSummaryOnWidgetEnabled: formData.get("aiSummaryOnWidgetEnabled") === "true",
+        aiSummaryOnProductReviewsEnabled: formData.get("aiSummaryOnProductReviewsEnabled") === "true",
+        aiSummaryOnStoreReviewsEnabled: formData.get("aiSummaryOnStoreReviewsEnabled") === "true",
+        aiSummaryOnCarouselEnabled: formData.get("aiSummaryOnCarouselEnabled") === "true",
         aiSummaryOnReviewSiteEnabled: formData.get("aiSummaryOnReviewSiteEnabled") === "true",
       });
       return {
         ok: true,
-        aiSummaryOnWidgetEnabled: updated.aiSummaryOnWidgetEnabled,
+        aiSummaryOnProductReviewsEnabled: updated.aiSummaryOnProductReviewsEnabled,
+        aiSummaryOnStoreReviewsEnabled: updated.aiSummaryOnStoreReviewsEnabled,
+        aiSummaryOnCarouselEnabled: updated.aiSummaryOnCarouselEnabled,
         aiSummaryOnReviewSiteEnabled: updated.aiSummaryOnReviewSiteEnabled,
       };
     }
@@ -157,7 +167,9 @@ export default function SettingsSeoPage() {
     feed,
     reviewSiteUrl,
     storeAiSummary: loaderStoreAiSummary,
-    aiSummaryOnWidgetEnabled: loaderAiSummaryOnWidgetEnabled,
+    aiSummaryOnProductReviewsEnabled: loaderAiSummaryOnProductReviewsEnabled,
+    aiSummaryOnStoreReviewsEnabled: loaderAiSummaryOnStoreReviewsEnabled,
+    aiSummaryOnCarouselEnabled: loaderAiSummaryOnCarouselEnabled,
     aiSummaryOnReviewSiteEnabled: loaderAiSummaryOnReviewSiteEnabled,
   } = useLoaderData<typeof loader>();
   const fetcher = useFetcher<ActionData>();
@@ -165,7 +177,11 @@ export default function SettingsSeoPage() {
   const displaySurfaceFetcher = useFetcher<ActionData>();
   const [enabled, setEnabled] = useState(feed.feedEnabled);
   const [toast, setToast] = useState<{ content: string; error?: boolean } | null>(null);
-  const [aiSummaryOnWidgetEnabled, setAiSummaryOnWidgetEnabled] = useState(loaderAiSummaryOnWidgetEnabled);
+  const [aiSummaryOnProductReviewsEnabled, setAiSummaryOnProductReviewsEnabled] = useState(
+    loaderAiSummaryOnProductReviewsEnabled,
+  );
+  const [aiSummaryOnStoreReviewsEnabled, setAiSummaryOnStoreReviewsEnabled] = useState(loaderAiSummaryOnStoreReviewsEnabled);
+  const [aiSummaryOnCarouselEnabled, setAiSummaryOnCarouselEnabled] = useState(loaderAiSummaryOnCarouselEnabled);
   const [aiSummaryOnReviewSiteEnabled, setAiSummaryOnReviewSiteEnabled] = useState(loaderAiSummaryOnReviewSiteEnabled);
   const feedUrl = fetcher.data?.ok ? fetcher.data.feedUrl : feed.feedUrl;
   const distributionFeedUrl = fetcher.data?.ok ? fetcher.data.distributionFeedUrl : feed.distributionFeedUrl;
@@ -200,11 +216,13 @@ export default function SettingsSeoPage() {
     if (!displaySurfaceFetcher.data) return;
     if (!displaySurfaceFetcher.data.ok) {
       setToast({ content: displaySurfaceFetcher.data.error || "Unable to update display settings.", error: true });
-      setAiSummaryOnWidgetEnabled(loaderAiSummaryOnWidgetEnabled);
+      setAiSummaryOnProductReviewsEnabled(loaderAiSummaryOnProductReviewsEnabled);
+      setAiSummaryOnStoreReviewsEnabled(loaderAiSummaryOnStoreReviewsEnabled);
+      setAiSummaryOnCarouselEnabled(loaderAiSummaryOnCarouselEnabled);
       setAiSummaryOnReviewSiteEnabled(loaderAiSummaryOnReviewSiteEnabled);
       return;
     }
-    setToast({ content: "Store AI Summary display settings updated." });
+    setToast({ content: "AI Summary display settings updated." });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [displaySurfaceFetcher.data]);
 
@@ -222,15 +240,21 @@ export default function SettingsSeoPage() {
     storeSummaryFetcher.submit(formData, { method: "post" });
   };
 
-  const toggleDisplaySurface = (surface: "widget" | "reviewSite", next: boolean) => {
-    const nextWidget = surface === "widget" ? next : aiSummaryOnWidgetEnabled;
+  const toggleDisplaySurface = (surface: "productReviews" | "storeReviews" | "carousel" | "reviewSite", next: boolean) => {
+    const nextProductReviews = surface === "productReviews" ? next : aiSummaryOnProductReviewsEnabled;
+    const nextStoreReviews = surface === "storeReviews" ? next : aiSummaryOnStoreReviewsEnabled;
+    const nextCarousel = surface === "carousel" ? next : aiSummaryOnCarouselEnabled;
     const nextReviewSite = surface === "reviewSite" ? next : aiSummaryOnReviewSiteEnabled;
-    setAiSummaryOnWidgetEnabled(nextWidget);
+    setAiSummaryOnProductReviewsEnabled(nextProductReviews);
+    setAiSummaryOnStoreReviewsEnabled(nextStoreReviews);
+    setAiSummaryOnCarouselEnabled(nextCarousel);
     setAiSummaryOnReviewSiteEnabled(nextReviewSite);
 
     const formData = new FormData();
     formData.set("intent", "updateAiSummaryDisplaySurfaces");
-    formData.set("aiSummaryOnWidgetEnabled", String(nextWidget));
+    formData.set("aiSummaryOnProductReviewsEnabled", String(nextProductReviews));
+    formData.set("aiSummaryOnStoreReviewsEnabled", String(nextStoreReviews));
+    formData.set("aiSummaryOnCarouselEnabled", String(nextCarousel));
     formData.set("aiSummaryOnReviewSiteEnabled", String(nextReviewSite));
     displaySurfaceFetcher.submit(formData, { method: "post" });
   };
@@ -400,12 +424,29 @@ export default function SettingsSeoPage() {
 
           <div>
             <div className={styles.aiFeatureRow}>
-              <div>
+              <div style={{ width: "100%" }}>
                 <p className={styles.aiFeatureName}>AI Review Summaries</p>
                 <p className={styles.aiFeatureDetail}>
                   A short summary of what customers say about a product, shown in your admin and (where enabled) on
                   your storefront. Regenerate any time from a product&apos;s detail page.
                 </p>
+
+                <div style={{ marginTop: "1rem" }}>
+                  <p className={styles.aiFeatureName}>Display on</p>
+                  <p className={styles.aiFeatureDetail}>
+                    Each product&apos;s own summary — never another product&apos;s, never your store-wide summary.
+                  </p>
+                  <Checkbox
+                    label="Product Reviews Widget"
+                    checked={aiSummaryOnProductReviewsEnabled}
+                    onChange={(next) => toggleDisplaySurface("productReviews", next)}
+                    disabled={!canUseAI || displaySurfaceFetcher.state !== "idle"}
+                  />
+                  <p className={managementStyles.mutedText} style={{ marginTop: "0.5rem" }}>
+                    The standalone Product AI Summary Theme App Block has no switch here — add or remove it in the
+                    Shopify Theme Editor to control it, the same as any other Imagyn block.
+                  </p>
+                </div>
               </div>
             </div>
             <div className={styles.aiFeatureRow}>
@@ -462,8 +503,14 @@ export default function SettingsSeoPage() {
                   </p>
                   <Checkbox
                     label="Store Reviews Widget"
-                    checked={aiSummaryOnWidgetEnabled}
-                    onChange={(next) => toggleDisplaySurface("widget", next)}
+                    checked={aiSummaryOnStoreReviewsEnabled}
+                    onChange={(next) => toggleDisplaySurface("storeReviews", next)}
+                    disabled={!canUseAI || displaySurfaceFetcher.state !== "idle"}
+                  />
+                  <Checkbox
+                    label="Review Carousel (when placed outside a product page)"
+                    checked={aiSummaryOnCarouselEnabled}
+                    onChange={(next) => toggleDisplaySurface("carousel", next)}
                     disabled={!canUseAI || displaySurfaceFetcher.state !== "idle"}
                   />
                   <Checkbox
@@ -473,8 +520,10 @@ export default function SettingsSeoPage() {
                     disabled={!canUseAI || displaySurfaceFetcher.state !== "idle"}
                   />
                   <p className={managementStyles.mutedText} style={{ marginTop: "0.5rem" }}>
-                    The Store AI Summary Theme App Block has no switch here — add or remove it in the Shopify Theme
-                    Editor to control it, the same as any other Imagyn block.
+                    The same Review Carousel checkbox also controls it when placed on a product page — there it
+                    shows that product&apos;s own summary instead. The Store AI Summary Theme App Block has no
+                    switch here — add or remove it in the Shopify Theme Editor to control it, the same as any other
+                    Imagyn block.
                   </p>
                 </div>
               </div>

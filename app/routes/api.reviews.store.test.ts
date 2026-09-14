@@ -5,7 +5,7 @@
 // generation from a storefront request.
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-let storeRecord: { id: string; aiSummaryOnWidgetEnabled: boolean };
+let storeRecord: { id: string; aiSummaryOnStoreReviewsEnabled: boolean };
 let storeAiSummaryRecord: { summary: string; reviewCountUsed: number } | null;
 
 vi.mock("../shopify.server", () => ({
@@ -45,7 +45,7 @@ function requestFor(shop: string) {
 }
 
 beforeEach(() => {
-  storeRecord = { id: "store_1", aiSummaryOnWidgetEnabled: false };
+  storeRecord = { id: "store_1", aiSummaryOnStoreReviewsEnabled: false };
   storeAiSummaryRecord = {
     summary: "Customers across every product love the fast shipping and consistent quality.",
     reviewCountUsed: 55,
@@ -69,7 +69,7 @@ describe("api.reviews.store loader — Store Reviews widget data", () => {
   });
 
   it("returns the real, persisted Store AI Summary when this surface is enabled", async () => {
-    storeRecord.aiSummaryOnWidgetEnabled = true;
+    storeRecord.aiSummaryOnStoreReviewsEnabled = true;
     const response = await loader({ request: requestFor("verve.myshopify.com") } as never);
     const json = await response.json();
 
@@ -81,7 +81,7 @@ describe("api.reviews.store loader — Store Reviews widget data", () => {
   });
 
   it("honestly returns null (never a fabricated summary) when enabled but nothing has been generated yet", async () => {
-    storeRecord.aiSummaryOnWidgetEnabled = true;
+    storeRecord.aiSummaryOnStoreReviewsEnabled = true;
     storeAiSummaryRecord = null;
     const response = await loader({ request: requestFor("verve.myshopify.com") } as never);
     const json = await response.json();

@@ -35,6 +35,7 @@
   data-show-distribution="{{ block.settings.show_distribution }}"
   data-show-cta="{{ block.settings.show_cta }}"
   data-show-achievements="{{ block.settings.show_achievements }}"
+  data-show-ai-summary="{{ block.settings.show_ai_summary }}"
 ></div>
 
 <script src="{{ 'imagyn-appearance.js' | asset_url }}" defer></script>
@@ -74,7 +75,14 @@
     { "type": "checkbox", "id": "show_distribution", "label": "Show rating distribution", "default": true },
     { "type": "checkbox", "id": "show_cta", "label": "Show \"Write a Review\" button", "default": true },
     { "type": "text", "id": "cta_label", "label": "Write-a-review button label", "default": "Write a Review" },
-    { "type": "checkbox", "id": "show_achievements", "label": "Show achievements", "default": true }
+    { "type": "checkbox", "id": "show_achievements", "label": "Show achievements", "default": true },
+    {
+      "type": "checkbox",
+      "id": "show_ai_summary",
+      "label": "Show AI Summary",
+      "default": true,
+      "info": "Your store's real AI-generated summary, when one has been generated and AI Review Summaries are enabled for this surface in Settings > Growth > Google, SEO & AI."
+    }
   ]
 }
 {% endschema %}

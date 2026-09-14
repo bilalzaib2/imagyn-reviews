@@ -13,8 +13,9 @@ vi.mock("../shopify.server", () => ({
   },
 }));
 
+let storeRecord: { id: string; aiSummaryOnProductReviewsEnabled: boolean };
 vi.mock("../services/store.server", () => ({
-  getStoreBySlug: vi.fn(async () => ({ id: "store_1" })),
+  getStoreBySlug: vi.fn(async () => storeRecord),
 }));
 
 vi.mock("../services/product.server", () => ({
@@ -66,6 +67,7 @@ function requestFor(params: Record<string, string>) {
 }
 
 beforeEach(() => {
+  storeRecord = { id: "store_1", aiSummaryOnProductReviewsEnabled: true };
   aiSummaryRecord = { summary: "This product's own customers love the fit and quality.", recommendation: "Great for everyday use." };
   getAiSummaryMock.mockClear();
 });
@@ -98,5 +100,25 @@ describe("api.reviews loader — Product AI Summary requires real product contex
     const response = await loader({ request: requestFor({ shop: "verve.myshopify.com", productId: "123" }) } as never);
     const json = await response.json();
     expect(json.aiSummary).toBeNull();
+  });
+});
+
+describe("api.reviews loader — Show AI Summary display surface (aiSummaryOnProductReviewsEnabled)", () => {
+  it("never fetches or returns the AI summary when this surface is disabled", async () => {
+    storeRecord.aiSummaryOnProductReviewsEnabled = false;
+    const response = await loader({ request: requestFor({ shop: "verve.myshopify.com", productId: "123" }) } as never);
+    const json = await response.json();
+
+    expect(getAiSummaryMock).not.toHaveBeenCalled();
+    expect(json.aiSummary).toBeNull();
+  });
+
+  it("still returns the rest of the product data when the AI summary surface is disabled", async () => {
+    storeRecord.aiSummaryOnProductReviewsEnabled = false;
+    const response = await loader({ request: requestFor({ shop: "verve.myshopify.com", productId: "123" }) } as never);
+    const json = await response.json();
+
+    expect(json.ok).toBe(true);
+    expect(json.summary).toEqual({ averageRating: 4.5, totalReviews: 2 });
   });
 });

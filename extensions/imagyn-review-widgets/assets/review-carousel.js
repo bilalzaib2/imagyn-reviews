@@ -76,6 +76,7 @@
       showVideo: bool("data-show-video", true),
       showProduct: bool("data-show-product", true),
       showSummary: bool("data-show-summary", true),
+      showAiSummary: bool("data-show-ai-summary", true),
       showArrows: bool("data-show-arrows", true),
       showDots: bool("data-show-dots", false),
       autoplay: bool("data-autoplay", false),
@@ -122,6 +123,25 @@
       "</span>" +
       '<span class="imagyn-visually-hidden">Average rating ' + average.toFixed(2) + " out of 5 from " + count +
       " review" + (count === 1 ? "" : "s") + "</span>" +
+      "</div>"
+    );
+  }
+
+  // Same markup/classes as reviews-widget.js's/store-reviews.js's own renderAiSummary — one
+  // shared visual component. aiSummary.scope ("product" or "store", set by
+  // api.reviews.featured.tsx's getCarouselAiSummary) decides only WHICH real, persisted
+  // summary this instance is showing — never a third, carousel-specific AI summary type.
+  // Sits above the cards as its own section-level block, not inside any one card, so
+  // integrating it never touches the card layout (image/review/stars/customer/product/
+  // secondary-rating) at all.
+  function renderAiSummary(aiSummary) {
+    if (!aiSummary || !aiSummary.summary) {
+      return "";
+    }
+    return (
+      '<div class="imagyn-ai-summary imagyn-carousel__ai-summary">' +
+      '<p class="imagyn-ratings-section__label imagyn-ai-summary__heading">AI Review Summary</p>' +
+      '<p class="imagyn-ai-summary__text">' + escapeHtml(aiSummary.summary) + "</p>" +
       "</div>"
     );
   }
@@ -287,6 +307,10 @@
     var heading = container.getAttribute("data-heading") || "";
     var limit = container.getAttribute("data-review-count") || "12";
     var settings = readSettings(container);
+    // Only present when this block instance renders on a product page (see
+    // review_carousel.liquid's data-product-id comment) — tells api.reviews.featured.tsx to
+    // return that product's own AI summary instead of the store-wide one.
+    var productId = container.getAttribute("data-product-id") || "";
 
     var viewport = container.querySelector("[data-imagyn-carousel-viewport]");
     var track = container.querySelector("[data-imagyn-carousel-track]");
@@ -295,7 +319,12 @@
 
     renderCarouselSkeleton(track);
 
-    fetch(PROXY_PATH + "?limit=" + encodeURIComponent(limit), { headers: { Accept: "application/json" } })
+    var fetchUrl = PROXY_PATH + "?limit=" + encodeURIComponent(limit);
+    if (productId) {
+      fetchUrl += "&productId=" + encodeURIComponent(productId);
+    }
+
+    fetch(fetchUrl, { headers: { Accept: "application/json" } })
       .then(function (response) {
         if (!response.ok) {
           throw new Error("Request failed");
@@ -344,6 +373,15 @@
             var summaryWrap = document.createElement("div");
             summaryWrap.innerHTML = summaryHtml;
             container.insertBefore(summaryWrap.firstChild, viewport);
+          }
+        }
+
+        if (settings.showAiSummary) {
+          var aiSummaryHtml = renderAiSummary(data.aiSummary);
+          if (aiSummaryHtml) {
+            var aiSummaryWrap = document.createElement("div");
+            aiSummaryWrap.innerHTML = aiSummaryHtml;
+            container.insertBefore(aiSummaryWrap.firstChild, viewport);
           }
         }
 
