@@ -133,6 +133,10 @@
    that this real aggregate comes from Imagyn's own review data, not a generic checkmark.
    currentColor keeps it the same muted tone as the count text it sits inside. */
 .imagyn-store-reviews__verified-icon {
+  /* Overrides this design system's own svg { display: block } reset — this icon sits
+     inline inside a text run (unlike other Imagyn icons, which live inside their own
+     flex container), so it needs to stay inline to avoid breaking onto its own line. */
+  display: inline-block;
   width: 1em;
   height: 1em;
   margin-inline-start: var(--imagyn-space-3xs, 0.2em);
