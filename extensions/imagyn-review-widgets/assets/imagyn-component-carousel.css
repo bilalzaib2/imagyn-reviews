@@ -300,21 +300,36 @@
 
 /* Media variant: the photo/video is the card's dominant visual element (STOREFRONT_DESIGN_
    SYSTEM.md's media-first treatment for this widget), so it renders full-bleed above a
-   tighter text block rather than sharing the card's outer padding. */
+   tighter text block rather than sharing the card's outer padding. --imagyn-carousel-
+   content-gap is the merchant's own "Spacing inside card" Theme Editor setting (set inline
+   per-instance by review_carousel.liquid), so this row rhythm is directly adjustable
+   instead of a value only editable in code. */
 .imagyn-review-card--media .imagyn-carousel__content {
   padding: var(--imagyn-space-px-md, 16px);
-  gap: var(--imagyn-space-sm, 0.6em);
+  gap: var(--imagyn-carousel-content-gap, var(--imagyn-space-sm, 0.6em));
 }
 
 /* Same small, consistent rhythm between title/body/stars/customer within the media
    variant's text block — a flex column with one shared gap value, instead of each
    element's own margin (which zeroed out unevenly: see .imagyn-review-card__stars'
    margin: 0 override below). One gap value between every row here is what makes review →
-   stars → customer read as a single cohesive group rather than separately-spaced lines. */
+   stars → customer read as a single cohesive group rather than separately-spaced lines.
+
+   margin-top: auto here (not on .imagyn-carousel__product) is deliberate: this is the
+   FIRST element of the text/product/rating group, so the auto margin absorbs whatever
+   leftover height align-items: stretch gives this card in front of the whole group,
+   moving text+product+rating down together as one still-compact unit. Putting the auto
+   margin on .imagyn-carousel__product instead (a previous version of this file) split the
+   group in two — text pinned at the top, product+rating pinned at the bottom, with a large
+   gap opened between the customer name and the product row. Harmless on the non-media,
+   text-only variant below: that variant's own .imagyn-carousel__text already has
+   flex: 1 1 auto and claims the leftover space by growing, so there's nothing left for an
+   auto margin to distribute there. */
 .imagyn-review-card--media .imagyn-carousel__text {
   display: flex;
   flex-direction: column;
-  gap: var(--imagyn-space-sm, 0.6em);
+  gap: var(--imagyn-carousel-content-gap, var(--imagyn-space-sm, 0.6em));
+  margin-top: auto;
 }
 
 .imagyn-carousel__slide .imagyn-review-card__header {
@@ -425,13 +440,11 @@
 }
 
 /* Follows the text block immediately, spaced by .imagyn-carousel__content's own small,
-   shared gap — deliberately NOT pinned to the card's bottom edge with margin-top: auto.
-   That auto margin used to push this row (and the secondary rating below it) all the way
-   down whenever align-items: stretch (see .imagyn-carousel__slide .imagyn-review-card
-   above) gave a card more height than its own content needed, opening a large gap between
-   the customer name and the product row. Any leftover height from row-stretching now
-   collects as trailing space below the last row instead, keeping every row in between
-   tightly grouped. */
+   shared gap. No margin-top: auto here on purpose — that's set on .imagyn-carousel__text
+   above instead (the first element of the text/product/rating group), so the whole group
+   moves down together as one compact unit when align-items: stretch gives this card extra
+   height, rather than this row alone being pinned to the bottom and splitting away from
+   the text above it. */
 .imagyn-carousel__product {
   display: flex;
   align-items: center;

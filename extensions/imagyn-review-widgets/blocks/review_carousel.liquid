@@ -34,7 +34,7 @@
   data-show-dots="{{ block.settings.show_dots }}"
   data-autoplay="{{ block.settings.autoplay }}"
   data-autoplay-speed="{{ block.settings.autoplay_speed }}"
-  style="--imagyn-carousel-cards-desktop: {{ block.settings.cards_desktop }}; --imagyn-carousel-cards-tablet: {{ block.settings.cards_tablet }}; --imagyn-carousel-cards-mobile: {{ block.settings.cards_mobile }}; --imagyn-carousel-gap: {{ block.settings.card_spacing }}px; --imagyn-carousel-image-ratio: {{ block.settings.image_ratio | replace: ':', ' / ' }};"
+  style="--imagyn-carousel-cards-desktop: {{ block.settings.cards_desktop }}; --imagyn-carousel-cards-tablet: {{ block.settings.cards_tablet }}; --imagyn-carousel-cards-mobile: {{ block.settings.cards_mobile }}; --imagyn-carousel-gap: {{ block.settings.card_spacing }}px; --imagyn-carousel-content-gap: {{ block.settings.content_spacing }}px; --imagyn-carousel-image-ratio: {{ block.settings.image_ratio | replace: ':', ' / ' }};"
 >
   <div class="imagyn-carousel__viewport" data-imagyn-carousel-viewport>
     <ul class="imagyn-carousel__track" data-imagyn-carousel-track></ul>
@@ -68,6 +68,7 @@
       "default": "1"
     },
     { "type": "range", "id": "card_spacing", "label": "Spacing between cards", "min": 8, "max": 32, "step": 2, "unit": "px", "default": 16 },
+    { "type": "range", "id": "content_spacing", "label": "Spacing inside card", "info": "Space between the review text, rating, customer, and product rows.", "min": 4, "max": 24, "step": 1, "unit": "px", "default": 10 },
     {
       "type": "select",
       "id": "image_ratio",
