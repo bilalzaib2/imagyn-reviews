@@ -229,8 +229,8 @@
    centers its own content within that. More line-clamp headroom lets a longer real review
    actually use the extra space instead of leaving it as dead air. */
 .imagyn-carousel__slide .imagyn-review-card:not(.imagyn-review-card--media) .imagyn-carousel__content {
-  padding: var(--imagyn-space-px-md, 16px);
-  gap: var(--imagyn-space-xs, 0.4em);
+  padding: var(--imagyn-space-px-lg, 24px) var(--imagyn-space-px-md, 16px);
+  gap: var(--imagyn-space-md, 1em);
 }
 
 .imagyn-carousel__slide .imagyn-review-card:not(.imagyn-review-card--media) .imagyn-carousel__text {
@@ -238,7 +238,7 @@
   display: flex;
   flex-direction: column;
   justify-content: center;
-  gap: var(--imagyn-space-xs, 0.4em);
+  gap: var(--imagyn-space-md, 1em);
   min-height: 0;
 }
 
@@ -258,20 +258,35 @@
    SYSTEM.md's media-first treatment for this widget), so it renders full-bleed above a
    tighter text block rather than sharing the card's outer padding. */
 .imagyn-review-card--media .imagyn-carousel__content {
-  padding: var(--imagyn-space-px-sm, 12px) var(--imagyn-space-px-md, 16px) var(--imagyn-space-px-md, 16px);
-  gap: var(--imagyn-space-3xs, 0.2em);
+  padding: var(--imagyn-space-px-md, 16px) var(--imagyn-space-px-md, 16px) var(--imagyn-space-px-lg, 24px);
+  gap: var(--imagyn-space-sm, 0.6em);
 }
 
 .imagyn-carousel__slide .imagyn-review-card__header {
-  margin-bottom: var(--imagyn-space-3xs, 0.2em);
+  margin-bottom: 0;
 }
 
+/* Stars are this card's single most important trust signal after the photo — sized well
+   above the shared design system's default (imagyn-component-review-card.css's own
+   font-size-sm, meant for a compact list row) so they read as a deliberate, confident
+   rating rather than a small caption. Scoped to the carousel only; other Imagyn widgets keep
+   their own existing star size. */
 .imagyn-carousel__slide .imagyn-review-card__stars {
-  margin-bottom: var(--imagyn-space-3xs, 0.2em);
+  font-size: var(--imagyn-font-size-xl, 26px);
+  margin: 0;
 }
 
 .imagyn-carousel__slide .imagyn-review-card__title {
   margin-bottom: 0;
+}
+
+/* Reviewer name reads as a real byline (bigger, bolder than the shared component default)
+   rather than small metadata — the customer is one of the five elements in this card's own
+   deliberate hierarchy (media, review text, rating, customer, product), not an afterthought
+   next to the date. */
+.imagyn-carousel__slide .imagyn-review-card__name {
+  font-size: var(--imagyn-font-size-lg, 20px);
+  font-weight: var(--imagyn-font-weight-semibold, 600);
 }
 
 /* Pinned both ways — max via line-clamp (long reviews truncate) *and* min via min-height
@@ -396,6 +411,35 @@
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+/* The product's own real, aggregate rating — deliberately small and muted (a fraction of
+   .imagyn-review-card__stars' own size above) so it never competes with or reads as a
+   second copy of the review's own rating. A distinct visual tier for a distinct kind of
+   information: "this is what this product's other reviews look like," not "here's another
+   rating for the review you just read." Sits directly below .imagyn-carousel__product (no
+   margin-top: auto of its own needed — that element's own auto margin already pins this
+   whole trailing group to the card's bottom edge together). */
+.imagyn-carousel__product-rating {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--imagyn-space-3xs, 0.2em);
+  font-size: var(--imagyn-font-size-xs, 12px);
+  color: var(--imagyn-color-text, inherit);
+  opacity: var(--imagyn-color-text-muted-opacity, 0.6);
+}
+
+.imagyn-carousel--align-left .imagyn-carousel__product-rating {
+  justify-content: flex-start;
+}
+
+.imagyn-carousel--align-right .imagyn-carousel__product-rating {
+  justify-content: flex-end;
+}
+
+.imagyn-carousel__product-rating-count {
+  font-variant-numeric: tabular-nums;
 }
 
 /* Media-first treatment: the photo/video is the card's primary visual content, not a

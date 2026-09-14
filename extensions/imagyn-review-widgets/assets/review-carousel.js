@@ -187,6 +187,25 @@
       html += productUrl
         ? '<a class="imagyn-carousel__product" href="' + escapeHtml(productUrl) + '">' + productInner + "</a>"
         : '<div class="imagyn-carousel__product">' + productInner + "</div>";
+
+      // The product's own real, aggregate rating (never a second rating for this review —
+      // see the collision this widget already guards against elsewhere) — small, muted,
+      // clearly subordinate metadata about the product, styled and positioned distinctly
+      // from the review's own stars above. Real data from getPublicReviewSummaryBatch (the
+      // same source the Collection Rating Badge uses), never shown if the product genuinely
+      // has zero approved reviews.
+      if (review.product.totalReviews > 0) {
+        html +=
+          '<div class="imagyn-carousel__product-rating">' +
+          '<span aria-hidden="true">' + renderStars(review.product.averageRating) + "</span>" +
+          '<span class="imagyn-carousel__product-rating-count">(' + review.product.totalReviews + ")</span>" +
+          '<span class="imagyn-visually-hidden">This product has an average rating of ' +
+          review.product.averageRating +
+          " out of 5 from " +
+          review.product.totalReviews +
+          " review" + (review.product.totalReviews === 1 ? "" : "s") + "</span>" +
+          "</div>";
+      }
     }
 
     html += "</div></div></li>";

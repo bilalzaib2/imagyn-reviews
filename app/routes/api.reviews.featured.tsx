@@ -1,6 +1,6 @@
 import type { LoaderFunctionArgs } from "react-router";
 import { authenticate } from "../shopify.server";
-import { getFeaturedReviews } from "../services/review.server";
+import { getFeaturedReviews, getPublicReviewSummaryBatch } from "../services/review.server";
 import { getStoreBySlug } from "../services/store.server";
 import { getStorefrontAppearance } from "../services/appearance.server";
 import { getStorefrontCarouselSettings } from "../services/widget.server";
@@ -58,6 +58,14 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
     getStorefrontAppearance(store.id, "review_carousel"),
   ]);
 
+  // Each product's own real aggregate rating (average + total, APPROVED reviews only) — the
+  // same getPublicReviewSummaryBatch api.reviews.batch.tsx already uses for the Collection
+  // Rating Badge, reused rather than re-derived, so the number shown here can never drift
+  // from what that badge (or the Product Reviews Widget) would show for the same product.
+  // This is real, secondary metadata about the product, never a second review-level rating.
+  const productIds = Array.from(new Set(reviews.map((review) => review.product.id)));
+  const productSummaries = await getPublicReviewSummaryBatch(productIds);
+
   return json({
     ok: true,
     widget,
@@ -72,7 +80,11 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
       title: review.title,
       content: review.content,
       createdAt: review.createdAt,
-      product: review.product,
+      product: {
+        ...review.product,
+        averageRating: productSummaries[review.product.id]?.averageRating ?? 0,
+        totalReviews: productSummaries[review.product.id]?.totalReviews ?? 0,
+      },
       media: review.media.map(serializeMedia),
     })),
   });
