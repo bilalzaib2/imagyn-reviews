@@ -77,6 +77,11 @@ function matchesWhere(review: FakeReview, where: Record<string, unknown>): boole
     const notIn = (where.id as { notIn: string[] }).notIn;
     if (notIn.includes(review.id)) return false;
   }
+  // Mirrors Prisma's `media: { some: {} }` relation filter — the media-aware backfill
+  // stage's actual selection criterion (getFeaturedReviews), not just its ordering.
+  if (where.media && typeof where.media === "object" && "some" in (where.media as object)) {
+    if (review.media.length === 0) return false;
+  }
   return true;
 }
 
@@ -224,5 +229,52 @@ describe("getFeaturedReviews — featured-first ordering with real-data backfill
 
     const results = await getFeaturedReviews("store_1", 2);
     expect(results).toHaveLength(2);
+  });
+});
+
+describe("getFeaturedReviews — media-aware backfill (Photo Reviews carousel)", () => {
+  it("prefers a non-featured review with media over a higher-helpful-count review without media", async () => {
+    seedReview({
+      id: "has_photo",
+      storeId: "store_1",
+      productId: "product_1",
+      featured: false,
+      helpfulCount: 1,
+      media: [{ id: "media_1", type: "IMAGE", url: "https://example.com/a.jpg", thumbnailUrl: null, width: 800, height: 1000 }],
+    });
+    seedReview({ id: "text_only", storeId: "store_1", productId: "product_1", featured: false, helpfulCount: 10 });
+
+    const results = await getFeaturedReviews("store_1", 2);
+
+    expect(results.map((r) => r.id)).toEqual(["has_photo", "text_only"]);
+  });
+
+  it("still fills remaining slots with text-only reviews once media reviews are exhausted", async () => {
+    seedReview({
+      id: "has_photo",
+      storeId: "store_1",
+      productId: "product_1",
+      featured: false,
+      media: [{ id: "media_1", type: "IMAGE", url: "https://example.com/a.jpg", thumbnailUrl: null, width: 800, height: 1000 }],
+    });
+    seedReview({ id: "text_only", storeId: "store_1", productId: "product_1", featured: false });
+
+    const results = await getFeaturedReviews("store_1", 5);
+
+    expect(results.map((r) => r.id).sort()).toEqual(["has_photo", "text_only"]);
+  });
+
+  it("never duplicates a review across the featured/media/backfill stages", async () => {
+    seedReview({
+      id: "featured_with_photo",
+      storeId: "store_1",
+      productId: "product_1",
+      featured: true,
+      media: [{ id: "media_1", type: "IMAGE", url: "https://example.com/a.jpg", thumbnailUrl: null, width: 800, height: 1000 }],
+    });
+
+    const results = await getFeaturedReviews("store_1", 5);
+
+    expect(results.map((r) => r.id)).toEqual(["featured_with_photo"]);
   });
 });

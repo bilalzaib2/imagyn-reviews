@@ -35,7 +35,7 @@
   font-family: var(--imagyn-font-family);
   color: var(--imagyn-color-text, inherit);
   width: 100%;
-  max-width: var(--imagyn-carousel-max-width, 1080px);
+  max-width: var(--imagyn-carousel-max-width, 1200px);
   margin-inline: auto;
   padding-inline: var(--imagyn-space-px-md, 16px);
   box-sizing: border-box;
@@ -124,17 +124,18 @@
    Theme Editor settings (--imagyn-carousel-cards-* custom properties, set inline per-
    instance by review_carousel.liquid) rather than a fixed pixel width — an even division
    of the track's own width, accounting for the real gap between cards, so exactly N whole
-   cards fit edge-to-edge at each breakpoint. Defaults (4/2/1) reproduce the previous fixed-
-   260px desktop card almost exactly (258px in a 1080px-max section) — a negligible, purely
-   visual rounding difference, not a behavior change. min-width: 0 stops this flex item's
-   own content (e.g. a long product name below) from forcing it wider than its flex-basis —
-   the same class of fix .imagyn-carousel__viewport applies one level up; max-width: 100%
-   is a safety net at very small widths. */
+   cards fit edge-to-edge at each breakpoint. Desktop default is deliberately 3 (was 4,
+   ~260px cards) plus a wider 1200px section max-width (was 1080px): together these produce
+   a ~390px card, large enough for the media variant's 4:5 portrait image to actually read
+   as a real photo rather than a thumbnail — the whole point of the media-first redesign.
+   min-width: 0 stops this flex item's own content (e.g. a long product name below) from
+   forcing it wider than its flex-basis — the same class of fix .imagyn-carousel__viewport
+   applies one level up; max-width: 100% is a safety net at very small widths. */
 .imagyn-carousel__slide {
   flex: 0 0 auto;
   flex-basis: calc(
-    (100% - (var(--imagyn-carousel-cards-desktop, 4) - 1) * var(--imagyn-carousel-gap, var(--imagyn-space-px-md, 16px))) /
-      var(--imagyn-carousel-cards-desktop, 4)
+    (100% - (var(--imagyn-carousel-cards-desktop, 3) - 1) * var(--imagyn-carousel-gap, var(--imagyn-space-px-md, 16px))) /
+      var(--imagyn-carousel-cards-desktop, 3)
   );
   min-width: 0;
   max-width: 100%;
@@ -155,16 +156,16 @@
   }
 }
 
-/* Mobile default (1 card) keeps the original, deliberately-designed "one clearly dominant
-   card with a visible peek of the next" treatment byte-for-byte — a flat percentage alone
-   doesn't work across real phone widths (80% is ~259px on a 324px viewport but ~344px on a
-   430px viewport), so this caps at 280px while staying percentage-driven (72%) on narrower
-   phones. A merchant who raises "Cards visible on mobile" to 2 gets the same even-division
-   formula desktop/tablet use instead — the peek treatment is specifically a 1-card default,
-   not a mobile-width default. */
+/* Mobile default (1 card): a genuinely full-width single card, not a partial "peek" of the
+   next one. The previous 72%/280px treatment intentionally left ~90px of the next card
+   visible at rest — reasonable for small text-only cards, but it reads as a clipped card
+   next to the media variant's large portrait image, and this widget's whole point on
+   mobile is one dominant, fully-visible photo review at a time (arrows/dots below the card
+   handle navigation instead). A merchant who raises "Cards visible on mobile" to 2 still
+   gets the even-division formula desktop/tablet use, unaffected by this. */
 @media (max-width: 640px) {
   .imagyn-carousel[data-cards-mobile="1"] .imagyn-carousel__slide {
-    flex-basis: min(72%, 280px);
+    flex-basis: 100%;
   }
 
   .imagyn-carousel:not([data-cards-mobile="1"]) .imagyn-carousel__slide {
@@ -179,17 +180,60 @@
    now gives .imagyn-carousel__slide (the <li>) — a block child doesn't auto-fill a taller
    parent just because the parent stretched; without this the card would stay sized to its
    own content inside a taller <li>, defeating the point of stretch (and leaving the extra
-   space as an invisible gap below the card instead of a usable one inside it). */
-/* Carousel cards run noticeably tighter than the shared .imagyn-review-card default
-   (padding: 24px, gap: 0.6em) — this is a density override scoped entirely to
-   .imagyn-carousel__slide, so List/Grid layouts elsewhere are untouched. */
+   space as an invisible gap below the card instead of a usable one inside it). overflow:
+   hidden lets the media variant's edge-to-edge image share the card's own rounded corners
+   without a separate radius on the <img> itself. */
 .imagyn-carousel__slide .imagyn-review-card {
   display: flex;
   flex-direction: column;
   height: 100%;
   box-sizing: border-box;
+  overflow: hidden;
+}
+
+/* Text-only variant (no eligible photo/video — see review-carousel.js's renderSlide): same
+   compact density as before, scoped to the content wrapper every card now has. When this
+   card sits in a row beside media cards, align-items: stretch on the track forces it to
+   match their (now much taller, portrait-image) height. A flex-growing .imagyn-carousel__text
+   block is what actually centers the review text in that extra space — justify-content on
+   .imagyn-carousel__content alone doesn't work here because .imagyn-carousel__product's own
+   margin-top: auto claims all free space for itself first (auto margins are resolved before
+   justify-content, per the flex spec), leaving nothing for a sibling's justify-content to
+   distribute. Letting imagyn-carousel__text itself flex-grow and center its own children
+   sidesteps that entirely: it (not the product row) ends up absorbing the leftover height, and
+   centers its own content within that. More line-clamp headroom lets a longer real review
+   actually use the extra space instead of leaving it as dead air. */
+.imagyn-carousel__slide .imagyn-review-card:not(.imagyn-review-card--media) .imagyn-carousel__content {
   padding: var(--imagyn-space-px-md, 16px);
   gap: var(--imagyn-space-xs, 0.4em);
+}
+
+.imagyn-carousel__slide .imagyn-review-card:not(.imagyn-review-card--media) .imagyn-carousel__text {
+  flex: 1 1 auto;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: var(--imagyn-space-xs, 0.4em);
+  min-height: 0;
+}
+
+.imagyn-carousel__slide .imagyn-review-card:not(.imagyn-review-card--media) .imagyn-review-card__body {
+  -webkit-line-clamp: 6;
+}
+
+.imagyn-carousel__content {
+  display: flex;
+  flex-direction: column;
+  flex: 1 1 auto;
+  min-height: 0;
+}
+
+/* Media variant: the photo/video is the card's dominant visual element (STOREFRONT_DESIGN_
+   SYSTEM.md's media-first treatment for this widget), so it renders full-bleed above a
+   tighter text block rather than sharing the card's outer padding. */
+.imagyn-review-card--media .imagyn-carousel__content {
+  padding: var(--imagyn-space-px-sm, 12px) var(--imagyn-space-px-md, 16px) var(--imagyn-space-px-md, 16px);
+  gap: var(--imagyn-space-3xs, 0.2em);
 }
 
 .imagyn-carousel__slide .imagyn-review-card__header {
@@ -204,20 +248,23 @@
   margin-bottom: 0;
 }
 
-/* Pinned to exactly 3 lines both ways — max via line-clamp (long reviews truncate) *and*
-   min via min-height (short reviews still reserve the same space) — using the same em
-   math as the clamp (line-height 1.5 × 3 lines = 4.5em, relative to this element's own
-   font-size token, not a hardcoded pixel guess). This is the actual fix for uneven card
-   heights: the one field with genuinely unbounded length is now bounded on both ends, so
-   every card's title/stars/product row lands in the same place regardless of review length.
-   3 lines (not the original 4) is also most of this pass's height reduction — the body was
-   the single largest contributor to how tall a "compact" card could still get. */
+/* Pinned both ways — max via line-clamp (long reviews truncate) *and* min via min-height
+   (short reviews still reserve the same space), using the same em math as the clamp, not a
+   hardcoded pixel guess. This is what keeps every card's title/stars/product row landing in
+   the same place regardless of review length. Media cards clamp tighter (2 lines) than
+   text-only cards (3): the photo is already carrying most of the card's visual weight, so
+   the excerpt only needs to supply context, not the full review. */
 .imagyn-carousel__slide .imagyn-review-card__body {
   display: -webkit-box;
   -webkit-box-orient: vertical;
   -webkit-line-clamp: 3;
   overflow: hidden;
   min-height: 4.5em;
+}
+
+.imagyn-review-card--media .imagyn-review-card__body {
+  -webkit-line-clamp: 2;
+  min-height: 3em;
 }
 
 /* margin-top: auto pins this to the bottom of the (now equal-height, see .imagyn-carousel__
@@ -265,25 +312,51 @@
   white-space: nowrap;
 }
 
-/* 2:1 instead of the review-detail gallery's 4:3 — at a 260px-wide card, 4:3 was ~195px
-   tall (the single largest contributor to card height); 2:1 is ~130px, a real reduction,
-   not just a cosmetic crop, while still reading as a genuine photo, not a thumbnail. The
-   image supports the review here — it isn't the card's primary content the way it can be
-   in the full Product Reviews Widget gallery.
-
-   max-height is the actual fix for "still large on mobile": aspect-ratio is width-relative,
-   and the mobile slide below is a much wider flex-basis (86% of viewport, often 300px+) than
-   the fixed 260px desktop card — so the same 2:1 ratio produced a visibly taller image on
-   mobile, and because align-items: stretch on the track applies across the *entire* row (all
-   reviews, not just the currently-visible slide), that one taller image was inflating every
-   card's equal height. Capping the absolute height decouples it from card width entirely, so
-   the image (and therefore the whole card) stays the same size regardless of viewport. */
-.imagyn-carousel__media {
+/* Media-first treatment: the photo/video is the card's primary visual content, not a
+   supporting thumbnail (this is the actual fix for "review images aren't showing
+   prominently" — the data was always there, see review-carousel.js history; the image was
+   just capped small and placed after the text). 4:5 is a deliberate portrait-leaning ratio
+   that reads as real UGC photography rather than a cropped product shot, and gives the
+   image real visual weight even at the narrower per-card widths a 3-4-across desktop
+   carousel produces. No max-height cap: with align-items: stretch removed from the height
+   equation by the media-wrap owning a fixed aspect-ratio (not the whole card), every card in
+   a row can size to its own content without one photo inflating the rest — the same failure
+   mode the old cap was defending against no longer exists at its root. */
+.imagyn-carousel__media-wrap {
+  position: relative;
   width: 100%;
-  aspect-ratio: 2 / 1;
-  max-height: 140px;
-  border-radius: var(--imagyn-radius-sm, 4px);
+  aspect-ratio: 4 / 5;
+  flex: none;
+  background: var(--imagyn-color-border, rgba(0, 0, 0, 0.06));
+  overflow: hidden;
+}
+
+/* At the mobile single-card width, a 4:5 image plus the text block below runs noticeably
+   taller than a normal-feeling card — most of it sits below the fold on a real phone
+   viewport. 4:3 keeps the photo genuinely large and dominant (still far bigger than the
+   old 140px cap) while bringing the overall card back to a size that reads as a review
+   card, not a full-screen photo. */
+@media (max-width: 640px) {
+  .imagyn-carousel__media-wrap {
+    aspect-ratio: 4 / 3;
+  }
+}
+
+.imagyn-carousel__media {
+  display: block;
+  width: 100%;
+  height: 100%;
   object-fit: cover;
+}
+
+.imagyn-carousel__media-play {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 44px;
+  height: 44px;
+  transform: translate(-50%, -50%);
+  pointer-events: none;
 }
 
 .imagyn-carousel__controls {
@@ -370,8 +443,31 @@
   outline-offset: 3px;
 }
 
+/* The carousel doesn't have its own lightbox — the Product Reviews Widget's gallery/
+   lightbox (reviews-widget.js) is private to that script, not a shared module, and wiring
+   the two together is a bigger refactor than this section's own redesign calls for. A
+   subtle hover/focus zoom keeps the photo feeling interactive without inventing a new
+   overlay just for this widget. */
+.imagyn-carousel__media {
+  transition: transform var(--imagyn-duration-base, 200ms) var(--imagyn-easing, ease-out);
+}
+
+.imagyn-carousel__slide:hover .imagyn-carousel__media,
+.imagyn-carousel__slide:focus-within .imagyn-carousel__media {
+  transform: scale(1.04);
+}
+
 @media (prefers-reduced-motion: reduce) {
   .imagyn-carousel__track {
     scroll-behavior: auto;
+  }
+
+  .imagyn-carousel__media {
+    transition: none;
+  }
+
+  .imagyn-carousel__slide:hover .imagyn-carousel__media,
+  .imagyn-carousel__slide:focus-within .imagyn-carousel__media {
+    transform: none;
   }
 }

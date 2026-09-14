@@ -260,10 +260,14 @@ export interface FeaturedReview {
 // Store-wide (cross-product), public-facing read for the Review Carousel widget — real
 // approved reviews only, never fabricated. Merchant-curated `featured: true` reviews lead
 // (most recent first); if that alone doesn't fill the requested count, backfills with the
-// store's best real reviews (highest helpful count, then most recent) rather than leaving the
-// carousel sparse or empty just because nothing's been flagged featured yet. The backfill
-// query only runs when actually needed (fewer than `limit` featured reviews exist), and
-// explicitly excludes ids already chosen so nothing is duplicated in the second batch.
+// store's best real reviews rather than leaving the carousel sparse or empty just because
+// nothing's been flagged featured yet. The backfill itself is media-aware: this widget is a
+// photo/video showcase (STOREFRONT_DESIGN_SYSTEM.md's media-first card treatment), so reviews
+// that actually have photos or videos are pulled first (by helpful count, then recency), and
+// only once those are exhausted does it fall back to text-only reviews — otherwise a store
+// with plenty of real photo reviews could still end up with an all-text carousel just because
+// none of those photo reviews happened to be marked featured. Each backfill stage only runs
+// when actually needed, and explicitly excludes ids already chosen so nothing is duplicated.
 export async function getFeaturedReviews(storeId: string, limit = 12): Promise<FeaturedReview[]> {
   const baseWhere = { storeId, deletedAt: null, status: ReviewStatus.APPROVED } as const;
 
@@ -275,6 +279,16 @@ export async function getFeaturedReviews(storeId: string, limit = 12): Promise<F
   });
 
   let combined = featured;
+
+  if (combined.length < limit) {
+    const withMedia = await prisma.review.findMany({
+      where: { ...baseWhere, id: { notIn: combined.map((review) => review.id) }, media: { some: {} } },
+      include: reviewInclude,
+      orderBy: [{ helpfulCount: "desc" }, { createdAt: "desc" }, { id: "desc" }],
+      take: limit - combined.length,
+    });
+    combined = [...combined, ...withMedia];
+  }
 
   if (combined.length < limit) {
     const backfill = await prisma.review.findMany({

@@ -82,9 +82,57 @@
     };
   }
 
+  var PLAY_ICON =
+    '<svg class="imagyn-carousel__media-play" viewBox="0 0 24 24" fill="none" aria-hidden="true" focusable="false">' +
+    '<circle cx="12" cy="12" r="11" fill="rgba(0,0,0,0.55)"></circle>' +
+    '<path d="M10 8.5v7l6-3.5-6-3.5z" fill="#fff"></path>' +
+    "</svg>";
+
+  // Media-first for any review that actually has a photo or video (the whole point of a
+  // "Photo Reviews" carousel — see review.server.ts's media-aware backfill), a compact
+  // text-only variant otherwise. This is a deliberate two-layout system, not one layout
+  // with an optional image bolted on: imagyn-component-carousel.css keys off the
+  // imagyn-review-card--media class to size/order each variant completely differently.
   function renderSlide(review, settings) {
+    // At most one photo/video per slide — a carousel card is a compact preview, not the
+    // full review detail (the Product Reviews Widget's gallery/lightbox already covers
+    // that). show_images/show_video are independent toggles, so a review with both photo
+    // and video media respects whichever of the two the merchant left enabled.
+    var eligibleMedia = (review.media || []).filter(function (item) {
+      return item.type === "VIDEO" ? settings.showVideo : settings.showImages;
+    });
+    var media = eligibleMedia.length > 0 ? eligibleMedia[0] : null;
+
     var html = '<li class="imagyn-carousel__slide" data-review-id="' + escapeHtml(review.id) + '">';
-    html += '<div class="imagyn-review-card">';
+    html += '<div class="imagyn-review-card' + (media ? " imagyn-review-card--media" : "") + '">';
+
+    if (media) {
+      // A real, data-derived description (who shared it, and what product it's of, when
+      // known) rather than an empty alt — the photo itself is genuinely meaningful content
+      // here (the whole point of a "Photo Reviews" carousel), not decoration, even though
+      // there's no way to describe what's actually pictured in an arbitrary customer photo.
+      var mediaAlt =
+        (media.type === "VIDEO" ? "Video" : "Photo") +
+        " from " +
+        review.reviewerName +
+        "'s review" +
+        (review.product && review.product.name ? " of " + review.product.name : "");
+      html +=
+        '<div class="imagyn-carousel__media-wrap">' +
+        '<img class="imagyn-carousel__media" src="' +
+        escapeHtml(media.thumbnailUrl || media.url) +
+        '" alt="' +
+        escapeHtml(mediaAlt) +
+        '"' +
+        (media.width ? ' width="' + escapeHtml(media.width) + '"' : "") +
+        (media.height ? ' height="' + escapeHtml(media.height) + '"' : "") +
+        ' loading="lazy" />' +
+        (media.type === "VIDEO" ? PLAY_ICON : "") +
+        "</div>";
+    }
+
+    html += '<div class="imagyn-carousel__content">';
+    html += '<div class="imagyn-carousel__text">';
 
     var identity = "";
     if (settings.showName) {
@@ -112,21 +160,7 @@
       html += '<p class="imagyn-review-card__title">' + escapeHtml(review.title) + "</p>";
     }
     html += '<p class="imagyn-review-card__body">' + escapeHtml(review.content) + "</p>";
-
-    // At most one photo/video per slide — a carousel card is a compact preview, not the
-    // full review detail (the Product Reviews Widget's gallery/lightbox already covers
-    // that). show_images/show_video are independent toggles, so a review with both photo
-    // and video media respects whichever of the two the merchant left enabled.
-    var eligibleMedia = (review.media || []).filter(function (item) {
-      return item.type === "VIDEO" ? settings.showVideo : settings.showImages;
-    });
-    if (eligibleMedia.length > 0) {
-      var firstMedia = eligibleMedia[0];
-      html +=
-        '<img class="imagyn-carousel__media" src="' +
-        escapeHtml(firstMedia.thumbnailUrl || firstMedia.url) +
-        '" alt="" loading="lazy" />';
-    }
+    html += "</div>";
 
     if (settings.showProduct && review.product) {
       var productUrl = review.product.handle ? "/products/" + encodeURIComponent(review.product.handle) : null;
@@ -140,7 +174,7 @@
         : '<div class="imagyn-carousel__product">' + productInner + "</div>";
     }
 
-    html += "</div></li>";
+    html += "</div></div></li>";
     return html;
   }
 
