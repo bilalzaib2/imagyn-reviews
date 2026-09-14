@@ -75,12 +75,55 @@
       showImages: bool("data-show-images", true),
       showVideo: bool("data-show-video", true),
       showProduct: bool("data-show-product", true),
+      showSummary: bool("data-show-summary", true),
       showArrows: bool("data-show-arrows", true),
       showDots: bool("data-show-dots", false),
       autoplay: bool("data-autoplay", false),
       autoplaySpeed: isFinite(autoplaySpeed) && autoplaySpeed > 0 ? autoplaySpeed : 5,
       noImageFallback: container.getAttribute("data-no-image-fallback") || "text",
     };
+  }
+
+  // Imagyn's own small brand mark (public/assets/imagyn-emblem.svg, inlined) — used to mark
+  // the store-wide rating summary as verified by Imagyn's own review collection, not a
+  // generic checkmark. currentColor (not the source file's hardcoded #070808) so it follows
+  // the badge's own text color like every other icon in this widget.
+  var IMAGYN_ICON =
+    '<svg class="imagyn-carousel__summary-icon" viewBox="0 0 54.86 54.58" aria-hidden="true" focusable="false">' +
+    '<circle cx="27.46" cy="7.01" r="7.01" fill="currentColor"/>' +
+    '<circle cx="27.4" cy="47.57" r="7.01" fill="currentColor"/>' +
+    '<circle cx="47.85" cy="7.01" r="4.67" fill="currentColor"/>' +
+    '<circle cx="47.85" cy="47.57" r="4.67" fill="currentColor"/>' +
+    '<circle cx="47.85" cy="27.32" r="7.01" fill="currentColor"/>' +
+    '<circle cx="7.01" cy="7.01" r="4.67" fill="currentColor"/>' +
+    '<circle cx="7.01" cy="47.57" r="4.67" fill="currentColor"/>' +
+    '<circle cx="7.01" cy="27.26" r="7.01" fill="currentColor"/>' +
+    "</svg>";
+
+  // The store-wide summary row shown above the cards (real average + count across every
+  // approved review, not just the ones featured in this carousel — see
+  // getPublicStoreReviewSummary). Hidden entirely when the store genuinely has zero approved
+  // reviews yet, same "never show a fake/empty metric" rule the per-product rating row above
+  // follows.
+  function renderSummary(storeSummary) {
+    if (!storeSummary || !storeSummary.totalReviews) {
+      return "";
+    }
+    var average = storeSummary.averageRating;
+    var count = storeSummary.totalReviews;
+    return (
+      '<div class="imagyn-carousel__summary">' +
+      '<span class="imagyn-carousel__summary-stars" aria-hidden="true">' + renderStars(average) + "</span>" +
+      '<span class="imagyn-carousel__summary-score" aria-hidden="true">' + average.toFixed(2) + "</span>" +
+      '<span class="imagyn-carousel__summary-count" aria-hidden="true">(' + count + ")</span>" +
+      '<span class="imagyn-carousel__summary-badge">' +
+      IMAGYN_ICON +
+      '<span class="imagyn-carousel__summary-badge-label">Verified</span>' +
+      "</span>" +
+      '<span class="imagyn-visually-hidden">Average rating ' + average.toFixed(2) + " out of 5 from " + count +
+      " review" + (count === 1 ? "" : "s") + "</span>" +
+      "</div>"
+    );
   }
 
   var PLAY_ICON =
@@ -293,6 +336,15 @@
           headingEl.className = "imagyn-carousel__heading";
           headingEl.textContent = heading;
           container.insertBefore(headingEl, viewport);
+        }
+
+        if (settings.showSummary) {
+          var summaryHtml = renderSummary(data.storeSummary);
+          if (summaryHtml) {
+            var summaryWrap = document.createElement("div");
+            summaryWrap.innerHTML = summaryHtml;
+            container.insertBefore(summaryWrap.firstChild, viewport);
+          }
         }
 
         track.innerHTML = reviews

@@ -19,6 +19,7 @@
   data-imagyn-carousel
   data-heading="{{ block.settings.heading }}"
   data-review-count="{{ block.settings.review_count }}"
+  data-show-summary="{{ block.settings.show_summary }}"
   data-cards-mobile="{{ block.settings.cards_mobile }}"
   data-review-length="{{ block.settings.review_length }}"
   data-text-size="{{ block.settings.text_size }}"
@@ -52,6 +53,7 @@
   "settings": [
     { "type": "text", "id": "heading", "label": "Heading", "default": "What customers are saying" },
     { "type": "range", "id": "review_count", "label": "Maximum reviews to show", "min": 3, "max": 24, "step": 1, "default": 12 },
+    { "type": "checkbox", "id": "show_summary", "label": "Show overall rating summary", "info": "The store's real average rating and review count, shown above the cards.", "default": true },
     { "type": "header", "content": "Layout" },
     { "type": "range", "id": "cards_desktop", "label": "Cards visible on desktop", "min": 2, "max": 5, "step": 1, "default": 3 },
     { "type": "range", "id": "cards_tablet", "label": "Cards visible on tablet", "min": 1, "max": 3, "step": 1, "default": 2 },

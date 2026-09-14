@@ -1,6 +1,6 @@
 import type { LoaderFunctionArgs } from "react-router";
 import { authenticate } from "../shopify.server";
-import { getFeaturedReviews, getPublicReviewSummaryBatch } from "../services/review.server";
+import { getFeaturedReviews, getPublicReviewSummaryBatch, getPublicStoreReviewSummary } from "../services/review.server";
 import { getStoreBySlug } from "../services/store.server";
 import { getStorefrontAppearance } from "../services/appearance.server";
 import { getStorefrontCarouselSettings } from "../services/widget.server";
@@ -51,11 +51,16 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
     return json({ ok: false, error: "Shop not found." }, { status: 404 });
   }
 
-  const [reviews, widget, appearance] = await Promise.all([
+  const [reviews, widget, appearance, storeSummary] = await Promise.all([
     getFeaturedReviews(store.id, limit),
     getStorefrontCarouselSettings(store.id),
     // Same centralized Appearance System tokens every other widget on the page resolves.
     getStorefrontAppearance(store.id, "review_carousel"),
+    // The store's own real, aggregate rating (all approved reviews, not just the ones
+    // featured in this carousel) — the same source getPublicReviewSummaryBatch draws from,
+    // just scoped to the whole store instead of one product. Powers the summary row shown
+    // above the cards (stars + average + count + verified badge).
+    getPublicStoreReviewSummary(store.id),
   ]);
 
   // Each product's own real aggregate rating (average + total, APPROVED reviews only) — the
@@ -70,6 +75,10 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
     ok: true,
     widget,
     appearance,
+    storeSummary: {
+      averageRating: storeSummary.averageRating,
+      totalReviews: storeSummary.totalReviews,
+    },
     reviews: reviews.map((review) => ({
       id: review.id,
       reviewerName: review.reviewerName,

@@ -57,6 +57,60 @@
   font-weight: var(--imagyn-font-weight-semibold, 600);
 }
 
+/* Store-wide rating summary row (real average + count across every approved review, not
+   just the ones featured below) — sits between the heading and the cards. Always centered
+   regardless of the text_align setting: this is a section-level trust signal, not part of
+   any one card's content, so it doesn't follow the per-card alignment control. */
+.imagyn-carousel__summary {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-wrap: wrap;
+  gap: var(--imagyn-space-2xs, 0.35em);
+  font-size: var(--imagyn-font-size-md, 16px);
+}
+
+.imagyn-carousel__summary-stars {
+  color: var(--imagyn-color-star, #f5a623);
+  font-size: 1.25em;
+  line-height: 1;
+}
+
+.imagyn-carousel__summary-score {
+  font-weight: var(--imagyn-font-weight-semibold, 600);
+}
+
+.imagyn-carousel__summary-count {
+  color: var(--imagyn-color-text, inherit);
+  opacity: var(--imagyn-color-text-muted-opacity, 0.6);
+}
+
+/* Same monochrome, theme-agnostic treatment as .imagyn-review-card__verified (a trust
+   signal, not a status pill) — the icon is Imagyn's own brand mark
+   (public/assets/imagyn-emblem.svg), not a generic checkmark, so this reads as "verified by
+   Imagyn's real review data" rather than borrowing a competitor's visual language. */
+.imagyn-carousel__summary-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--imagyn-space-3xs, 0.25em);
+  margin-inline-start: var(--imagyn-space-2xs, 0.35em);
+  padding: 0.3em 0.65em;
+  border-radius: var(--imagyn-radius-full, 999px);
+  background: var(--imagyn-color-border, rgba(0, 0, 0, 0.06));
+  font-size: var(--imagyn-font-size-xs, 12px);
+  font-weight: var(--imagyn-font-weight-medium, 500);
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+  color: var(--imagyn-color-text, inherit);
+}
+
+.imagyn-carousel__summary-icon {
+  width: 1em;
+  height: 1em;
+  flex: none;
+  color: var(--imagyn-color-text, currentColor);
+}
+
 /* Text alignment is a Theme Editor setting on this block specifically (not a Brand Studio
    token — Brand Studio owns color/typography/card-style globally; alignment is a
    structural layout choice scoped to this one section, the same category heading/
