@@ -8,6 +8,22 @@
   var renderStars = window.ImagynShared.renderStars;
   var escapeHtml = window.ImagynShared.escapeHtml;
 
+  // Imagyn's own small brand mark (public/assets/imagyn-emblem.svg, inlined) — same icon
+  // review-carousel.js uses for its "Verified" badge. currentColor (not the source file's
+  // hardcoded #070808) so it follows this text's own muted color instead of painting a
+  // fixed dark circle regardless of theme.
+  var IMAGYN_ICON =
+    '<svg class="imagyn-store-reviews__verified-icon" viewBox="0 0 54.86 54.58" aria-hidden="true" focusable="false">' +
+    '<circle cx="27.46" cy="7.01" r="7.01" fill="currentColor"/>' +
+    '<circle cx="27.4" cy="47.57" r="7.01" fill="currentColor"/>' +
+    '<circle cx="47.85" cy="7.01" r="4.67" fill="currentColor"/>' +
+    '<circle cx="47.85" cy="47.57" r="4.67" fill="currentColor"/>' +
+    '<circle cx="47.85" cy="27.32" r="7.01" fill="currentColor"/>' +
+    '<circle cx="7.01" cy="7.01" r="4.67" fill="currentColor"/>' +
+    '<circle cx="7.01" cy="47.57" r="4.67" fill="currentColor"/>' +
+    '<circle cx="7.01" cy="27.26" r="7.01" fill="currentColor"/>' +
+    "</svg>";
+
   // Mirrors medals-showcase.js's own glyph set exactly (and Medallion.tsx's
   // GLYPH_BY_CATEGORY) — the same original Imagyn glyph paths, not a separate icon set.
   var GLYPH_BY_CATEGORY = {
@@ -143,7 +159,7 @@
       html += '<span class="imagyn-store-reviews__rating-stars" aria-hidden="true">' + renderStars(summary.averageRating) + "</span>";
       html +=
         '<span class="imagyn-store-reviews__rating-count">Based on ' + totalReviews +
-        (totalReviews === 1 ? " store review" : " store reviews") + "</span>";
+        (totalReviews === 1 ? " store review" : " store reviews") + IMAGYN_ICON + "</span>";
       html += "</div>";
     }
 

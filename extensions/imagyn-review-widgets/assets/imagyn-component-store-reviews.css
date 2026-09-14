@@ -129,6 +129,17 @@
   font-variant-numeric: tabular-nums;
 }
 
+/* Imagyn's own small brand mark beside "Based on N store reviews" — a quiet trust signal
+   that this real aggregate comes from Imagyn's own review data, not a generic checkmark.
+   currentColor keeps it the same muted tone as the count text it sits inside. */
+.imagyn-store-reviews__verified-icon {
+  width: 1em;
+  height: 1em;
+  margin-inline-start: var(--imagyn-space-3xs, 0.2em);
+  vertical-align: -0.15em;
+  color: currentColor;
+}
+
 /* Wider distribution columns than the per-product widget's own histogram context — the
    star-glyph label needs the room, and a wider bar is the whole point of giving this its
    own horizontal section instead of squeezing it into a 22rem column. */
