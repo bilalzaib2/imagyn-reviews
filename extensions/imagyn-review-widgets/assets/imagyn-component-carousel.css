@@ -324,10 +324,11 @@
 /* Stars are this card's single most important trust signal after the photo — sized well
    above the shared design system's default (imagyn-component-review-card.css's own
    font-size-sm, meant for a compact list row) so they read as a deliberate, confident
-   rating rather than a small caption. Scoped to the carousel only; other Imagyn widgets keep
+   rating rather than a small caption, while staying balanced with the customer name below
+   it rather than dominating it. Scoped to the carousel only; other Imagyn widgets keep
    their own existing star size. */
 .imagyn-carousel__slide .imagyn-review-card__stars {
-  font-size: var(--imagyn-font-size-xl, 26px);
+  font-size: var(--imagyn-font-size-lg, 20px);
   margin: 0;
 }
 
