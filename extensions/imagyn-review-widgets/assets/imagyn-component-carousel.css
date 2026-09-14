@@ -274,14 +274,10 @@
    compact density as before, scoped to the content wrapper every card now has. When this
    card sits in a row beside media cards, align-items: stretch on the track forces it to
    match their (now much taller, portrait-image) height. A flex-growing .imagyn-carousel__text
-   block is what actually centers the review text in that extra space — justify-content on
-   .imagyn-carousel__content alone doesn't work here because .imagyn-carousel__product's own
-   margin-top: auto claims all free space for itself first (auto margins are resolved before
-   justify-content, per the flex spec), leaving nothing for a sibling's justify-content to
-   distribute. Letting imagyn-carousel__text itself flex-grow and center its own children
-   sidesteps that entirely: it (not the product row) ends up absorbing the leftover height, and
-   centers its own content within that. More line-clamp headroom lets a longer real review
-   actually use the extra space instead of leaving it as dead air. */
+   block is what actually centers the review text in that extra space, rather than leaving it
+   as dead air below a short review — the product row still follows immediately after with
+   the normal small gap, never pinned separately to the card's bottom edge. More line-clamp
+   headroom lets a longer real review actually use the extra space too. */
 .imagyn-carousel__slide .imagyn-review-card:not(.imagyn-review-card--media) .imagyn-carousel__content {
   padding: var(--imagyn-space-px-lg, 24px) var(--imagyn-space-px-md, 16px);
   gap: var(--imagyn-space-md, 1em);
@@ -312,8 +308,19 @@
    SYSTEM.md's media-first treatment for this widget), so it renders full-bleed above a
    tighter text block rather than sharing the card's outer padding. */
 .imagyn-review-card--media .imagyn-carousel__content {
-  padding: var(--imagyn-space-px-md, 16px) var(--imagyn-space-px-md, 16px) var(--imagyn-space-px-lg, 24px);
-  gap: var(--imagyn-space-sm, 0.6em);
+  padding: var(--imagyn-space-px-md, 16px);
+  gap: var(--imagyn-space-xs, 0.4em);
+}
+
+/* Same small, consistent rhythm between title/body/stars/customer within the media
+   variant's text block — a flex column with one shared gap value, instead of each
+   element's own margin (which zeroed out unevenly: see .imagyn-review-card__stars'
+   margin: 0 override below). One gap value between every row here is what makes review →
+   stars → customer read as a single cohesive group rather than separately-spaced lines. */
+.imagyn-review-card--media .imagyn-carousel__text {
+  display: flex;
+  flex-direction: column;
+  gap: var(--imagyn-space-xs, 0.4em);
 }
 
 .imagyn-carousel__slide .imagyn-review-card__header {
@@ -422,18 +429,19 @@
   font-size: calc(var(--imagyn-font-size-base, 15px) * 1.15);
 }
 
-/* margin-top: auto pins this to the bottom of the (now equal-height, see .imagyn-carousel__
-   slide .imagyn-review-card above) card — every card's product row lands at the same
-   vertical position regardless of whether that card also has a title or photo. This is
-   safe now (it wasn't before the body was pinned to a fixed 4-line height above): the
-   available space it can push through is bounded by the same fixed card height every
-   other card in the row already has, not by one review's unbounded text length. */
+/* Follows the text block immediately, spaced by .imagyn-carousel__content's own small,
+   shared gap — deliberately NOT pinned to the card's bottom edge with margin-top: auto.
+   That auto margin used to push this row (and the secondary rating below it) all the way
+   down whenever align-items: stretch (see .imagyn-carousel__slide .imagyn-review-card
+   above) gave a card more height than its own content needed, opening a large gap between
+   the customer name and the product row. Any leftover height from row-stretching now
+   collects as trailing space below the last row instead, keeping every row in between
+   tightly grouped. */
 .imagyn-carousel__product {
   display: flex;
   align-items: center;
   gap: var(--imagyn-space-xs, 0.4em);
   padding-top: var(--imagyn-space-3xs, 0.2em);
-  margin-top: auto;
   border-top: var(--imagyn-border-width, 1px) solid var(--imagyn-color-border, rgba(0, 0, 0, 0.08));
   text-decoration: none;
   color: inherit;
@@ -471,9 +479,8 @@
    .imagyn-review-card__stars' own size above) so it never competes with or reads as a
    second copy of the review's own rating. A distinct visual tier for a distinct kind of
    information: "this is what this product's other reviews look like," not "here's another
-   rating for the review you just read." Sits directly below .imagyn-carousel__product (no
-   margin-top: auto of its own needed — that element's own auto margin already pins this
-   whole trailing group to the card's bottom edge together). */
+   rating for the review you just read." Follows .imagyn-carousel__product with the same
+   small shared gap every other row in this card uses. */
 .imagyn-carousel__product-rating {
   display: flex;
   align-items: center;
