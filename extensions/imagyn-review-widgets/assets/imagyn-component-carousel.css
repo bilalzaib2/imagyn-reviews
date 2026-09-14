@@ -32,16 +32,10 @@
      so it costs nothing either way. */
   align-content: start;
   gap: var(--imagyn-space-px-md, 16px);
-  /* Unlike every other Imagyn widget (which deliberately locks to Helvetica/system fonts,
-     see imagyn-tokens.css), this carousel is a large, editorial, storefront-facing section —
-     the same category of surface a competing app's own review carousel already inherits the
-     theme's real typography for, and looking distinctly "off-brand" from the merchant's own
-     site there reads as a bolted-on widget rather than a native section. Modern Shopify
-     themes (Dawn and its derivatives, confirmed on a real installed premium theme) expose
-     --font-body-family on :root for exactly this kind of integration; falling back to
-     Imagyn's own token when a theme doesn't define it keeps today's behavior unchanged on
-     any theme that doesn't opt in. */
-  font-family: var(--font-body-family, var(--imagyn-font-family));
+  /* --imagyn-font-family itself already resolves to the theme's --font-body-family first
+     (imagyn-tokens.css) — every Imagyn widget follows the merchant's real typography now,
+     not just this one. */
+  font-family: var(--imagyn-font-family);
   color: var(--imagyn-color-text, inherit);
   width: 100%;
   max-width: var(--imagyn-carousel-max-width, 1200px);
@@ -309,7 +303,7 @@
    tighter text block rather than sharing the card's outer padding. */
 .imagyn-review-card--media .imagyn-carousel__content {
   padding: var(--imagyn-space-px-md, 16px);
-  gap: var(--imagyn-space-xs, 0.4em);
+  gap: var(--imagyn-space-sm, 0.6em);
 }
 
 /* Same small, consistent rhythm between title/body/stars/customer within the media
@@ -320,7 +314,7 @@
 .imagyn-review-card--media .imagyn-carousel__text {
   display: flex;
   flex-direction: column;
-  gap: var(--imagyn-space-xs, 0.4em);
+  gap: var(--imagyn-space-sm, 0.6em);
 }
 
 .imagyn-carousel__slide .imagyn-review-card__header {
@@ -470,6 +464,10 @@
   min-width: 0;
   font-size: var(--imagyn-font-size-sm, 13px);
   font-weight: var(--imagyn-font-weight-medium, 500);
+  /* Product metadata, not a second byline — muted like .imagyn-review-card__date and
+     -verified-label above so it visually reads as secondary information beneath the
+     customer's own name, not competing text of the same weight. */
+  opacity: var(--imagyn-color-text-muted-opacity, 0.6);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;

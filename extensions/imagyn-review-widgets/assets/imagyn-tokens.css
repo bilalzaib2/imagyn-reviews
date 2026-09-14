@@ -15,17 +15,23 @@
  * elements carrying Imagyn's own classes reference them.
  */
 :root {
-  /* Typography — Helvetica first (brand default), system stack as fallback for the
-     platforms where it isn't installed. Still no externally loaded font: every name here
-     is either Helvetica itself or a locally-available system font, so a storefront never
-     pays for a webfont fetch just for this widget. */
-  --imagyn-font-family:
+  /* Every Imagyn widget follows the merchant's own theme typography first — modern Shopify
+     themes (Dawn and its derivatives, confirmed on a real installed premium theme) expose
+     --font-body-family on :root for exactly this kind of integration, and a widget that
+     looks visibly off-brand from the rest of the storefront reads as bolted-on rather than
+     native. Helvetica-first is the fallback for any theme that doesn't define it, keeping
+     today's rendering unchanged there. Still no externally loaded font in the fallback
+     chain itself: every fallback name is either Helvetica or a locally-available system
+     font, so a storefront never pays for a webfont fetch just for this widget. */
+  --imagyn-font-family: var(
+    --font-body-family,
     Helvetica,
     Arial,
     -apple-system,
     BlinkMacSystemFont,
     "Segoe UI",
-    sans-serif;
+    sans-serif
+  );
 
   /* px, not rem: rem ties our sizing to the merchant theme's own <html> font-size
      (Dawn sets it to 62.5%, i.e. 1rem = 10px, not 16px) — px keeps Imagyn Reviews
