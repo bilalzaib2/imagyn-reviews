@@ -15,6 +15,13 @@
   behavioral settings (heading, layout, which fields to show, navigation), never a
   competing color/style system. Section-level spacing is Shopify's own native "Apps"
   section wrapper setting ("Make section margins the same as theme"), not duplicated here.
+
+  data-product-id below is present (a real Shopify product ID) only when this block instance
+  happens to render on a product page — Liquid's global `product` object is only non-null
+  there, regardless of block type. review-carousel.js uses this to decide whether the AI
+  summary it fetches should be this product's own (see api.reviews.featured.tsx's productId
+  param) or the store-wide one — the "product vs store context" the Review Carousel needs
+  without a separate, third AI summary type.
 {% endcomment %}
 <div
   class="imagyn-carousel imagyn-carousel--align-{{ block.settings.text_align }}"
@@ -22,14 +29,6 @@
   data-heading="{{ block.settings.heading }}"
   data-review-count="{{ block.settings.review_count }}"
   data-show-summary="{{ block.settings.show_summary }}"
-  {% comment %}
-    Present (a real Shopify product ID) only when this block instance happens to render on a
-    product page — Liquid's global `product` object is only non-null there, regardless of
-    block type. review-carousel.js uses this to decide whether the AI summary it fetches
-    should be this product's own (see api.reviews.featured.tsx's productId param) or the
-    store-wide one — the "product vs store context" the Review Carousel needs without a
-    separate, third AI summary type.
-  {% endcomment %}
   data-product-id="{{ product.id }}"
   data-show-ai-summary="{{ block.settings.show_ai_summary }}"
   data-cards-mobile="{{ block.settings.cards_mobile }}"
