@@ -7,8 +7,13 @@ import { Button } from "../components/ui/Button";
 import { ContextualSaveBar } from "../components/ui/ContextualSaveBar";
 import { Section } from "../components/ui/Section";
 import { authenticateAdminDeduped } from "../services/auth-dedupe.server";
-import { getOrCreateStore, updateModerationSettings } from "../services/store.server";
+import {
+  getOrCreateStore,
+  updateModerationSettings,
+  updateNewReviewNotificationSettings,
+} from "../services/store.server";
 import { getModerationSettings } from "../services/moderationRules.server";
+import { getNewReviewNotificationSettings } from "../services/reviewNotifications.server";
 import styles from "../styles/app.management.module.css";
 
 // Settings > Review Display > Publishing & Moderation. Split out of the former single
@@ -24,6 +29,10 @@ type LoaderData = {
     notifyOnHold: boolean;
     notifyEmail: string;
   };
+  newReviewNotification: {
+    enabled: boolean;
+    email: string;
+  };
 };
 
 type ActionData = {
@@ -35,7 +44,10 @@ type ActionData = {
 export const loader = async ({ request }: LoaderFunctionArgs): Promise<LoaderData> => {
   const { session } = await authenticateAdminDeduped(request);
   const store = await getOrCreateStore(session.shop);
-  const moderation = await getModerationSettings(store.id);
+  const [moderation, newReviewNotification] = await Promise.all([
+    getModerationSettings(store.id),
+    getNewReviewNotificationSettings(store.id),
+  ]);
 
   return {
     moderation: {
@@ -47,6 +59,10 @@ export const loader = async ({ request }: LoaderFunctionArgs): Promise<LoaderDat
       bannedWords: moderation.bannedWords.join("\n"),
       notifyOnHold: moderation.notifyOnHold,
       notifyEmail: moderation.notifyEmail ?? "",
+    },
+    newReviewNotification: {
+      enabled: newReviewNotification.enabled,
+      email: newReviewNotification.email ?? "",
     },
   };
 };
@@ -71,7 +87,18 @@ export const action = async ({ request }: ActionFunctionArgs): Promise<ActionDat
     return { ok: false, error: "Enter a valid notification email address." };
   }
 
+  const newReviewNotifyEnabled = formData.get("newReviewNotifyEnabled") === "true";
+  const newReviewNotifyEmail = String(formData.get("newReviewNotifyEmail") || "").trim();
+
+  if (newReviewNotifyEnabled && !EMAIL_PATTERN.test(newReviewNotifyEmail)) {
+    return { ok: false, error: "Enter a valid email address for new-review notifications." };
+  }
+
   try {
+    await updateNewReviewNotificationSettings(store.id, {
+      newReviewNotifyEnabled,
+      newReviewNotifyEmail: newReviewNotifyEmail || null,
+    });
     await updateModerationSettings(store.id, {
       moderationRulesEnabled: formData.get("moderationRulesEnabled") === "true",
       moderationMinRating: minRating,
@@ -82,9 +109,9 @@ export const action = async ({ request }: ActionFunctionArgs): Promise<ActionDat
       moderationNotifyOnHold: notifyOnHold,
       moderationNotifyEmail: notifyEmail || null,
     });
-    return { ok: true, message: "Moderation Rules saved." };
+    return { ok: true, message: "Settings saved." };
   } catch (error) {
-    return { ok: false, error: error instanceof Error ? error.message : "Unable to save Moderation Rules." };
+    return { ok: false, error: error instanceof Error ? error.message : "Unable to save settings." };
   }
 };
 
@@ -97,7 +124,7 @@ const MIN_RATING_OPTIONS = [
 ];
 
 export default function SettingsModerationPage() {
-  const { moderation } = useLoaderData<typeof loader>();
+  const { moderation, newReviewNotification } = useLoaderData<typeof loader>();
   const moderationFetcher = useFetcher<ActionData>();
   const isSavingModeration = moderationFetcher.state !== "idle";
 
@@ -110,14 +137,16 @@ export default function SettingsModerationPage() {
   const [bannedWords, setBannedWords] = useState(moderation.bannedWords);
   const [notifyOnHold, setNotifyOnHold] = useState(moderation.notifyOnHold);
   const [notifyEmail, setNotifyEmail] = useState(moderation.notifyEmail);
+  const [newReviewNotifyEnabled, setNewReviewNotifyEnabled] = useState(newReviewNotification.enabled);
+  const [newReviewNotifyEmail, setNewReviewNotifyEmail] = useState(newReviewNotification.email);
 
   useEffect(() => {
     if (!moderationFetcher.data) return;
     if (!moderationFetcher.data.ok) {
-      setToast({ content: moderationFetcher.data.error || "Unable to save Moderation Rules.", error: true });
+      setToast({ content: moderationFetcher.data.error || "Unable to save settings.", error: true });
       return;
     }
-    setToast({ content: moderationFetcher.data.message || "Moderation Rules saved." });
+    setToast({ content: moderationFetcher.data.message || "Settings saved." });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [moderationFetcher.data]);
 
@@ -132,6 +161,8 @@ export default function SettingsModerationPage() {
     formData.set("moderationBannedWords", bannedWords);
     formData.set("moderationNotifyOnHold", String(notifyOnHold));
     formData.set("moderationNotifyEmail", notifyEmail);
+    formData.set("newReviewNotifyEnabled", String(newReviewNotifyEnabled));
+    formData.set("newReviewNotifyEmail", newReviewNotifyEmail);
     moderationFetcher.submit(formData, { method: "post" });
   };
 
@@ -147,7 +178,9 @@ export default function SettingsModerationPage() {
     holdProfanity !== moderation.holdProfanity ||
     bannedWords !== moderation.bannedWords ||
     notifyOnHold !== moderation.notifyOnHold ||
-    notifyEmail !== moderation.notifyEmail;
+    notifyEmail !== moderation.notifyEmail ||
+    newReviewNotifyEnabled !== newReviewNotification.enabled ||
+    newReviewNotifyEmail !== newReviewNotification.email;
 
   const handleDiscardModeration = () => {
     setModerationEnabled(moderation.enabled);
@@ -158,6 +191,8 @@ export default function SettingsModerationPage() {
     setBannedWords(moderation.bannedWords);
     setNotifyOnHold(moderation.notifyOnHold);
     setNotifyEmail(moderation.notifyEmail);
+    setNewReviewNotifyEnabled(newReviewNotification.enabled);
+    setNewReviewNotifyEmail(newReviewNotification.email);
   };
 
   return (
@@ -212,6 +247,37 @@ export default function SettingsModerationPage() {
               />
             ) : null}
           </>
+        ) : null}
+
+        <Button type="button" variant="primary" onClick={handleSaveModeration} disabled={isSavingModeration}>
+          {isSavingModeration ? "Saving…" : "Save"}
+        </Button>
+      </Section>
+
+      {/* Deliberately its own Section, outside the Moderation Rules toggle above: a new-review
+          notification is useful whether or not a store runs Moderation Rules, so hiding it
+          behind that switch would make it unreachable for the stores most likely to want it.
+          Shares this page's single save/discard flow (same fetcher, same ContextualSaveBar) —
+          one screen, one Save, rather than two competing save bars. */}
+      <Section
+        title="New review notifications"
+        description="Get an email the moment a customer leaves a review, with a link to read it and reply."
+      >
+        <Checkbox
+          label="Email me when a customer submits a new review"
+          checked={newReviewNotifyEnabled}
+          onChange={setNewReviewNotifyEnabled}
+          helpText="Sent for every review a customer submits — from your storefront or from a review request email. Imported reviews and reviews you add yourself never trigger it."
+        />
+        {newReviewNotifyEnabled ? (
+          <TextField
+            label="Notification email"
+            type="email"
+            autoComplete="off"
+            placeholder="you@example.com"
+            value={newReviewNotifyEmail}
+            onChange={setNewReviewNotifyEmail}
+          />
         ) : null}
 
         <Button type="button" variant="primary" onClick={handleSaveModeration} disabled={isSavingModeration}>

@@ -86,7 +86,10 @@
   margin: 0 0 var(--space-6);
   padding: var(--space-3) var(--space-4);
   border-radius: var(--radius-md);
-  background: #fbf1ef;
+  /* Tinted from --color-danger via color-mix() rather than a re-typed warm pink hex, the
+     same convention shared.module.css's .errorState already uses — so this wash follows the
+     danger token instead of drifting from it. */
+  background: color-mix(in srgb, var(--color-danger) 8%, var(--color-surface));
   color: var(--color-danger);
   font-size: var(--text-sm);
 }
@@ -134,8 +137,8 @@
   height: 20px;
   border: none;
   border-radius: var(--radius-full);
-  background: rgba(17, 17, 17, 0.72);
-  color: #ffffff;
+  background: color-mix(in srgb, var(--color-text) 72%, transparent);
+  color: var(--color-surface);
   font-size: var(--text-sm);
   line-height: 1;
   display: flex;

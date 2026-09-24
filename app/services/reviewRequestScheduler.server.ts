@@ -2,6 +2,7 @@ import prisma from "../db.server";
 import { enqueueReminderDispatch, enqueueReviewRequestDispatch } from "./reviewRequestDispatch.server";
 import { reviewRequestService, type ReminderType } from "./review-request.server";
 import { emailSuppressionService } from "./emailSuppression.server";
+import { getStorePermissions } from "./permissions";
 
 // This process (react-router-serve) stays alive on Railway between requests — the same
 // assumption productSync.server.ts's fire-and-forget catalog sync already relies on — so a
@@ -52,6 +53,30 @@ function daysBefore(now: Date, days: number): Date {
   return cutoff;
 }
 
+// Plan entitlement for automated reminders, resolved once per store per sweep rather than
+// once per candidate row — a single store can easily own every row in a batch, and
+// getStorePermissions is a real database read.
+//
+// Why this exists at all: Store.reminderEmailsEnabled is a merchant *preference*, not an
+// entitlement. Settings → Request Scheduling refuses to turn it on without
+// canUseEmailReminders, but nothing ever turns it back off when a store leaves Pro — a
+// downgrade (or a cancelled/expired Shopify subscription, which syncBillingFromShopify
+// collapses to plan "starter") leaves the stored preference `true` forever. Without this
+// check, that store would keep receiving the Pro-only Day-N reminder sequence on Free.
+// Checked here, in the one place reminders are actually dispatched, rather than by
+// rewriting the merchant's saved preference on downgrade: the preference is theirs, and it
+// must come back intact the moment they upgrade again.
+async function canUseRemindersCached(storeId: string, cache: Map<string, boolean>): Promise<boolean> {
+  const cached = cache.get(storeId);
+  if (cached !== undefined) {
+    return cached;
+  }
+
+  const permissions = await getStorePermissions(storeId);
+  cache.set(storeId, permissions.canUseEmailReminders);
+  return permissions.canUseEmailReminders;
+}
+
 // One pass: finds every non-terminal, unreviewed ReviewRequest belonging to a store with
 // reminders enabled that still has at least one un-sent reminder, then applies each store's own
 // configured reminder1DelayDays/reminderFinalDelayDays (Settings → Request Scheduling) against
@@ -89,6 +114,7 @@ export async function runDueReminderSweep(now: Date = new Date()): Promise<{ due
 
   let due = 0;
   let dispatched = 0;
+  const reminderEntitlementByStore = new Map<string, boolean>();
 
   for (const request of candidates) {
     if (!request.sentAt) {
@@ -110,6 +136,14 @@ export async function runDueReminderSweep(now: Date = new Date()): Promise<{ due
     }
 
     due += 1;
+
+    // Plan gate, checked before the store's own preference guards below: Free never receives
+    // an automated reminder sequence, only the single initial request (which is a Free
+    // capability and is dispatched by runDueReviewRequestSweep above, entirely independently
+    // of this sweep). See canUseRemindersCached for why a stale-true preference is possible.
+    if (!(await canUseRemindersCached(request.store.id, reminderEntitlementByStore))) {
+      continue;
+    }
 
     if (!request.store.remindersEnabledAt || request.sentAt < request.store.remindersEnabledAt) {
       continue;

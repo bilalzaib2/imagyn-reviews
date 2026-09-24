@@ -1,22 +1,43 @@
 :root {
   color-scheme: light;
-  /* Warm, editorial base — not stark white. Every --color-surface-* below is a step of the
-     same warm neutral family, not independent grays, so the whole app reads as one considered
-     palette rather than "white with gray boxes." */
-  --color-background: #faf9f4;
-  --color-surface: #fffefb;
-  --color-surface-muted: #f4f2ea;
-  --color-surface-strong: #ece8dc;
-  --color-text: #16160f;
-  --color-text-muted: #6f6c60;
-  --color-border: #e6e2d3;
-  --color-border-strong: #d3cdb8;
+  /* Neutral grayscale base (2026-09-25 refinement — replaced the previous warm beige/cream
+     family, whose surfaces ran #faf9f4/#fffefb/#f4f2ea/#ece8dc with matching warm borders and
+     an olive-cast near-black text color). The ladder below is deliberately ONE family, not
+     independent grays, so the app still reads as a single considered palette:
+       white          #ffffff  primary surfaces and cards
+       light gray     #f6f6f8  the page/background surface everything sits on
+       light gray     #f1f1f4  muted surfaces — hover fills, inset panels, quiet chips
+       mid gray       #e6e6ea  strong surfaces — pressed/selected fills, disabled chrome
+       mid gray       #e5e5e9 / #cecdd4  hairline dividers, then real borders
+       soft gray      #6e6e77  secondary text
+       charcoal       #18181b  primary text
+     Every value carries a barely-there cool cast (hue 240, under 4% saturation) rather than
+     being mathematically pure gray: dead-neutral grays read flat and clinical on a screen,
+     while a trace of blue is what makes a grayscale interface feel calm and considered. It is
+     far below the threshold where anyone would call it "blue."
+     Deliberately NOT pure #000 on pure #fff: charcoal text on an off-white page is the whole
+     difference between premium and harsh. Contrast is still comfortably past WCAG AA —
+     charcoal on white measures 17.7:1, and the secondary gray clears AA on all three neutral
+     surfaces it is ever used on (5.3:1 on white, 4.9:1 on the page background, 4.7:1 on the
+     muted surface). That last case is why the secondary gray is #6a6a73 and not a step
+     lighter: at #6e6e77 it measured 4.48:1 on the muted surface, marginally under AA, which
+     is exactly the combination used for help text inside an inset panel. */
+  --color-background: #f6f6f8;
+  --color-surface: #ffffff;
+  --color-surface-muted: #f1f1f4;
+  --color-surface-strong: #e6e6ea;
+  --color-text: #18181b;
+  --color-text-muted: #6a6a73;
+  --color-border: #e5e5e9;
+  --color-border-strong: #cecdd4;
 
   /* Structural brand color — primary buttons, focus rings, "selected" states. Stays
      near-black on purpose (see docs/DESIGN_SYSTEM.md's 2026-09-10 note): black is IMAGYN's
-     one strong, confident brand color, not a stand-in for "no real color system." */
-  --color-accent: #16160f;
-  --color-accent-soft: #efece0;
+     one strong, confident brand color, not a stand-in for "no real color system." Now the
+     same neutral charcoal as --color-text rather than the old olive-cast near-black, so a
+     primary button and body copy are the same ink. */
+  --color-accent: #18181b;
+  --color-accent-soft: #ededf0;
 
   /* IMAGYN's one restrained chartreuse accent — used deliberately for genuine emphasis
      (a real status, a key metric, an earned badge), never as a default card treatment and
@@ -24,9 +45,19 @@
      — "restrained," per the brand direction, not "loud." */
   --color-highlight: #97a819;
   --color-highlight-strong: #6f7a13;
+  /* The pale tint of the same accent, used as a filled background with --color-text on top
+     (Brand Studio's two "apply my branding" actions). Added by the 2026-09-25 grayscale pass
+     only to stop the exact same value being typed inline in two separate places — the color
+     itself is unchanged, and like --color-highlight it is deliberately NOT grayscale: it is
+     the brand's one accent, not part of the beige surface language that pass removed. */
+  --color-highlight-soft: #eafbb2;
 
   /* Real, distinct functional hues — previously too desaturated/brownish to read as actual
-     green/amber/red at a glance. */
+     green/amber/red at a glance. Deliberately UNTOUCHED by the 2026-09-25 grayscale pass: a
+     status color carries meaning, and flattening success/warning/danger/AI into the neutral
+     ladder above would delete that meaning, not refine it. These are the only hues in the
+     admin UI besides --color-highlight above, which is exactly what makes them read as
+     signal against an otherwise grayscale interface. */
   --color-success: #1f7a45;
   --color-warning: #b06a06;
   --color-danger: #c23b2b;
@@ -65,9 +96,12 @@
   --radius-xl: 1.25rem;
   --radius-full: 999px;
 
-  --shadow-sm: 0 1px 2px rgba(17, 17, 17, 0.04);
-  --shadow-md: 0 4px 16px rgba(17, 17, 17, 0.05);
-  --shadow-lg: 0 8px 24px rgba(17, 17, 17, 0.06);
+  /* Same depth as before (identical blur/offset/opacity) — only the ink was retinted from the
+     old warm near-black to the neutral charcoal above, so a card's shadow belongs to the same
+     grayscale family as its border instead of casting a faint warm halo onto the page. */
+  --shadow-sm: 0 1px 2px rgba(24, 24, 27, 0.04);
+  --shadow-md: 0 4px 16px rgba(24, 24, 27, 0.05);
+  --shadow-lg: 0 8px 24px rgba(24, 24, 27, 0.06);
 
   --container-width: 1120px;
   --container-padding: 2rem;

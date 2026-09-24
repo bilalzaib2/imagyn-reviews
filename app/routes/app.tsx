@@ -19,6 +19,7 @@ import enTranslations from "@shopify/polaris/locales/en.json";
 import { authenticateAdminDeduped } from "../services/auth-dedupe.server";
 import { getOrCreateStore } from "../services/store.server";
 import { ensureDevelopmentStoreFlag, getBillingSnapshot } from "../services/billing/billing.server";
+import { PLANS, type PlanId } from "../services/billing/plans";
 import { FloatingHelp } from "../components/ui/FloatingHelp";
 import styles from "../styles/app.shell.module.css";
 
@@ -30,9 +31,14 @@ const BILLING_PATH = "/app/billing";
 export const loader = async ({ request }: LoaderFunctionArgs) => {
   const { session, admin } = await authenticateAdminDeduped(request);
 
+  // Resolved once for the whole shell: the access gate below needs it on every route except
+  // billing, and the support widget needs the store's name/plan on every route including
+  // billing. app.billing.tsx already calls getOrCreateStore itself, so hoisting this out of
+  // the gate adds no query that page wasn't already making.
+  const store = await getOrCreateStore(session.shop);
+
   const url = new URL(request.url);
   if (url.pathname !== BILLING_PATH) {
-    const store = await getOrCreateStore(session.shop);
     const isDevelopmentStore = await ensureDevelopmentStoreFlag(admin, store);
     const snapshot = getBillingSnapshot({ ...store, isDevelopmentStore });
 
@@ -41,12 +47,20 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
     }
   }
 
-  // eslint-disable-next-line no-undef
-  return { apiKey: process.env.SHOPIFY_API_KEY || "" };
+  return {
+    // eslint-disable-next-line no-undef
+    apiKey: process.env.SHOPIFY_API_KEY || "",
+    // Store context for the support widget's pre-filled email (see supportMailto.ts, which
+    // documents what must never be included). Store.plan is a plain string column, so an
+    // unrecognized value resolves to null rather than crashing the whole shell on a lookup.
+    storeName: store.name,
+    shopDomain: session.shop,
+    planName: PLANS[store.plan as PlanId]?.name ?? null,
+  };
 };
 
 export default function App() {
-  const { apiKey } = useLoaderData<typeof loader>();
+  const { apiKey, storeName, shopDomain, planName } = useLoaderData<typeof loader>();
   const location = useLocation();
   const navigate = useNavigate();
   const navigation = useNavigation();
@@ -88,7 +102,7 @@ export default function App() {
       <PolarisAppProvider i18n={enTranslations}>
         {isNavigating ? <div className={styles.navProgress} aria-hidden="true" /> : null}
         <Outlet />
-        <FloatingHelp />
+        <FloatingHelp storeName={storeName} shopDomain={shopDomain} planName={planName} />
       </PolarisAppProvider>
     </AppProvider>
   );

@@ -6,6 +6,7 @@ import type { ActionFunctionArgs, LoaderFunctionArgs } from "react-router";
 import { reviewRequestService } from "../services/review-request.server";
 import { createReview, issueRewardIfEligible } from "../services/review.server";
 import { evaluateReview, getModerationSettings, sendHeldReviewNotification } from "../services/moderationRules.server";
+import { sendNewReviewNotification } from "../services/reviewNotifications.server";
 import {
   MAX_IMAGES_PER_REVIEW,
   MAX_VIDEO_DURATION_MS,
@@ -165,16 +166,31 @@ export const action = async ({ request, params }: ActionFunctionArgs) => {
       approvedReview = review;
     }
 
-    if (decision.moderationStatus === "held" && moderationSettings.notifyOnHold && moderationSettings.notifyEmail) {
+    const heldNotificationSentTo =
+      decision.moderationStatus === "held" && moderationSettings.notifyOnHold && moderationSettings.notifyEmail
+        ? moderationSettings.notifyEmail
+        : null;
+
+    if (heldNotificationSentTo) {
       void sendHeldReviewNotification({
         storeName: result.request.store.name,
-        notifyEmail: moderationSettings.notifyEmail,
+        notifyEmail: heldNotificationSentTo,
         reviewerName,
         productName: result.request.product.name ?? "your product",
         rating,
         reason: decision.moderationReason ?? "Held by a Moderation Rule.",
       });
     }
+
+    // Same merchant new-review notification the storefront widget path sends (see
+    // api.reviews.tsx) — a review submitted through a request link is no less a real new
+    // review. Fire-and-forget; the review above has already been created successfully.
+    void sendNewReviewNotification({
+      storeId: result.request.store.id,
+      reviewId: review.id,
+      source: "review_request",
+      heldNotificationSentTo,
+    });
   } catch (error) {
     return data(
       { ok: false as const, error: error instanceof Error ? error.message : "Unable to submit review." },

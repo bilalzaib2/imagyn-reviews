@@ -37,6 +37,12 @@ const ALLOWED_BLOCKS: Record<string, { template: "product" | "collection" | "ind
   // Store-wide, placeable on any page — opens on the homepage template by default, same
   // reasoning as review_carousel/medals_showcase/store_reviews above.
   store_ai_summary: { template: "index", kind: "section" },
+  // An app embed (`"target": "body"` — see floating_reviews.liquid), enabled once for the
+  // whole storefront rather than placed in a section, so it takes the same activateAppId +
+  // context=apps deep-link shape collection_rating_badges uses. Sending it through the
+  // section shape instead is exactly what produced Shopify's "There is a problem with the
+  // app block" error described above.
+  floating_reviews: { template: "index", kind: "embed" },
 };
 
 export const loader = async ({ request }: LoaderFunctionArgs) => {

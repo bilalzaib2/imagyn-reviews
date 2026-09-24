@@ -663,7 +663,11 @@ export default function AppearancePage() {
                       // stays on the shared black `--color-accent` (see button.module.css);
                       // this isn't a global restyle. Kept as the sole place lime appears in
                       // Brand Studio, per "use selectively, don't force it everywhere."
-                      style={{ background: "#EAFBB2", color: "#000000", borderColor: "#EAFBB2" }}
+                      style={{
+                        background: "var(--color-highlight-soft)",
+                        color: "var(--color-text)",
+                        borderColor: "var(--color-highlight-soft)",
+                      }}
                       onClick={handleApplyEmailBranding}
                       disabled={isApplyingEmailBranding}
                     >
@@ -702,7 +706,11 @@ export default function AppearancePage() {
                         <Button
                           type="button"
                           variant="primary"
-                          style={{ background: "#EAFBB2", color: "#000000", borderColor: "#EAFBB2" }}
+                          style={{
+                        background: "var(--color-highlight-soft)",
+                        color: "var(--color-text)",
+                        borderColor: "var(--color-highlight-soft)",
+                      }}
                           onClick={handleApplyAiSuggestion}
                         >
                           Apply suggestion

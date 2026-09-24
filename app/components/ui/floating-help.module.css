@@ -64,7 +64,12 @@
   position: absolute;
   right: 0;
   bottom: calc(100% + var(--space-3));
-  width: 216px;
+  /* Wider than the old two-item menu (216px) because the panel now leads with real copy and
+     an email address. Capped against the viewport so it can never overflow the app frame on a
+     narrow screen — see the phone breakpoint at the end of this file, which drops the absolute
+     positioning entirely. */
+  width: 264px;
+  max-width: calc(100vw - var(--space-6) * 2);
   display: grid;
   gap: 2px;
   padding: var(--space-2);
@@ -87,6 +92,36 @@
   }
 }
 
+/* Typography-first header: a quiet title, one line of supporting copy, and the address
+   itself — no icon, no illustration, nothing that reads as a chat widget. */
+.panelHeader {
+  display: grid;
+  gap: 2px;
+  padding: var(--space-2) var(--space-3) var(--space-3);
+}
+
+.panelTitle {
+  margin: 0;
+  color: var(--color-text);
+  font-size: var(--text-sm);
+  font-weight: 600;
+}
+
+.panelText {
+  margin: 0;
+  color: var(--color-text-muted);
+  font-size: var(--text-xs);
+  line-height: 1.5;
+}
+
+.panelEmail {
+  margin: var(--space-1) 0 0;
+  color: var(--color-text);
+  font-size: var(--text-xs);
+  /* Long-ish address, narrow panel — wrap rather than force the panel wider. */
+  overflow-wrap: anywhere;
+}
+
 .item {
   display: flex;
   align-items: center;
@@ -102,6 +137,27 @@
 
 .item:hover {
   background: var(--color-surface-muted);
+}
+
+/* The one emphasized action in the panel. Same geometry as .item so the two read as one
+   stack, with the app's existing muted surface marking which one is primary — no new accent
+   color is introduced. */
+.primaryItem {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  padding: var(--space-2) var(--space-3);
+  border-radius: var(--radius-md);
+  background: var(--color-surface-muted);
+  color: var(--color-text);
+  font-size: var(--text-sm);
+  font-weight: 600;
+  text-decoration: none;
+  transition: background-color var(--transition-base);
+}
+
+.primaryItem:hover {
+  background: var(--color-border);
 }
 
 .itemIcon {
@@ -129,7 +185,23 @@
     animation: none;
   }
 
-  .item {
+  .item,
+  .primaryItem {
     transition: none;
+  }
+}
+
+/* Phones: the panel stops being a small popover anchored to a 44px button in the corner and
+   becomes a sheet spanning the app frame's width, so nothing is ever clipped by the viewport
+   edge. The trigger itself is unchanged — already a 44px touch target. */
+@media (max-width: 480px) {
+  .panel {
+    position: fixed;
+    left: max(var(--space-4), env(safe-area-inset-left));
+    right: max(var(--space-4), env(safe-area-inset-right));
+    bottom: calc(max(var(--space-6), env(safe-area-inset-bottom)) + 44px + var(--space-3));
+    width: auto;
+    max-width: none;
+    transform-origin: bottom center;
   }
 }

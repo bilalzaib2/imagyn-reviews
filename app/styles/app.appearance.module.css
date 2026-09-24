@@ -243,8 +243,12 @@
 .heroSection {
   padding: var(--space-3);
   border-radius: var(--radius-lg);
-  border: 1px solid #d8f0a0;
-  background: linear-gradient(180deg, rgba(234, 251, 178, 0.35), rgba(234, 251, 178, 0.08));
+  border: 1px solid color-mix(in srgb, var(--color-highlight) 35%, var(--color-surface));
+  background: linear-gradient(
+    180deg,
+    color-mix(in srgb, var(--color-highlight) 16%, var(--color-surface)) 0%,
+    color-mix(in srgb, var(--color-highlight) 4%, var(--color-surface)) 100%
+  );
   margin-bottom: var(--space-2);
 }
 
@@ -256,9 +260,11 @@
   flex-wrap: wrap;
   padding: var(--space-3) var(--space-4);
   border-radius: var(--radius-md);
-  /* Imagyn's own approved neutral surface (#F5F5F5) — this card is Imagyn admin chrome
-     around a merchant's data, not merchant-customizable storefront content. */
-  background: #f5f5f5;
+  /* Imagyn admin chrome around a merchant's data, not merchant-customizable storefront
+     content. On the shared muted-surface token since the 2026-09-25 grayscale pass — that
+     token now IS the approved neutral surface this used to hardcode as #F5F5F5, so the two
+     can no longer drift apart. */
+  background: var(--color-surface-muted);
 }
 
 .brandMatchPreview {

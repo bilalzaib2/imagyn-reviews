@@ -1,0 +1,447 @@
+/*
+ * Imagyn Reviews — Floating Reviews widget.
+ *
+ * A fixed side tab that opens a review drawer, available on every storefront page via the
+ * app embed block (blocks/floating_reviews.liquid). Every value comes from imagyn-tokens.css
+ * (and therefore from Brand Studio at runtime — see imagyn-appearance.js, which writes the
+ * resolved --imagyn-* tokens onto this widget's own root element) rather than being
+ * hardcoded here.
+ *
+ * Load imagyn-tokens.css before this file.
+ *
+ * Scoping rule: every selector below is prefixed .imagyn-floating-reviews, and the widget
+ * renders into its own fixed-position container, so nothing here can affect the merchant's
+ * theme layout or inherit unexpectedly from it.
+ */
+
+.imagyn-floating-reviews {
+  font-family: var(--imagyn-font-family);
+  /* Above typical theme chrome (sticky headers sit in the 10–100 range in Dawn and its
+     derivatives) but deliberately below the 1000+ band Shopify's own cart drawers and
+     consent banners use, so this widget never covers a shopper's checkout path. */
+  z-index: 900;
+}
+
+/* ---------------------------------------------------------------- Tab */
+
+.imagyn-floating-reviews__tab {
+  position: fixed;
+  /* Both offsets are always defined; the side not in use is set to auto by the position
+     modifier classes below, so left/right can never both apply. */
+  top: var(--imagyn-floating-top, 50%);
+  transform: translateY(-50%);
+  display: inline-flex;
+  align-items: center;
+  gap: var(--imagyn-space-xs, 0.4em);
+  margin: 0;
+  padding: var(--imagyn-space-sm, 0.6em) var(--imagyn-space-md, 1em);
+  border: var(--imagyn-border-width, 1px) solid var(--imagyn-color-border, rgba(0, 0, 0, 0.08));
+  background: var(--imagyn-color-surface, #ffffff);
+  color: var(--imagyn-color-text, inherit);
+  font-family: inherit;
+  font-size: var(--imagyn-font-size-sm, 13px);
+  font-weight: var(--imagyn-font-weight-medium, 500);
+  letter-spacing: var(--imagyn-letter-spacing-normal, 0.02em);
+  line-height: var(--imagyn-line-height-tight, 1);
+  cursor: pointer;
+  box-shadow: var(--imagyn-shadow-md, 0 2px 8px rgba(0, 0, 0, 0.06));
+  z-index: 900;
+  /* Vertical writing mode keeps the tab a thin strip against the viewport edge instead of a
+     wide block covering the merchant's own content — the whole point of a side tab. */
+  writing-mode: vertical-rl;
+  transition:
+    box-shadow var(--imagyn-duration-base, 200ms) var(--imagyn-easing, ease-out),
+    padding var(--imagyn-duration-base, 200ms) var(--imagyn-easing, ease-out);
+}
+
+.imagyn-floating-reviews__tab:hover {
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.1);
+}
+
+.imagyn-floating-reviews__tab:focus-visible {
+  outline: 2px solid var(--imagyn-color-focus, #0a0a0a);
+  outline-offset: 2px;
+}
+
+.imagyn-floating-reviews__tab--right {
+  right: 0;
+  left: auto;
+  border-right: none;
+  border-radius: var(--imagyn-radius-md, 8px) 0 0 var(--imagyn-radius-md, 8px);
+}
+
+.imagyn-floating-reviews__tab--left {
+  left: 0;
+  right: auto;
+  border-left: none;
+  border-radius: 0 var(--imagyn-radius-md, 8px) var(--imagyn-radius-md, 8px) 0;
+  /* Mirrors the glyph order so the stars still read top-to-bottom on the left edge. */
+  writing-mode: vertical-lr;
+}
+
+.imagyn-floating-reviews__tab-star {
+  color: var(--imagyn-color-star, #f5a623);
+  /* Rotated back to upright inside the vertical tab — a rotated star reads as a glitch. */
+  writing-mode: horizontal-tb;
+}
+
+.imagyn-floating-reviews__tab-rating {
+  writing-mode: horizontal-tb;
+  font-variant-numeric: tabular-nums;
+}
+
+.imagyn-floating-reviews__tab-count {
+  writing-mode: horizontal-tb;
+  opacity: var(--imagyn-color-text-muted-opacity, 0.6);
+  font-size: var(--imagyn-font-size-xs, 12px);
+  font-variant-numeric: tabular-nums;
+}
+
+/* ---------------------------------------------------------------- Overlay + panel */
+
+.imagyn-floating-reviews__overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.32);
+  z-index: 901;
+  opacity: 0;
+  transition: opacity var(--imagyn-duration-base, 200ms) var(--imagyn-easing, ease-out);
+}
+
+.imagyn-floating-reviews__overlay[data-open="true"] {
+  opacity: 1;
+}
+
+.imagyn-floating-reviews__panel {
+  position: fixed;
+  top: 0;
+  bottom: 0;
+  width: min(420px, 100vw);
+  max-width: 100vw;
+  display: flex;
+  flex-direction: column;
+  background: var(--imagyn-color-surface, #ffffff);
+  color: var(--imagyn-color-text, inherit);
+  box-shadow: 0 0 40px rgba(0, 0, 0, 0.12);
+  z-index: 902;
+  transition: transform var(--imagyn-duration-slow, 320ms) var(--imagyn-easing, ease-out);
+}
+
+.imagyn-floating-reviews__panel--right {
+  right: 0;
+  transform: translateX(100%);
+}
+
+.imagyn-floating-reviews__panel--left {
+  left: 0;
+  transform: translateX(-100%);
+}
+
+.imagyn-floating-reviews__panel[data-open="true"] {
+  transform: translateX(0);
+}
+
+/* ---------------------------------------------------------------- Panel header */
+
+.imagyn-floating-reviews__header {
+  flex: 0 0 auto;
+  padding: var(--imagyn-space-px-lg, 24px);
+  border-bottom: var(--imagyn-border-width, 1px) solid var(--imagyn-color-border, rgba(0, 0, 0, 0.08));
+}
+
+.imagyn-floating-reviews__header-top {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--imagyn-space-md, 1em);
+}
+
+.imagyn-floating-reviews__title {
+  margin: 0;
+  font-size: var(--imagyn-font-size-md, 17px);
+  font-weight: var(--imagyn-font-weight-semibold, 600);
+  line-height: var(--imagyn-line-height-base, 1.5);
+  letter-spacing: var(--imagyn-letter-spacing-tight, 0.01em);
+}
+
+.imagyn-floating-reviews__scope {
+  margin: var(--imagyn-space-3xs, 0.2em) 0 0;
+  font-size: var(--imagyn-font-size-xs, 12px);
+  line-height: var(--imagyn-line-height-base, 1.5);
+  opacity: var(--imagyn-color-text-muted-opacity, 0.6);
+}
+
+.imagyn-floating-reviews__close {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  padding: 0;
+  border: none;
+  border-radius: var(--imagyn-radius-full, 999px);
+  background: transparent;
+  color: inherit;
+  font-family: inherit;
+  font-size: var(--imagyn-font-size-md, 17px);
+  line-height: 1;
+  cursor: pointer;
+}
+
+.imagyn-floating-reviews__close:hover {
+  background: var(--imagyn-color-border, rgba(0, 0, 0, 0.08));
+}
+
+.imagyn-floating-reviews__close:focus-visible {
+  outline: 2px solid var(--imagyn-color-focus, #0a0a0a);
+  outline-offset: 2px;
+}
+
+.imagyn-floating-reviews__summary {
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: var(--imagyn-space-sm, 0.6em);
+  margin-top: var(--imagyn-space-md, 1em);
+}
+
+.imagyn-floating-reviews__average {
+  font-size: var(--imagyn-font-size-xl, 26px);
+  font-weight: var(--imagyn-font-weight-semibold, 600);
+  line-height: var(--imagyn-line-height-tight, 1);
+  font-variant-numeric: tabular-nums;
+}
+
+.imagyn-floating-reviews__stars {
+  color: var(--imagyn-color-star, #f5a623);
+  font-size: var(--imagyn-font-size-base, 15px);
+  letter-spacing: 0.08em;
+}
+
+.imagyn-floating-reviews__count {
+  font-size: var(--imagyn-font-size-sm, 13px);
+  opacity: var(--imagyn-color-text-muted-opacity, 0.6);
+  font-variant-numeric: tabular-nums;
+}
+
+.imagyn-floating-reviews__distribution {
+  margin-top: var(--imagyn-space-md, 1em);
+}
+
+/* ---------------------------------------------------------------- Review list */
+
+.imagyn-floating-reviews__body {
+  flex: 1 1 auto;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+  padding: var(--imagyn-space-px-lg, 24px);
+  /* Never a horizontal scrollbar, whatever a review's content is — the one axis this panel
+     must not scroll on. */
+  overflow-x: hidden;
+}
+
+.imagyn-floating-reviews__list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--imagyn-space-px-lg, 24px);
+}
+
+.imagyn-floating-reviews__review + .imagyn-floating-reviews__review {
+  padding-top: var(--imagyn-space-px-lg, 24px);
+  border-top: var(--imagyn-border-width, 1px) solid var(--imagyn-color-border, rgba(0, 0, 0, 0.08));
+}
+
+.imagyn-floating-reviews__review-head {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--imagyn-space-sm, 0.6em);
+}
+
+.imagyn-floating-reviews__review-stars {
+  color: var(--imagyn-color-star, #f5a623);
+  font-size: var(--imagyn-font-size-sm, 13px);
+  letter-spacing: 0.06em;
+}
+
+.imagyn-floating-reviews__review-author {
+  font-size: var(--imagyn-font-size-sm, 13px);
+  font-weight: var(--imagyn-font-weight-medium, 500);
+}
+
+.imagyn-floating-reviews__verified {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--imagyn-space-3xs, 0.2em);
+  font-size: var(--imagyn-font-size-xs, 12px);
+  color: var(--imagyn-color-success, #1a7f4b);
+}
+
+.imagyn-floating-reviews__verified-icon {
+  width: 0.9em;
+  height: 0.9em;
+  flex: 0 0 auto;
+}
+
+.imagyn-floating-reviews__review-title {
+  margin: var(--imagyn-space-xs, 0.4em) 0 0;
+  font-size: var(--imagyn-font-size-base, 15px);
+  font-weight: var(--imagyn-font-weight-semibold, 600);
+  line-height: var(--imagyn-line-height-base, 1.5);
+}
+
+.imagyn-floating-reviews__review-body {
+  margin: var(--imagyn-space-xs, 0.4em) 0 0;
+  font-size: var(--imagyn-font-size-sm, 13px);
+  line-height: var(--imagyn-line-height-base, 1.5);
+  /* Long unbroken strings (URLs, stray keyboard-mashing) wrap instead of forcing the panel
+     wider than the viewport. */
+  overflow-wrap: anywhere;
+}
+
+.imagyn-floating-reviews__review-meta {
+  margin: var(--imagyn-space-xs, 0.4em) 0 0;
+  font-size: var(--imagyn-font-size-xs, 12px);
+  opacity: var(--imagyn-color-text-muted-opacity, 0.6);
+}
+
+.imagyn-floating-reviews__media {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--imagyn-space-px-xs, 8px);
+  margin-top: var(--imagyn-space-sm, 0.6em);
+}
+
+.imagyn-floating-reviews__media-item {
+  width: 64px;
+  height: 64px;
+  object-fit: cover;
+  border-radius: var(--imagyn-radius-sm, 4px);
+  border: var(--imagyn-border-width, 1px) solid var(--imagyn-color-border, rgba(0, 0, 0, 0.08));
+  background: var(--imagyn-color-border, rgba(0, 0, 0, 0.04));
+}
+
+.imagyn-floating-reviews__reply {
+  margin-top: var(--imagyn-space-sm, 0.6em);
+  padding-left: var(--imagyn-space-md, 1em);
+  border-left: 2px solid var(--imagyn-color-border, rgba(0, 0, 0, 0.08));
+}
+
+.imagyn-floating-reviews__reply-label {
+  margin: 0;
+  font-size: var(--imagyn-font-size-xs, 12px);
+  font-weight: var(--imagyn-font-weight-medium, 500);
+  opacity: var(--imagyn-color-text-muted-opacity, 0.6);
+}
+
+.imagyn-floating-reviews__reply-body {
+  margin: var(--imagyn-space-3xs, 0.2em) 0 0;
+  font-size: var(--imagyn-font-size-sm, 13px);
+  line-height: var(--imagyn-line-height-base, 1.5);
+  overflow-wrap: anywhere;
+}
+
+.imagyn-floating-reviews__empty {
+  margin: 0;
+  font-size: var(--imagyn-font-size-sm, 13px);
+  line-height: var(--imagyn-line-height-base, 1.5);
+  opacity: var(--imagyn-color-text-muted-opacity, 0.6);
+}
+
+/* ---------------------------------------------------------------- Footer CTA */
+
+.imagyn-floating-reviews__footer {
+  flex: 0 0 auto;
+  padding: var(--imagyn-space-px-md, 16px) var(--imagyn-space-px-lg, 24px);
+  border-top: var(--imagyn-border-width, 1px) solid var(--imagyn-color-border, rgba(0, 0, 0, 0.08));
+  /* Keeps the CTA clear of the iOS home indicator when the panel is full height. */
+  padding-bottom: calc(var(--imagyn-space-px-md, 16px) + env(safe-area-inset-bottom, 0px));
+}
+
+.imagyn-floating-reviews__cta {
+  display: block;
+  width: 100%;
+  padding: var(--imagyn-space-sm, 0.6em) var(--imagyn-space-md, 1em);
+  border: var(--imagyn-border-width, 1px) solid currentColor;
+  border-radius: var(--imagyn-radius-md, 8px);
+  background: transparent;
+  color: inherit;
+  font-family: inherit;
+  font-size: var(--imagyn-font-size-sm, 13px);
+  font-weight: var(--imagyn-font-weight-medium, 500);
+  line-height: var(--imagyn-line-height-base, 1.5);
+  text-align: center;
+  text-decoration: none;
+  cursor: pointer;
+}
+
+.imagyn-floating-reviews__cta:focus-visible {
+  outline: 2px solid var(--imagyn-color-focus, #0a0a0a);
+  outline-offset: 2px;
+}
+
+/* ---------------------------------------------------------------- Responsive */
+
+/* Tablet and below: a narrower viewport can't spare 420px of fixed width. */
+@media (max-width: 749px) {
+  .imagyn-floating-reviews__panel {
+    width: min(360px, 92vw);
+  }
+}
+
+/* Phones: the side panel becomes a bottom sheet — the same treatment
+   imagyn-component-drawer.css established for mobile — because a full-height side panel on a
+   small screen is indistinguishable from a page takeover, and a bottom sheet keeps the
+   storefront visible behind it. The tab moves to the lower edge, clear of sticky theme
+   headers and of the thumb's natural resting position. */
+@media (max-width: 599px) {
+  .imagyn-floating-reviews__tab {
+    top: auto;
+    bottom: calc(var(--imagyn-space-px-md, 16px) + env(safe-area-inset-bottom, 0px));
+    transform: none;
+    writing-mode: horizontal-tb;
+    border-radius: var(--imagyn-radius-full, 999px);
+    border: var(--imagyn-border-width, 1px) solid var(--imagyn-color-border, rgba(0, 0, 0, 0.08));
+    padding: var(--imagyn-space-sm, 0.6em) var(--imagyn-space-md, 1em);
+  }
+
+  .imagyn-floating-reviews__tab--right {
+    right: var(--imagyn-space-px-md, 16px);
+  }
+
+  .imagyn-floating-reviews__tab--left {
+    left: var(--imagyn-space-px-md, 16px);
+    writing-mode: horizontal-tb;
+  }
+
+  .imagyn-floating-reviews__panel,
+  .imagyn-floating-reviews__panel--left,
+  .imagyn-floating-reviews__panel--right {
+    top: auto;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    width: 100%;
+    max-height: 86vh;
+    border-radius: var(--imagyn-radius-lg, 12px) var(--imagyn-radius-lg, 12px) 0 0;
+    transform: translateY(100%);
+  }
+
+  .imagyn-floating-reviews__panel[data-open="true"] {
+    transform: translateY(0);
+  }
+}
+
+/* A shopper who has asked their OS for less motion gets no slide at all — the panel simply
+   appears. Nothing about the widget's behavior depends on the transition. */
+@media (prefers-reduced-motion: reduce) {
+  .imagyn-floating-reviews__panel,
+  .imagyn-floating-reviews__overlay,
+  .imagyn-floating-reviews__tab {
+    transition: none;
+  }
+}

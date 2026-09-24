@@ -21,6 +21,10 @@ interface FakeStoreRow {
   remindersEnabledAt: Date | null;
   reminder1DelayDays: number;
   reminderFinalDelayDays: number;
+  /** Plan entitlement, as permissions.ts would resolve it. Defaults to true in the helper
+   *  below so every pre-existing reminder test keeps describing a Pro store, which is what
+   *  they were always written against. */
+  canUseEmailReminders?: boolean;
 }
 
 let fakeRequests: FakeRequestRow[];
@@ -105,6 +109,17 @@ vi.mock("./reviewRequestDispatch.server", () => ({
     }
     reminderDispatches.push({ id, type });
   }),
+}));
+
+// Plan entitlement, as runDueReminderSweep now checks it before dispatching any reminder.
+// Defaults to true for any store the test didn't explicitly mark as Free, so every
+// pre-existing reminder test in this file continues to describe a Pro store.
+const getStorePermissionsMock = vi.fn(async (storeId: string) => ({
+  canUseEmailReminders: fakeStores[storeId]?.canUseEmailReminders ?? true,
+}));
+
+vi.mock("./permissions", () => ({
+  getStorePermissions: (storeId: string) => getStorePermissionsMock(storeId),
 }));
 
 vi.mock("./emailSuppression.server", () => ({
@@ -454,6 +469,71 @@ describe("runDueReminderSweep", () => {
       // store_1's 2-day delay makes req_fast_store due; store_2's 8-day delay does not.
       expect(result).toEqual({ due: 1, dispatched: 1 });
       expect(reminderDispatches).toEqual([{ id: "req_fast_store", type: "reminder_1" }]);
+    });
+  });
+
+  // The Free/Pro product rule: Free gets exactly one initial review-request email per
+  // eligible order (dispatched by runDueReviewRequestSweep, tested in its own describe block
+  // above — entirely independent of this sweep) and NO automated reminder sequence. Pro keeps
+  // both. The store-level reminderEmailsEnabled preference is not sufficient on its own: it
+  // survives a downgrade, so the plan itself has to be checked at dispatch time.
+  describe("plan gating (Free never receives automated reminders)", () => {
+    it("does not dispatch a reminder for a Free store, even with reminderEmailsEnabled stuck on after a downgrade", async () => {
+      fakeStores.store_1.canUseEmailReminders = false;
+      fakeRequests = [{ id: "req_1", storeId: "store_1", status: "sent", scheduledFor: null, sentAt: day(3) }];
+
+      const result = await runDueReminderSweep(now);
+
+      // Still counted as "due" (its date condition is genuinely met) — but never sent, the
+      // same way the remindersEnabledAt and suppression guards behave.
+      expect(result).toEqual({ due: 1, dispatched: 0 });
+      expect(reminderDispatches).toEqual([]);
+    });
+
+    it("does not dispatch the final reminder for a Free store either", async () => {
+      fakeStores.store_1.canUseEmailReminders = false;
+      fakeRequests = [
+        { id: "req_1", storeId: "store_1", status: "sent", scheduledFor: null, sentAt: day(7), reminder1SentAt: day(4) },
+      ];
+
+      const result = await runDueReminderSweep(now);
+
+      expect(result).toEqual({ due: 1, dispatched: 0 });
+      expect(reminderDispatches).toEqual([]);
+    });
+
+    it("still dispatches reminders for a Pro store in the same sweep as a Free one", async () => {
+      fakeStores.store_1.canUseEmailReminders = false;
+      fakeStores.store_2 = {
+        reminderEmailsEnabled: true,
+        remindersEnabledAt: day(30),
+        reminder1DelayDays: 3,
+        reminderFinalDelayDays: 7,
+        canUseEmailReminders: true,
+      };
+      fakeRequests = [
+        { id: "req_free", storeId: "store_1", status: "sent", scheduledFor: null, sentAt: day(3) },
+        { id: "req_pro", storeId: "store_2", status: "sent", scheduledFor: null, sentAt: day(3) },
+      ];
+
+      const result = await runDueReminderSweep(now);
+
+      expect(result).toEqual({ due: 2, dispatched: 1 });
+      expect(reminderDispatches).toEqual([{ id: "req_pro", type: "reminder_1" }]);
+    });
+
+    it("resolves plan entitlement once per store per sweep, not once per due request", async () => {
+      getStorePermissionsMock.mockClear();
+      fakeRequests = [
+        { id: "req_1", storeId: "store_1", status: "sent", scheduledFor: null, sentAt: day(3) },
+        { id: "req_2", storeId: "store_1", status: "sent", scheduledFor: null, sentAt: day(4) },
+        { id: "req_3", storeId: "store_1", status: "sent", scheduledFor: null, sentAt: day(5) },
+      ];
+
+      await runDueReminderSweep(now);
+
+      expect(reminderDispatches).toHaveLength(3);
+      expect(getStorePermissionsMock).toHaveBeenCalledTimes(1);
     });
   });
 });

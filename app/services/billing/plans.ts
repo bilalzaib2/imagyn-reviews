@@ -72,7 +72,13 @@ export const PLANS: Record<PlanId, Plan> = {
     name: "Pro",
     price: 9.99,
     currencyCode: "USD",
-    trialDays: 14,
+    // Display metadata only — the trial a merchant actually receives is configured on the
+    // Pro plan in Shopify's Managed Pricing (Partner Dashboard), which owns the entire
+    // purchase flow (see app.billing.manage.tsx) and reports the real length back via
+    // syncBillingFromShopify's `trialDays`. This value must be kept equal to that Managed
+    // Pricing setting so the billing page never advertises a trial length Shopify won't
+    // honor. Set to 7 on 2026-09-25 alongside the same change in Managed Pricing.
+    trialDays: 7,
     tagline: "For stores that want AI, deeper automation, and full brand control.",
     features: [
       { label: "Everything in Starter" },

@@ -1,0 +1,134 @@
+{{ 'imagyn-tokens.css' | asset_url | stylesheet_tag }}
+{{ 'imagyn-typography.css' | asset_url | stylesheet_tag }}
+{{ 'imagyn-component-histogram.css' | asset_url | stylesheet_tag }}
+{{ 'imagyn-component-floating-reviews.css' | asset_url | stylesheet_tag }}
+
+{% comment %}
+  Floating Reviews — an app embed block (target: "body"), not a section block, so a merchant
+  enables it once and it appears on every storefront page rather than being placed page by
+  page. Same pattern collection_rating_badges.liquid already uses.
+
+  Context awareness comes from `product` alone: Liquid only populates it on a product page, so
+  data-product-id is a real Shopify product ID there and empty everywhere else. The endpoint
+  (app/routes/api.reviews.floating.tsx) decides from that whether to answer with this product's
+  own reviews or the store-wide rollup — including falling back to store-wide for a product
+  that has no approved reviews yet, so the drawer is never empty just because one product
+  hasn't been reviewed.
+
+  The write-a-review CTA has no submission flow of its own: every real review form in this app
+  lives on a product page (see star_rating.liquid). On a page where that block is present, the
+  CTA opens its real form via the same "imagyn:write-review-toggle" event the Rating Badge
+  block already uses; everywhere else it sends the shopper to a real destination — this product
+  (on a product page) or the storefront's all-products page — rather than to a form that
+  doesn't exist there.
+
+  Colors, typography, spacing, corner radius, border width and shadow all come from the
+  centralized Appearance System (Brand Studio), resolved server-side for the new
+  "floating_reviews" surface key and applied by imagyn-appearance.js — this block defines no
+  colors or fonts of its own.
+{% endcomment %}
+<div
+  class="imagyn-floating-reviews"
+  data-imagyn-floating-reviews
+  data-enabled="{{ block.settings.enabled }}"
+  data-product-id="{% if product %}{{ product.id }}{% endif %}"
+  data-position="{{ block.settings.position }}"
+  data-vertical-position="{{ block.settings.vertical_position }}"
+  data-label="{{ block.settings.label }}"
+  data-heading="{{ block.settings.heading }}"
+  data-cta-label="{{ block.settings.cta_label }}"
+  data-cta-url="{% if product %}{{ product.url }}{% else %}{{ routes.all_products_collection_url }}{% endif %}"
+  data-show-rating="{{ block.settings.show_rating }}"
+  data-show-count="{{ block.settings.show_count }}"
+  data-show-distribution="{{ block.settings.show_distribution }}"
+  data-show-verified="{{ block.settings.show_verified }}"
+  data-show-media="{{ block.settings.show_media }}"
+  data-close-on-overlay="{{ block.settings.close_on_overlay }}"
+></div>
+
+{% comment %}
+  `defer` (not the blocking script_tag filter) — theme-check flags parser-blocking scripts.
+  Both stay in document order so imagyn-appearance.js still finishes defining
+  window.ImagynShared/ImagynAppearance before floating-reviews.js reads them (deferred scripts
+  run in source order).
+{% endcomment %}
+<script src="{{ 'imagyn-appearance.js' | asset_url }}" defer></script>
+<script src="{{ 'floating-reviews.js' | asset_url }}" defer></script>
+
+{% schema %}
+{
+  "name": "Floating Reviews",
+  "target": "body",
+  "settings": [
+    {
+      "type": "paragraph",
+      "content": "Adds a floating reviews tab to every page of your storefront. Clicking it opens a drawer with your real rating, rating breakdown and recent reviews. Enable once here — no per-page placement needed."
+    },
+    { "type": "checkbox", "id": "enabled", "label": "Enable floating reviews tab", "default": true },
+    {
+      "type": "select",
+      "id": "position",
+      "label": "Position",
+      "options": [
+        { "value": "right", "label": "Right edge" },
+        { "value": "left", "label": "Left edge" }
+      ],
+      "default": "right"
+    },
+    {
+      "type": "range",
+      "id": "vertical_position",
+      "label": "Vertical position",
+      "min": 10,
+      "max": 90,
+      "step": 5,
+      "unit": "%",
+      "default": 50,
+      "info": "How far down the screen the tab sits on desktop. On phones the tab always sits at the bottom edge, where it stays reachable."
+    },
+    { "type": "text", "id": "label", "label": "Tab label", "default": "Reviews" },
+    { "type": "text", "id": "heading", "label": "Drawer heading", "default": "Reviews" },
+    {
+      "type": "header",
+      "content": "What to show"
+    },
+    { "type": "checkbox", "id": "show_rating", "label": "Show overall rating", "default": true },
+    { "type": "checkbox", "id": "show_count", "label": "Show review count", "default": true },
+    { "type": "checkbox", "id": "show_distribution", "label": "Show rating breakdown", "default": true },
+    {
+      "type": "checkbox",
+      "id": "show_verified",
+      "label": "Show verified buyer badges",
+      "default": true,
+      "info": "Only ever shown on reviews that are genuinely from a verified buyer."
+    },
+    {
+      "type": "checkbox",
+      "id": "show_media",
+      "label": "Show customer photos",
+      "default": true
+    },
+    {
+      "type": "header",
+      "content": "Drawer behavior"
+    },
+    {
+      "type": "text",
+      "id": "cta_label",
+      "label": "Write-a-review button label",
+      "default": "Write a Review",
+      "info": "Leave empty to hide the button."
+    },
+    {
+      "type": "checkbox",
+      "id": "close_on_overlay",
+      "label": "Close when clicking outside the drawer",
+      "default": true
+    },
+    {
+      "type": "paragraph",
+      "content": "Colors, typography, corner radius, borders and shadow come from Brand Studio (Settings > Brand Studio in the app) — this widget always matches the rest of your Imagyn widgets automatically, and can be given its own override there under \"Floating Reviews widget\"."
+    }
+  ]
+}
+{% endschema %}

@@ -580,6 +580,22 @@ export async function getReview(id: string) {
   });
 }
 
+// Store-scoped single-review read, returning the exact same shape as getStoreReviews' own
+// rows (ReviewWithProduct) so a caller can drop the result straight into that list. Added for
+// the Reviews page's deep-link entry point (`/app/reviews?review=<id>`, the destination of the
+// merchant's new-review notification email) — a review linked from an email is very often not
+// on page one of the current filter, or is filtered out of it entirely.
+//
+// storeId is part of the lookup rather than a follow-up comparison, matching requireReview's
+// convention above: a cross-tenant id produces the same "not found" a bogus id would, so the
+// deep link can never be used to pull another store's review into this store's admin.
+export async function getStoreReview(storeId: string, id: string): Promise<ReviewWithProduct | null> {
+  return prisma.review.findFirst({
+    where: { id, storeId, deletedAt: null },
+    include: reviewInclude,
+  });
+}
+
 // storeId is the caller's already-authenticated store, never derived from the client-supplied
 // productId — the product lookup below is scoped to it, so a productId belonging to another
 // store resolves to "not found" instead of silently creating a review under the wrong tenant

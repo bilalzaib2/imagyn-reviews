@@ -1,6 +1,7 @@
 import { render } from "@react-email/render";
 import { ReviewRequestEmail } from "./emails/ReviewRequestEmail";
 import { ReviewHeldEmail, type ReviewHeldEmailProps } from "./emails/ReviewHeldEmail";
+import { NewReviewEmail, type NewReviewEmailProps } from "./emails/NewReviewEmail";
 import {
   firstNameOf,
   getDefaultEmailTemplateContent,
@@ -35,6 +36,8 @@ export interface ReviewRequestEmailData {
 }
 
 export type ReviewHeldEmailData = ReviewHeldEmailProps;
+
+export type NewReviewEmailData = NewReviewEmailProps;
 
 // Renders the React Email template (emails/ReviewRequestEmail.tsx) to the plain
 // {subject, html, text} shape EmailProvider.sendEmail expects — callers (review-request.server.ts,
@@ -97,6 +100,29 @@ export async function buildReviewHeldEmail(data: ReviewHeldEmailData): Promise<{
 }> {
   const subject = `A review was held for moderation — ${data.productName}`;
   const element = <ReviewHeldEmail {...data} />;
+
+  const [html, text] = await Promise.all([
+    render(element),
+    render(element, { plainText: true }),
+  ]);
+
+  return { subject, html, text };
+}
+
+// Mirrors buildReviewHeldEmail — the only caller is reviewNotifications.server.ts's
+// sendNewReviewNotification, which never imports React Email directly. The subject line names
+// the real rating and the real product (falling back to the reviewer when a review somehow has
+// no product name recorded), so a merchant scanning an inbox can triage without opening
+// anything — never a generic "You have a new review" for every send.
+export async function buildNewReviewEmail(data: NewReviewEmailData): Promise<{
+  subject: string;
+  html: string;
+  text: string;
+}> {
+  const subject = data.productName
+    ? `New ${data.rating}-star review on ${data.productName}`
+    : `New ${data.rating}-star review from ${data.reviewerName}`;
+  const element = <NewReviewEmail {...data} />;
 
   const [html, text] = await Promise.all([
     render(element),

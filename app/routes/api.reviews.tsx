@@ -24,6 +24,7 @@ import { getStorefrontAppearance } from "../services/appearance.server";
 import { getEarnedMedalsForStorefront } from "../services/achievements.server";
 import { getStorePermissions } from "../services/permissions";
 import { evaluateReview, getModerationSettings, sendHeldReviewNotification } from "../services/moderationRules.server";
+import { sendNewReviewNotification } from "../services/reviewNotifications.server";
 import { checkAndRecordSubmission } from "../services/reviewSubmissionThrottle.server";
 
 // Shared with api.reviews.batch.tsx so the two public review endpoints respond identically.
@@ -299,16 +300,34 @@ export const action = async ({ request }: ActionFunctionArgs) => {
       moderationReason: decision.moderationReason,
     });
 
-    if (decision.moderationStatus === "held" && moderationSettings.notifyOnHold && moderationSettings.notifyEmail) {
+    const heldNotificationSentTo =
+      decision.moderationStatus === "held" && moderationSettings.notifyOnHold && moderationSettings.notifyEmail
+        ? moderationSettings.notifyEmail
+        : null;
+
+    if (heldNotificationSentTo) {
       void sendHeldReviewNotification({
         storeName: store.name,
-        notifyEmail: moderationSettings.notifyEmail,
+        notifyEmail: heldNotificationSentTo,
         reviewerName: customerName,
         productName: product.name,
         rating,
         reason: decision.moderationReason ?? "Held by a Moderation Rule.",
       });
     }
+
+    // Fires for every real customer submission, held or not — the merchant's own
+    // new-review notification setting decides whether anything is actually sent (see
+    // reviewNotifications.server.ts). Fire-and-forget for the same reason the held
+    // notification above is: the review has already been created successfully, and a mail
+    // failure must never turn that into an error for the shopper. `heldNotificationSentTo`
+    // suppresses a duplicate when both notifications would land in the same inbox.
+    void sendNewReviewNotification({
+      storeId: store.id,
+      reviewId: review.id,
+      source: "storefront",
+      heldNotificationSentTo,
+    });
 
     let media: { uploaded: number; failed: Array<{ filename: string; error: string }> } | null = null;
 

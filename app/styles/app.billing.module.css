@@ -142,7 +142,7 @@
 
 /* Apple-style minimal button, scoped to this page only (not the shared
    components/ui/Button) — but built entirely from the app's own monochrome tokens
-   (--color-accent is already #111111) rather than a one-off brand color, so the billing
+   (--color-accent is already the app's neutral charcoal) rather than a one-off brand color, so the billing
    page reads as part of Shopify Admin instead of a marketing landing page. margin-top:
    auto (paired with .featureList's flex: 1 above) guarantees the button sits at the same
    baseline across every card regardless of what varies above it — a badge present or not,

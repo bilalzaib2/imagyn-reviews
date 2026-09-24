@@ -529,13 +529,14 @@
    slide width (imagyn-component-carousel.css's .imagyn-carousel__slide). Sits inside the same
    .widgetCardThumbnail/.widgetCardThumbnailScale scale-down wrapper the full WidgetPreview uses.
    Backdrop is Imagyn's own admin chrome (not merchant-configurable, unlike the review cards
-   inside it, which stay on live Appearance tokens) — #F5F5F5 per the approved Imagyn Reviews
-   neutral-surface color, not the merchant-customizable storefront background. */
+   inside it, which stay on live Appearance tokens) — the shared muted-surface token, which
+   since the 2026-09-25 grayscale pass is itself the approved Imagyn neutral surface this used
+   to hardcode as #F5F5F5. Not the merchant-customizable storefront background. */
 .carouselThumbnailTrack {
   display: flex;
   gap: 1rem;
   padding: 20px;
-  background: #f5f5f5;
+  background: var(--color-surface-muted);
 }
 
 .carouselThumbnailCard {

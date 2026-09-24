@@ -23,6 +23,7 @@ import { getRewardStats } from "../services/rewards.server";
 import { getSetupGuideItems } from "../services/setupGuide.server";
 import { getOrCreateStore } from "../services/store.server";
 import { getStorePermissions } from "../services/permissions";
+import { getAppStoreListingUrl } from "../services/appStoreListing.server";
 import { authenticateAdminDeduped } from "../services/auth-dedupe.server";
 import { getOrRefreshTrustCertification, refreshTrustCertification } from "../services/trustCertification.server";
 import {
@@ -43,7 +44,7 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
   const { session, admin } = await authenticateAdminDeduped(request);
   const store = await getOrCreateStore(session.shop);
 
-  const [stats, requestStats, storeAiSummary, productCoverage, permissions, setupGuide, trust] = await Promise.all([
+  const [stats, requestStats, storeAiSummary, productCoverage, permissions, setupGuide, trust, appStoreUrl] = await Promise.all([
     getStoreReviewStats(store.id, { recentLimit: 5 }),
     reviewRequestService.getRequestStats(store.id),
     // Genuinely store-level — synthesized across every approved review in the store, not one
@@ -57,6 +58,10 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
     // getOrRefreshTrustCertification's own header comment) — never blocks this page load on
     // live Shopify latency, but also never shows a certification state older than 12 hours.
     getOrRefreshTrustCertification(admin, store.id),
+    // The real App Store listing URL (null until the listing is public) — the fallback
+    // destination for the "Leave a review" nudge below whenever Shopify declines to show its
+    // own native review modal. Never throws; see getAppStoreListingUrl.
+    getAppStoreListingUrl(admin),
   ]);
 
   // Reward stats are their own query only when the merchant has actually turned Rewards on —
@@ -74,6 +79,7 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
     rewardStats,
     setupGuide,
     trust,
+    appStoreUrl,
     automation: {
       // Two distinct, real facts — not one flag. Shopify's Protected Customer Data approval
       // (isApproved) was granted 2026-09-08; isLive is a separate, deliberate activation
@@ -159,8 +165,19 @@ const ACTIVITY_STATUS_DOT_CLASS: Record<string, string> = {
 const revealStyle = (stepIndex: number): CSSProperties => ({ "--reveal-delay": `${stepIndex * 60}ms` }) as CSSProperties;
 
 export default function Index() {
-  const { storeName, storeDomain, stats, requestStats, storeAiSummary, productCoverage, rewardStats, setupGuide, trust, automation } =
-    useLoaderData<typeof loader>();
+  const {
+    storeName,
+    storeDomain,
+    stats,
+    requestStats,
+    storeAiSummary,
+    productCoverage,
+    rewardStats,
+    setupGuide,
+    trust,
+    appStoreUrl,
+    automation,
+  } = useLoaderData<typeof loader>();
   const incompleteSetupItems = setupGuide.filter((item) => !item.done);
 
   const trustFetcher = useFetcher<{ ok: boolean; error?: string }>();
@@ -333,10 +350,12 @@ export default function Index() {
         </div>
 
         {/* Real positive-moment gate, not a timer: at least 5 real published reviews means this
-            store has genuinely gotten value out of the app, not just installed it. See
-            AppReviewPrompt's own header comment for why "Leave a review" needs no App Store URL
-            here at all. */}
-        <AppReviewPrompt eligible={stats.publishedReviews >= 5} />
+            store has genuinely gotten value out of the app, not just installed it.
+            `appStoreUrl` is the real listing URL Shopify reports for this app (null while the
+            app is unpublished) — see AppReviewPrompt's own header comment for why the button
+            needs it: Shopify's native review modal declines far more often than it shows, and
+            without a real fallback destination the click did nothing at all. */}
+        <AppReviewPrompt eligible={stats.publishedReviews >= 5} appStoreUrl={appStoreUrl} />
 
         {/* Both conditions are real and orthogonal — a brand-new store and Shopify's pending
             approval are two different things a merchant might need to know, so both can show

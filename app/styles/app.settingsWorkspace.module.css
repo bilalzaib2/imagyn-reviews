@@ -102,7 +102,7 @@
 }
 
 /* A solid filled container, not a border stripe — --color-accent resolves to near-black
-   (#111111, see design-system.css), so the left-border version this replaced read as a plain
+   (the app's neutral charcoal, see design-system.css), so the left-border version this replaced read as a plain
    black tab indicator, not a deliberate selection state, no matter how it was described. This
    is the same accent color already used for every primary button in the app, just at low
    opacity as a fill instead of full-strength — a real background/container treatment (per the

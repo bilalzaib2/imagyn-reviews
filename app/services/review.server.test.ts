@@ -157,6 +157,7 @@ const {
   createReview,
   deleteReply,
   deleteReview,
+  getStoreReview,
   rejectReview,
   replyToReview,
   updateReview,
@@ -207,6 +208,12 @@ describe("cross-tenant review mutation isolation", () => {
     await expect(replyToReview("store_1", "review_1", "Thanks!")).rejects.toThrow("Review not found.");
     await expect(deleteReply("store_1", "review_1")).rejects.toThrow("Review not found.");
     expect(reviews.find((r) => r.id === "review_1")?.reply).toBeNull();
+  });
+
+  it("getStoreReview returns nothing for a review belonging to a different store", async () => {
+    seedReview({ id: "review_1", storeId: "store_2", productId: "product_2" });
+
+    await expect(getStoreReview("store_1", "review_1")).resolves.toBeNull();
   });
 
   it("updateReview rejects reassigning a review onto another store's product", async () => {
@@ -274,5 +281,85 @@ describe("bulkModerateReviews / bulkDeleteReviews — cross-tenant isolation", (
 
     const result = await bulkModerateReviews("store_1", ["foreign_1"], ReviewStatus.REJECTED);
     expect(result).toEqual({ count: 0, affectedProductIds: [] });
+  });
+});
+
+// The merchant reply flow end to end at the service layer: the reply is saved onto the exact
+// review it was written for, timestamped, editable, and removable — and every one of those
+// operations is scoped to the owning store (the cross-tenant rejections live in the isolation
+// block above). What makes the reply public is Review.reply itself: every storefront read
+// serializes it straight off the row (see api.reviews.tsx's loader), so a saved reply needs no
+// separate publish step.
+describe("merchant reply", () => {
+  it("saves the reply onto the review and timestamps it", async () => {
+    seedReview({ id: "review_1", storeId: "store_1", productId: "product_1" });
+
+    const before = Date.now();
+    const replied = await replyToReview("store_1", "review_1", "Thanks for the kind words!");
+
+    expect(replied.reply).toBe("Thanks for the kind words!");
+    expect(replied.repliedAt).toBeInstanceOf(Date);
+    expect(replied.repliedAt!.getTime()).toBeGreaterThanOrEqual(before);
+  });
+
+  it("only touches the review it was written for", async () => {
+    seedReview({ id: "review_1", storeId: "store_1", productId: "product_1" });
+    seedReview({ id: "review_2", storeId: "store_1", productId: "product_1" });
+
+    await replyToReview("store_1", "review_1", "Glad it worked out.");
+
+    expect(reviews.find((r) => r.id === "review_2")?.reply).toBeNull();
+    expect(reviews.find((r) => r.id === "review_2")?.repliedAt).toBeNull();
+  });
+
+  it("trims surrounding whitespace", async () => {
+    seedReview({ id: "review_1", storeId: "store_1", productId: "product_1" });
+
+    const replied = await replyToReview("store_1", "review_1", "   Thank you!   ");
+
+    expect(replied.reply).toBe("Thank you!");
+  });
+
+  it("rejects an empty or whitespace-only reply", async () => {
+    seedReview({ id: "review_1", storeId: "store_1", productId: "product_1" });
+
+    await expect(replyToReview("store_1", "review_1", "")).rejects.toThrow("Reply cannot be empty.");
+    await expect(replyToReview("store_1", "review_1", "    ")).rejects.toThrow("Reply cannot be empty.");
+    expect(reviews.find((r) => r.id === "review_1")?.reply).toBeNull();
+  });
+
+  it("overwrites an existing reply when the merchant edits it", async () => {
+    seedReview({ id: "review_1", storeId: "store_1", productId: "product_1" });
+
+    await replyToReview("store_1", "review_1", "First pass.");
+    const updated = await replyToReview("store_1", "review_1", "Better wording.");
+
+    expect(updated.reply).toBe("Better wording.");
+  });
+
+  it("deleteReply clears both the reply and its timestamp", async () => {
+    seedReview({ id: "review_1", storeId: "store_1", productId: "product_1" });
+    await replyToReview("store_1", "review_1", "Thanks!");
+
+    const cleared = await deleteReply("store_1", "review_1");
+
+    expect(cleared.reply).toBeNull();
+    expect(cleared.repliedAt).toBeNull();
+  });
+
+  it("getStoreReview returns the merchant's own review, including a saved reply", async () => {
+    seedReview({ id: "review_1", storeId: "store_1", productId: "product_1" });
+    await replyToReview("store_1", "review_1", "Appreciate the feedback.");
+
+    const found = await getStoreReview("store_1", "review_1");
+
+    expect(found?.id).toBe("review_1");
+    expect(found?.reply).toBe("Appreciate the feedback.");
+  });
+
+  it("getStoreReview returns nothing for a soft-deleted review", async () => {
+    seedReview({ id: "review_1", storeId: "store_1", productId: "product_1", deletedAt: new Date() });
+
+    await expect(getStoreReview("store_1", "review_1")).resolves.toBeNull();
   });
 });

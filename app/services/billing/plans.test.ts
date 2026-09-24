@@ -30,6 +30,15 @@ describe("getAllPlans", () => {
     expect(free.price).toBe(0);
     expect(pro.price).toBeGreaterThan(0);
   });
+
+  // Pro's trial is offered by Shopify Managed Pricing, not by this codebase — this value is
+  // only what the billing page advertises, and it must stay equal to the trial configured on
+  // the Pro plan in the Partner Dashboard. Free has no trial: it is already free.
+  it("advertises a 7-day trial on Pro and no trial on Free", () => {
+    const [free, pro] = getAllPlans();
+    expect(free.trialDays).toBe(0);
+    expect(pro.trialDays).toBe(7);
+  });
 });
 
 describe("getPlan — retired/internal plans stay resolvable but are never listed", () => {

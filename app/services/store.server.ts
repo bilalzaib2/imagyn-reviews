@@ -194,6 +194,30 @@ export async function updateModerationSettings(
   });
 }
 
+// New-review merchant notification (see reviewNotifications.server.ts). Its own updater
+// rather than two more fields on updateModerationSettings above: the setting is independent
+// of Moderation Rules (it fires whether or not they're enabled), and keeping the two apart
+// means turning Moderation Rules off can never quietly clear this recipient. Mirrors that
+// function's own convention of clearing the address when the toggle is off, so a disabled
+// notification never leaves a stale inbox on the row.
+export async function updateNewReviewNotificationSettings(
+  id: string,
+  data: {
+    newReviewNotifyEnabled: boolean;
+    newReviewNotifyEmail: string | null;
+  },
+) {
+  return prisma.store.update({
+    where: {
+      id,
+    },
+    data: {
+      newReviewNotifyEnabled: data.newReviewNotifyEnabled,
+      newReviewNotifyEmail: data.newReviewNotifyEnabled ? data.newReviewNotifyEmail?.trim() || null : null,
+    },
+  });
+}
+
 export type ProductSyncStatus = "idle" | "running" | "completed" | "failed";
 
 export interface ProductSyncState {

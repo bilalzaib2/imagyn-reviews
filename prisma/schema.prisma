@@ -118,6 +118,19 @@ model Store {
   moderationNotifyOnHold    Boolean @default(false)
   moderationNotifyEmail     String?
 
+  // Merchant notification for every NEW customer-submitted review (see
+  // app/services/reviewNotifications.server.ts). Deliberately separate from
+  // moderationNotifyOnHold/moderationNotifyEmail above rather than folded into them: those
+  // two fire only for a review a Moderation Rule actually held, and only while Moderation
+  // Rules are switched on at all, whereas this fires for every real customer submission —
+  // held, auto-published, or awaiting manual moderation — which is what a merchant relies on
+  // to reply promptly. Imported and merchant-authored reviews never trigger it (see that
+  // service's own comment). Off by default, like every other notification in this app, so no
+  // existing store suddenly starts receiving mail it never asked for. Both settings live on
+  // the same Settings > Publishing & Moderation screen and can point at different inboxes.
+  newReviewNotifyEnabled Boolean @default(false)
+  newReviewNotifyEmail   String?
+
   // Full-catalog product sync progress (see product.server.ts's syncAllProducts and
   // productSync.server.ts's runProductSync). One row per store — only one sync runs at a
   // time per store, so this doesn't need its own table. status: "idle" | "running" |

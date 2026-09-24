@@ -38,6 +38,7 @@ import {
   bulkModerateReviews,
   deleteReply,
   deleteReview,
+  getStoreReview,
   getStoreReviews,
   rejectReview,
   replyToReview,
@@ -115,6 +116,13 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
   // goToNextPage/goToPreviousPage for that logic.
   const cursor = url.searchParams.get("cursor") || undefined;
   const sortParam = url.searchParams.get("sort")?.trim() === "helpful" ? "helpful" : "newest";
+  // Deep-link entry point, used by the merchant's new-review notification email (see
+  // reviewNotifications.server.ts's buildReviewAdminUrl/buildReviewReplyUrl, the single source
+  // of truth for these two parameter names): `review` preselects one specific review, and
+  // `reply=1` additionally opens its reply editor. Both are ordinary optional params — the page
+  // behaves exactly as before when neither is present.
+  const requestedReviewId = url.searchParams.get("review")?.trim() || "";
+  const wantsReplyEditor = url.searchParams.get("reply") === "1";
 
   try {
     const result = await getStoreReviews(store.id, {
@@ -133,11 +141,35 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
     // Batched, not per-review — bounded by this page's own REVIEWS_PAGE_SIZE-review limit,
     // and a pure cache read (see getAiSummariesForProducts), so this never triggers AI
     // generation.
-    const productIds = Array.from(new Set(result.reviews.map((review) => review.productId)));
+    // A deep-linked review is very often not on the current page of the current filter (or is
+    // excluded by it outright), so it's fetched explicitly and prepended rather than left to
+    // the merchant to go hunting for. Store-scoped in the same query that resolves it (see
+    // getStoreReview), so another store's id simply resolves to nothing and the page renders
+    // normally with no selection forced — never an error, and never another store's data.
+    let reviews = result.reviews;
+    let focusReviewId = "";
+
+    if (requestedReviewId) {
+      const alreadyOnPage = reviews.some((review) => review.id === requestedReviewId);
+
+      if (alreadyOnPage) {
+        focusReviewId = requestedReviewId;
+      } else {
+        const focused = await getStoreReview(store.id, requestedReviewId);
+        if (focused) {
+          reviews = [focused, ...reviews];
+          focusReviewId = focused.id;
+        }
+      }
+    }
+
+    const productIds = Array.from(new Set(reviews.map((review) => review.productId)));
     const aiSummaries = await getAiSummariesForProducts(productIds);
 
     return {
-      reviews: result.reviews,
+      reviews,
+      focusReviewId,
+      focusReplyEditor: Boolean(focusReviewId) && wantsReplyEditor,
       nextCursor: result.nextCursor,
       hasMore: result.hasMore,
       totalCount: result.totalCount,
@@ -155,6 +187,8 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
   } catch (error) {
     return {
       reviews: [] as ReviewWithProduct[],
+      focusReviewId: "",
+      focusReplyEditor: false,
       nextCursor: null,
       hasMore: false,
       totalCount: 0,
@@ -394,6 +428,8 @@ export default function ReviewsPage() {
     dateTo: initialDateTo,
     verifiedPurchase: initialVerifiedPurchase,
     sort: initialSort,
+    focusReviewId,
+    focusReplyEditor,
   } = loaderData;
 
   const mutationFetcher = useFetcher<ActionData>();
@@ -490,7 +526,12 @@ export default function ReviewsPage() {
   };
 
   const [searchInput, setSearchInput] = useState(initialSearch);
-  const [selectedReviewId, setSelectedReviewId] = useState<string | null>(null);
+  // Seeded from the deep link (`/app/reviews?review=<id>`) when the merchant arrived from a
+  // new-review notification email, so the linked review is already selected on first paint
+  // rather than being replaced by "first review in the list" by the effect below. The loader
+  // only ever sets focusReviewId to a review this store genuinely owns, and guarantees it is
+  // present in `reviews`.
+  const [selectedReviewId, setSelectedReviewId] = useState<string | null>(focusReviewId || null);
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [mutationError, setMutationError] = useState<string | null>(null);
   const [replyDraft, setReplyDraft] = useState("");
@@ -671,6 +712,23 @@ export default function ReviewsPage() {
     setReplyDraft(selectedReview?.reply ?? "");
     setIsReplyEditing(false);
   }, [selectedReview?.id, selectedReview?.reply]);
+
+  // One-shot: honors `reply=1` from the notification email's "Reply to review" CTA by opening
+  // that review's reply editor. Deliberately declared after the effect above that resets
+  // isReplyEditing on every selection change — effects run in declaration order within the
+  // same commit, so this wins for the initial focus — and consumed via a ref so a later manual
+  // collapse is never re-opened behind the merchant's back.
+  const replyIntentConsumedRef = useRef(false);
+  useEffect(() => {
+    if (replyIntentConsumedRef.current || !focusReplyEditor || !focusReviewId) {
+      return;
+    }
+    if (selectedReview?.id !== focusReviewId) {
+      return;
+    }
+    replyIntentConsumedRef.current = true;
+    setIsReplyEditing(true);
+  }, [focusReplyEditor, focusReviewId, selectedReview?.id]);
 
   useEffect(() => {
     setShowAllPhotos(false);

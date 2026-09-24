@@ -52,12 +52,14 @@ const fallbackInstallStatus: Record<WidgetInstallKey, WidgetInstallStatus> = {
 
 type PageView = "gallery" | "customize";
 
-// The theme extension ships five real, installable blocks (see
+// The theme extension ships ten real, installable blocks (see
 // extensions/imagyn-review-widgets/blocks/*.liquid — names below match their Shopify
 // block names exactly). Only "review-list" is wired to admin-editable settings today
 // (getStorefrontWidgetSettings always resolves that one type); Product Rating Badge,
-// Collection Rating Badge, Review Carousel, and Medals Showcase are configured entirely in
-// the Shopify Theme Editor and have no in-app settings to open, so their cards link out
+// Collection Rating Badge, Review Carousel, Medals Showcase, and Floating Reviews are
+// configured entirely in the Shopify Theme Editor (Floating Reviews additionally inherits
+// Brand Studio like every other widget) and have no in-app settings to open, so their cards
+// link out
 // instead of pretending to have a working Customize flow (Review Carousel's/Medals
 // Showcase's real settings — heading, etc. — live in each block's own schema, editable
 // there).
@@ -140,6 +142,15 @@ const widgetCards: WidgetCardDef[] = [
     status: "theme-editor",
     blockName: "Store Reviews",
     blockHandle: "store_reviews",
+  },
+  {
+    key: "floating-reviews",
+    title: "Floating Reviews",
+    description:
+      "A floating reviews tab on every page of your storefront that opens a drawer with your rating, star distribution, and recent reviews. On a product page it shows that product's reviews; everywhere else, your store's. One embed, enabled once in the Shopify Theme Editor.",
+    status: "theme-editor",
+    blockName: "Floating Reviews",
+    blockHandle: "floating_reviews",
   },
   {
     key: "ai-review-summary",
@@ -522,7 +533,12 @@ function WidgetPreview({ tokens, settings }: { tokens: AppearanceTokens; setting
   const layoutReviews = settings.layout === "grid" ? sampleReviews : sampleReviews.slice(0, settings.layout === "carousel" ? 2 : 3);
 
   return (
-    <div className={styles.previewFrame} style={{ background: "#F5F4EF" }}>
+    // The browser-chrome frame AROUND the storefront preview is Imagyn admin chrome, so it
+    // follows the app's own muted-surface token (neutral gray since the 2026-09-25 grayscale
+    // pass — it was a hardcoded warm beige, #F5F4EF). The storefront canvas inside it stays
+    // literal white below: that one is standing in for a merchant's real storefront page, not
+    // for our UI, so it must not follow our admin palette.
+    <div className={styles.previewFrame} style={{ background: "var(--color-surface-muted)" }}>
       <div className={styles.previewBrowserBar}>
         <span />
         <span />

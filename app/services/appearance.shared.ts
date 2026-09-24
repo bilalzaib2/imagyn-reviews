@@ -49,6 +49,7 @@ export type SurfaceKey =
   | "review_carousel" // api.reviews.featured.tsx
   | "trust_badge" // api.reviews.trust.tsx
   | "store_ai_summary" // api.reviews.store-ai-summary.tsx
+  | "floating_reviews" // api.reviews.floating.tsx
   | "public_review_site" // reviewSite.server.ts
   | "review_request_landing"; // r.$token.tsx
 
@@ -58,6 +59,7 @@ export const SURFACE_KEYS: SurfaceKey[] = [
   "review_carousel",
   "trust_badge",
   "store_ai_summary",
+  "floating_reviews",
   "public_review_site",
   "review_request_landing",
 ];
@@ -68,6 +70,7 @@ export const SURFACE_LABELS: Record<SurfaceKey, string> = {
   review_carousel: "Review Carousel",
   trust_badge: "Trust Badge",
   store_ai_summary: "Store AI Summary block",
+  floating_reviews: "Floating Reviews widget",
   public_review_site: "Public Review Site",
   review_request_landing: "Review request landing page",
 };

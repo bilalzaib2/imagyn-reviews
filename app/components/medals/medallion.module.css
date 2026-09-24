@@ -103,7 +103,7 @@
 
 /* Onyx — tier 4, the top of the ladder. Bottoms out at #0d0e0f, the exact near-black used
    by the brand mark itself (public/assets/imagyn-app-logo.svg) — a shade darker than the
-   app's own --color-text (#111111) and the one place this component intentionally echoes
+   app's own --color-text (neutral charcoal) and the one place this component intentionally echoes
    the brand mark's own tone rather than inventing a new one. */
 .medallionOnyx .medallionRing {
   stroke: #0d0e0f;

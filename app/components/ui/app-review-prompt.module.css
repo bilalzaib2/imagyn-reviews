@@ -33,3 +33,13 @@
   gap: var(--space-2);
   flex-shrink: 0;
 }
+
+/* Shown only when Shopify declined to show its review modal AND the app has no public App
+   Store listing to fall back to — an honest "not right now" instead of a click that appears
+   to do nothing. Uses the app's existing muted text treatment; no new alert color. */
+.notice {
+  margin: var(--space-2) 0 0;
+  font-size: var(--text-sm);
+  line-height: 1.5;
+  color: var(--color-text-muted);
+}
