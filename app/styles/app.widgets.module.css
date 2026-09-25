@@ -51,11 +51,14 @@
   gap: var(--space-5);
 }
 
+/* Preview-first card: the visual sits flush at the top edge, and everything textual lives in
+   .widgetCardBody below it. Padding moved off the card onto the body/actions so the preview
+   can bleed to the card's own rounded corners instead of floating in a padded box. */
 .widgetCard {
   display: grid;
-  gap: var(--space-3);
+  grid-template-rows: auto 1fr auto;
   align-content: start;
-  padding: var(--space-5);
+  overflow: hidden;
   border: 1px solid var(--color-border);
   border-radius: var(--radius-lg);
   background: var(--color-surface);
@@ -85,12 +88,17 @@
    viewports so its live preview reads at a size worth looking at; collapses back to one column
    below 960px (see the media query at the bottom of this file) so it never crowds out the
    others on tablet/mobile. */
+/* Emphasis is now structural (it spans two columns and shows a full live preview) plus a
+   single accent tag, rather than a lime background wash across the whole card — that wash was
+   the "repetitive green treatment" this gallery was asked to move away from. The card itself
+   is the same white surface as every other card; only its border is a step stronger. */
 .widgetCardFeatured {
   grid-column: span 2;
-  border-color: color-mix(in srgb, var(--color-highlight) 30%, var(--color-border-strong));
-  background: color-mix(in srgb, var(--color-highlight) 5%, var(--color-surface));
+  border-color: var(--color-border-strong);
 }
 
+/* The one place IMAGYN's lime accent appears in this gallery — deliberately a single small
+   tag on a single card, not a treatment repeated across every tile. */
 .widgetCardFeaturedTag {
   display: inline-flex;
   width: fit-content;
@@ -106,11 +114,26 @@
   text-transform: uppercase;
 }
 
+.widgetCardBody {
+  display: grid;
+  gap: var(--space-2);
+  align-content: start;
+  padding: var(--space-4) var(--space-5) 0;
+}
+
 .widgetCardHeader {
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: var(--space-2);
+}
+
+.widgetCardTitleGroup {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  flex-wrap: wrap;
+  min-width: 0;
 }
 
 .widgetCardTitle {
@@ -127,45 +150,73 @@
   line-height: 1.6;
 }
 
-.widgetCardThumbnail {
-  height: 9rem;
-  border-radius: var(--radius-md);
-  overflow: hidden;
-  border: 1px solid var(--color-border);
-  background: var(--color-surface-muted);
+/* ---------------------------------------------------------------- Preview stage
+
+   The one preview area every card in the gallery shares: same height, same bleed to the card
+   edge, same bottom hairline. Only the backdrop changes per widget (the four context classes
+   below), which is what gives the gallery genuine visual variety — a product page reads
+   differently from a plain section, and an overlay widget needs a darker page behind it —
+   without fragmenting it into ten unrelated compositions.
+
+   Replaces the previous pair of containers (.widgetCardThumbnail, a 0.35-scaled mockup box,
+   and .widgetCardThumbnailPlaceholder, a smaller centered box), which made two cards sitting
+   side by side look like they belonged to different products. */
+.previewStage {
   position: relative;
-}
-
-.widgetCardThumbnailScale {
-  position: absolute;
-  top: 0;
-  left: 0;
-  width: 285%;
-  transform: scale(0.35);
-  transform-origin: top left;
-  pointer-events: none;
-}
-
-/* Compact, non-scaled preview box for the two smaller single-row previews (Product Rating
-   Badge, Collection Rating Badge) — a solid border, matching .widgetCardThumbnail, since
-   this now holds real representative content, not a "not built yet" placeholder. */
-.widgetCardThumbnailPlaceholder {
   display: flex;
   align-items: center;
   justify-content: center;
-  height: 9rem;
-  border-radius: var(--radius-md);
-  border: 1px solid var(--color-border);
-  background: var(--color-surface-muted);
-  color: var(--color-text-muted);
-  font-size: var(--text-xs);
+  height: 11rem;
+  padding: var(--space-4);
+  overflow: hidden;
+  border-bottom: 1px solid var(--color-border);
+  /* A preview is a picture of the storefront, never something to click. */
+  pointer-events: none;
+  user-select: none;
 }
 
-.widgetCardMeta {
-  display: flex;
-  align-items: center;
-  gap: var(--space-2);
-  flex-wrap: wrap;
+/* A white storefront section — the default backdrop for widgets that render on a plain page. */
+.previewStageLight {
+  background: var(--color-surface);
+  background-image: radial-gradient(circle at 1px 1px, var(--color-border) 1px, transparent 0);
+  background-size: 16px 16px;
+}
+
+/* A neutral storefront — for widgets that usually sit inside an existing content area. */
+.previewStageNeutral {
+  background: var(--color-surface-muted);
+}
+
+/* A dark page, used only where the widget genuinely overlays the storefront rather than
+   sitting in it (Floating Reviews), so the overlay relationship is legible at this size. */
+.previewStageDark {
+  background: var(--color-text);
+}
+
+/* A product page — a faint two-column suggestion of product image on the left and buy box on
+   the right, so a badge that lives next to the price is previewed where it actually appears.
+   The extra left padding keeps the preview inside the buy-box column instead of straddling the
+   boundary, which read as a badge floating over the product photo. */
+.previewStageProduct {
+  background: var(--color-surface);
+  background-image: linear-gradient(
+    90deg,
+    var(--color-surface-muted) 0 34%,
+    transparent 34% 100%
+  );
+  padding-left: calc(34% + var(--space-3));
+}
+
+/* The single scaled preview: the Product Reviews Widget's real, full-width storefront mockup
+   shrunk to thumbnail size. Every other preview is drawn at its natural size, because
+   shrinking an already-compact component only makes it unreadable. */
+.previewStageScale {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 250%;
+  transform: scale(0.4);
+  transform-origin: top left;
 }
 
 .widgetCardMetaLabel {
@@ -176,8 +227,9 @@
 .widgetCardActions {
   display: flex;
   align-items: center;
+  flex-wrap: wrap;
   gap: var(--space-2);
-  margin-top: var(--space-1);
+  padding: var(--space-4) var(--space-5) var(--space-5);
 }
 
 .statusEnabled,
@@ -524,23 +576,53 @@
   gap: 1rem;
 }
 
-/* Review Carousel gallery-card thumbnail — a horizontal, non-wrapping row so it reads as a
-   carousel snapshot rather than a grid/list. 260px matches the real storefront carousel's own
-   slide width (imagyn-component-carousel.css's .imagyn-carousel__slide). Sits inside the same
-   .widgetCardThumbnail/.widgetCardThumbnailScale scale-down wrapper the full WidgetPreview uses.
-   Backdrop is Imagyn's own admin chrome (not merchant-configurable, unlike the review cards
-   inside it, which stay on live Appearance tokens) — the shared muted-surface token, which
-   since the 2026-09-25 grayscale pass is itself the approved Imagyn neutral surface this used
-   to hardcode as #F5F5F5. Not the merchant-customizable storefront background. */
-.carouselThumbnailTrack {
+/* Review Carousel preview — a horizontal, non-wrapping row of compact slides that runs off the
+   right edge of the stage, which is exactly how the real carousel reads on a storefront: more
+   cards continue past the fold. Drawn at thumbnail scale rather than shrinking the full-size
+   storefront slide, so the text stays readable. Card chrome (surface, border, radius) comes
+   from the store's live Appearance tokens, applied inline in the component. */
+.carouselPreviewTrack {
   display: flex;
-  gap: 1rem;
-  padding: 20px;
-  background: var(--color-surface-muted);
+  align-items: stretch;
+  gap: var(--space-3);
+  width: 100%;
+  /* The row is wider than the stage on purpose — the third card is clipped, which is what
+     communicates "this scrolls". */
+  justify-content: flex-start;
+  padding-left: 2px;
 }
 
-.carouselThumbnailCard {
-  flex: 0 0 260px;
+.carouselPreviewCard {
+  flex: 0 0 7.5rem;
+  display: grid;
+  align-content: start;
+  gap: 3px;
+  padding: var(--space-2);
+  border: 1px solid;
+  box-shadow: var(--shadow-sm);
+}
+
+/* Stands in for a customer photo. A flat neutral tile, not a fake photograph: inventing an
+   image here would misrepresent what a merchant's own reviews actually contain. */
+.carouselPreviewMedia {
+  display: block;
+  height: 2.6rem;
+  margin-bottom: 2px;
+  background: var(--color-surface-strong);
+}
+
+.carouselPreviewTitle {
+  font-size: 10px;
+  font-weight: 600;
+  line-height: 1.3;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.carouselPreviewName {
+  color: var(--color-text-muted);
+  font-size: 9px;
 }
 
 .previewCard {
@@ -624,6 +706,62 @@
 @media (max-width: 960px) {
   .widgetCardFeatured {
     grid-column: span 1;
+  }
+
+  /* Once the featured card is a single column, its scaled full-storefront preview is being
+     squeezed into the same width as every other card — scale it down further so the mockup
+     still fits the stage instead of showing only its top-left corner. */
+  .previewStageScale {
+    width: 320%;
+    transform: scale(0.3125);
+  }
+}
+
+/* Phones: the grid is already one column here (auto-fill minmax(320px, 1fr)), but the stage
+   itself gets shorter so a card's text and action aren't pushed below the fold by its
+   picture, and the body/action padding tightens to match the narrower card. */
+@media (max-width: 600px) {
+  .previewStage {
+    height: 9.5rem;
+    padding: var(--space-3);
+  }
+
+  .widgetCardBody {
+    padding: var(--space-3) var(--space-4) 0;
+  }
+
+  .widgetCardActions {
+    padding: var(--space-3) var(--space-4) var(--space-4);
+  }
+
+  /* Three slides no longer fit legibly at this width — the row still clips, which is the
+     point, but each visible card keeps a readable size. */
+  .carouselPreviewCard {
+    flex-basis: 6.75rem;
+  }
+
+  .storeReviewsPreview {
+    gap: var(--space-3);
+  }
+
+  /* The two-column product suggestion stops being readable this narrow — drop back to a plain
+     white storefront rather than a sliver of gray with a squeezed badge next to it. */
+  .previewStageProduct {
+    background-image: none;
+    padding-left: var(--space-3);
+  }
+}
+
+/* Very narrow phones: the Store Reviews preview's three-column grid stops fitting, so the
+   CTA column drops away rather than crushing the distribution bars into nothing. The real
+   widget makes the same call at its own breakpoint (a single stacked column). */
+@media (max-width: 400px) {
+  .storeReviewsPreview {
+    grid-template-columns: auto 1fr;
+  }
+
+  .storeReviewsPreviewCta {
+    display: none;
   }
 }
 
@@ -753,4 +891,269 @@
   font-size: 0.7rem;
   line-height: 1.5;
   color: var(--color-text-muted);
+}
+
+/* ---------------------------------------------------------------- Store Reviews preview
+
+   Mirrors store-reviews.js's own three-part horizontal grid (rating / distribution / CTA),
+   compressed to thumbnail proportions. Kept as a real grid rather than a picture of one, so
+   it stays legible and reflows with the card at narrow widths. */
+.storeReviewsPreview {
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  align-items: center;
+  gap: var(--space-4);
+  width: 100%;
+  max-width: 21rem;
+}
+
+.storeReviewsPreviewRating {
+  display: grid;
+  justify-items: center;
+  gap: 2px;
+}
+
+.storeReviewsPreviewAverage {
+  font-size: var(--text-2xl);
+  font-weight: 600;
+  line-height: 1;
+  letter-spacing: -0.02em;
+}
+
+.storeReviewsPreviewCount {
+  color: var(--color-text-muted);
+  font-size: 9px;
+  text-align: center;
+  max-width: 6.5rem;
+  line-height: 1.3;
+}
+
+.storeReviewsPreviewDistribution {
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+}
+
+.storeReviewsPreviewRow {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.storeReviewsPreviewRowLabel {
+  display: inline-flex;
+  white-space: nowrap;
+}
+
+.storeReviewsPreviewTrack {
+  height: 4px;
+  border-radius: var(--radius-full);
+  background: var(--color-surface-strong);
+  overflow: hidden;
+}
+
+.storeReviewsPreviewFill {
+  display: block;
+  height: 100%;
+  border-radius: var(--radius-full);
+}
+
+.storeReviewsPreviewCta {
+  display: flex;
+}
+
+.storeReviewsPreviewButton {
+  border: 1px solid;
+  padding: 0.35rem 0.7rem;
+  font-size: 10px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+/* ---------------------------------------------------------------- Floating Reviews preview
+
+   Both halves of what the merchant is actually enabling: the fixed side tab and the drawer it
+   opens, over a dark mock page. Positioned absolutely within the stage because that IS the
+   widget's real relationship to the page — it floats above it. */
+.floatingPreview {
+  position: absolute;
+  inset: 0;
+}
+
+.floatingPreviewPage {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  align-content: start;
+  gap: 8px;
+  padding: var(--space-4);
+}
+
+.floatingPreviewPageBar,
+.floatingPreviewPageBarShort,
+.floatingPreviewPageBlock {
+  display: block;
+  border-radius: var(--radius-sm);
+  background: color-mix(in srgb, var(--color-surface) 14%, transparent);
+}
+
+.floatingPreviewPageBar {
+  height: 8px;
+  width: 45%;
+}
+
+.floatingPreviewPageBarShort {
+  height: 8px;
+  width: 30%;
+}
+
+.floatingPreviewPageBlock {
+  height: 42px;
+  width: 62%;
+}
+
+.floatingPreviewDrawer {
+  position: absolute;
+  top: 10px;
+  right: 10px;
+  bottom: 10px;
+  width: 62%;
+  max-width: 14rem;
+  display: grid;
+  align-content: start;
+  gap: 5px;
+  padding: var(--space-3);
+  border: 1px solid;
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-lg);
+}
+
+.floatingPreviewDrawerHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.floatingPreviewDrawerTitle {
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.floatingPreviewDrawerClose {
+  color: var(--color-text-muted);
+  font-size: 11px;
+  line-height: 1;
+}
+
+.floatingPreviewSummary {
+  display: flex;
+  align-items: baseline;
+  gap: 4px;
+  padding-bottom: 5px;
+  border-bottom: 1px solid var(--color-border);
+}
+
+.floatingPreviewAverage {
+  font-size: var(--text-base);
+  font-weight: 600;
+  line-height: 1;
+}
+
+.floatingPreviewCount {
+  color: var(--color-text-muted);
+  font-size: 9px;
+}
+
+.floatingPreviewReview {
+  display: grid;
+  gap: 1px;
+}
+
+.floatingPreviewReviewName {
+  font-size: 9px;
+  font-weight: 600;
+}
+
+.floatingPreviewReviewBody {
+  color: var(--color-text-muted);
+  font-size: 9px;
+  line-height: 1.35;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* The tab itself — pinned to the stage's left edge, mirroring the real widget's fixed side
+   placement (the drawer opens from the opposite side here purely so both are visible at once
+   in one small thumbnail). */
+.floatingPreviewTab {
+  position: absolute;
+  top: 50%;
+  left: 0;
+  transform: translateY(-50%);
+  display: inline-flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  padding: 0.45rem 0.35rem;
+  border: 1px solid;
+  border-left: none;
+  border-radius: 0 var(--radius-sm) var(--radius-sm) 0;
+  font-size: 9px;
+  font-weight: 600;
+  line-height: 1;
+  box-shadow: var(--shadow-md);
+}
+
+.floatingPreviewTabLabel {
+  writing-mode: vertical-rl;
+  letter-spacing: 0.06em;
+}
+
+/* ---------------------------------------------------------------- Trust Badge preview
+
+   Matches trust-badge.js's rendered button: stars, rating, "(N verified reviews)", then the
+   Certified chip. Green appears here and only here among the previews, because it is carrying
+   real meaning — a certification state — not decoration. */
+.trustBadgePreview {
+  display: inline-flex;
+  align-items: center;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: var(--space-2);
+  padding: 0.6rem 0.9rem;
+  border: 1px solid;
+  background: var(--color-surface);
+  box-shadow: var(--shadow-sm);
+}
+
+.trustBadgePreviewRating {
+  font-size: var(--text-base);
+  font-weight: 600;
+  line-height: 1;
+}
+
+.trustBadgePreviewCount {
+  color: var(--color-text-muted);
+  font-size: 10px;
+}
+
+.trustBadgePreviewCertified {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  padding: 0.2rem 0.45rem;
+  border-radius: var(--radius-full);
+  background: color-mix(in srgb, var(--color-success) 12%, transparent);
+  color: var(--color-success);
+  font-size: 9px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.trustBadgePreviewCertified svg {
+  width: 10px;
+  height: 10px;
 }

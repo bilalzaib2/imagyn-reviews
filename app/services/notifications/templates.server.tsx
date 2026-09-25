@@ -2,6 +2,7 @@ import { render } from "@react-email/render";
 import { ReviewRequestEmail } from "./emails/ReviewRequestEmail";
 import { ReviewHeldEmail, type ReviewHeldEmailProps } from "./emails/ReviewHeldEmail";
 import { NewReviewEmail, type NewReviewEmailProps } from "./emails/NewReviewEmail";
+import { SupportRequestEmail, type SupportRequestEmailProps } from "./emails/SupportRequestEmail";
 import {
   firstNameOf,
   getDefaultEmailTemplateContent,
@@ -38,6 +39,8 @@ export interface ReviewRequestEmailData {
 export type ReviewHeldEmailData = ReviewHeldEmailProps;
 
 export type NewReviewEmailData = NewReviewEmailProps;
+
+export type SupportRequestEmailData = SupportRequestEmailProps;
 
 // Renders the React Email template (emails/ReviewRequestEmail.tsx) to the plain
 // {subject, html, text} shape EmailProvider.sendEmail expects — callers (review-request.server.ts,
@@ -123,6 +126,25 @@ export async function buildNewReviewEmail(data: NewReviewEmailData): Promise<{
     ? `New ${data.rating}-star review on ${data.productName}`
     : `New ${data.rating}-star review from ${data.reviewerName}`;
   const element = <NewReviewEmail {...data} />;
+
+  const [html, text] = await Promise.all([
+    render(element),
+    render(element, { plainText: true }),
+  ]);
+
+  return { subject, html, text };
+}
+
+// Mirrors buildReviewHeldEmail — the only caller is supportRequest.server.ts, which never
+// imports React Email directly. The "[IMAGYN Support]" prefix is fixed here rather than being
+// part of the merchant's own subject, so a merchant can neither spoof nor strip it.
+export async function buildSupportRequestEmail(data: SupportRequestEmailData): Promise<{
+  subject: string;
+  html: string;
+  text: string;
+}> {
+  const subject = `[IMAGYN Support] ${data.subject}`;
+  const element = <SupportRequestEmail {...data} />;
 
   const [html, text] = await Promise.all([
     render(element),

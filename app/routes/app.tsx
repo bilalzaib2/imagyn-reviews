@@ -19,7 +19,6 @@ import enTranslations from "@shopify/polaris/locales/en.json";
 import { authenticateAdminDeduped } from "../services/auth-dedupe.server";
 import { getOrCreateStore } from "../services/store.server";
 import { ensureDevelopmentStoreFlag, getBillingSnapshot } from "../services/billing/billing.server";
-import { PLANS, type PlanId } from "../services/billing/plans";
 import { FloatingHelp } from "../components/ui/FloatingHelp";
 import styles from "../styles/app.shell.module.css";
 
@@ -50,17 +49,16 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
   return {
     // eslint-disable-next-line no-undef
     apiKey: process.env.SHOPIFY_API_KEY || "",
-    // Store context for the support widget's pre-filled email (see supportMailto.ts, which
-    // documents what must never be included). Store.plan is a plain string column, so an
-    // unrecognized value resolves to null rather than crashing the whole shell on a lookup.
+    // Shown in the support panel so a merchant can see which store they're writing about.
+    // The shop domain and plan are deliberately NOT sent to the client any more: the support
+    // email resolves both server-side from the authenticated session (see app.support.tsx),
+    // so there is no reason to ship them into the page.
     storeName: store.name,
-    shopDomain: session.shop,
-    planName: PLANS[store.plan as PlanId]?.name ?? null,
   };
 };
 
 export default function App() {
-  const { apiKey, storeName, shopDomain, planName } = useLoaderData<typeof loader>();
+  const { apiKey, storeName } = useLoaderData<typeof loader>();
   const location = useLocation();
   const navigate = useNavigate();
   const navigation = useNavigation();
@@ -102,7 +100,7 @@ export default function App() {
       <PolarisAppProvider i18n={enTranslations}>
         {isNavigating ? <div className={styles.navProgress} aria-hidden="true" /> : null}
         <Outlet />
-        <FloatingHelp storeName={storeName} shopDomain={shopDomain} planName={planName} />
+        <FloatingHelp storeName={storeName} />
       </PolarisAppProvider>
     </AppProvider>
   );

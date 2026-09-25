@@ -43,6 +43,9 @@ const ALLOWED_BLOCKS: Record<string, { template: "product" | "collection" | "ind
   // section shape instead is exactly what produced Shopify's "There is a problem with the
   // app block" error described above.
   floating_reviews: { template: "index", kind: "embed" },
+  // A section block (`"target": "section"` — see trust_badge.liquid), typically placed on a
+  // product page next to the buy box, same shape as rating_badge above.
+  trust_badge: { template: "product", kind: "section" },
 };
 
 export const loader = async ({ request }: LoaderFunctionArgs) => {

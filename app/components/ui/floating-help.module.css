@@ -122,13 +122,21 @@
   overflow-wrap: anywhere;
 }
 
+/* Both panel entries are <button>s now, not links: they open the in-app support form instead
+   of navigating anywhere. These reset the UA button styling the anchors never needed. */
 .item {
   display: flex;
   align-items: center;
   gap: var(--space-3);
+  width: 100%;
   padding: var(--space-2) var(--space-3);
+  border: none;
   border-radius: var(--radius-md);
+  background: transparent;
   color: var(--color-text);
+  font-family: inherit;
+  text-align: left;
+  cursor: pointer;
   font-size: var(--text-sm);
   font-weight: 500;
   text-decoration: none;
@@ -146,10 +154,15 @@
   display: flex;
   align-items: center;
   gap: var(--space-3);
+  width: 100%;
   padding: var(--space-2) var(--space-3);
+  border: none;
   border-radius: var(--radius-md);
   background: var(--color-surface-muted);
   color: var(--color-text);
+  font-family: inherit;
+  text-align: left;
+  cursor: pointer;
   font-size: var(--text-sm);
   font-weight: 600;
   text-decoration: none;
@@ -203,5 +216,102 @@
     width: auto;
     max-width: none;
     transform-origin: bottom center;
+  }
+}
+
+/* ---------------------------------------------------------------- Support form
+
+   Lives inside a Polaris Modal, so the dialog chrome (surface, radius, shadow, header, action
+   bar) is Polaris's. These rules only style the content, using the app's own tokens so the
+   form reads as IMAGYN rather than as a default Polaris form. No accent colour: the one
+   coloured element is the success state, which is carrying real meaning. */
+.supportForm {
+  display: grid;
+  gap: var(--space-4);
+}
+
+.supportIntro {
+  margin: 0;
+  color: var(--color-text-muted);
+  font-size: var(--text-sm);
+  line-height: 1.6;
+}
+
+.supportFootnote {
+  margin: 0;
+  color: var(--color-text-muted);
+  font-size: var(--text-xs);
+  line-height: 1.5;
+}
+
+.supportError {
+  display: grid;
+  gap: 2px;
+  padding: var(--space-3) var(--space-4);
+  border: 1px solid color-mix(in srgb, var(--color-danger) 35%, var(--color-surface));
+  border-radius: var(--radius-md);
+  background: color-mix(in srgb, var(--color-danger) 7%, var(--color-surface));
+}
+
+.supportErrorTitle {
+  margin: 0;
+  color: var(--color-danger);
+  font-size: var(--text-sm);
+  font-weight: 600;
+}
+
+.supportErrorText {
+  margin: 0;
+  color: var(--color-text-muted);
+  font-size: var(--text-sm);
+  line-height: 1.5;
+}
+
+.supportSuccess {
+  display: grid;
+  justify-items: center;
+  gap: var(--space-2);
+  padding: var(--space-6) var(--space-4);
+  text-align: center;
+}
+
+.supportSuccessIcon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 44px;
+  height: 44px;
+  margin-bottom: var(--space-1);
+  border-radius: var(--radius-full);
+  background: color-mix(in srgb, var(--color-success) 12%, transparent);
+  color: var(--color-success);
+}
+
+.supportSuccessIcon svg {
+  width: 22px;
+  height: 22px;
+}
+
+.supportSuccessTitle {
+  margin: 0;
+  color: var(--color-text);
+  font-size: var(--text-base);
+  font-weight: 600;
+}
+
+.supportSuccessText {
+  margin: 0;
+  max-width: 24rem;
+  color: var(--color-text-muted);
+  font-size: var(--text-sm);
+  line-height: 1.6;
+}
+
+/* Phones: the panel's two entries are now buttons rather than links, so they need the same
+   full-width tap target the links had. */
+@media (max-width: 480px) {
+  .item,
+  .primaryItem {
+    width: 100%;
   }
 }

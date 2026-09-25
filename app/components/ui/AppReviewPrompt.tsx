@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { Card } from "./Card";
 import { Button } from "./Button";
+import { SUPPORT_INBOX } from "../../services/supportRequest.shared";
 import styles from "./app-review-prompt.module.css";
 
 const DISMISS_KEY = "imagyn:appReviewPromptDismissedAt";
@@ -15,6 +16,11 @@ function isDismissed(): boolean {
   const dismissedAt = Number(raw);
   return Number.isFinite(dismissedAt) && Date.now() - dismissedAt < DISMISS_COOLDOWN_MS;
 }
+
+// Built from the shared support constant rather than a repeated literal — the address a
+// merchant is shown here and the address the support form actually sends to are the same
+// value, so they can never drift apart again.
+const UNAVAILABLE_MESSAGE = `Reviews aren't available right now. Please try again later — or email us at ${SUPPORT_INBOX}.`;
 
 // Shopify's documented response shape for reviews.request() — success, plus a code/message
 // explaining a decline (rate limits, merchant eligibility, already reviewed, and so on).
@@ -116,18 +122,14 @@ export function AppReviewPrompt({
         return;
       }
 
-      setUnavailableMessage(
-        "Reviews aren't available right now. Please try again later — or email us at appsupport@imagyn.co.",
-      );
+      setUnavailableMessage(UNAVAILABLE_MESSAGE);
     } catch {
       if (appStoreUrl) {
         openAppStoreListing(appStoreUrl);
         handleDismiss();
         return;
       }
-      setUnavailableMessage(
-        "Reviews aren't available right now. Please try again later — or email us at appsupport@imagyn.co.",
-      );
+      setUnavailableMessage(UNAVAILABLE_MESSAGE);
     } finally {
       setIsRequesting(false);
     }

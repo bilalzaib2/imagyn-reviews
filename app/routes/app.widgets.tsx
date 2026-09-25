@@ -86,6 +86,17 @@ interface WidgetCardDef {
   // build the theme-editor deep link, so a merchant can add the block with one click instead
   // of finding it manually.
   blockHandle?: string;
+  /** The surface this widget actually sits on, which decides how its preview is staged (see
+   *  PREVIEW_STAGE_CLASS). Purely presentational: it gives the gallery real visual variety —
+   *  a product page reads differently from a plain storefront section — instead of ten
+   *  identical light-gray tiles. */
+  previewContext?: "light" | "neutral" | "dark" | "product";
+  /** False for the two blocks widgetInstallDetection.server.ts has no marker for
+   *  (Floating Reviews, Trust Badge). Without this they'd inherit the generic "Not checked
+   *  yet." reason, which reads as a failed check rather than the truth: this widget's install
+   *  state simply isn't something the app detects. Presentation-only — no detection behavior
+   *  changes here. */
+  installDetectable?: boolean;
 }
 
 const widgetCards: WidgetCardDef[] = [
@@ -96,6 +107,7 @@ const widgetCards: WidgetCardDef[] = [
     status: "editable",
     blockName: "Imagyn Reviews",
     blockHandle: "star_rating",
+    previewContext: "light",
   },
   {
     key: "product-rating-badge",
@@ -104,6 +116,8 @@ const widgetCards: WidgetCardDef[] = [
     status: "theme-editor",
     blockName: "Product Rating Badge",
     blockHandle: "rating_badge",
+    // Sits next to the buy box, so it previews inside a product-page context.
+    previewContext: "product",
   },
   {
     key: "collection-rating-badge",
@@ -117,6 +131,7 @@ const widgetCards: WidgetCardDef[] = [
     status: "theme-editor",
     blockName: "Collection Ratings",
     blockHandle: "collection_rating_badges",
+    previewContext: "neutral",
   },
   {
     key: "review-carousel",
@@ -125,6 +140,7 @@ const widgetCards: WidgetCardDef[] = [
     status: "theme-editor",
     blockName: "Review Carousel",
     blockHandle: "review_carousel",
+    previewContext: "neutral",
   },
   {
     key: "medals-showcase",
@@ -133,6 +149,7 @@ const widgetCards: WidgetCardDef[] = [
     status: "theme-editor",
     blockName: "Medals Showcase",
     blockHandle: "medals_showcase",
+    previewContext: "neutral",
   },
   {
     key: "store-reviews",
@@ -142,6 +159,7 @@ const widgetCards: WidgetCardDef[] = [
     status: "theme-editor",
     blockName: "Store Reviews",
     blockHandle: "store_reviews",
+    previewContext: "light",
   },
   {
     key: "floating-reviews",
@@ -151,6 +169,11 @@ const widgetCards: WidgetCardDef[] = [
     status: "theme-editor",
     blockName: "Floating Reviews",
     blockHandle: "floating_reviews",
+    // The one widget that overlays the storefront rather than sitting in it — a darker stage
+    // is what makes the floating tab and drawer read as "on top of the page."
+    previewContext: "dark",
+    // No detection marker in widgetInstallDetection.server.ts for this block.
+    installDetectable: false,
   },
   {
     key: "ai-review-summary",
@@ -160,6 +183,7 @@ const widgetCards: WidgetCardDef[] = [
     status: "theme-editor",
     blockName: "Product AI Summary",
     blockHandle: "ai_review_summary",
+    previewContext: "light",
   },
   {
     key: "store-ai-summary",
@@ -169,6 +193,23 @@ const widgetCards: WidgetCardDef[] = [
     status: "theme-editor",
     blockName: "Store AI Summary",
     blockHandle: "store_ai_summary",
+    previewContext: "neutral",
+  },
+  {
+    // Shipped in the theme extension since 2026-09-09 (blocks/trust_badge.liquid) but never
+    // listed here, so merchants had no way to discover or add it from the app. Added as a real
+    // card, not a new feature: the block, its settings, and trustCertification.server.ts
+    // behind it are all unchanged.
+    key: "trust-badge",
+    title: "Trust Badge",
+    description:
+      "A compact badge showing your rating across verified purchases only, with a Certified indicator when your store currently meets IMAGYN's certification criteria. Opens a details panel shoppers can inspect.",
+    status: "theme-editor",
+    blockName: "Trust Badge",
+    blockHandle: "trust_badge",
+    previewContext: "light",
+    // No detection marker in widgetInstallDetection.server.ts for this block.
+    installDetectable: false,
   },
 ];
 
@@ -408,14 +449,38 @@ function ReviewPreviewCard({
 // (see the widgetCards.map branch below). 260px card width matches the real storefront
 // carousel's own slide width (imagyn-component-carousel.css's .imagyn-carousel__slide), so the
 // preview's proportions match what a merchant actually sees after adding the block.
-const carouselPreviewSettings = getDefaultWidgetSettings(REVIEWS_WIDGET_TYPE);
-
 function CarouselThumbnailPreview({ tokens }: { tokens: AppearanceTokens }) {
+  const textColor = tokens.colors.textColor ?? "#111111";
+
   return (
-    <div className={styles.carouselThumbnailTrack}>
-      {sampleReviews.map((review) => (
-        <div key={review.id} className={styles.carouselThumbnailCard}>
-          <ReviewPreviewCard tokens={tokens} settings={carouselPreviewSettings} review={review} />
+    <div className={styles.carouselPreviewTrack}>
+      {sampleReviews.map((review, index) => (
+        <div
+          key={review.id}
+          className={styles.carouselPreviewCard}
+          style={{
+            background: tokens.colors.surfaceColor,
+            borderColor: tokens.colors.borderColor,
+            borderRadius: `${tokens.corners.radius}px`,
+          }}
+        >
+          {/* The real carousel is media-first — getFeaturedReviews deliberately pulls reviews
+              that actually have photos or video ahead of text-only ones (see its own comment),
+              so a media tile is the honest representation of a typical slide. The third card
+              is text-only, because the same function falls back to text reviews once media
+              ones are exhausted. */}
+          {index < 2 ? (
+            <span
+              className={styles.carouselPreviewMedia}
+              style={{ borderRadius: `${Math.max(tokens.corners.radius - 2, 2)}px` }}
+              aria-hidden="true"
+            />
+          ) : null}
+          <span className={styles.previewStars}>{renderStars(review.rating, 9, tokens.colors.starColor)}</span>
+          <span className={styles.carouselPreviewTitle} style={{ color: textColor }}>
+            {review.title}
+          </span>
+          <span className={styles.carouselPreviewName}>{review.name}</span>
         </div>
       ))}
     </div>
@@ -529,6 +594,150 @@ function StoreAiSummaryThumbnailPreview({ tokens }: { tokens: AppearanceTokens }
   );
 }
 
+// Store Reviews' gallery preview — mirrors store-reviews.js's own three-part horizontal grid
+// (rating column, distribution column, CTA column), which is the layout a merchant actually
+// gets after adding the block. The five histogram rows use the same 5→1 descending order and
+// proportional bar fills renderHistogram produces; the counts are representative sample data,
+// like every other preview on this page.
+const STORE_REVIEWS_PREVIEW_DISTRIBUTION = [
+  { stars: 5, count: 91 },
+  { stars: 4, count: 24 },
+  { stars: 3, count: 8 },
+  { stars: 2, count: 3 },
+  { stars: 1, count: 2 },
+];
+
+function StoreReviewsThumbnailPreview({ tokens }: { tokens: AppearanceTokens }) {
+  const textColor = tokens.colors.textColor ?? "#111111";
+  const total = STORE_REVIEWS_PREVIEW_DISTRIBUTION.reduce((sum, row) => sum + row.count, 0);
+  const max = Math.max(...STORE_REVIEWS_PREVIEW_DISTRIBUTION.map((row) => row.count));
+
+  return (
+    <div className={styles.storeReviewsPreview}>
+      <div className={styles.storeReviewsPreviewRating}>
+        <span className={styles.storeReviewsPreviewAverage} style={{ color: textColor }}>
+          4.7
+        </span>
+        <span className={styles.previewStars}>{renderStars(5, 13, tokens.colors.starColor)}</span>
+        <span className={styles.storeReviewsPreviewCount}>Based on {total} store reviews</span>
+      </div>
+      <div className={styles.storeReviewsPreviewDistribution}>
+        {STORE_REVIEWS_PREVIEW_DISTRIBUTION.map((row) => (
+          <div key={row.stars} className={styles.storeReviewsPreviewRow}>
+            <span className={styles.storeReviewsPreviewRowLabel} aria-hidden="true">
+              {renderStars(row.stars, 8, tokens.colors.starColor)}
+            </span>
+            <span className={styles.storeReviewsPreviewTrack}>
+              <span
+                className={styles.storeReviewsPreviewFill}
+                style={{ width: `${Math.round((row.count / max) * 100)}%`, background: tokens.colors.starColor }}
+              />
+            </span>
+          </div>
+        ))}
+      </div>
+      <div className={styles.storeReviewsPreviewCta}>
+        <span
+          className={styles.storeReviewsPreviewButton}
+          style={{ borderColor: tokens.colors.borderColor, borderRadius: `${tokens.corners.radius}px`, color: textColor }}
+        >
+          Write a Review
+        </span>
+      </div>
+    </div>
+  );
+}
+
+// Floating Reviews' gallery preview — the one widget that overlays the storefront instead of
+// sitting inside it, so this shows both halves of what a merchant is actually enabling: the
+// fixed side tab (star + rating + label, exactly what renderTabContents builds) and the drawer
+// it opens (header with average/stars/count, then review rows), matching
+// floating-reviews.js's renderPanelContents. Staged over a dark mock page so the overlay
+// relationship is legible at thumbnail size.
+function FloatingReviewsThumbnailPreview({ tokens }: { tokens: AppearanceTokens }) {
+  const textColor = tokens.colors.textColor ?? "#111111";
+
+  return (
+    <div className={styles.floatingPreview}>
+      <div className={styles.floatingPreviewPage} aria-hidden="true">
+        <span className={styles.floatingPreviewPageBar} />
+        <span className={styles.floatingPreviewPageBlock} />
+        <span className={styles.floatingPreviewPageBarShort} />
+      </div>
+
+      <div
+        className={styles.floatingPreviewDrawer}
+        style={{ background: tokens.colors.surfaceColor, borderColor: tokens.colors.borderColor }}
+      >
+        <div className={styles.floatingPreviewDrawerHeader}>
+          <span className={styles.floatingPreviewDrawerTitle} style={{ color: textColor }}>
+            Reviews
+          </span>
+          <span className={styles.floatingPreviewDrawerClose} aria-hidden="true">
+            ×
+          </span>
+        </div>
+        <div className={styles.floatingPreviewSummary}>
+          <span className={styles.floatingPreviewAverage} style={{ color: textColor }}>
+            4.7
+          </span>
+          <span className={styles.previewStars}>{renderStars(5, 10, tokens.colors.starColor)}</span>
+          <span className={styles.floatingPreviewCount}>128 reviews</span>
+        </div>
+        {sampleReviews.slice(0, 2).map((review) => (
+          <div key={review.id} className={styles.floatingPreviewReview}>
+            <span className={styles.previewStars}>{renderStars(review.rating, 9, tokens.colors.starColor)}</span>
+            <span className={styles.floatingPreviewReviewName} style={{ color: textColor }}>
+              {review.name}
+            </span>
+            <span className={styles.floatingPreviewReviewBody}>{review.title}</span>
+          </div>
+        ))}
+      </div>
+
+      <span
+        className={styles.floatingPreviewTab}
+        style={{ background: tokens.colors.surfaceColor, borderColor: tokens.colors.borderColor, color: textColor }}
+      >
+        <span style={{ color: tokens.colors.starColor }}>★</span>
+        <span>4.7</span>
+        <span className={styles.floatingPreviewTabLabel}>Reviews</span>
+      </span>
+    </div>
+  );
+}
+
+// Trust Badge's gallery preview — matches trust-badge.js's rendered button exactly: star row,
+// numeric rating, "(N verified reviews)", then the Certified chip. The wording "verified
+// reviews" is load-bearing and deliberately not shortened: this badge counts verified
+// purchases only, which is the entire distinction from the plain Rating Badge card above.
+// The Certified chip is shown here because that is the state a merchant is deciding whether
+// to display; on a real storefront it only ever renders when the store is genuinely certified
+// (see the block's own header comment and api.reviews.trust.tsx).
+function TrustBadgeThumbnailPreview({ tokens }: { tokens: AppearanceTokens }) {
+  const textColor = tokens.colors.textColor ?? "#111111";
+
+  return (
+    <div
+      className={styles.trustBadgePreview}
+      style={{ borderColor: tokens.colors.borderColor, borderRadius: `${tokens.corners.radius}px` }}
+    >
+      <span className={styles.previewStars}>{renderStars(5, 14, tokens.colors.starColor)}</span>
+      <span className={styles.trustBadgePreviewRating} style={{ color: textColor }}>
+        4.8
+      </span>
+      <span className={styles.trustBadgePreviewCount}>(96 verified reviews)</span>
+      <span className={styles.trustBadgePreviewCertified}>
+        <svg viewBox="0 0 20 20" fill="currentColor" aria-hidden="true" focusable="false">
+          <path d="M10 1.5 12.4 4l3.4-.2.2 3.4L18.5 10l-2.5 2.4.2 3.4-3.4.2L10 18.5 7.6 16l-3.4.2-.2-3.4L1.5 10 4 7.6l-.2-3.4 3.4.2z" />
+          <path d="M6.6 10.2 8.9 12.5 13.4 8" stroke="#ffffff" strokeWidth="1.6" fill="none" strokeLinecap="round" strokeLinejoin="round" />
+        </svg>
+        Certified
+      </span>
+    </div>
+  );
+}
+
 function WidgetPreview({ tokens, settings }: { tokens: AppearanceTokens; settings: WidgetSettings }) {
   const layoutReviews = settings.layout === "grid" ? sampleReviews : sampleReviews.slice(0, settings.layout === "carousel" ? 2 : 3);
 
@@ -601,6 +810,69 @@ function WidgetPreview({ tokens, settings }: { tokens: AppearanceTokens; setting
 // spot that guarantees an installed widget can never show "Add to Theme" (see
 // widgetInstallDetection.server.ts's docblock), since every card branch below calls this
 // instead of building its own label/pill logic.
+// One place that answers "what does this widget look like," keyed by card. Replaces the long
+// inline ternary chain the gallery used to carry, so adding a widget means adding a card def
+// plus one entry here — and so every card is guaranteed to have a real preview rather than
+// silently falling through to nothing, which is exactly how Store Reviews and Floating Reviews
+// ended up as text-only cards.
+//
+// `scaled` marks the one preview that is a full storefront mockup shrunk to thumbnail size
+// (the Product Reviews Widget's live WidgetPreview). Everything else is drawn at its natural
+// size for this stage, because shrinking an already-compact component just makes it
+// unreadable.
+function renderWidgetPreview(cardKey: string, tokens: AppearanceTokens): ReactNode {
+  switch (cardKey) {
+    case "product-rating-badge":
+      return <RatingBadgeThumbnailPreview tokens={tokens} />;
+    case "collection-rating-badge":
+      return <CollectionBadgeThumbnailPreview tokens={tokens} />;
+    case "review-carousel":
+      return <CarouselThumbnailPreview tokens={tokens} />;
+    case "medals-showcase":
+      return <MedalsShowcaseThumbnailPreview />;
+    case "store-reviews":
+      return <StoreReviewsThumbnailPreview tokens={tokens} />;
+    case "floating-reviews":
+      return <FloatingReviewsThumbnailPreview tokens={tokens} />;
+    case "trust-badge":
+      return <TrustBadgeThumbnailPreview tokens={tokens} />;
+    case "ai-review-summary":
+      return <AiSummaryThumbnailPreview tokens={tokens} />;
+    case "store-ai-summary":
+      return <StoreAiSummaryThumbnailPreview tokens={tokens} />;
+    default:
+      return null;
+  }
+}
+
+const PREVIEW_STAGE_CLASS: Record<NonNullable<WidgetCardDef["previewContext"]>, string> = {
+  light: styles.previewStageLight,
+  neutral: styles.previewStageNeutral,
+  dark: styles.previewStageDark,
+  product: styles.previewStageProduct,
+};
+
+// The consistent preview area every card shares: same height, same radius, same inset — with
+// only the backdrop varying by context, which is what gives the gallery variety without
+// breaking it into ten unrelated compositions.
+function WidgetPreviewStage({
+  card,
+  children,
+  scaled = false,
+}: {
+  card: WidgetCardDef;
+  children: ReactNode;
+  scaled?: boolean;
+}) {
+  const stageClass = PREVIEW_STAGE_CLASS[card.previewContext ?? "neutral"];
+
+  return (
+    <div className={`${styles.previewStage} ${stageClass}`} aria-hidden="true">
+      {scaled ? <div className={styles.previewStageScale}>{children}</div> : children}
+    </div>
+  );
+}
+
 function InstallStateBadge({ status }: { status: WidgetInstallStatus }) {
   if (status.state === "installed") {
     return <span className={styles.installStateInstalled}>Installed</span>;
@@ -821,11 +1093,13 @@ export default function WidgetsPage() {
                   // detection couldn't tell, rather than a generic action nudge that would read
                   // as a status claim either way.
                   const metaLabel =
-                    status.state === "installed"
-                      ? `Block: ${card.blockName} — detected live on your storefront.`
-                      : status.state === "not-installed"
-                        ? `Block: ${card.blockName} — not yet added to your theme.`
-                        : status.reason ?? "Install state can't be determined automatically.";
+                    card.installDetectable === false
+                      ? `Block: ${card.blockName} — add or manage it in your Theme Editor.`
+                      : status.state === "installed"
+                        ? `Block: ${card.blockName} — detected live on your storefront.`
+                        : status.state === "not-installed"
+                          ? `Block: ${card.blockName} — not yet added to your theme.`
+                          : status.reason ?? "Install state can't be determined automatically.";
 
                   return (
                     <div
@@ -833,47 +1107,20 @@ export default function WidgetsPage() {
                       className={`${styles.widgetCard} ${shellStyles.reveal}`}
                       style={revealStyle(cardIndex)}
                     >
-                      <div className={styles.widgetCardHeader}>
-                        <h2 className={styles.widgetCardTitle}>{card.title}</h2>
-                        <InstallStateBadge status={status} />
-                      </div>
-                      <p className={styles.widgetCardDescription}>{card.description}</p>
-                      {card.key === "review-carousel" ? (
-                        // The only one of these three that's genuinely a scaled-down full
-                        // storefront mockup (matches WidgetPreview's own big-shell-shrunk-to-
-                        // thumbnail pattern) — the scale wrapper exists for that reason, not
-                        // for the two smaller, single-row previews below.
-                        <div className={styles.widgetCardThumbnail}>
-                          <div className={styles.widgetCardThumbnailScale}>
-                            <CarouselThumbnailPreview tokens={appearanceTokens} />
-                          </div>
+                      <WidgetPreviewStage card={card}>{renderWidgetPreview(card.key, appearanceTokens)}</WidgetPreviewStage>
+                      <div className={styles.widgetCardBody}>
+                        <div className={styles.widgetCardHeader}>
+                          <h2 className={styles.widgetCardTitle}>{card.title}</h2>
+                          {card.installDetectable === false ? null : <InstallStateBadge status={status} />}
                         </div>
-                      ) : card.key === "product-rating-badge" ? (
-                        <div className={styles.widgetCardThumbnailPlaceholder}>
-                          <RatingBadgeThumbnailPreview tokens={appearanceTokens} />
-                        </div>
-                      ) : card.key === "collection-rating-badge" ? (
-                        <div className={styles.widgetCardThumbnailPlaceholder}>
-                          <CollectionBadgeThumbnailPreview tokens={appearanceTokens} />
-                        </div>
-                      ) : card.key === "medals-showcase" ? (
-                        <div className={styles.widgetCardThumbnailPlaceholder}>
-                          <MedalsShowcaseThumbnailPreview />
-                        </div>
-                      ) : card.key === "ai-review-summary" ? (
-                        <div className={styles.widgetCardThumbnailPlaceholder}>
-                          <AiSummaryThumbnailPreview tokens={appearanceTokens} />
-                        </div>
-                      ) : card.key === "store-ai-summary" ? (
-                        <div className={styles.widgetCardThumbnailPlaceholder}>
-                          <StoreAiSummaryThumbnailPreview tokens={appearanceTokens} />
-                        </div>
-                      ) : null}
-                      <div className={styles.widgetCardMeta}>
+                        <p className={styles.widgetCardDescription}>{card.description}</p>
                         <span className={styles.widgetCardMetaLabel}>{metaLabel}</span>
                       </div>
                       <div className={styles.widgetCardActions}>
-                        <InstallStateAction status={status} addToThemeHref={addToThemeHref(card.blockHandle!)} />
+                        <InstallStateAction
+                          status={card.installDetectable === false ? UNKNOWN_INSTALL_STATUS : status}
+                          addToThemeHref={addToThemeHref(card.blockHandle!)}
+                        />
                       </div>
                     </div>
                   );
@@ -898,20 +1145,20 @@ export default function WidgetsPage() {
                     className={`${styles.widgetCard} ${styles.widgetCardFeatured} ${shellStyles.reveal}`}
                     style={revealStyle(cardIndex)}
                   >
-                    <span className={styles.widgetCardFeaturedTag}>Core widget</span>
-                    <div className={styles.widgetCardHeader}>
-                      <h2 className={styles.widgetCardTitle}>{card.title}</h2>
-                      <span className={draftSettings.enabled ? styles.statusEnabled : styles.statusDisabled}>
-                        {draftSettings.enabled ? "Enabled" : "Disabled"}
-                      </span>
-                    </div>
-                    <p className={styles.widgetCardDescription}>{card.description}</p>
-                    <div className={styles.widgetCardThumbnail}>
-                      <div className={styles.widgetCardThumbnailScale}>
-                        <WidgetPreview tokens={appearanceTokens} settings={{ ...draftSettings, widgetName: draftName }} />
+                    <WidgetPreviewStage card={card} scaled>
+                      <WidgetPreview tokens={appearanceTokens} settings={{ ...draftSettings, widgetName: draftName }} />
+                    </WidgetPreviewStage>
+                    <div className={styles.widgetCardBody}>
+                      <div className={styles.widgetCardHeader}>
+                        <div className={styles.widgetCardTitleGroup}>
+                          <h2 className={styles.widgetCardTitle}>{card.title}</h2>
+                          <span className={styles.widgetCardFeaturedTag}>Core widget</span>
+                        </div>
+                        <span className={draftSettings.enabled ? styles.statusEnabled : styles.statusDisabled}>
+                          {draftSettings.enabled ? "Enabled" : "Disabled"}
+                        </span>
                       </div>
-                    </div>
-                    <div className={styles.widgetCardMeta}>
+                      <p className={styles.widgetCardDescription}>{card.description}</p>
                       <span className={styles.widgetCardMetaLabel}>{reviewsMetaLabel}</span>
                     </div>
                     <div className={styles.widgetCardActions}>
