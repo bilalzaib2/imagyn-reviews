@@ -60,7 +60,11 @@
     var html = "";
     for (var i = 0; i < media.length; i++) {
       var item = media[i];
-      if (item.type !== "image") {
+      // ReviewMedia.type is an enum stored uppercase (IMAGE/VIDEO). Comparing against a
+      // lowercase literal here silently skipped every photo, so the drawer never showed
+      // customer media at all. Normalised rather than matched exactly, so this keeps working
+      // whichever casing the endpoint sends.
+      if (String(item.type).toLowerCase() !== "image") {
         continue;
       }
       var src = item.thumbnailUrl || item.url;
