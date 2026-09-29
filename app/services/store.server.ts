@@ -104,6 +104,22 @@ export async function updateAiSummaryDisplaySurfaces(
   });
 }
 
+// Public IMAGYN Reviews Network participation (app.settings.seo.tsx). This writes one
+// boolean and nothing else — no Review row is edited, unpublished or deleted when a merchant
+// opts out, and opting back in restores visibility immediately because the public API simply
+// re-includes the store on its next read.
+//
+// Development stores are excluded from the public network independently of this flag (see
+// publicDiscovery.server.ts's PUBLIC_STORE), so enabling it on a dev store still publishes
+// nothing.
+export async function setPublicNetworkEnabled(id: string, enabled: boolean) {
+  return prisma.store.update({
+    where: { id },
+    data: { publicNetworkEnabled: enabled },
+    select: { id: true, publicNetworkEnabled: true },
+  });
+}
+
 // Automatic Reminder Emails (app.settings.tsx). remindersEnabledAt is bumped forward only on
 // an off->on transition — never on a resave while already on — so re-enabling after a period
 // of being off starts the eligibility cutoff fresh rather than resurrecting whatever backlog

@@ -40,7 +40,21 @@ import { ReviewStatus } from "./review.shared";
 // This affects ONLY the public consumer surface. Merchant admin, storefront widgets, billing
 // and every api.reviews.* route are untouched: a dev store's own dashboard and its own
 // storefront work exactly as before.
-const PUBLIC_STORE = { isDevelopmentStore: false } satisfies Prisma.StoreWhereInput;
+// The two conditions a store must satisfy to exist on the public network at all. Every
+// public read in this file funnels through this object (directly, or via
+// DISCOVERABLE_REVIEW below), which is what makes the exclusion a database-level rule
+// rather than something each consumer surface has to remember to apply.
+//
+//  - isDevelopmentStore: false  — a dev/test store is never public, and cannot make itself
+//    public by flipping the merchant setting.
+//  - publicNetworkEnabled: true — the merchant's own participation control. Turning it off
+//    removes the store, its products and its reviews from every public surface, including
+//    counts, facets, search, the sitemap and structured data, without touching a single
+//    Review row.
+const PUBLIC_STORE = {
+  isDevelopmentStore: false,
+  publicNetworkEnabled: true,
+} satisfies Prisma.StoreWhereInput;
 
 // A store only becomes part of the public network once it has at least one approved review.
 // This is a real product rule, not a cosmetic filter: it keeps empty shops out of consumer
@@ -199,7 +213,7 @@ async function buildReviewWhere(filters: PublicReviewFilters): Promise<Prisma.Re
   if (filters.withPhotos) where.media = { some: { type: ReviewMediaType.IMAGE } };
   if (filters.withVideo) where.media = { some: { type: ReviewMediaType.VIDEO } };
   // Merged, never replaced: assigning `where.store` outright would silently drop the
-  // development-store exclusion that DISCOVERABLE_REVIEW put there.
+  // development-store and participation exclusions that DISCOVERABLE_REVIEW put there.
   if (filters.store) where.store = { ...PUBLIC_STORE, slug: filters.store };
 
   if (filters.category || filters.product) {

@@ -131,6 +131,30 @@ model Store {
   newReviewNotifyEnabled Boolean @default(false)
   newReviewNotifyEmail   String?
 
+  // Public IMAGYN Reviews Network participation (see publicDiscovery.server.ts, which is
+  // the single place every public/consumer read is filtered). When false, this store and
+  // all of its reviews and products disappear from every public discovery surface — the
+  // network feed, product and store pages, search, counts, facets, sitemap and structured
+  // data — because that service filters on this column at the database level rather than
+  // hiding rows in the UI.
+  //
+  // Defaults to TRUE, unlike every other opt-in flag in this model, and the reason matters:
+  // approved reviews from non-development stores were already publicly readable through the
+  // public API before this column existed. Defaulting to false would have silently removed
+  // every store currently in the network, which is a data/visibility change disguised as a
+  // schema addition. True preserves exactly the behaviour that is already live, and gives
+  // merchants an explicit, immediate way out.
+  //
+  // This is a CONTROL, not a record of consent. It stores a current preference; it does not
+  // capture who agreed, when, or to what, and nothing here should be represented as legal
+  // consent. A genuine consent record would need its own timestamped, auditable model.
+  //
+  // Turning this off never edits, unpublishes or deletes a single Review row — storefront
+  // widgets, the merchant dashboard and every private API keep working unchanged. It only
+  // narrows what the public network is allowed to read. Development stores remain excluded
+  // independently of this flag, so a dev store cannot become public by enabling it.
+  publicNetworkEnabled Boolean @default(true)
+
   // Full-catalog product sync progress (see product.server.ts's syncAllProducts and
   // productSync.server.ts's runProductSync). One row per store — only one sync runs at a
   // time per store, so this doesn't need its own table. status: "idle" | "running" |
@@ -355,6 +379,14 @@ model Review {
   media        ReviewMedia[]
   reward       Reward?
 
+  // Real, DB-enforced defense-in-depth on top of the application-level check-before-create in
+  // findExistingReview — a genuinely unique (storeId, importSource, externalId) combination can
+  // never be inserted twice, closing the race-condition gap a check-then-insert always has
+  // (two concurrent imports of the same file). Safe for every other row: Postgres treats each
+  // NULL as distinct from every other NULL, so this never blocks organic reviews (importSource
+  // always null) or any import source with no per-row externalId (Loox/Stamped/Ali Reviews) —
+  // it only ever fires for the exact case it's meant to catch.
+  @@unique([storeId, importSource, externalId])
   @@index([deletedAt, createdAt])
   @@index([storeId, deletedAt, createdAt])
   @@index([productId, deletedAt])
@@ -365,14 +397,6 @@ model Review {
   @@index([helpfulCount])
   @@index([storeId, externalId])
   @@index([importBatchId])
-  // Real, DB-enforced defense-in-depth on top of the application-level check-before-create in
-  // findExistingReview — a genuinely unique (storeId, importSource, externalId) combination can
-  // never be inserted twice, closing the race-condition gap a check-then-insert always has
-  // (two concurrent imports of the same file). Safe for every other row: Postgres treats each
-  // NULL as distinct from every other NULL, so this never blocks organic reviews (importSource
-  // always null) or any import source with no per-row externalId (Loox/Stamped/Ali Reviews) —
-  // it only ever fires for the exact case it's meant to catch.
-  @@unique([storeId, importSource, externalId])
 }
 
 // One row per merchant-initiated review migration/import — created before the first row is

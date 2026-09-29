@@ -2,7 +2,7 @@
 // so these tests are weighted toward the things that would be a data incident rather than a
 // bug: publishing an unapproved review, leaking a merchant-private column, or letting a filter
 // widen the approved-only scope.
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 interface FakeReview {
   id: string;
@@ -51,6 +51,11 @@ vi.mock("../db.server", () => ({
   },
 }));
 
+const prismaMock = (await import("../db.server")).default as unknown as {
+  store: { findFirst: ReturnType<typeof vi.fn> };
+  review: { groupBy: ReturnType<typeof vi.fn> };
+};
+
 const {
   buildProductSlug, listPublicReviews, listReviewedProducts, listPublicStores,
   getPublicProduct, getPublicStore, getNetworkStats, searchPublic,
@@ -61,12 +66,21 @@ beforeEach(() => {
   capturedWhere = null;
 });
 
-// Development and test stores (Verveonline, and every Shopify App Review install) must never
-// reach the public consumer network. The exclusion is keyed on Store.isDevelopmentStore — the
-// flag the app already sets from Shopify's own partnerDevelopment signal — so these assert the
-// filter is present on every path rather than testing one store's name.
+// Two independent conditions gate the public network, and both are enforced in the database
+// query rather than in any UI:
+//
+//   isDevelopmentStore: false  — development and test stores (Verveonline, and every Shopify
+//     App Review install) must never reach the public consumer network. Keyed on the flag the
+//     app already sets from Shopify's own partnerDevelopment signal, so these assert the
+//     filter is present on every path rather than testing one store's name.
+//   publicNetworkEnabled: true — the merchant's own participation control.
+//
+// These assert the whole `store` filter object by equality on purpose. A looser assertion
+// (toMatchObject, or checking one key) would still pass if a future edit dropped the other
+// condition, which is the exact regression that would silently publish a store that opted
+// out — or a development store.
 describe("development stores are excluded from every public path", () => {
-  const devExcluded = { isDevelopmentStore: false };
+  const devExcluded = { isDevelopmentStore: false, publicNetworkEnabled: true };
 
   it("the base review filter excludes development stores", async () => {
     await listPublicReviews();
@@ -77,7 +91,7 @@ describe("development stores are excluded from every public path", () => {
     // The bug this guards against: assigning where.store = { slug } outright would replace
     // the exclusion, letting ?store=verveonline publish a dev store's reviews.
     await listPublicReviews({ store: "verveonline" });
-    expect(capturedWhere!.store).toEqual({ isDevelopmentStore: false, slug: "verveonline" });
+    expect(capturedWhere!.store).toEqual({ isDevelopmentStore: false, publicNetworkEnabled: true, slug: "verveonline" });
   });
 
   it("every filter combination keeps the exclusion", async () => {
@@ -108,6 +122,127 @@ describe("development stores are excluded from every public path", () => {
     expect(result.stores).toEqual([]);
     expect(result.reviews).toEqual([]);
     expect(capturedWhere!.store).toMatchObject(devExcluded);
+  });
+});
+
+// The merchant-facing participation control (Store.publicNetworkEnabled, surfaced in
+// Settings > Growth > Google, SEO & AI). A merchant who switches it off must disappear from
+// every public surface at the database level — not be hidden by a consumer-side filter that
+// a future page, feed or sitemap could forget to apply.
+//
+// These assert the filter on each entry point separately rather than trusting that they all
+// share PUBLIC_STORE, because the thing worth protecting is the guarantee, not the current
+// implementation detail that happens to provide it.
+describe("merchant public-network participation is enforced server-side", () => {
+  const participating = { isDevelopmentStore: false, publicNetworkEnabled: true };
+
+  it("the base review feed only reads participating stores", async () => {
+    await listPublicReviews();
+    expect(capturedWhere!.store).toEqual(participating);
+  });
+
+  it("a store filter cannot resurrect a store that opted out", async () => {
+    // Same class of bug as the development-store case: replacing where.store outright would
+    // drop publicNetworkEnabled, so ?store=<slug> could publish an opted-out store.
+    await listPublicReviews({ store: "opted-out-store" });
+    expect(capturedWhere!.store).toEqual({ ...participating, slug: "opted-out-store" });
+  });
+
+  it("no filter combination drops the participation condition", async () => {
+    await listPublicReviews({ verifiedOnly: true, withPhotos: true, rating: 5, category: "Pottery", sort: "helpful" });
+    expect(capturedWhere!.store).toEqual(participating);
+  });
+
+  it("counts, facets, product listings and store listings all require participation", async () => {
+    await getNetworkStats();
+    expect(capturedWhere!.store).toEqual(participating);
+    await listReviewedProducts();
+    expect(capturedWhere!.store).toEqual(participating);
+    await listPublicStores();
+    expect(capturedWhere!.store).toEqual(participating);
+  });
+
+  it("an opted-out store's own store page resolves to null", async () => {
+    await expect(getPublicStore("opted-out-store")).resolves.toBeNull();
+  });
+
+  it("an opted-out store's product page resolves to null", async () => {
+    await expect(getPublicProduct("anything--abc123")).resolves.toBeNull();
+  });
+
+  it("search never returns content from a store that opted out", async () => {
+    const result = await searchPublic("opted-out");
+    expect(result.products).toEqual([]);
+    expect(result.stores).toEqual([]);
+    expect(result.reviews).toEqual([]);
+    expect(capturedWhere!.store).toMatchObject(participating);
+  });
+
+  it("participation and the development-store exclusion are independent conditions", async () => {
+    // Enabling participation must never be able to publish a development store, so both keys
+    // have to survive together on the same filter.
+    await listPublicReviews();
+    expect(capturedWhere!.store).toHaveProperty("isDevelopmentStore", false);
+    expect(capturedWhere!.store).toHaveProperty("publicNetworkEnabled", true);
+  });
+});
+
+// The tests above assert the filter this service builds. This one proves the filter actually
+// selects the right rows, by giving store.findFirst a fake that really applies the where
+// clause to a small fixture table — so a store that opted out disappears and a participating
+// store is still returned, rather than both outcomes resting on the same captured object.
+describe("participation decides which store rows are returned", () => {
+  const STORES = [
+    { id: "s1", name: "Participating Store", slug: "participating", isDevelopmentStore: false, publicNetworkEnabled: true },
+    { id: "s2", name: "Opted Out Store", slug: "opted-out", isDevelopmentStore: false, publicNetworkEnabled: false },
+    { id: "s3", name: "Dev Store", slug: "verveonline", isDevelopmentStore: true, publicNetworkEnabled: true },
+  ];
+
+  beforeEach(() => {
+    // getPublicStore also requires at least one approved review before a store is
+    // discoverable (an existing product rule, covered by its own test above), so give every
+    // fixture store one — otherwise this describe would pass for the wrong reason.
+    prismaMock.review.groupBy.mockImplementation(async ({ where }: { where: Record<string, unknown> }) => {
+      capturedWhere = where;
+      return [{ rating: 5, _count: { _all: 3 } }];
+    });
+
+    prismaMock.store.findFirst.mockImplementation(async ({ where }: { where: Record<string, unknown> }) => {
+      capturedWhere = where;
+      const match = STORES.find(
+        (store) =>
+          store.slug === where.slug &&
+          (where.isDevelopmentStore === undefined || store.isDevelopmentStore === where.isDevelopmentStore) &&
+          (where.publicNetworkEnabled === undefined || store.publicNetworkEnabled === where.publicNetworkEnabled),
+      );
+      return match ?? null;
+    });
+  });
+
+  it("a participating store is still found", async () => {
+    await expect(getPublicStore("participating")).resolves.not.toBeNull();
+  });
+
+  it("a store that opted out is not found, even though the row still exists", async () => {
+    await expect(getPublicStore("opted-out")).resolves.toBeNull();
+  });
+
+  it("a development store is not found regardless of its participation flag", async () => {
+    await expect(getPublicStore("verveonline")).resolves.toBeNull();
+  });
+
+  // These two mocks are overridden for this describe only. Without restoring them, the
+  // filtering fake and the non-empty groupBy would leak into every describe declared after
+  // this one and could make an unrelated test pass for the wrong reason.
+  afterEach(() => {
+    prismaMock.store.findFirst.mockImplementation(async ({ where }: { where: Record<string, unknown> }) => {
+      capturedWhere = where;
+      return null;
+    });
+    prismaMock.review.groupBy.mockImplementation(async ({ where }: { where: Record<string, unknown> }) => {
+      capturedWhere = where;
+      return [];
+    });
   });
 });
 

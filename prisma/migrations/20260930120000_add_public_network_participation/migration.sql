@@ -1,0 +1,14 @@
+-- Public IMAGYN Reviews Network participation control.
+--
+-- Additive only: one nullable-free boolean column with a DEFAULT, so the statement is safe
+-- on a live table and requires no backfill pass. Postgres 11+ applies a non-volatile column
+-- default without rewriting the table, so this does not lock the Store table for any
+-- meaningful time.
+--
+-- DEFAULT true is deliberate. Approved reviews from non-development stores were already
+-- readable through the public API before this column existed; defaulting to false would
+-- silently remove every store currently visible on the network. Existing rows therefore
+-- keep exactly the visibility they already have, and merchants get an explicit opt-out.
+--
+-- No Review, Product or Store row is modified beyond gaining this column.
+ALTER TABLE "Store" ADD COLUMN "publicNetworkEnabled" BOOLEAN NOT NULL DEFAULT true;

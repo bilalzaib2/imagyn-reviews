@@ -5,7 +5,7 @@ import { boundary } from "@shopify/shopify-app-react-router/server";
 import { Checkbox, Frame, Toast } from "@shopify/polaris";
 import { StatusBadge } from "../components/ui/StatusBadge";
 import { authenticateAdminDeduped } from "../services/auth-dedupe.server";
-import { getOrCreateStore, updateAiSummaryDisplaySurfaces } from "../services/store.server";
+import { getOrCreateStore, setPublicNetworkEnabled, updateAiSummaryDisplaySurfaces } from "../services/store.server";
 import { getStorePermissions } from "../services/permissions";
 import { getFeedReadiness, setGoogleFeedEnabled, type FeedReadiness } from "../services/googleReviewFeed.server";
 import { getReviewSiteUrl } from "../services/reviewSite.server";
@@ -33,6 +33,8 @@ type LoaderData = {
   aiSummaryOnStoreReviewsEnabled: boolean;
   aiSummaryOnCarouselEnabled: boolean;
   aiSummaryOnReviewSiteEnabled: boolean;
+  publicNetworkEnabled: boolean;
+  isDevelopmentStore: boolean;
 };
 
 type ActionData = {
@@ -45,6 +47,7 @@ type ActionData = {
   aiSummaryOnStoreReviewsEnabled?: boolean;
   aiSummaryOnCarouselEnabled?: boolean;
   aiSummaryOnReviewSiteEnabled?: boolean;
+  publicNetworkEnabled?: boolean;
 };
 
 export const loader = async ({ request }: LoaderFunctionArgs): Promise<LoaderData> => {
@@ -65,6 +68,10 @@ export const loader = async ({ request }: LoaderFunctionArgs): Promise<LoaderDat
     aiSummaryOnStoreReviewsEnabled: store.aiSummaryOnStoreReviewsEnabled,
     aiSummaryOnCarouselEnabled: store.aiSummaryOnCarouselEnabled,
     aiSummaryOnReviewSiteEnabled: store.aiSummaryOnReviewSiteEnabled,
+    publicNetworkEnabled: store.publicNetworkEnabled,
+    // Surfaced so the card can tell a development store the truth: the setting is stored,
+    // but a dev store is excluded from the public network regardless of it.
+    isDevelopmentStore: store.isDevelopmentStore === true,
   };
 };
 
@@ -94,6 +101,11 @@ export const action = async ({ request }: ActionFunctionArgs): Promise<ActionDat
         aiSummaryOnCarouselEnabled: updated.aiSummaryOnCarouselEnabled,
         aiSummaryOnReviewSiteEnabled: updated.aiSummaryOnReviewSiteEnabled,
       };
+    }
+
+    if (intent === "togglePublicNetwork") {
+      const updated = await setPublicNetworkEnabled(store.id, formData.get("enabled") === "true");
+      return { ok: true, publicNetworkEnabled: updated.publicNetworkEnabled };
     }
 
     const enabled = formData.get("enabled") === "true";
@@ -171,10 +183,13 @@ export default function SettingsSeoPage() {
     aiSummaryOnStoreReviewsEnabled: loaderAiSummaryOnStoreReviewsEnabled,
     aiSummaryOnCarouselEnabled: loaderAiSummaryOnCarouselEnabled,
     aiSummaryOnReviewSiteEnabled: loaderAiSummaryOnReviewSiteEnabled,
+    publicNetworkEnabled: loaderPublicNetworkEnabled,
+    isDevelopmentStore,
   } = useLoaderData<typeof loader>();
   const fetcher = useFetcher<ActionData>();
   const storeSummaryFetcher = useFetcher<ActionData>();
   const displaySurfaceFetcher = useFetcher<ActionData>();
+  const publicNetworkFetcher = useFetcher<ActionData>();
   const [enabled, setEnabled] = useState(feed.feedEnabled);
   const [toast, setToast] = useState<{ content: string; error?: boolean } | null>(null);
   const [aiSummaryOnProductReviewsEnabled, setAiSummaryOnProductReviewsEnabled] = useState(
@@ -183,6 +198,7 @@ export default function SettingsSeoPage() {
   const [aiSummaryOnStoreReviewsEnabled, setAiSummaryOnStoreReviewsEnabled] = useState(loaderAiSummaryOnStoreReviewsEnabled);
   const [aiSummaryOnCarouselEnabled, setAiSummaryOnCarouselEnabled] = useState(loaderAiSummaryOnCarouselEnabled);
   const [aiSummaryOnReviewSiteEnabled, setAiSummaryOnReviewSiteEnabled] = useState(loaderAiSummaryOnReviewSiteEnabled);
+  const [publicNetworkEnabled, setPublicNetworkEnabledState] = useState(loaderPublicNetworkEnabled);
   const feedUrl = fetcher.data?.ok ? fetcher.data.feedUrl : feed.feedUrl;
   const distributionFeedUrl = fetcher.data?.ok ? fetcher.data.distributionFeedUrl : feed.distributionFeedUrl;
   const storeAiSummary = storeSummaryFetcher.data?.ok ? (storeSummaryFetcher.data.storeAiSummary ?? loaderStoreAiSummary) : loaderStoreAiSummary;
@@ -225,6 +241,32 @@ export default function SettingsSeoPage() {
     setToast({ content: "AI Summary display settings updated." });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [displaySurfaceFetcher.data]);
+
+  useEffect(() => {
+    if (!publicNetworkFetcher.data) return;
+    if (!publicNetworkFetcher.data.ok) {
+      setToast({
+        content: publicNetworkFetcher.data.error || "Unable to update network participation.",
+        error: true,
+      });
+      setPublicNetworkEnabledState(loaderPublicNetworkEnabled);
+      return;
+    }
+    setToast({
+      content: publicNetworkFetcher.data.publicNetworkEnabled
+        ? "Your store now appears on the public Imagyn Reviews network."
+        : "Your store has been removed from the public Imagyn Reviews network.",
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [publicNetworkFetcher.data]);
+
+  const togglePublicNetwork = (next: boolean) => {
+    setPublicNetworkEnabledState(next);
+    const formData = new FormData();
+    formData.set("intent", "togglePublicNetwork");
+    formData.set("enabled", String(next));
+    publicNetworkFetcher.submit(formData, { method: "post" });
+  };
 
   const toggle = (next: boolean) => {
     setEnabled(next);
@@ -406,6 +448,48 @@ export default function SettingsSeoPage() {
               View page
             </a>
           </div>
+        </div>
+
+        {/* Public Imagyn Reviews Network participation. Sits beside the public review page
+            because both answer the same merchant question: where, outside my own storefront,
+            do my reviews appear? Copy states only what the setting does — no traffic, sales
+            or ranking claim is attached to it, because none has been measured. */}
+        <div className={styles.card} data-tone="success">
+          <div className={styles.cardHeader}>
+            <div className={styles.cardHeaderLeft}>
+              <span className={styles.iconChip} data-tone="success">
+                <GlobeIcon />
+              </span>
+              <p className={styles.cardTitle}>Public Imagyn Reviews Network</p>
+            </div>
+            <StatusBadge tone={publicNetworkEnabled ? "success" : "neutral"}>
+              {publicNetworkEnabled ? "On" : "Off"}
+            </StatusBadge>
+          </div>
+          <p className={styles.cardDescription}>
+            Allow approved reviews from your store to appear on the public Imagyn Reviews
+            network, where shoppers can discover products, stores and customer experiences.
+          </p>
+
+          <Checkbox
+            label="Include my store in the public network"
+            checked={publicNetworkEnabled}
+            onChange={togglePublicNetwork}
+            disabled={publicNetworkFetcher.state !== "idle"}
+          />
+
+          <p className={managementStyles.mutedText}>
+            {publicNetworkEnabled
+              ? "Only reviews you have already approved are included. Turning this off removes your store, products and reviews from the public network — it never deletes a review or changes anything on your storefront."
+              : "Your store, products and reviews are not shown on the public network. Your storefront widgets, review collection and public review page are unaffected."}
+          </p>
+
+          {isDevelopmentStore ? (
+            <p className={managementStyles.mutedText}>
+              This is a development store, so it is excluded from the public network regardless
+              of this setting.
+            </p>
+          ) : null}
         </div>
 
         <div className={`${styles.card} ${styles.cardWide}`} data-tone="ai">
