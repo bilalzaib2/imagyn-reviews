@@ -36,7 +36,16 @@ vi.mock("../db.server", () => ({
       }),
     },
     product: { findFirst: vi.fn(async () => null), findMany: vi.fn(async () => []), findUnique: vi.fn(async () => null) },
-    store: { findUnique: vi.fn(async () => null), findMany: vi.fn(async () => []) },
+    store: {
+      findUnique: vi.fn(async () => null),
+      // getPublicStore moved to findFirst so the development-store exclusion can sit in the
+      // same lookup that resolves the slug.
+      findFirst: vi.fn(async ({ where }: { where: Record<string, unknown> }) => {
+        capturedWhere = where;
+        return null;
+      }),
+      findMany: vi.fn(async () => []),
+    },
     productAiSummary: { findUnique: vi.fn(async () => null) },
     storeAiSummary: { findUnique: vi.fn(async () => null) },
   },
@@ -50,6 +59,56 @@ const {
 beforeEach(() => {
   reviews = [];
   capturedWhere = null;
+});
+
+// Development and test stores (Verveonline, and every Shopify App Review install) must never
+// reach the public consumer network. The exclusion is keyed on Store.isDevelopmentStore — the
+// flag the app already sets from Shopify's own partnerDevelopment signal — so these assert the
+// filter is present on every path rather than testing one store's name.
+describe("development stores are excluded from every public path", () => {
+  const devExcluded = { isDevelopmentStore: false };
+
+  it("the base review filter excludes development stores", async () => {
+    await listPublicReviews();
+    expect(capturedWhere!.store).toEqual(devExcluded);
+  });
+
+  it("a caller-supplied store filter cannot drop the exclusion", async () => {
+    // The bug this guards against: assigning where.store = { slug } outright would replace
+    // the exclusion, letting ?store=verveonline publish a dev store's reviews.
+    await listPublicReviews({ store: "verveonline" });
+    expect(capturedWhere!.store).toEqual({ isDevelopmentStore: false, slug: "verveonline" });
+  });
+
+  it("every filter combination keeps the exclusion", async () => {
+    await listPublicReviews({ verifiedOnly: true, withPhotos: true, rating: 5, category: "Pottery", sort: "helpful" });
+    expect(capturedWhere!.store).toEqual(devExcluded);
+  });
+
+  it("network stats, facets, product and store listings all exclude them", async () => {
+    await getNetworkStats();
+    expect(capturedWhere!.store).toEqual(devExcluded);
+    await listReviewedProducts();
+    expect(capturedWhere!.store).toEqual(devExcluded);
+    await listPublicStores();
+    expect(capturedWhere!.store).toEqual(devExcluded);
+  });
+
+  it("a development store's own store page resolves to null", async () => {
+    await expect(getPublicStore("verveonline")).resolves.toBeNull();
+  });
+
+  it("a development store's product page resolves to null", async () => {
+    await expect(getPublicProduct("anything--abc123")).resolves.toBeNull();
+  });
+
+  it("search never returns development-store content", async () => {
+    const result = await searchPublic("verve");
+    expect(result.products).toEqual([]);
+    expect(result.stores).toEqual([]);
+    expect(result.reviews).toEqual([]);
+    expect(capturedWhere!.store).toMatchObject(devExcluded);
+  });
 });
 
 describe("approved-only invariant", () => {

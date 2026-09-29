@@ -25,13 +25,30 @@ import { ReviewStatus } from "./review.shared";
 // this layer will ever call "verified". `importSource` is surfaced separately as provenance —
 // an imported review is never represented as verified, per docs/IMPORT_VERIFICATION_POLICY.md.
 
+// Development and test stores are never part of the public consumer network. This uses the
+// Store.isDevelopmentStore flag the app already maintains — set from Shopify's own
+// `shop.plan.partnerDevelopment` by billing.server.ts's ensureDevelopmentStoreFlag — rather
+// than a slug blocklist, so it is based on real store identity and automatically covers every
+// future dev store and Shopify App Review install without anyone remembering to add it.
+//
+// Deliberately `false`, not `NOT: true`: the column is nullable, and a store whose status has
+// never been resolved is treated as not-yet-eligible rather than published by default. This
+// fails closed — the cost of the strict reading is that a brand-new store joins discovery a
+// few seconds later (the flag resolves on its first admin page load), and the cost of the
+// loose reading would be a dev store leaking into the public network.
+//
+// This affects ONLY the public consumer surface. Merchant admin, storefront widgets, billing
+// and every api.reviews.* route are untouched: a dev store's own dashboard and its own
+// storefront work exactly as before.
+const PUBLIC_STORE = { isDevelopmentStore: false } satisfies Prisma.StoreWhereInput;
+
 // A store only becomes part of the public network once it has at least one approved review.
-// This is a real product rule, not a cosmetic filter: it keeps empty shops and the Shopify App
-// Review test installs (which have no reviews) out of consumer discovery without anyone having
-// to maintain a blocklist.
+// This is a real product rule, not a cosmetic filter: it keeps empty shops out of consumer
+// discovery without anyone having to maintain a blocklist.
 const DISCOVERABLE_REVIEW = {
   deletedAt: null,
   status: ReviewStatus.APPROVED,
+  store: PUBLIC_STORE,
 } satisfies Prisma.ReviewWhereInput;
 
 export const PAGE_SIZE = 24;
@@ -116,6 +133,14 @@ export interface PublicReview {
   store: { slug: string; name: string };
 }
 
+/** Shopify writes productType/vendor as "" rather than null on plenty of products, so the raw
+ *  column can't be trusted as "absent". Normalising here means every consumer branches on null
+ *  only, and an empty category never renders as a blank chip or an empty facet. */
+function orNull(value: string | null | undefined): string | null {
+  const trimmed = value?.trim();
+  return trimmed ? trimmed : null;
+}
+
 function toPublicReview(row: ReviewRow): PublicReview {
   return {
     id: row.id,
@@ -136,8 +161,8 @@ function toPublicReview(row: ReviewRow): PublicReview {
       slug: buildProductSlug(row.product),
       name: row.product.name,
       image: row.product.featuredImage,
-      category: row.product.productType,
-      brand: row.product.vendor,
+      category: orNull(row.product.productType),
+      brand: orNull(row.product.vendor),
     },
     store: { slug: row.store.slug, name: row.store.name },
   };
@@ -160,7 +185,7 @@ async function resolveProductIdBySlug(slug: string): Promise<string | null> {
   const suffix = productIdFromSlug(slug);
   if (!suffix) return null;
   const product = await prisma.product.findFirst({
-    where: { id: { endsWith: suffix } },
+    where: { id: { endsWith: suffix }, store: PUBLIC_STORE },
     select: { id: true },
   });
   return product?.id ?? null;
@@ -173,7 +198,9 @@ async function buildReviewWhere(filters: PublicReviewFilters): Promise<Prisma.Re
   if (filters.rating && filters.rating >= 1 && filters.rating <= 5) where.rating = filters.rating;
   if (filters.withPhotos) where.media = { some: { type: ReviewMediaType.IMAGE } };
   if (filters.withVideo) where.media = { some: { type: ReviewMediaType.VIDEO } };
-  if (filters.store) where.store = { slug: filters.store };
+  // Merged, never replaced: assigning `where.store` outright would silently drop the
+  // development-store exclusion that DISCOVERABLE_REVIEW put there.
+  if (filters.store) where.store = { ...PUBLIC_STORE, slug: filters.store };
 
   if (filters.category || filters.product) {
     const productWhere: Prisma.ProductWhereInput = {};
@@ -283,7 +310,7 @@ export async function listReviewedProducts(options: { limit?: number; category?:
 
   const productIds = grouped.map((g) => g.productId);
   const [products, verifiedCounts] = await Promise.all([
-    prisma.product.findMany({ where: { id: { in: productIds } }, select: PRODUCT_SELECT }),
+    prisma.product.findMany({ where: { id: { in: productIds }, store: PUBLIC_STORE }, select: PRODUCT_SELECT }),
     prisma.review.groupBy({
       by: ["productId"],
       where: { ...DISCOVERABLE_REVIEW, productId: { in: productIds }, verifiedPurchase: true },
@@ -302,8 +329,8 @@ export async function listReviewedProducts(options: { limit?: number; category?:
         slug: buildProductSlug(product),
         name: product.name,
         image: product.featuredImage,
-        category: product.productType,
-        brand: product.vendor,
+        category: orNull(product.productType),
+        brand: orNull(product.vendor),
         store: { slug: product.store.slug, name: product.store.name },
         reviewCount: g._count._all,
         averageRating: Number((g._avg.rating ?? 0).toFixed(1)),
@@ -323,8 +350,10 @@ export async function getPublicProduct(slug: string): Promise<PublicProductDetai
   const id = await resolveProductIdBySlug(slug);
   if (!id) return null;
 
-  const product = await prisma.product.findUnique({
-    where: { id },
+  // Guarded independently of the review queries below: this reads the Product table directly,
+  // so without it a dev store's product page would resolve even though its reviews wouldn't.
+  const product = await prisma.product.findFirst({
+    where: { id, store: PUBLIC_STORE },
     select: { ...PRODUCT_SELECT, description: true },
   });
   if (!product) return null;
@@ -361,8 +390,8 @@ export async function getPublicProduct(slug: string): Promise<PublicProductDetai
     slug: buildProductSlug(product),
     name: product.name,
     image: product.featuredImage,
-    category: product.productType,
-    brand: product.vendor,
+    category: orNull(product.productType),
+    brand: orNull(product.vendor),
     description: product.description,
     store: { slug: product.store.slug, name: product.store.name },
     reviewCount: total,
@@ -400,22 +429,28 @@ export async function listPublicStores(limit = PAGE_SIZE): Promise<PublicStoreSu
 
   const storeIds = grouped.map((g) => g.storeId);
   const [stores, verifiedCounts, productCounts] = await Promise.all([
-    prisma.store.findMany({ where: { id: { in: storeIds } }, select: { id: true, name: true, slug: true } }),
+    prisma.store.findMany({ where: { id: { in: storeIds }, ...PUBLIC_STORE }, select: { id: true, name: true, slug: true } }),
     prisma.review.groupBy({
       by: ["storeId"],
       where: { ...DISCOVERABLE_REVIEW, storeId: { in: storeIds }, verifiedPurchase: true },
       _count: { _all: true },
     }),
-    prisma.review.groupBy({
-      by: ["storeId"],
+    // Distinct reviewed products per store. groupBy's `_count: { productId: true }` counts
+    // review ROWS with a non-null productId, not distinct products — which made every store
+    // report its review count as its product count (58 reviews read as "58 products").
+    prisma.review.findMany({
       where: { ...DISCOVERABLE_REVIEW, storeId: { in: storeIds } },
-      _count: { productId: true },
+      select: { storeId: true, productId: true },
+      distinct: ["storeId", "productId"],
     }),
   ]);
 
   const byId = new Map(stores.map((s) => [s.id, s]));
   const verifiedById = new Map(verifiedCounts.map((v) => [v.storeId, v._count._all]));
-  const productsById = new Map(productCounts.map((p) => [p.storeId, p._count.productId]));
+  const productsById = new Map<string, number>();
+  for (const row of productCounts) {
+    productsById.set(row.storeId, (productsById.get(row.storeId) ?? 0) + 1);
+  }
 
   return grouped
     .map((g) => {
@@ -439,8 +474,8 @@ export interface PublicStoreDetail extends PublicStoreSummary {
 }
 
 export async function getPublicStore(slug: string): Promise<PublicStoreDetail | null> {
-  const store = await prisma.store.findUnique({
-    where: { slug },
+  const store = await prisma.store.findFirst({
+    where: { slug, ...PUBLIC_STORE },
     // Deliberately narrow: this row carries plan, billing ids, API-ish settings and every
     // merchant preference. Only name and slug may cross into public data.
     select: { id: true, name: true, slug: true, aiSummaryOnReviewSiteEnabled: true },
@@ -615,7 +650,7 @@ export async function searchPublic(query: string, limit = 8): Promise<SearchResu
 
 async function hydrateProducts(ids: string[]): Promise<PublicProductSummary[]> {
   const [products, grouped, verified] = await Promise.all([
-    prisma.product.findMany({ where: { id: { in: ids } }, select: PRODUCT_SELECT }),
+    prisma.product.findMany({ where: { id: { in: ids }, store: PUBLIC_STORE }, select: PRODUCT_SELECT }),
     prisma.review.groupBy({
       by: ["productId"],
       where: { ...DISCOVERABLE_REVIEW, productId: { in: ids } },
@@ -638,8 +673,8 @@ async function hydrateProducts(ids: string[]): Promise<PublicProductSummary[]> {
       slug: buildProductSlug(product),
       name: product.name,
       image: product.featuredImage,
-      category: product.productType,
-      brand: product.vendor,
+      category: orNull(product.productType),
+      brand: orNull(product.vendor),
       store: { slug: product.store.slug, name: product.store.name },
       reviewCount: stats?._count._all ?? 0,
       averageRating: Number((stats?._avg.rating ?? 0).toFixed(1)),
