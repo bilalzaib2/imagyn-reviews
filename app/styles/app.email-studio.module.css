@@ -467,3 +467,33 @@
   color: var(--color-warning);
   font-weight: 600;
 }
+
+/* Shown instead of a stale render when the draft can't be previewed. Silently leaving the
+   last good render on screen made an invalid draft look like a broken theme/mode toggle. */
+.previewPaused {
+  display: grid;
+  gap: var(--space-2);
+  align-content: center;
+  justify-items: center;
+  min-height: 18rem;
+  padding: var(--space-6);
+  text-align: center;
+  border: 1px dashed var(--color-border);
+  border-radius: var(--radius-lg);
+  background: var(--color-surface-muted);
+}
+
+.previewPausedTitle {
+  margin: 0;
+  font-size: var(--text-sm);
+  font-weight: 600;
+  color: var(--color-text);
+}
+
+.previewPausedBody {
+  margin: 0;
+  max-width: 28ch;
+  font-size: var(--text-xs);
+  line-height: 1.6;
+  color: var(--color-text-muted);
+}

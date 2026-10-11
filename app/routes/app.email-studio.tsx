@@ -591,11 +591,14 @@ export default function EmailStudioPage() {
   // otherwise be a server round-trip that renders a whole email.
   useEffect(() => {
     const timer = setTimeout(() => {
+      // A draft that fails validation is rejected by the preview action, so submitting it
+      // only burns a round-trip and leaves the pane showing a stale render.
+      if (validationErrors.length > 0) return;
       previewFetcher.submit(toFormData({ _intent: "preview", previewTheme }), { method: "post" });
     }, 400);
     return () => clearTimeout(timer);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [draft, previewTheme, activeType]);
+  }, [draft, previewTheme, activeType, validationErrors.length]);
 
   useEffect(() => {
     if (previewFetcher.data?.ok && previewFetcher.data.intent === "preview") {
@@ -1310,7 +1313,16 @@ export default function EmailStudioPage() {
               </div>
 
               <div className={styles.previewFrame} data-mode={previewMode}>
-                {previewHtml ? (
+                {validationErrors.length > 0 ? (
+                  <div className={styles.previewPaused}>
+                    <p className={styles.previewPausedTitle}>Preview paused</p>
+                    <p className={styles.previewPausedBody}>
+                      {validationErrors.length === 1
+                        ? "Fix the issue listed above and the preview will update."
+                        : `Fix the ${validationErrors.length} issues listed above and the preview will update.`}
+                    </p>
+                  </div>
+                ) : previewHtml ? (
                   // sandbox="" gives the frame a unique opaque origin with scripts, forms and
                   // navigation all disabled. The HTML inside is already sanitized server-side;
                   // this is the second layer, so that even a sanitizer bypass cannot reach the
