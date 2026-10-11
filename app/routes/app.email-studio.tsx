@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Link, useFetcher, useLoaderData } from "react-router";
-import type { ActionFunctionArgs, LoaderFunctionArgs } from "react-router";
+import type { ActionFunctionArgs, LoaderFunctionArgs, ShouldRevalidateFunctionArgs } from "react-router";
 import { Frame, Toast } from "@shopify/polaris";
 
 import { Button } from "../components/ui/Button";
@@ -397,6 +397,18 @@ export const action = async ({ request }: ActionFunctionArgs): Promise<ActionDat
   }
 };
 
+// Only two intents change what the loader reads back: save and reset. The others (preview,
+// logo upload, SVG validation, test send, duplicate-into-another-template) leave this
+// template's persisted row untouched, so revalidating after them is pure waste — and, before
+// the draft-reset fix above, actively harmful.
+export function shouldRevalidate({ formData, defaultShouldRevalidate }: ShouldRevalidateFunctionArgs) {
+  const intent = formData?.get("_intent");
+  if (typeof intent === "string") {
+    return intent === "save" || intent === "reset";
+  }
+  return defaultShouldRevalidate;
+}
+
 type PreviewMode = "desktop" | "mobile";
 
 const THEME_OPTIONS: Array<{ value: EmailTheme; label: string }> = [
@@ -517,13 +529,24 @@ export default function EmailStudioPage() {
 
   const validationErrors = useMemo(() => validateContent(draft, activeType), [draft, activeType]);
 
-  // Reset local state whenever the loader hands over a different template — switching tabs is
-  // a navigation, so the draft must follow it rather than leaking one template's edits into
+  // Reset local state only when a DIFFERENT template is loaded — switching tabs is a
+  // navigation, so the draft must follow it rather than leaking one template's edits into
   // another's editor.
+  //
+  // Keyed on activeType, deliberately NOT on the initialContent object. useLoaderData returns
+  // a fresh object identity after every revalidation, and a non-GET fetcher submission
+  // revalidates by default — so depending on it made the debounced preview POST (which fires
+  // 400ms after any edit) reset the draft to the last saved values. The visible symptom was
+  // the Custom HTML and light/dark toggles snapping back a moment after being clicked, and
+  // typed text silently reverting. Fix 2 below stops the needless revalidation; this stops the
+  // clobber even when a revalidation is legitimate.
+  const loadedType = useRef(activeType);
   useEffect(() => {
+    if (loadedType.current === activeType) return;
+    loadedType.current = activeType;
     setDraft(initialContent);
     setPreviewTheme(initialContent.theme);
-  }, [initialContent]);
+  }, [activeType, initialContent]);
 
   const updateField = <K extends keyof EmailTemplateContent>(key: K, value: EmailTemplateContent[K]) => {
     setDraft((current) => ({ ...current, [key]: value }));
