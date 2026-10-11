@@ -25,12 +25,19 @@ export interface Permissions {
   canUseAutomaticReviewRequests: boolean;
   canUseEmailReminders: boolean;
 
-  // Email Studio's single review-request template editor (subject/content/variables/CTA/
-  // logo/preview/reset) has no gate at all — every plan gets it, see app.email-studio.tsx.
-  // This flag is specifically the Pro-only extension: multiple templates/themes, a
-  // reminder-email template, and deeper layout/styling control — none of which is built yet,
-  // same "entitlement true, comingSoon on every pricing surface" convention as
-  // canUseVideoReviews below.
+  // DEAD FLAG — currently read by nothing. Kept because removing a field from this interface
+  // touches every plan definition below for no behavioural gain, but do not assume it gates
+  // anything.
+  //
+  // It was reserved for "advanced" Email Studio (deeper layout/styling, extra templates).
+  // All of that now ships to every plan, including Free: copy, colour, typography, spacing,
+  // layout, section ordering, light/dark, light+dark logos and custom HTML are deliberately
+  // ungated — see app/services/email.shared.ts's header for the policy and
+  // sanitizeEmailTemplateContentForPlan for the one remaining entitlement (showPoweredBy,
+  // which rides on canUseCustomBranding, not this flag).
+  //
+  // Reminder TEMPLATES are editable on every plan too; only the automatic reminder sweep is
+  // Pro, and that is gated by canUseEmailReminders in reviewRequestScheduler.server.ts.
   canUseAdvancedEmailStudio: boolean;
 
   canUsePhotoReviews: boolean;

@@ -291,3 +291,179 @@
 .toastFrame :global(.Polaris-Frame) {
   display: contents;
 }
+
+/* ---------------------------------------------------------------- Email Studio upgrade
+   Visual/HTML mode switch, section reordering, design controls, validation and status.
+   Uses the same design tokens as the controls above — no new colour values are introduced
+   here, so the editor stays inside the app's existing palette. */
+
+.modeToggle {
+  display: inline-flex;
+  gap: var(--space-1);
+  padding: 0.25rem;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  background: var(--color-surface-muted);
+  width: fit-content;
+}
+
+.selectInput {
+  width: 100%;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  background: var(--color-surface);
+  color: var(--color-text);
+  padding: 0.75rem 0.9rem;
+  font: inherit;
+}
+
+/* Monospace, because this is markup — proportional type makes nesting and attributes much
+   harder to scan. */
+.htmlEditor {
+  width: 100%;
+  min-height: 18rem;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  background: var(--color-surface);
+  color: var(--color-text);
+  padding: 0.75rem 0.9rem;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: var(--text-sm);
+  line-height: 1.6;
+  resize: vertical;
+  tab-size: 2;
+}
+
+.sectionList {
+  display: grid;
+  gap: var(--space-2);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.sectionRow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-4);
+  padding: 0.6rem 0.75rem;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  background: var(--color-surface);
+}
+
+/* A hidden section stays listed (so it can be re-enabled and reordered) but reads as
+   inactive rather than disappearing, which would make it look deleted. */
+.sectionRow[data-disabled="true"] {
+  opacity: 0.55;
+}
+
+.sectionName {
+  font-size: var(--text-sm);
+  font-weight: 500;
+  color: var(--color-text);
+}
+
+.sectionActions {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+}
+
+.iconButton {
+  width: 1.75rem;
+  height: 1.75rem;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  background: var(--color-surface);
+  color: var(--color-text);
+  cursor: pointer;
+  line-height: 1;
+}
+
+.iconButton:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.optionGrid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--space-4);
+  margin-bottom: var(--space-5);
+}
+
+@media (max-width: 600px) {
+  .optionGrid {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* The live value sits in the label rather than beside the slider, so the number is readable
+   without the thumb covering it at either extreme. */
+.rangeValue {
+  float: right;
+  font-variant-numeric: tabular-nums;
+  text-transform: none;
+  letter-spacing: 0;
+  color: var(--color-text);
+}
+
+.rangeInput {
+  width: 100%;
+  accent-color: var(--color-accent);
+}
+
+.inlineRow {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+}
+
+.inlineRow > :first-child {
+  flex: 1;
+  min-width: 0;
+}
+
+@media (max-width: 600px) {
+  .inlineRow {
+    flex-direction: column;
+    align-items: stretch;
+  }
+}
+
+.validationCard {
+  border-color: var(--color-danger);
+}
+
+.validationTitle {
+  margin: 0 0 var(--space-2);
+  font-size: var(--text-sm);
+  font-weight: 600;
+  color: var(--color-danger);
+}
+
+.validationList {
+  margin: 0;
+  padding-left: 1.1rem;
+  display: grid;
+  gap: var(--space-1);
+  font-size: var(--text-sm);
+  color: var(--color-text-muted);
+}
+
+.statusTag {
+  margin-left: auto;
+  font-size: var(--text-xs);
+  color: var(--color-text-muted);
+}
+
+/* Dirty state is the one moment this label needs to pull attention; saved state stays quiet. */
+.statusTag[data-dirty="true"] {
+  color: var(--color-warning);
+  font-weight: 600;
+}

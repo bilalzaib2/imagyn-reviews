@@ -77,6 +77,7 @@ describe("emailTemplateService", () => {
 
   it("upsertActive creates a row on first save and getActiveContent then returns it", async () => {
     const content: EmailTemplateContent = {
+      ...getDefaultEmailTemplateContent(),
       subject: "Loved your order?",
       heading: "Hi {{customer_name}}!",
       bodyText: "Tell us what you thought.",

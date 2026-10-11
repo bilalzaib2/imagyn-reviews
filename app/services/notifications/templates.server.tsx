@@ -6,9 +6,12 @@ import { SupportRequestEmail, type SupportRequestEmailProps } from "./emails/Sup
 import {
   firstNameOf,
   getDefaultEmailTemplateContent,
+  normalizeEmailTemplateContent,
   renderTemplateVariables,
+  stripUnresolvedVariables,
   type EmailTemplateContent,
 } from "../email.shared";
+import { sanitizeEmailHtml } from "../emailSanitize.server";
 
 export interface ReviewRequestEmailData {
   customerName: string;
@@ -34,6 +37,10 @@ export interface ReviewRequestEmailData {
   // "reward" template sends only — the real, already-issued Shopify discount code (see
   // rewards.server.ts). Never set for any other template type.
   discountCode?: string;
+  // The purchased product's image, when the send actually has one. Optional because not
+  // every product has an image and not every caller resolves one — the product block is
+  // skipped rather than rendering a placeholder, so nothing here is ever invented.
+  productImageUrl?: string | null;
 }
 
 export type ReviewHeldEmailData = ReviewHeldEmailProps;
@@ -53,7 +60,10 @@ export async function buildReviewRequestEmail(data: ReviewRequestEmailData): Pro
   html: string;
   text: string;
 }> {
-  const content = data.template ?? getDefaultEmailTemplateContent();
+  // normalizeEmailTemplateContent runs on READ as well as save: a row persisted before a
+  // field existed (or before it was clamped) still has to render, and this is the last point
+  // before markup where an out-of-range width or an unknown enum can be corrected.
+  const content = normalizeEmailTemplateContent(data.template ?? getDefaultEmailTemplateContent());
   // A merchant's displayName override affects only what's shown inside the email (this
   // variable and the eyebrow line below) — the actual From address always uses the real
   // store name regardless (see resend.server.ts's fromName), so sender identity stays
@@ -66,21 +76,60 @@ export async function buildReviewRequestEmail(data: ReviewRequestEmailData): Pro
     discountCode: data.discountCode,
   };
 
-  const subject = renderTemplateVariables(content.subject, variables);
-  const heading = renderTemplateVariables(content.heading, variables);
-  const bodyText = data.customMessage || renderTemplateVariables(content.bodyText, variables);
+  // Substituted, then swept for anything still unresolved. The sweep should never have work
+  // to do — unknown tokens are rejected at the save boundary — but a reward send that somehow
+  // arrives without its discount code would otherwise put the literal characters
+  // "{{discount_code}}" in front of a customer. Warned about rather than silently swallowed,
+  // so the underlying omission is findable in logs.
+  const resolve = (text: string) => {
+    const substituted = renderTemplateVariables(text, variables);
+    const swept = stripUnresolvedVariables(substituted);
+    if (swept !== substituted) {
+      console.warn("[templates.server] stripped an unresolved variable from an outgoing email");
+    }
+    return swept;
+  };
+
+  const subject = resolve(content.subject);
+  const heading = resolve(content.heading);
+  const bodyText = data.customMessage || resolve(content.bodyText);
+  const closingText = resolve(content.closingText);
+  // Falls back to the subject, which is what this app showed as the inbox snippet before
+  // previewText was a separate field.
+  const previewText = resolve(content.previewText).trim() || subject;
+  // Sanitized again here, not just on save. Persisted data is not trusted simply because it
+  // is persisted — a row written by an older build (or straight into the database) must not
+  // be able to ship script into a customer's inbox or into the admin preview iframe.
+  const customHtml = content.customHtmlEnabled ? sanitizeEmailHtml(resolve(content.customHtml)) : null;
 
   const element = (
     <ReviewRequestEmail
-      previewText={subject}
+      previewText={previewText}
       heading={heading}
       bodyText={bodyText}
+      closingText={closingText}
       buttonText={content.buttonText}
       accentColor={content.accentColor}
+      buttonTextColor={content.buttonTextColor}
+      theme={content.theme}
+      fontFamily={content.fontFamily}
+      headingSize={content.headingSize}
+      bodySize={content.bodySize}
+      density={content.density}
+      contentWidth={content.contentWidth}
+      cornerRadius={content.cornerRadius}
+      buttonStyle={content.buttonStyle}
+      buttonAlign={content.buttonAlign}
       logoUrl={content.logoUrl}
+      logoDarkUrl={content.logoDarkUrl}
+      logoWidth={content.logoWidth}
       storeName={effectiveStoreName}
       showStoreName={content.showStoreName}
       showPoweredBy={content.showPoweredBy}
+      productName={content.showProduct ? data.productName : null}
+      productImageUrl={content.showProduct ? data.productImageUrl ?? null : null}
+      sections={content.sections}
+      customHtml={customHtml}
       reviewUrl={data.reviewUrl}
       unsubscribeUrl={data.unsubscribeUrl}
     />
