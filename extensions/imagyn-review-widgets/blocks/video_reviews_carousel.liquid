@@ -1,0 +1,188 @@
+{{ 'imagyn-tokens.css' | asset_url | stylesheet_tag }}
+{{ 'imagyn-typography.css' | asset_url | stylesheet_tag }}
+{{ 'imagyn-utilities.css' | asset_url | stylesheet_tag }}
+{{ 'imagyn-component-skeleton.css' | asset_url | stylesheet_tag }}
+{{ 'imagyn-component-video-carousel.css' | asset_url | stylesheet_tag }}
+
+{% comment %}
+  Video Reviews Carousel — PRO ONLY.
+
+  Store-wide: real, approved customer reviews that genuinely have a video, sourced from
+  app/routes/api.reviews.video-carousel.tsx. Never fabricated, and never padded with
+  photo/text reviews to fill the row.
+
+  The Pro gate lives in that endpoint, not here. This block intentionally ships no review
+  data of its own, so a Free store that adds it by hand in the Theme Editor simply receives
+  an empty payload and the block renders nothing — there is no client-side flag to flip.
+
+  Colour, typography and card styling come from the centralized Appearance System
+  (Brand Studio → "Video Reviews Carousel" surface), exactly like every other Imagyn widget.
+  This schema therefore carries only structural/behavioural settings — layout, which fields
+  to show, navigation, media presentation — and never a competing colour system.
+
+  No autoplay. Video plays on an explicit user action only: autoplaying customer video on a
+  storefront is hostile on mobile data, fights every browser's own autoplay policy, and would
+  make the carousel a Largest-Contentful-Paint problem. Posters are what load on first paint;
+  the video element's source is attached on play.
+{% endcomment %}
+<div
+  class="imagyn-vcarousel imagyn-vcarousel--align-{{ block.settings.text_align }} imagyn-vcarousel--width-{{ block.settings.width }}"
+  data-imagyn-video-carousel
+  data-heading="{{ block.settings.heading | escape }}"
+  data-subheading="{{ block.settings.subheading | escape }}"
+  data-video-count="{{ block.settings.video_count }}"
+  data-color-scheme="{{ block.settings.color_scheme }}"
+  data-show-rating="{{ block.settings.show_rating }}"
+  data-show-name="{{ block.settings.show_name }}"
+  data-show-verified="{{ block.settings.show_verified }}"
+  data-show-text="{{ block.settings.show_text }}"
+  data-text-length="{{ block.settings.text_length }}"
+  data-show-product="{{ block.settings.show_product }}"
+  data-show-product-image="{{ block.settings.show_product_image }}"
+  data-show-arrows="{{ block.settings.show_arrows }}"
+  data-show-dots="{{ block.settings.show_dots }}"
+  data-play-button-style="{{ block.settings.play_button_style }}"
+  data-empty-behavior="{{ block.settings.empty_behavior }}"
+  data-empty-message="{{ block.settings.empty_message | escape }}"
+  style="--imagyn-vcarousel-cards-desktop: {{ block.settings.cards_desktop }}; --imagyn-vcarousel-cards-tablet: {{ block.settings.cards_tablet }}; --imagyn-vcarousel-cards-mobile: {{ block.settings.cards_mobile }}; --imagyn-vcarousel-gap: {{ block.settings.card_spacing }}px; --imagyn-vcarousel-radius: {{ block.settings.card_radius }}px; --imagyn-vcarousel-ratio: {{ block.settings.media_ratio | replace: ':', ' / ' }}; --imagyn-vcarousel-play-size: {{ block.settings.play_button_size }}px;"
+>
+  <div class="imagyn-vcarousel__header" data-imagyn-vcarousel-header hidden></div>
+  <div class="imagyn-vcarousel__viewport" data-imagyn-vcarousel-viewport>
+    <ul class="imagyn-vcarousel__track" data-imagyn-vcarousel-track></ul>
+  </div>
+  <div class="imagyn-vcarousel__controls" data-imagyn-vcarousel-controls hidden></div>
+  <div class="imagyn-vcarousel__dots" data-imagyn-vcarousel-dots hidden></div>
+</div>
+
+<script src="{{ 'imagyn-appearance.js' | asset_url }}" defer></script>
+<script src="{{ 'video-reviews-carousel.js' | asset_url }}" defer></script>
+
+{% schema %}
+{
+  "name": "Video Reviews Carousel",
+  "target": "section",
+  "settings": [
+    {
+      "type": "paragraph",
+      "content": "Shows real customer video reviews from your store. Included in Pro — on the Starter plan this block renders nothing, and your settings and reviews are kept if you upgrade later. Colours and typography come from Brand Studio (Video Reviews Carousel surface)."
+    },
+    { "type": "text", "id": "heading", "label": "Heading", "default": "See it from real customers" },
+    { "type": "text", "id": "subheading", "label": "Subheading", "info": "Optional. Leave empty to hide." },
+    { "type": "range", "id": "video_count", "label": "Maximum videos to show", "min": 3, "max": 24, "step": 1, "default": 12 },
+
+    { "type": "header", "content": "Layout" },
+    { "type": "range", "id": "cards_desktop", "label": "Cards visible on desktop", "min": 2, "max": 5, "step": 1, "default": 4 },
+    { "type": "range", "id": "cards_tablet", "label": "Cards visible on tablet", "min": 1, "max": 4, "step": 1, "default": 2 },
+    {
+      "type": "select",
+      "id": "cards_mobile",
+      "label": "Cards visible on mobile",
+      "options": [
+        { "value": "1", "label": "1" },
+        { "value": "1.2", "label": "1 and a peek of the next" },
+        { "value": "2", "label": "2" }
+      ],
+      "default": "1.2"
+    },
+    { "type": "range", "id": "card_spacing", "label": "Spacing between cards", "min": 8, "max": 32, "step": 2, "unit": "px", "default": 16 },
+    { "type": "range", "id": "card_radius", "label": "Corner radius", "min": 0, "max": 28, "step": 2, "unit": "px", "default": 14 },
+    {
+      "type": "select",
+      "id": "width",
+      "label": "Width",
+      "options": [
+        { "value": "full", "label": "Full width" },
+        { "value": "wide", "label": "Wide" },
+        { "value": "narrow", "label": "Narrow" }
+      ],
+      "default": "wide"
+    },
+    {
+      "type": "select",
+      "id": "text_align",
+      "label": "Heading alignment",
+      "options": [
+        { "value": "left", "label": "Left" },
+        { "value": "center", "label": "Centre" }
+      ],
+      "default": "left"
+    },
+
+    { "type": "header", "content": "Appearance" },
+    {
+      "type": "select",
+      "id": "color_scheme",
+      "label": "Appearance",
+      "info": "Inherit follows your Brand Studio tokens. Light and dark force this block's own surface, for placing it on a contrasting section.",
+      "options": [
+        { "value": "inherit", "label": "Inherit from Brand Studio" },
+        { "value": "light", "label": "Light" },
+        { "value": "dark", "label": "Dark" }
+      ],
+      "default": "inherit"
+    },
+    {
+      "type": "select",
+      "id": "media_ratio",
+      "label": "Video shape",
+      "info": "Most customer video is filmed vertically on a phone.",
+      "options": [
+        { "value": "9:16", "label": "Vertical (9:16)" },
+        { "value": "3:4", "label": "Portrait (3:4)" },
+        { "value": "1:1", "label": "Square (1:1)" },
+        { "value": "16:9", "label": "Landscape (16:9)" }
+      ],
+      "default": "9:16"
+    },
+    {
+      "type": "select",
+      "id": "play_button_style",
+      "label": "Play button",
+      "options": [
+        { "value": "solid", "label": "Solid" },
+        { "value": "outline", "label": "Outline" },
+        { "value": "minimal", "label": "Minimal" }
+      ],
+      "default": "solid"
+    },
+    { "type": "range", "id": "play_button_size", "label": "Play button size", "min": 40, "max": 88, "step": 4, "unit": "px", "default": 56 },
+
+    { "type": "header", "content": "Card content" },
+    { "type": "checkbox", "id": "show_rating", "label": "Show star rating", "default": true },
+    { "type": "checkbox", "id": "show_name", "label": "Show reviewer name", "default": true },
+    {
+      "type": "checkbox",
+      "id": "show_verified",
+      "label": "Show Verified Buyer badge",
+      "info": "Only appears on reviews that are genuinely verified against a real order.",
+      "default": true
+    },
+    { "type": "checkbox", "id": "show_text", "label": "Show review text", "default": true },
+    { "type": "range", "id": "text_length", "label": "Review text length", "min": 60, "max": 240, "step": 20, "unit": "ch", "default": 120 },
+    { "type": "checkbox", "id": "show_product", "label": "Show product name and link", "default": true },
+    { "type": "checkbox", "id": "show_product_image", "label": "Show product thumbnail", "default": true },
+
+    { "type": "header", "content": "Navigation" },
+    { "type": "checkbox", "id": "show_arrows", "label": "Show previous/next arrows", "default": true },
+    { "type": "checkbox", "id": "show_dots", "label": "Show pagination dots", "default": true },
+
+    { "type": "header", "content": "When there are no video reviews yet" },
+    {
+      "type": "select",
+      "id": "empty_behavior",
+      "label": "Empty state",
+      "options": [
+        { "value": "hide", "label": "Hide the section entirely" },
+        { "value": "message", "label": "Show a short message" }
+      ],
+      "default": "hide"
+    },
+    {
+      "type": "text",
+      "id": "empty_message",
+      "label": "Empty message",
+      "default": "Video reviews are coming soon."
+    }
+  ]
+}
+{% endschema %}

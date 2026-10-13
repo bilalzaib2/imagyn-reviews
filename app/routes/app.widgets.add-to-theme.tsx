@@ -33,6 +33,11 @@ const ALLOWED_BLOCKS: Record<string, { template: "product" | "collection" | "ind
   // Same reasoning as review_carousel above — store-wide, section-target, typically
   // homepage-placed.
   medals_showcase: { template: "index", kind: "section" },
+  // Store-wide, section-target, typically homepage-placed — same shape as review_carousel.
+  // Pro-gated, but the gate is server-side in api.reviews.video-carousel.tsx: a Free store
+  // that reaches this deep link still gets a block that renders nothing, so there is no
+  // second entitlement check to duplicate (and drift) here.
+  video_reviews_carousel: { template: "index", kind: "section" },
   store_reviews: { template: "index", kind: "section" },
   // Store-wide, placeable on any page — opens on the homepage template by default, same
   // reasoning as review_carousel/medals_showcase/store_reviews above.

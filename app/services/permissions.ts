@@ -41,7 +41,15 @@ export interface Permissions {
   canUseAdvancedEmailStudio: boolean;
 
   canUsePhotoReviews: boolean;
+  // COLLECTING video reviews — free on every plan since 2026-08-24, and deliberately left
+  // that way. Do not conflate with canUseVideoReviewsCarousel below.
   canUseVideoReviews: boolean;
+  // DISPLAYING them in the storefront Video Reviews Carousel widget. A separate flag on
+  // purpose: a Starter merchant can still collect video reviews, show them inside the normal
+  // Product Reviews widget, and keep every video a customer has already submitted — what Pro
+  // buys is the dedicated carousel surface, not the ability to have video at all. Enforced in
+  // api.reviews.video-carousel.tsx, the storefront delivery path, not just in the admin UI.
+  canUseVideoReviewsCarousel: boolean;
 
   canUseAI: boolean;
   canUseAnalytics: boolean;
@@ -98,6 +106,10 @@ const STARTER: Permissions = {
   // Shipped and live-verified (2026-08-24) — reviewMedia.server.ts/shopifyFiles.server.ts.
   // No longer "coming soon" on any plan; see plans.ts's Starter feature list.
   canUseVideoReviews: true,
+  // The dedicated Video Reviews Carousel widget is the Pro differentiator. Starter merchants
+  // keep collecting video and keep every video already submitted — a downgrade hides the
+  // carousel, it never deletes a review, a video, or the block's saved Theme Editor settings.
+  canUseVideoReviewsCarousel: false,
   canUseAI: false,
   // Entitlement true; every plan already renders the same dashboard (app._index.tsx) — there is
   // no differentiated "advanced" analytics built yet for Growth to exclusively offer.
@@ -118,6 +130,7 @@ const STARTER: Permissions = {
 const GROWTH: Permissions = {
   ...STARTER,
   canUseEmailReminders: true,
+  canUseVideoReviewsCarousel: true,
   canUseAdvancedEmailStudio: true,
   canUseAI: true,
   canUseCustomBranding: true,
@@ -153,6 +166,7 @@ const OWNER: Permissions = {
   canUseAdvancedEmailStudio: true,
   canUsePhotoReviews: true,
   canUseVideoReviews: true,
+  canUseVideoReviewsCarousel: true,
   canUseAI: true,
   canUseAnalytics: true,
   canUseCustomBranding: true,

@@ -11,6 +11,7 @@ import { Medallion } from "../components/medals/Medallion";
 import { authenticateAdminDeduped } from "../services/auth-dedupe.server";
 import { getOrCreateStore } from "../services/store.server";
 import { getStorePermissions } from "../services/permissions";
+import { getPlan } from "../services/billing/plans";
 import { getStorefrontAppearance } from "../services/appearance.server";
 import { getDefaultAppearanceTokens, type AppearanceTokens } from "../services/appearance.shared";
 import { widgetService } from "../services/widget.server";
@@ -34,9 +35,23 @@ type LoaderData = {
   // Gates Grid/Carousel — see widget.server.ts's getStorefrontWidgetSettings for why the real
   // enforcement lives server-side, not just in whether this page shows the option.
   canUseMultipleWidgetThemes: boolean;
+  /** Gates the Video Reviews Carousel card's lock state. Enforcement itself lives in
+   *  api.reviews.video-carousel.tsx — this only decides what the gallery shows. */
+  canUseVideoReviewsCarousel: boolean;
+  /** Canonical Pro plan name/price, read from billing/plans.ts so the lock copy can never
+   *  advertise a stale figure. */
+  proPlan: { name: string; price: number; currencyCode: string };
   appearanceTokens: AppearanceTokens;
   installStatus: Record<WidgetInstallKey, WidgetInstallStatus>;
 };
+
+// Reads the live plan definition rather than restating a price in the UI — billing/plans.ts
+// is the single source of truth, and a figure duplicated here would silently go stale the
+// next time pricing changes.
+function proPlanSummary() {
+  const plan = getPlan("growth");
+  return { name: plan.name, price: plan.price, currencyCode: plan.currencyCode };
+}
 
 const UNKNOWN_INSTALL_STATUS: WidgetInstallStatus = { state: "unknown", reason: "Not checked yet." };
 const fallbackInstallStatus: Record<WidgetInstallKey, WidgetInstallStatus> = {
@@ -97,6 +112,10 @@ interface WidgetCardDef {
    *  state simply isn't something the app detects. Presentation-only — no detection behavior
    *  changes here. */
   installDetectable?: boolean;
+  /** Pro-only widgets. Presentation only: the real enforcement is in the widget's own
+   *  storefront data endpoint (for the Video Reviews Carousel, api.reviews.video-carousel.tsx),
+   *  so a merchant who adds the block by hand still gets nothing without the entitlement. */
+  requiresPro?: boolean;
 }
 
 const widgetCards: WidgetCardDef[] = [
@@ -141,6 +160,20 @@ const widgetCards: WidgetCardDef[] = [
     blockName: "Review Carousel",
     blockHandle: "review_carousel",
     previewContext: "neutral",
+  },
+  {
+    key: "video-reviews-carousel",
+    title: "Video Reviews Carousel",
+    description:
+      "A store-wide, swipeable row of your real customer video reviews — vertical-first, tap to play, typically placed on the homepage or a product page.",
+    status: "theme-editor",
+    blockName: "Video Reviews Carousel",
+    blockHandle: "video_reviews_carousel",
+    previewContext: "dark",
+    // No storefront marker to detect yet, same as Floating Reviews and Trust Badge — saying
+    // "not installed" would be a claim this app can't actually make.
+    installDetectable: false,
+    requiresPro: true,
   },
   {
     key: "medals-showcase",
@@ -270,6 +303,8 @@ export const loader = async ({ request }: LoaderFunctionArgs): Promise<LoaderDat
       shop: session.shop,
       error: null,
       canUseMultipleWidgetThemes: permissions.canUseMultipleWidgetThemes,
+      canUseVideoReviewsCarousel: permissions.canUseVideoReviewsCarousel,
+      proPlan: proPlanSummary(),
       appearanceTokens,
       installStatus,
     };
@@ -279,6 +314,8 @@ export const loader = async ({ request }: LoaderFunctionArgs): Promise<LoaderDat
       shop: session.shop,
       error: error instanceof Error ? error.message : "Unable to load widgets.",
       canUseMultipleWidgetThemes: false,
+      canUseVideoReviewsCarousel: false,
+      proPlan: proPlanSummary(),
       appearanceTokens: getDefaultAppearanceTokens(),
       installStatus: fallbackInstallStatus,
     };
@@ -546,6 +583,36 @@ const MEDALS_PREVIEW_SAMPLES: Array<{ category: "verified" | "trust" | "ranking"
   { category: "trust", tier: 3, name: "Highly Trusted" },
   { category: "ranking", tier: 1, name: "Rising Tier" },
 ];
+
+// Gallery thumbnail for the Video Reviews Carousel. Deliberately abstract: vertical media
+// tiles with a play affordance, no invented reviewer names, quotes, ratings or thumbnails.
+// The real widget only ever renders a store's own approved video reviews, and a preview that
+// mocked those up would be showing a merchant content they do not have.
+function VideoCarouselThumbnailPreview({ tokens }: { tokens: AppearanceTokens }) {
+  return (
+    <div className={styles.videoPreviewTrack}>
+      {[0, 1, 2].map((index) => (
+        <div
+          key={index}
+          className={styles.videoPreviewCard}
+          style={{
+            background: tokens.colors.surfaceColor,
+            borderColor: tokens.colors.borderColor,
+            borderRadius: `${tokens.corners.radius}px`,
+          }}
+        >
+          <span
+            className={styles.videoPreviewMedia}
+            style={{ borderRadius: `${Math.max(tokens.corners.radius - 2, 2)}px` }}
+            aria-hidden="true"
+          >
+            <span className={styles.videoPreviewPlay} />
+          </span>
+        </div>
+      ))}
+    </div>
+  );
+}
 
 function MedalsShowcaseThumbnailPreview() {
   return (
@@ -828,6 +895,8 @@ function renderWidgetPreview(cardKey: string, tokens: AppearanceTokens): ReactNo
       return <CollectionBadgeThumbnailPreview tokens={tokens} />;
     case "review-carousel":
       return <CarouselThumbnailPreview tokens={tokens} />;
+    case "video-reviews-carousel":
+      return <VideoCarouselThumbnailPreview tokens={tokens} />;
     case "medals-showcase":
       return <MedalsShowcaseThumbnailPreview />;
     case "store-reviews":
@@ -908,7 +977,8 @@ function InstallStateAction({ status, addToThemeHref }: { status: WidgetInstallS
 }
 
 export default function WidgetsPage() {
-  const { widgets, error, canUseMultipleWidgetThemes, appearanceTokens, installStatus } = useLoaderData<typeof loader>();
+  const { widgets, error, canUseMultipleWidgetThemes, canUseVideoReviewsCarousel, proPlan, appearanceTokens, installStatus } =
+    useLoaderData<typeof loader>();
   const location = useLocation();
   // Carries embedded/host/shop context the same way app.billing.tsx's manageUrl does — this is
   // a real top-level navigation (required to break out of the iframe), not a fetcher, so it
@@ -1087,13 +1157,19 @@ export default function WidgetsPage() {
               {widgetCards.map((card, cardIndex) => {
                 if (card.status === "theme-editor") {
                   const status = installStatus[card.key as WidgetInstallKey] ?? UNKNOWN_INSTALL_STATUS;
+                  // Pro-only and this store isn't entitled. The card stays visible and
+                  // previewable so the feature is discoverable, but the add-to-theme action is
+                  // replaced by an upgrade link — adding the block anyway would render nothing,
+                  // because the entitlement is enforced in api.reviews.video-carousel.tsx.
+                  const proLocked = card.requiresPro === true && !canUseVideoReviewsCarousel;
                   // Detected live against this store's own storefront (see
                   // widgetInstallDetection.server.ts) — for installed/not-installed the meta
                   // label states the fact plainly; for unknown it surfaces the actual reason
                   // detection couldn't tell, rather than a generic action nudge that would read
                   // as a status claim either way.
-                  const metaLabel =
-                    card.installDetectable === false
+                  const metaLabel = proLocked
+                    ? `Included in ${proPlan.name} — $${proPlan.price}/month. Your settings and reviews are kept if you upgrade later.`
+                    : card.installDetectable === false
                       ? `Block: ${card.blockName} — add or manage it in your Theme Editor.`
                       : status.state === "installed"
                         ? `Block: ${card.blockName} — detected live on your storefront.`
@@ -1110,17 +1186,26 @@ export default function WidgetsPage() {
                       <WidgetPreviewStage card={card}>{renderWidgetPreview(card.key, appearanceTokens)}</WidgetPreviewStage>
                       <div className={styles.widgetCardBody}>
                         <div className={styles.widgetCardHeader}>
-                          <h2 className={styles.widgetCardTitle}>{card.title}</h2>
-                          {card.installDetectable === false ? null : <InstallStateBadge status={status} />}
+                          <h2 className={styles.widgetCardTitle}>
+                            {card.title}
+                            {card.requiresPro ? <span className={styles.widgetProTag}>{proPlan.name}</span> : null}
+                          </h2>
+                          {proLocked || card.installDetectable === false ? null : <InstallStateBadge status={status} />}
                         </div>
                         <p className={styles.widgetCardDescription}>{card.description}</p>
                         <span className={styles.widgetCardMetaLabel}>{metaLabel}</span>
                       </div>
                       <div className={styles.widgetCardActions}>
-                        <InstallStateAction
-                          status={card.installDetectable === false ? UNKNOWN_INSTALL_STATUS : status}
-                          addToThemeHref={addToThemeHref(card.blockHandle!)}
-                        />
+                        {proLocked ? (
+                          <a className={styles.widgetUpgradeAction} href="/app/billing">
+                            Upgrade to {proPlan.name}
+                          </a>
+                        ) : (
+                          <InstallStateAction
+                            status={card.installDetectable === false ? UNKNOWN_INSTALL_STATUS : status}
+                            addToThemeHref={addToThemeHref(card.blockHandle!)}
+                          />
+                        )}
                       </div>
                     </div>
                   );

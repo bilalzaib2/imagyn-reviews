@@ -47,6 +47,7 @@ export type SurfaceKey =
   | "store_reviews" // api.reviews.store.tsx
   | "product_reviews" // api.reviews.tsx — also backs the standalone Product AI Summary block, same request
   | "review_carousel" // api.reviews.featured.tsx
+  | "video_reviews_carousel" // api.reviews.video-carousel.tsx (Pro)
   | "trust_badge" // api.reviews.trust.tsx
   | "store_ai_summary" // api.reviews.store-ai-summary.tsx
   | "floating_reviews" // api.reviews.floating.tsx
@@ -57,6 +58,7 @@ export const SURFACE_KEYS: SurfaceKey[] = [
   "store_reviews",
   "product_reviews",
   "review_carousel",
+  "video_reviews_carousel",
   "trust_badge",
   "store_ai_summary",
   "floating_reviews",
@@ -68,6 +70,7 @@ export const SURFACE_LABELS: Record<SurfaceKey, string> = {
   store_reviews: "Store Reviews widget",
   product_reviews: "Product Reviews widget",
   review_carousel: "Review Carousel",
+  video_reviews_carousel: "Video Reviews Carousel",
   trust_badge: "Trust Badge",
   store_ai_summary: "Store AI Summary block",
   floating_reviews: "Floating Reviews widget",

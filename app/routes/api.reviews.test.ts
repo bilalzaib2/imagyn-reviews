@@ -122,3 +122,47 @@ describe("api.reviews loader — Show AI Summary display surface (aiSummaryOnPro
     expect(json.summary).toEqual({ averageRating: 4.5, totalReviews: 2 });
   });
 });
+
+// Reported from production as "the App Proxy is broken on purenutrition.com.pk", with the
+// evidence being {"ok":false,"error":"shop and productId are required."} in a browser.
+//
+// The proxy was healthy throughout: opening /apps/reviews by hand reaches the API root with
+// no productId, which is a 400 by design, while every widget request supplies one and
+// returns 200. These lock in that distinction so the behaviour can't be "fixed" later by
+// quietly making productId optional, and so the message a merchant lands on keeps explaining
+// itself instead of reading like an outage.
+describe("direct browser visit to the proxy root (the Pure Nutrition report)", () => {
+  it("still rejects a request with no productId — productId is NOT optional", async () => {
+    const response = await loader({ request: requestFor({ shop: "purenutritiononline.myshopify.com" }) } as never);
+    expect(response.status).toBe(400);
+  });
+
+  it("explains that this is an endpoint rather than a page, and names the missing parameter", async () => {
+    const response = await loader({ request: requestFor({ shop: "purenutritiononline.myshopify.com" }) } as never);
+    const body = await response.json();
+
+    expect(body.ok).toBe(false);
+    expect(body.error).toContain("productId is required");
+    // The sentence a confused merchant actually needs.
+    expect(body.error).toContain("not a page you can open directly");
+  });
+
+  it("names only the genuinely missing parameter when shop is absent", async () => {
+    const response = await loader({ request: requestFor({ productId: "7797228798035" }) } as never);
+    const body = await response.json();
+
+    expect(body.error).toBe("shop is required.");
+  });
+
+  it("the corrected request — the one every widget actually makes — succeeds", async () => {
+    // Same numeric Shopify product id Liquid's {{ product.id }} emits on a product page,
+    // which is the form the live storefront sends (verified against purenutrition.com.pk).
+    const response = await loader({
+      request: requestFor({ shop: "purenutritiononline.myshopify.com", productId: "7797228798035" }),
+    } as never);
+
+    expect(response.status).toBe(200);
+    const body = await response.json();
+    expect(body.ok).toBe(true);
+  });
+});

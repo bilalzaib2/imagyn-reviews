@@ -1,4 +1,7 @@
 import type { Prisma } from "@prisma/client";
+// Value import (not type-only): the VIDEO member is compared at runtime. Matches the
+// convention in reviewMedia.server.ts and publicDiscovery.server.ts.
+import { ReviewMediaType } from "@prisma/client";
 import prisma from "../db.server";
 import { maybeAutoRegenerateAiSummary, maybeAutoRegenerateStoreAiSummary } from "./aiSummary.server";
 import { HelpfulVoteValue, ReviewStatus } from "./review.shared";
@@ -322,6 +325,61 @@ export async function getFeaturedReviews(storeId: string, limit = 12): Promise<F
       width: item.width,
       height: item.height,
     })),
+  }));
+}
+
+// Store-wide, public-facing read for the Video Reviews Carousel widget (Pro — see
+// permissions.ts's canUseVideoReviewsCarousel and api.reviews.video-carousel.tsx, which is
+// where the entitlement is actually enforced; this function is plan-agnostic and simply
+// answers "which real reviews have a playable video").
+//
+// Differs from getFeaturedReviews in one important way: there is NO backfill. A video
+// carousel with no video in it is not a video carousel, so a store with too few video
+// reviews gets a short carousel (or the block's empty state) rather than being padded with
+// photo or text-only reviews. Returning fewer rows than asked for is the correct answer.
+//
+// Only APPROVED, non-deleted reviews with at least one VIDEO media row are eligible, and the
+// returned `media` array is filtered down to the video entries only — a review's photos are
+// not this widget's subject and shipping them would just bloat the storefront payload.
+export async function getVideoReviews(storeId: string, limit = 12): Promise<FeaturedReview[]> {
+  const rows = await prisma.review.findMany({
+    where: {
+      storeId,
+      deletedAt: null,
+      status: ReviewStatus.APPROVED,
+      media: { some: { type: ReviewMediaType.VIDEO } },
+    },
+    include: reviewInclude,
+    // Merchant-curated picks lead, then the reviews real shoppers found most useful, then
+    // recency — the same ordering intent as the Review Carousel, minus the backfill stages.
+    orderBy: [{ featured: "desc" }, { helpfulCount: "desc" }, { createdAt: "desc" }, { id: "desc" }],
+    take: limit,
+  });
+
+  return rows.map((review) => ({
+    id: review.id,
+    reviewerName: review.reviewerName,
+    verifiedPurchase: review.verifiedPurchase,
+    rating: review.rating,
+    title: review.title,
+    content: review.content,
+    createdAt: review.createdAt,
+    product: {
+      id: review.product.id,
+      name: review.product.name,
+      handle: review.product.handle,
+      featuredImage: review.product.featuredImage,
+    },
+    media: review.media
+      .filter((item) => item.type === ReviewMediaType.VIDEO)
+      .map((item) => ({
+        id: item.id,
+        type: item.type,
+        url: item.url,
+        thumbnailUrl: item.thumbnailUrl,
+        width: item.width,
+        height: item.height,
+      })),
   }));
 }
 

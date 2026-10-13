@@ -1,0 +1,395 @@
+/* Imagyn Reviews — Video Reviews Carousel (Pro).
+ *
+ * Colour and typography come from the Appearance System tokens (imagyn-tokens.css, resolved
+ * per store by Brand Studio). The block's own Theme Editor settings only supply the custom
+ * properties set inline on .imagyn-vcarousel — card counts, gap, radius, media ratio and
+ * play-button size — so there is exactly one colour system on the page.
+ *
+ * Horizontal movement is the browser's own overflow scrolling with scroll-snap, not a
+ * transform-driven track: it gets native touch momentum, interruptible swipes, correct
+ * trackpad behaviour and keyboard scrolling for free, and it cannot desynchronise from the
+ * DOM the way a hand-rolled index can. */
+
+.imagyn-vcarousel {
+  --imagyn-vcarousel-cards-desktop: 4;
+  --imagyn-vcarousel-cards-tablet: 2;
+  --imagyn-vcarousel-cards-mobile: 1.2;
+  --imagyn-vcarousel-gap: 16px;
+  --imagyn-vcarousel-radius: 14px;
+  --imagyn-vcarousel-ratio: 9 / 16;
+  --imagyn-vcarousel-play-size: 56px;
+
+  /* Resolved from the inherited surface by default; the light/dark options below override
+   * only these two, so every descendant keeps reading one pair of variables. */
+  --imagyn-vcarousel-surface: var(--imagyn-color-surface, #ffffff);
+  --imagyn-vcarousel-ink: var(--imagyn-color-text, #111111);
+
+  color: var(--imagyn-vcarousel-ink);
+  font-family: var(--imagyn-font-family, inherit);
+  container-type: inline-size;
+}
+
+.imagyn-vcarousel[data-color-scheme="light"] {
+  --imagyn-vcarousel-surface: #ffffff;
+  --imagyn-vcarousel-ink: #111111;
+}
+
+.imagyn-vcarousel[data-color-scheme="dark"] {
+  --imagyn-vcarousel-surface: #16161a;
+  --imagyn-vcarousel-ink: #f4f4f5;
+}
+
+.imagyn-vcarousel--width-narrow {
+  max-width: 880px;
+  margin-inline: auto;
+}
+
+.imagyn-vcarousel--width-wide {
+  max-width: 1280px;
+  margin-inline: auto;
+}
+
+.imagyn-vcarousel--align-center {
+  text-align: center;
+}
+
+/* ---------------------------------------------------------------- header */
+
+.imagyn-vcarousel__header {
+  margin-bottom: 20px;
+}
+
+.imagyn-vcarousel__heading {
+  margin: 0;
+  font-size: var(--imagyn-font-size-xl, 1.4rem);
+  font-weight: var(--imagyn-font-weight-semibold, 600);
+  line-height: var(--imagyn-line-height-tight, 1.25);
+  letter-spacing: var(--imagyn-letter-spacing-tight, -0.01em);
+}
+
+.imagyn-vcarousel__subheading {
+  margin: 6px 0 0;
+  font-size: var(--imagyn-font-size-sm, 0.9rem);
+  opacity: 0.7;
+}
+
+/* ---------------------------------------------------------------- track */
+
+.imagyn-vcarousel__viewport {
+  overflow-x: auto;
+  overflow-y: hidden;
+  scroll-snap-type: x mandatory;
+  /* The scrollbar is redundant next to the arrows and dots, and on desktop it shifts the
+   * card baseline when it appears on hover. */
+  scrollbar-width: none;
+  -webkit-overflow-scrolling: touch;
+}
+
+.imagyn-vcarousel__viewport::-webkit-scrollbar {
+  display: none;
+}
+
+.imagyn-vcarousel__viewport:focus-visible {
+  outline: 2px solid var(--imagyn-color-focus, #005bd3);
+  outline-offset: 4px;
+  border-radius: var(--imagyn-vcarousel-radius);
+}
+
+.imagyn-vcarousel__track {
+  display: grid;
+  grid-auto-flow: column;
+  grid-auto-columns: calc(
+    (100% - (var(--imagyn-vcarousel-cards-desktop) - 1) * var(--imagyn-vcarousel-gap)) /
+      var(--imagyn-vcarousel-cards-desktop)
+  );
+  gap: var(--imagyn-vcarousel-gap);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.imagyn-vcarousel__slide {
+  scroll-snap-align: start;
+  min-width: 0;
+}
+
+/* Container queries rather than viewport media queries: this block can sit in a narrow
+ * sidebar or a full-bleed section, and what matters is how much room the carousel itself
+ * has, not how wide the window is. */
+@container (max-width: 1024px) {
+  .imagyn-vcarousel__track {
+    grid-auto-columns: calc(
+      (100% - (var(--imagyn-vcarousel-cards-tablet) - 1) * var(--imagyn-vcarousel-gap)) /
+        var(--imagyn-vcarousel-cards-tablet)
+    );
+  }
+}
+
+@container (max-width: 640px) {
+  .imagyn-vcarousel__track {
+    grid-auto-columns: calc(
+      (100% - (var(--imagyn-vcarousel-cards-mobile) - 1) * var(--imagyn-vcarousel-gap)) /
+        var(--imagyn-vcarousel-cards-mobile)
+    );
+  }
+}
+
+/* ---------------------------------------------------------------- card */
+
+.imagyn-vcarousel__card {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  overflow: hidden;
+  border: var(--imagyn-border-width, 1px) solid var(--imagyn-color-border, #e5e5e5);
+  border-radius: var(--imagyn-vcarousel-radius);
+  background: var(--imagyn-vcarousel-surface);
+  text-align: left;
+}
+
+.imagyn-vcarousel__media {
+  position: relative;
+  aspect-ratio: var(--imagyn-vcarousel-ratio);
+  background: #0b0b0d;
+}
+
+.imagyn-vcarousel__video {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+/* ---------------------------------------------------------------- play button */
+
+.imagyn-vcarousel__play {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  width: 100%;
+  height: 100%;
+  border: 0;
+  padding: 0;
+  background: transparent;
+  cursor: pointer;
+  /* The whole poster is the hit target — a small circular button is a poor touch target and
+   * shoppers tap the thumbnail anyway. */
+}
+
+/* Hidden once playback starts so the native controls are reachable. */
+.imagyn-vcarousel__media[data-playing="true"] .imagyn-vcarousel__play {
+  display: none;
+}
+
+.imagyn-vcarousel__play:focus-visible {
+  outline: 2px solid var(--imagyn-color-focus, #005bd3);
+  outline-offset: -4px;
+}
+
+.imagyn-vcarousel__play-icon {
+  width: var(--imagyn-vcarousel-play-size);
+  height: var(--imagyn-vcarousel-play-size);
+  border-radius: var(--imagyn-radius-full, 999px);
+  display: grid;
+  place-items: center;
+  transition: transform var(--imagyn-duration-fast, 120ms) var(--imagyn-easing, ease);
+}
+
+/* The triangle is a CSS border trick rather than an inline SVG, so it inherits currentColor
+ * and needs no extra asset request. */
+.imagyn-vcarousel__play-icon::before {
+  content: "";
+  border-style: solid;
+  border-width: calc(var(--imagyn-vcarousel-play-size) / 6) 0 calc(var(--imagyn-vcarousel-play-size) / 6)
+    calc(var(--imagyn-vcarousel-play-size) / 3.6);
+  border-color: transparent transparent transparent currentColor;
+  margin-left: calc(var(--imagyn-vcarousel-play-size) / 12);
+}
+
+.imagyn-vcarousel[data-play-button-style="solid"] .imagyn-vcarousel__play-icon {
+  background: rgba(255, 255, 255, 0.94);
+  color: #111111;
+}
+
+.imagyn-vcarousel[data-play-button-style="outline"] .imagyn-vcarousel__play-icon {
+  border: 2px solid rgba(255, 255, 255, 0.9);
+  color: #ffffff;
+}
+
+.imagyn-vcarousel[data-play-button-style="minimal"] .imagyn-vcarousel__play-icon {
+  color: #ffffff;
+  filter: drop-shadow(0 1px 6px rgba(0, 0, 0, 0.5));
+}
+
+.imagyn-vcarousel__play:hover .imagyn-vcarousel__play-icon {
+  transform: scale(1.06);
+}
+
+.imagyn-vcarousel__media-error {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  margin: 0;
+  padding: 16px;
+  text-align: center;
+  background: #0b0b0d;
+  color: rgba(255, 255, 255, 0.76);
+  font-size: var(--imagyn-font-size-sm, 0.875rem);
+}
+
+/* ---------------------------------------------------------------- body */
+
+.imagyn-vcarousel__body {
+  display: grid;
+  gap: 8px;
+  padding: 14px;
+}
+
+.imagyn-vcarousel__rating {
+  margin: 0;
+  color: var(--imagyn-color-star, #f5a623);
+  letter-spacing: 0.08em;
+  line-height: 1;
+}
+
+.imagyn-vcarousel__text {
+  margin: 0;
+  font-size: var(--imagyn-font-size-sm, 0.9rem);
+  line-height: var(--imagyn-line-height-base, 1.55);
+  opacity: 0.88;
+}
+
+.imagyn-vcarousel__meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin: 0;
+  font-size: var(--imagyn-font-size-xs, 0.8rem);
+}
+
+.imagyn-vcarousel__name {
+  font-weight: var(--imagyn-font-weight-medium, 500);
+}
+
+.imagyn-vcarousel__verified {
+  color: var(--imagyn-color-success, #1f7a45);
+  font-weight: var(--imagyn-font-weight-medium, 500);
+}
+
+.imagyn-vcarousel__product {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 2px 0 0;
+  padding-top: 10px;
+  border-top: 1px solid var(--imagyn-color-border, #e5e5e5);
+  font-size: var(--imagyn-font-size-xs, 0.8rem);
+  color: inherit;
+  text-decoration: none;
+}
+
+a.imagyn-vcarousel__product:hover .imagyn-vcarousel__product-name {
+  text-decoration: underline;
+}
+
+a.imagyn-vcarousel__product:focus-visible {
+  outline: 2px solid var(--imagyn-color-focus, #005bd3);
+  outline-offset: 2px;
+  border-radius: var(--imagyn-radius-sm, 4px);
+}
+
+.imagyn-vcarousel__product-image {
+  width: 32px;
+  height: 32px;
+  object-fit: cover;
+  border-radius: var(--imagyn-radius-sm, 6px);
+  flex-shrink: 0;
+}
+
+.imagyn-vcarousel__product-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  opacity: 0.85;
+}
+
+/* ---------------------------------------------------------------- navigation */
+
+.imagyn-vcarousel__controls {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 14px;
+}
+
+.imagyn-vcarousel--align-center .imagyn-vcarousel__controls {
+  justify-content: center;
+}
+
+.imagyn-vcarousel__arrow {
+  width: 36px;
+  height: 36px;
+  border: 1px solid var(--imagyn-color-border, #e5e5e5);
+  border-radius: var(--imagyn-radius-full, 999px);
+  background: var(--imagyn-vcarousel-surface);
+  color: inherit;
+  cursor: pointer;
+  line-height: 1;
+}
+
+.imagyn-vcarousel__arrow:focus-visible {
+  outline: 2px solid var(--imagyn-color-focus, #005bd3);
+  outline-offset: 2px;
+}
+
+.imagyn-vcarousel__dots {
+  display: flex;
+  justify-content: center;
+  gap: 6px;
+  margin-top: 12px;
+}
+
+.imagyn-vcarousel__dot {
+  width: 7px;
+  height: 7px;
+  padding: 0;
+  border: 0;
+  border-radius: var(--imagyn-radius-full, 999px);
+  background: currentColor;
+  opacity: 0.28;
+  cursor: pointer;
+}
+
+.imagyn-vcarousel__dot[aria-current="true"] {
+  opacity: 1;
+}
+
+.imagyn-vcarousel__dot:focus-visible {
+  outline: 2px solid var(--imagyn-color-focus, #005bd3);
+  outline-offset: 3px;
+}
+
+.imagyn-vcarousel__empty {
+  margin: 0;
+  padding: 24px;
+  text-align: center;
+  font-size: var(--imagyn-font-size-sm, 0.9rem);
+  opacity: 0.7;
+}
+
+/* Suppress the hover/scale flourishes entirely; the smooth-scroll behaviour itself is
+ * switched to "auto" in JS, since CSS alone cannot change a scrollTo call. */
+@media (prefers-reduced-motion: reduce) {
+  .imagyn-vcarousel__play-icon,
+  .imagyn-vcarousel__play:hover .imagyn-vcarousel__play-icon {
+    transition: none;
+    transform: none;
+  }
+
+  .imagyn-vcarousel__viewport {
+    scroll-behavior: auto;
+  }
+}

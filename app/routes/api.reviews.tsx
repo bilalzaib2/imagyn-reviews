@@ -97,8 +97,25 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
   const visitorId = url.searchParams.get("visitorId")?.trim() || "";
   const sort = url.searchParams.get("sort")?.trim() === "helpful" ? "helpful" : "recent";
 
+  // `shop` is injected by Shopify on every proxied request, so in practice the only way to
+  // reach this branch is a human opening /apps/reviews in a browser with no productId — which
+  // merchants do when they are checking whether "the app proxy works". The old response was a
+  // bare "shop and productId are required.", which reads like a broken integration rather
+  // than "this is an API endpoint, not a page", and has been reported as a proxy outage more
+  // than once.
+  //
+  // Still a 400, still mandatory: productId is NOT made optional here. Only the wording
+  // changes, and only for the case a person is actually looking at.
   if (!shop || !productId) {
-    return json({ ok: false, error: "shop and productId are required." }, { status: 400 });
+    return json(
+      {
+        ok: false,
+        error: !shop
+          ? "shop is required."
+          : "productId is required. This endpoint serves the review widgets and is not a page you can open directly — the widget supplies productId automatically on a product page.",
+      },
+      { status: 400 },
+    );
   }
 
   const store = await getStoreBySlug(storeSlugFromShop(shop));

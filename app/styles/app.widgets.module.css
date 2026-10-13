@@ -1157,3 +1157,87 @@
   width: 10px;
   height: 10px;
 }
+
+/* Video Reviews Carousel gallery thumbnail — vertical media tiles with a play affordance.
+   Mirrors .carouselPreview* above but portrait, since customer video is overwhelmingly
+   filmed vertically on a phone and that is what the real widget defaults to (9:16). */
+.videoPreviewTrack {
+  display: flex;
+  gap: 8px;
+  align-items: stretch;
+  width: 100%;
+  padding: 0 10px;
+}
+
+.videoPreviewCard {
+  flex: 1 1 0;
+  min-width: 0;
+  border: 1px solid;
+  padding: 6px;
+  display: flex;
+}
+
+.videoPreviewMedia {
+  position: relative;
+  display: block;
+  width: 100%;
+  aspect-ratio: 9 / 16;
+  background: linear-gradient(160deg, #2a2a30, #121216);
+}
+
+.videoPreviewPlay {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  width: 18px;
+  height: 18px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.92);
+}
+
+/* The triangle is a border trick rather than an icon asset, matching the storefront
+   widget's own play button. */
+.videoPreviewPlay::before {
+  content: "";
+  position: absolute;
+  top: 50%;
+  left: 54%;
+  transform: translate(-50%, -50%);
+  border-style: solid;
+  border-width: 3.5px 0 3.5px 6px;
+  border-color: transparent transparent transparent #16161a;
+}
+
+/* Pro marker on a gated widget card. Restrained on purpose — the card is still fully
+   previewable, so this only needs to say "paid", not shout. */
+.widgetProTag {
+  margin-left: var(--space-2);
+  padding: 2px 6px;
+  border-radius: var(--radius-sm);
+  background: var(--color-accent-soft);
+  color: var(--color-text-muted);
+  font-size: 0.6875rem;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  vertical-align: middle;
+}
+
+.widgetUpgradeAction {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0.5rem 0.9rem;
+  border: 1px solid var(--color-border-strong);
+  border-radius: var(--radius-md);
+  background: var(--color-surface);
+  color: var(--color-text);
+  font-size: var(--text-sm);
+  font-weight: 500;
+  text-decoration: none;
+}
+
+.widgetUpgradeAction:hover {
+  border-color: var(--color-accent);
+}
