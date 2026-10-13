@@ -88,6 +88,7 @@ export const loader = ({ request }: LoaderFunctionArgs) => {
 <link rel="stylesheet" href="/appearance-preview/imagyn-typography.css">
 <link rel="stylesheet" href="/appearance-preview/imagyn-component-badge.css">
 <link rel="stylesheet" href="/appearance-preview/imagyn-component-summary.css">
+<link rel="stylesheet" href="/appearance-preview/imagyn-component-histogram.css">
 <link rel="stylesheet" href="/appearance-preview/imagyn-component-ratings-section.css">
 <link rel="stylesheet" href="/appearance-preview/imagyn-component-review-card.css">
 <link rel="stylesheet" href="/appearance-preview/imagyn-component-button.css">
@@ -120,7 +121,33 @@ export const loader = ({ request }: LoaderFunctionArgs) => {
           <span class="imagyn-summary__quickbar-rating">4.9</span>
           <span class="imagyn-summary__quickbar-count">(128 reviews)</span>
           <span class="imagyn-summary__quickbar-divider"></span>
+          <span class="imagyn-tag imagyn-tag--success">Verified</span>
           <button type="button" class="imagyn-summary__quickbar-write">Write a review</button>
+        </div>
+        <!-- The rating histogram, included because this is where a strong brand colour does
+             the most damage and the merchant could previously not see it until it was live:
+             the track, the row hover and the Verified pill above all render filled areas.
+             Counts here are deliberately uneven so a track that has wrongly become solid is
+             obvious at a glance, rather than every row looking "full" either way. -->
+        <div class="imagyn-histogram">
+          ${[
+            { stars: 5, count: 96, pct: 100 },
+            { stars: 4, count: 21, pct: 22 },
+            { stars: 3, count: 7, pct: 8 },
+            { stars: 2, count: 3, pct: 4 },
+            { stars: 1, count: 1, pct: 2 },
+          ]
+            .map(
+              (row) =>
+                `<div class="imagyn-histogram__row">
+                   <span class="imagyn-histogram__label imagyn-histogram__label--stars">${row.stars}&#9733;</span>
+                   <span class="imagyn-histogram__track">
+                     <span class="imagyn-histogram__fill" style="--imagyn-histogram-fill: ${row.pct}%"></span>
+                   </span>
+                   <span class="imagyn-histogram__count">${row.count}</span>
+                 </div>`,
+            )
+            .join("")}
         </div>
       </div>
     </div>

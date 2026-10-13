@@ -30,7 +30,7 @@
    interactivity is reserved for a later phase per §16). Mouse-only feedback never
    implies affordance to keyboard/assistive-tech users. */
 .imagyn-histogram__row:hover {
-  background: var(--imagyn-color-border, rgba(0, 0, 0, 0.08));
+  background: var(--imagyn-color-fill-subtle, rgba(0, 0, 0, 0.08));
 }
 
 .imagyn-histogram__label {
@@ -54,7 +54,7 @@
   position: relative;
   height: 6px;
   border-radius: var(--imagyn-radius-full, 999px);
-  background: var(--imagyn-color-border, rgba(0, 0, 0, 0.08));
+  background: var(--imagyn-color-fill-subtle, rgba(0, 0, 0, 0.08));
   overflow: hidden;
 }
 

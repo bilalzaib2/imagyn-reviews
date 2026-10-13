@@ -1188,7 +1188,10 @@ export default function WidgetsPage() {
                         <div className={styles.widgetCardHeader}>
                           <h2 className={styles.widgetCardTitle}>
                             {card.title}
-                            {card.requiresPro ? <span className={styles.widgetProTag}>{proPlan.name}</span> : null}
+                            {/* Only while the store actually lacks the entitlement. Showing it to a
+                                merchant who is already on Pro reads as "locked" and had them asking
+                                why they couldn't access a widget they could in fact open. */}
+                            {proLocked ? <span className={styles.widgetProTag}>{proPlan.name}</span> : null}
                           </h2>
                           {proLocked || card.installDetectable === false ? null : <InstallStateBadge status={status} />}
                         </div>

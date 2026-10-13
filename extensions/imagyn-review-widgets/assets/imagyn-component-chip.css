@@ -16,7 +16,7 @@
 }
 
 .imagyn-chip:hover {
-  background: var(--imagyn-color-border, rgba(0, 0, 0, 0.08));
+  background: var(--imagyn-color-fill-subtle, rgba(0, 0, 0, 0.08));
 }
 
 .imagyn-chip--selected {

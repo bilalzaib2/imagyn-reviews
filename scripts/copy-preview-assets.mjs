@@ -19,6 +19,9 @@ const FILES = [
   "imagyn-utilities.css",
   "imagyn-component-badge.css",
   "imagyn-component-summary.css",
+  // The histogram is where a strong brand colour does the most visible damage, so the
+  // preview has to include it — see appearance-preview.tsx.
+  "imagyn-component-histogram.css",
   "imagyn-component-ratings-section.css",
   "imagyn-component-review-card.css",
   "imagyn-component-button.css",

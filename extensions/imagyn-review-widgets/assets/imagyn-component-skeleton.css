@@ -11,7 +11,7 @@
 
 .imagyn-skeleton {
   border-radius: var(--imagyn-radius-sm, 4px);
-  background: var(--imagyn-color-border, rgba(0, 0, 0, 0.08));
+  background: var(--imagyn-color-fill-subtle, rgba(0, 0, 0, 0.08));
   background-image: linear-gradient(
     90deg,
     var(--imagyn-color-border, rgba(0, 0, 0, 0.08)) 0%,

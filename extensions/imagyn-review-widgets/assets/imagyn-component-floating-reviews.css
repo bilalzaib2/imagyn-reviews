@@ -190,7 +190,7 @@
 }
 
 .imagyn-floating-reviews__close:hover {
-  background: var(--imagyn-color-border, rgba(0, 0, 0, 0.08));
+  background: var(--imagyn-color-fill-subtle, rgba(0, 0, 0, 0.08));
 }
 
 .imagyn-floating-reviews__close:focus-visible {
@@ -322,7 +322,7 @@
   object-fit: cover;
   border-radius: var(--imagyn-radius-sm, 4px);
   border: var(--imagyn-border-width, 1px) solid var(--imagyn-color-border, rgba(0, 0, 0, 0.08));
-  background: var(--imagyn-color-border, rgba(0, 0, 0, 0.04));
+  background: var(--imagyn-color-fill-subtle, rgba(0, 0, 0, 0.04));
 }
 
 .imagyn-floating-reviews__reply {

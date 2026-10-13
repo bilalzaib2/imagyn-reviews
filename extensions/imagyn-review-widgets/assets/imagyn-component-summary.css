@@ -103,7 +103,7 @@
 }
 
 .imagyn-summary__quickbar-write:hover {
-  background: var(--imagyn-color-border, rgba(0, 0, 0, 0.04));
+  background: var(--imagyn-color-fill-subtle, rgba(0, 0, 0, 0.04));
   border-color: var(--imagyn-color-text, currentColor);
 }
 

@@ -82,6 +82,19 @@
   --imagyn-color-star: #f5a623;
   --imagyn-color-star-empty: rgba(0, 0, 0, 0.15);
   --imagyn-color-border: rgba(0, 0, 0, 0.08);
+  /* A subtle filled tint for histogram tracks, chips, skeletons, hover states and pills.
+   *
+   * Deliberately NOT --imagyn-color-border. A border token is sized for 1px hairlines, and
+   * reusing it as a large filled area means any merchant who picks a strong border colour
+   * gets an unreadable widget. That is a real bug this fixed: a store with
+   * borderColor #000000 rendered every histogram row as a solid black bar — so a 5.0 with
+   * one review looked like all five ratings were at 100% — and turned the Verified pill
+   * into a black lozenge with black text.
+   *
+   * Derived from the TEXT colour rather than the border colour, so it stays a quiet tint on
+   * light and dark surfaces alike and can never resolve to a solid block. The flat rgba
+   * below is the fallback for engines without color-mix. */
+  --imagyn-color-fill-subtle: rgba(0, 0, 0, 0.08);
   --imagyn-color-surface: #ffffff;
   --imagyn-color-success: #1a7f4b;
   --imagyn-color-danger: #c0392b;
@@ -109,4 +122,10 @@
   --imagyn-duration-base: 200ms;
   --imagyn-duration-slow: 320ms;
   --imagyn-easing: cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+@supports (color: color-mix(in srgb, red 10%, transparent)) {
+  :root {
+    --imagyn-color-fill-subtle: color-mix(in srgb, var(--imagyn-color-text, #111111) 10%, transparent);
+  }
 }

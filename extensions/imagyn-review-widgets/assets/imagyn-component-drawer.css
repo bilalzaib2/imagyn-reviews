@@ -35,7 +35,7 @@
   width: 2.5em;
   height: 4px;
   border-radius: var(--imagyn-radius-full, 999px);
-  background: var(--imagyn-color-border, rgba(0, 0, 0, 0.08));
+  background: var(--imagyn-color-fill-subtle, rgba(0, 0, 0, 0.08));
   margin: 0 auto var(--imagyn-space-md, 1em);
 }
 
