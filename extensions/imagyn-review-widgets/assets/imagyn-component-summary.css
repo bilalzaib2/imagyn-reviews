@@ -105,6 +105,9 @@
 .imagyn-summary__quickbar-write:hover {
   background: var(--imagyn-color-fill-subtle, rgba(0, 0, 0, 0.04));
   border-color: var(--imagyn-color-text, currentColor);
+  /* Re-declared so a host theme's `a:hover`/`button:hover` colour cannot win on
+     specificity and repaint this text mid-hover. */
+  color: var(--imagyn-color-text, inherit);
 }
 
 .imagyn-summary__quickbar-write:focus-visible {

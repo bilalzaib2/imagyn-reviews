@@ -57,6 +57,9 @@
 
 .imagyn-modal__close:hover {
   opacity: 1;
+  /* Re-declared so a host theme's `a:hover`/`button:hover` colour cannot win on
+     specificity and repaint this text mid-hover. */
+  color: inherit;
 }
 
 @media (max-width: 640px) {

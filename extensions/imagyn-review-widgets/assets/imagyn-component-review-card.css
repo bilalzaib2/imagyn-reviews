@@ -216,6 +216,9 @@
 
 .imagyn-review-card__helpful-btn:hover {
   opacity: 1;
+  /* Re-declared so a host theme's `a:hover`/`button:hover` colour cannot win on
+     specificity and repaint this text mid-hover. */
+  color: var(--imagyn-color-text, inherit);
 }
 
 .imagyn-review-card__helpful-btn:focus-visible {

@@ -291,6 +291,13 @@
   text-decoration: none;
 }
 
+/* Anchors inherit their colour, which a host theme's `a:hover {{ color: ... }}` (specificity
+   0,1,1) overrides on hover — repainting our text in the theme's link colour. Re-asserting
+   the inherited value keeps the widget's own palette in control. */
+a.imagyn-vcarousel__product:hover {
+  color: inherit;
+}
+
 a.imagyn-vcarousel__product:hover .imagyn-vcarousel__product-name {
   text-decoration: underline;
 }

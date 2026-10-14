@@ -65,6 +65,9 @@
 .imagyn-reviews__load-more:hover {
   opacity: 1;
   background: rgba(0, 0, 0, 0.03);
+  /* Re-declared so a host theme's `a:hover`/`button:hover` colour cannot win on
+     specificity and repaint this text mid-hover. */
+  color: inherit;
 }
 
 .imagyn-reviews__load-more:focus-visible {
@@ -129,6 +132,9 @@
 .imagyn-reviews__field input:hover,
 .imagyn-reviews__field textarea:hover {
   border-color: var(--imagyn-color-text, rgba(0, 0, 0, 0.3));
+  /* Re-declared so a host theme's `a:hover`/`button:hover` colour cannot win on
+     specificity and repaint this text mid-hover. */
+  color: var(--imagyn-color-text, #111);
 }
 
 .imagyn-reviews__field input:focus,
@@ -159,6 +165,9 @@
 
 .imagyn-reviews__star-btn:hover {
   transform: scale(1.12);
+  /* Re-declared so a host theme's `a:hover`/`button:hover` colour cannot win on
+     specificity and repaint this text mid-hover. */
+  color: var(--imagyn-color-star, var(--imagyn-star-color, #f5a623));
 }
 
 .imagyn-reviews__star-btn:focus-visible {
@@ -396,6 +405,9 @@
 
 .imagyn-reviews__photo-remove:hover {
   background: rgba(0, 0, 0, 0.75);
+  /* Re-declared so a host theme's `a:hover`/`button:hover` colour cannot win on
+     specificity and repaint this text mid-hover. */
+  color: #fff;
 }
 
 .imagyn-reviews__photo-remove:focus-visible {
@@ -450,6 +462,9 @@
 
 .imagyn-reviews__sort-select:hover {
   border-color: var(--imagyn-color-text, rgba(0, 0, 0, 0.3));
+  /* Re-declared so a host theme's `a:hover`/`button:hover` colour cannot win on
+     specificity and repaint this text mid-hover. */
+  color: var(--imagyn-color-text, inherit);
 }
 
 .imagyn-reviews__sort-select:focus-visible {

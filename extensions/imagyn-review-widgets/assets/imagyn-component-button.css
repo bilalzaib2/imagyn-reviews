@@ -39,6 +39,9 @@
 
 .imagyn-btn--primary:hover {
   opacity: 0.85;
+  /* Re-declared so a host theme's `a:hover`/`button:hover` colour cannot win on
+     specificity and repaint this text mid-hover. */
+  color: var(--imagyn-btn-color, var(--imagyn-color-surface, #ffffff));
 }
 
 .imagyn-btn--secondary {
@@ -49,6 +52,9 @@
 
 .imagyn-btn--secondary:hover {
   background: var(--imagyn-color-fill-subtle, rgba(0, 0, 0, 0.08));
+  /* Re-declared so a host theme's `a:hover`/`button:hover` colour cannot win on
+     specificity and repaint this text mid-hover. */
+  color: var(--imagyn-color-text, inherit);
 }
 
 .imagyn-btn:disabled {

@@ -195,6 +195,9 @@
 
 .imagyn-store-reviews__write:hover {
   opacity: 0.85;
+  /* Re-declared so a host theme's `a:hover`/`button:hover` colour cannot win on
+     specificity and repaint this text mid-hover. */
+  color: var(--imagyn-btn-color, #ffffff);
 }
 
 .imagyn-store-reviews__write:active {

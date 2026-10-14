@@ -56,6 +56,9 @@
 
 .imagyn-floating-reviews__tab:hover {
   box-shadow: 0 4px 16px rgba(0, 0, 0, 0.1);
+  /* Re-declared so a host theme's `a:hover`/`button:hover` colour cannot win on
+     specificity and repaint this text mid-hover. */
+  color: var(--imagyn-color-text, inherit);
 }
 
 .imagyn-floating-reviews__tab:focus-visible {
@@ -191,6 +194,9 @@
 
 .imagyn-floating-reviews__close:hover {
   background: var(--imagyn-color-fill-subtle, rgba(0, 0, 0, 0.08));
+  /* Re-declared so a host theme's `a:hover`/`button:hover` colour cannot win on
+     specificity and repaint this text mid-hover. */
+  color: inherit;
 }
 
 .imagyn-floating-reviews__close:focus-visible {
@@ -377,6 +383,13 @@
   text-align: center;
   text-decoration: none;
   cursor: pointer;
+}
+
+/* Anchors inherit their colour, which a host theme's `a:hover {{ color: ... }}` (specificity
+   0,1,1) overrides on hover — repainting our text in the theme's link colour. Re-asserting
+   the inherited value keeps the widget's own palette in control. */
+.imagyn-floating-reviews__cta:hover {
+  color: inherit;
 }
 
 .imagyn-floating-reviews__cta:focus-visible {

@@ -97,6 +97,9 @@
 .imagyn-lightbox__close:hover,
 .imagyn-lightbox__nav:hover {
   background: rgba(0, 0, 0, 0.7);
+  /* Re-declared so a host theme's `a:hover`/`button:hover` colour cannot win on
+     specificity and repaint this text mid-hover. */
+  color: #fff;
 }
 
 .imagyn-lightbox__close:focus-visible,
