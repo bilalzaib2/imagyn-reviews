@@ -41,7 +41,14 @@
 }
 
 /* Opt-in star-glyph label (renderHistogram's starLabels option) — a wider column and the
-   real star color, since "★★★★★" needs more room and more presence than a bare numeral. */
+   real star color, since "★★★★★" needs more room and more presence than a bare numeral.
+   The wider column is set here, on the row grid: the 2.5em column above is sized for a
+   single numeral, and five star glyphs are about twice that, so without this they simply
+   overflowed their column and ran underneath the bar. */
+.imagyn-histogram--star-labels .imagyn-histogram__row {
+  grid-template-columns: 5.25em 1fr 2.5em;
+}
+
 .imagyn-histogram__label--stars {
   color: var(--imagyn-color-star, #f5a623);
   opacity: 1;

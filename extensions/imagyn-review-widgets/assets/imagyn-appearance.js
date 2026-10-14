@@ -240,11 +240,18 @@
   }
 
   window.ImagynShared = {
+    // Each star is its own element so the filled and unfilled glyphs can take different
+    // colours. They could not before: both inherited --imagyn-color-star from the row, which
+    // left --imagyn-color-star-empty set by applyColors() below but read by no CSS rule at
+    // all — a dead Brand Studio control, and a 4-star rating that differed from a 5-star one
+    // only by the thin outline of one glyph.
     renderStars: function (rating) {
       var full = Math.round(rating);
       var stars = "";
       for (var i = 0; i < 5; i++) {
-        stars += i < full ? "★" : "☆";
+        stars += i < full
+          ? '<span class="imagyn-star">★</span>'
+          : '<span class="imagyn-star imagyn-star--empty">☆</span>';
       }
       return stars;
     },
@@ -289,7 +296,9 @@
           "</div>";
       }
 
-      return '<div class="imagyn-histogram">' + rows + "</div>";
+      return (
+        '<div class="imagyn-histogram' + (starLabels ? " imagyn-histogram--star-labels" : "") + '">' + rows + "</div>"
+      );
     },
     // Pairs with renderHistogram — call once, right after the returned markup is inserted
     // into the document. Same double-rAF technique as reviews-widget.js's

@@ -26,6 +26,12 @@ const FILES = [
   "imagyn-component-review-card.css",
   "imagyn-component-button.css",
   "imagyn-component-tag.css",
+  // One stylesheet per previewable surface — the preview now shows the widgets that belong
+  // to the surface the merchant selected, not one generic stack (see appearance-preview.tsx).
+  "imagyn-component-trust-badge.css",
+  "imagyn-component-carousel.css",
+  "imagyn-component-video-carousel.css",
+  "imagyn-component-floating-reviews.css",
   "imagyn-appearance.js",
 ];
 

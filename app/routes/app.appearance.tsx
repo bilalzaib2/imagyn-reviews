@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useFetcher, useLoaderData, useLocation, useRevalidator } from "react-router";
 import type { ActionFunctionArgs, LoaderFunctionArgs } from "react-router";
 import { RangeSlider, Select, TextField, Frame, Toast } from "@shopify/polaris";
@@ -355,20 +355,16 @@ export default function AppearancePage() {
 
   const previewFrameRef = useRef<HTMLIFrameElement>(null);
 
+  // What the preview is showing: the global brand across every surface, or one surface as it
+  // would really render (its override merged over the global brand). Editing a control on
+  // either side switches this automatically, so the preview is never quietly showing
+  // something other than what the merchant has their hands on.
+  const [previewScope, setPreviewScope] = useState<"global" | SurfaceKey>("global");
+
   const hasUnsavedChanges = useMemo(
     () => JSON.stringify(draftTokens) !== JSON.stringify(baselineTokens),
     [draftTokens, baselineTokens],
   );
-
-  // Instant reactivity via the exact same code path the real storefront uses
-  // (imagyn-appearance.js), not a second preview implementation — see
-  // app/routes/appearance-preview.tsx.
-  useEffect(() => {
-    previewFrameRef.current?.contentWindow?.postMessage(
-      { source: "imagyn-appearance-draft", tokens: draftTokens },
-      "*",
-    );
-  }, [draftTokens]);
 
   useEffect(() => {
     if (!fetcher.data) return;
@@ -480,21 +476,58 @@ export default function AppearancePage() {
     [overrideDraft, draftTokens],
   );
 
-  // Real validation over the merchant's own chosen colors, never a fabricated warning —
-  // see appearance.shared.ts's checkAppearanceContrast for exactly what pairs this checks.
-  const contrastWarnings: ContrastWarning[] = useMemo(() => checkAppearanceContrast(draftTokens), [draftTokens]);
+  // Exactly what the previewed scope would render on a storefront: the global brand, or the
+  // selected surface's override resolved over it. Sending draftTokens for a surface scope is
+  // what made the preview untrustworthy — a merchant could change a surface's accent colour
+  // and watch nothing happen.
+  const previewTokens = useMemo(
+    () => (previewScope === "global" ? draftTokens : overrideResolvedTokens),
+    [previewScope, draftTokens, overrideResolvedTokens],
+  );
+
+  // Instant reactivity via the exact same code path the real storefront uses
+  // (imagyn-appearance.js), not a second preview implementation — see
+  // app/routes/appearance-preview.tsx. The scope travels with the tokens in one message, so
+  // the frame can never paint one surface's widgets in another surface's colours.
+  const postPreview = useCallback(() => {
+    previewFrameRef.current?.contentWindow?.postMessage(
+      { source: "imagyn-appearance-draft", tokens: previewTokens, scope: previewScope },
+      "*",
+    );
+  }, [previewTokens, previewScope]);
+
+  useEffect(() => {
+    postPreview();
+  }, [postPreview]);
+
+  // Real validation over the merchant's own chosen colors, never a fabricated warning — and
+  // over the tokens the merchant is actually looking at, so a surface override with an
+  // unreadable accent is caught too, not just the global brand.
+  // See appearance.shared.ts's checkAppearanceContrast for exactly what pairs this checks.
+  const contrastWarnings: ContrastWarning[] = useMemo(() => checkAppearanceContrast(previewTokens), [previewTokens]);
 
   const update = <C extends keyof AppearanceTokens>(category: C, patch: Partial<AppearanceTokens[C]>) => {
     setPreset("custom");
+    // Global edits are only fully visible across every surface, so showing one surface while
+    // the merchant drags a global slider would understate what they just changed.
+    setPreviewScope("global");
     setDraftTokens((current) => ({ ...current, [category]: { ...current[category], ...patch } }));
   };
 
   const updateOverride = <C extends keyof AppearanceTokens>(category: C, patch: Partial<AppearanceTokens[C]>) => {
+    setPreviewScope(selectedSurface);
     setOverrideDraft((current) => ({
       ...current,
       [category]: { ...(current[category] as AppearanceTokens[C] | undefined), ...patch },
     }));
   };
+
+  const overrideLabel = (base: string, overridden: boolean) =>
+    `${base} — ${overridden ? "Overridden" : "Inherited"}`;
+
+  /** Which of this surface's override fields the merchant has actually set, vs inherited. */
+  const isOverridden = <C extends keyof AppearanceTokens>(category: C, field: keyof AppearanceTokens[C]) =>
+    (overrideDraft[category] as AppearanceTokens[C] | undefined)?.[field] !== undefined;
 
   // A Widget Style preset only carries structural categories (typography scale, spacing,
   // corners, borders, buttons, card treatment) — never `colors`, so switching styles never
@@ -1051,7 +1084,10 @@ export default function AppearancePage() {
                     value: key,
                   }))}
                   value={selectedSurface}
-                  onChange={(value) => setSelectedSurface(value as SurfaceKey)}
+                  onChange={(value) => {
+                    setSelectedSurface(value as SurfaceKey);
+                    setPreviewScope(value as SurfaceKey);
+                  }}
                 />
 
                 <p className={styles.mutedHint}>
@@ -1062,18 +1098,18 @@ export default function AppearancePage() {
 
                 <div className={styles.fieldGrid}>
                   <ColorField
-                    label="Accent color"
+                    label={overrideLabel("Accent color", isOverridden("colors", "starColor"))}
                     value={overrideResolvedTokens.colors.starColor}
                     onChange={(value) => updateOverride("colors", { starColor: value })}
                   />
                   <ColorField
-                    label="Background"
+                    label={overrideLabel("Background", isOverridden("colors", "surfaceColor"))}
                     value={overrideResolvedTokens.colors.surfaceColor}
                     onChange={(value) => updateOverride("colors", { surfaceColor: value })}
                   />
                 </div>
                 <Select
-                  label="Button style"
+                  label={overrideLabel("Button style", isOverridden("buttons", "style"))}
                   options={[
                     { label: "Filled", value: "solid" },
                     { label: "Outline", value: "outline" },
@@ -1083,7 +1119,7 @@ export default function AppearancePage() {
                   onChange={(value) => updateOverride("buttons", { style: value as "solid" | "outline" | "ghost" })}
                 />
                 <ValueSlider
-                  label="Border radius"
+                  label={overrideLabel("Border radius", isOverridden("corners", "radius"))}
                   min={0}
                   max={24}
                   step={1}
@@ -1104,6 +1140,36 @@ export default function AppearancePage() {
             </div>
 
             <div className={styles.previewColumn}>
+              {/* Which of the two things the merchant is editing this preview is showing.
+                  Global and per-surface are genuinely different previews, and conflating them
+                  is what made this panel untrustworthy. */}
+              <div className={styles.previewToggle} role="group" aria-label="Preview scope">
+                <button
+                  type="button"
+                  className={`${styles.previewToggleButton} ${previewScope === "global" ? styles.previewToggleActive : ""}`}
+                  onClick={() => setPreviewScope("global")}
+                  aria-pressed={previewScope === "global"}
+                >
+                  Global brand
+                </button>
+                <button
+                  type="button"
+                  className={`${styles.previewToggleButton} ${previewScope !== "global" ? styles.previewToggleActive : ""}`}
+                  onClick={() => setPreviewScope(selectedSurface)}
+                  aria-pressed={previewScope !== "global"}
+                >
+                  {SURFACE_LABELS[selectedSurface]}
+                </button>
+              </div>
+
+              <p className={styles.mutedHint}>
+                {previewScope === "global"
+                  ? "Showing every widget with your global brand — this is what any surface without its own override renders."
+                  : hasSelectedOverride
+                    ? `Showing ${SURFACE_LABELS[selectedSurface]} with its own saved override applied over your global brand.`
+                    : `Showing ${SURFACE_LABELS[selectedSurface]}, which currently inherits your global brand. Changing a field below overrides it for this surface only.`}
+              </p>
+
               <div className={styles.previewToggle} role="group" aria-label="Preview device">
                 <button
                   type="button"
@@ -1129,12 +1195,7 @@ export default function AppearancePage() {
                   className={styles.previewFrame}
                   src="/appearance-preview"
                   title="Live preview"
-                  onLoad={() =>
-                    previewFrameRef.current?.contentWindow?.postMessage(
-                      { source: "imagyn-appearance-draft", tokens: draftTokens },
-                      "*",
-                    )
-                  }
+                  onLoad={postPreview}
                 />
               </div>
 

@@ -31,11 +31,15 @@
     return text.slice(0, max).replace(/\s+\S*$/, "") + "…";
   }
 
+  // Mirrors ImagynShared.renderStars exactly, including the per-star elements that let the
+  // unfilled glyph take --imagyn-color-star-empty (imagyn-utilities.css).
   function renderStars(rating) {
     var full = Math.round(rating);
     var stars = "";
     for (var i = 0; i < 5; i++) {
-      stars += i < full ? "★" : "☆";
+      stars += i < full
+        ? '<span class="imagyn-star">★</span>'
+        : '<span class="imagyn-star imagyn-star--empty">☆</span>';
     }
     return stars;
   }

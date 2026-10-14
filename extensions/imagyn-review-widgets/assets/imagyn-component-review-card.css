@@ -112,13 +112,18 @@
   white-space: nowrap;
 }
 
+/* The merchant's star colour, like every other star in the app (the summary quickbar, the
+   Trust Badge, the Rating Badge, both carousels, Floating Reviews and Store Reviews all
+   resolve --imagyn-color-star). This rule alone used --imagyn-color-text, so the per-review
+   ratings — by far the most numerous stars on a page — rendered in the body text colour and
+   ignored Brand Studio's Star colour control entirely. */
 .imagyn-review-card__stars {
   display: block;
   margin-bottom: var(--imagyn-space-px-sm, 12px);
   font-size: var(--imagyn-font-size-sm, 13px);
   letter-spacing: var(--imagyn-letter-spacing-normal, 0.02em);
   line-height: var(--imagyn-line-height-tight, 1);
-  color: var(--imagyn-color-text, inherit);
+  color: var(--imagyn-color-star, #f5a623);
 }
 
 .imagyn-review-card__title {

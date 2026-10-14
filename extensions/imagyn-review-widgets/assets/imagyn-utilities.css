@@ -87,3 +87,23 @@
     animation: none;
   }
 }
+
+/* Star glyphs — the one place --imagyn-color-star-empty is actually read.
+ *
+ * Every widget renders its stars through ImagynShared.renderStars (imagyn-appearance.js),
+ * which emits one element per star. Filled stars inherit the row's own colour, which each
+ * component already sets to --imagyn-color-star; only the unfilled glyph is recoloured here,
+ * so this is purely additive — a component that sets its own star colour (the Trust Badge's
+ * --imagyn-trust-badge-star-color, the Rating Badge's --imagyn-card-badge-star-color) keeps
+ * controlling its filled stars exactly as before.
+ *
+ * Without this rule the filled and unfilled glyphs rendered in the same colour, so a 4-star
+ * rating was told apart from a 5-star one only by the outline of a single glyph, and Brand
+ * Studio's "Empty star color" control changed nothing at all. */
+.imagyn-star {
+  font-style: normal;
+}
+
+.imagyn-star--empty {
+  color: var(--imagyn-color-star-empty, rgba(0, 0, 0, 0.15));
+}
