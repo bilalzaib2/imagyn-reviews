@@ -104,7 +104,7 @@ export function parseAiSummaryJson(raw: string, providerName: string): Omit<AiSu
 
 const BRAND_SUGGESTION_JSON_SHAPE = `Respond with strict JSON only, matching exactly this shape (no markdown fences, no commentary outside the JSON):
 {
-  "starColor": string,       // a 6-digit hex color, e.g. "#2B2B2B" — the one accent color used for star ratings
+  "starColor": string,       // a 6-digit hex color, e.g. "#E8A33D" — the one accent color used for star ratings; a readable hue, never a grey
   "scale": number,           // 0.9-1.15 — a font-size multiplier; 1 is the default/neutral size
   "letterSpacing": string,   // exactly "tight" or "normal"
   "rationale": string        // one short sentence explaining the choice, in plain language for a merchant
@@ -113,14 +113,27 @@ const BRAND_SUGGESTION_JSON_SHAPE = `Respond with strict JSON only, matching exa
 // Deliberately the narrowest possible brief — accent color + typography only, matching
 // exactly what this feature is scoped to (see AiBrandSuggestionRequest's own comment). The
 // model is explicitly told not to invent brand facts it wasn't given.
+//
+// The restraint instruction applies to TYPOGRAPHY, not to the accent color. It used to apply
+// to both ("never a loud or saturated color"), and for a star rating that is the wrong brief:
+// it reliably produced desaturated greys (one live store was handed #B0B0B0), which are
+// indistinguishable from the grey UNFILLED star they sit beside — so a 3-star review and a
+// 5-star review rendered identically. A rating accent has a functional job before an
+// aesthetic one, so the color half of the brief now asks for a definite hue and names the
+// failure to avoid; appearance.shared.ts's checkStarLegibility enforces it regardless of what
+// the model returns.
 export function buildBrandSuggestionSystemPrompt(): string {
   return (
     "You are a minimal, premium brand-design assistant for a Shopify reviews app. Given a " +
     "merchant's shop name and, optionally, a brand color already detected from their Shopify " +
     "brand settings, suggest ONE accent color (used only for star ratings) and a typography " +
-    "feel (font-size scale and letter spacing) for their review widgets. Favor calm, " +
-    "restrained, Apple-inspired choices — never a loud or saturated color, never an extreme " +
-    "scale or spacing value. If a brand color was given, your suggestion should complement or " +
+    "feel (font-size scale and letter spacing) for their review widgets. The accent color has " +
+    "a job to do: filled stars are drawn in it and sit directly beside light-grey unfilled " +
+    "stars, so it must be a definite, clearly readable hue — an amber, gold, warm orange, or " +
+    "a confident version of the merchant's own brand hue. Never return a grey, a near-grey, " +
+    "or any desaturated neutral: those make the rating unreadable. It can be tasteful without " +
+    "being washed out. Keep the TYPOGRAPHY calm and Apple-inspired instead — no extreme scale " +
+    "or spacing value. If a brand color was given, your suggestion should complement or " +
     "refine it, not replace it with something unrelated. Do not invent facts about the " +
     "merchant or their products; base the suggestion only on the shop name and brand color " +
     "provided. " +

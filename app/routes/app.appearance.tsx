@@ -1140,13 +1140,15 @@ export default function AppearancePage() {
 
               {contrastWarnings.length > 0 ? (
                 <div className={styles.contrastWarning} role="alert">
-                  <p className={styles.contrastWarningTitle}>Low contrast — some text may be hard to read</p>
+                  <p className={styles.contrastWarningTitle}>These colors may be hard to read</p>
                   <ul className={styles.contrastWarningList}>
                     {contrastWarnings.map((warning) => (
                       <li key={warning.pair}>
                         {warning.pair === "text-on-surface"
                           ? `Text color against your background is only ${warning.ratio.toFixed(1)}:1 (recommended: 4.5:1 or higher).`
-                          : `Your accent color against your background is only ${warning.ratio.toFixed(1)}:1 (recommended: 4.5:1 or higher).`}
+                          : warning.pair === "star-on-surface"
+                            ? "Your star color is almost the same as your background, so ratings will look blank. Pick a darker or more colorful star."
+                            : "Your star color is too close to grey, so a 3-star rating will look the same as a 5-star one. Try an amber, gold, or a stronger version of your brand color."}
                       </li>
                     ))}
                   </ul>

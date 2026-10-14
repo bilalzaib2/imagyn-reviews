@@ -292,22 +292,126 @@ export function contrastRatio(hexA: string, hexB: string): number | null {
   return (lighter + 0.05) / (darker + 0.05);
 }
 
-// WCAG 2.x AA for normal-size text/UI components — the standard both this app's own
-// accessibility bar (docs/ACCESS_CONTROL.md is unrelated; see STOREFRONT_DESIGN_SYSTEM.md's
-// accessibility section) and Shopify's own theme requirements reference.
+// WCAG 2.x AA for normal-size text — SC 1.4.3. Applies to real running text (the review
+// body, the reviewer name, the rating numeral), which is what this threshold was written
+// for.
 export const WCAG_AA_MIN_CONTRAST = 4.5;
 
-export interface ContrastWarning {
-  pair: "text-on-surface" | "accent-on-surface";
+// SC 1.4.11 Non-text Contrast, for a graphical object against the colours ADJACENT to it.
+// Deliberately NOT applied to the star colour against the card surface: see
+// checkStarLegibility for why that pairing is the wrong measurement for a star rating.
+export const WCAG_AA_MIN_NON_TEXT_CONTRAST = 3;
+
+// Below this, a filled star is close enough to the card surface that the rating reads as
+// blank rather than as a score. Not a WCAG number — an "is it there at all" floor, set low
+// on purpose so it only catches genuinely invisible choices (a white or near-white star on a
+// white card), never a merely soft one.
+const MIN_STAR_VISIBILITY_CONTRAST = 1.5;
+
+// HSV saturation above which a colour reads as a hue rather than as a grey. A star rating is
+// understood by hue as much as by lightness — which is exactly why luminance contrast alone
+// cannot judge one (see checkStarLegibility).
+const MIN_STAR_CHROMA = 0.25;
+
+/**
+ * HSV saturation, 0 (a pure grey) to 1 (a fully saturated hue). Returns null for a colour
+ * this cannot parse rather than guessing.
+ */
+function chromaOf(hex: string): number | null {
+  const rgb = hexToRgb(hex);
+  if (!rgb) return null;
+  const max = Math.max(...rgb);
+  const min = Math.min(...rgb);
+  return max === 0 ? 0 : (max - min) / max;
+}
+
+/**
+ * Composites a possibly-translucent token value down onto an opaque surface so it can be
+ * compared as a real rendered colour.
+ *
+ * starEmptyColor ships as `rgba(0, 0, 0, 0.15)` — a translucent overlay, not a hex — so
+ * contrastRatio alone cannot see it. What a shopper actually looks at is that overlay already
+ * blended with the card surface, which is what this returns.
+ */
+export function flattenOntoSurface(color: string, surfaceHex: string): string | null {
+  const value = color.trim();
+  const surface = hexToRgb(surfaceHex);
+  if (!surface) return null;
+  if (/^#?[a-f\d]{6}$/i.test(value)) return value.startsWith("#") ? value : `#${value}`;
+
+  const match = /^rgba?\(\s*([\d.]+)[\s,]+([\d.]+)[\s,]+([\d.]+)(?:[\s,/]+([\d.]+))?\s*\)$/i.exec(value);
+  if (!match) return null;
+
+  const alpha = match[4] === undefined ? 1 : Math.min(1, Math.max(0, Number(match[4])));
+  const blended = [1, 2, 3].map((index) => {
+    const channel = Number(match[index]);
+    if (!Number.isFinite(channel)) return null;
+    return Math.round(channel * alpha + surface[index - 1] * (1 - alpha));
+  });
+  if (blended.some((channel) => channel === null)) return null;
+
+  return `#${blended.map((channel) => (channel as number).toString(16).padStart(2, "0")).join("")}`;
+}
+
+export interface StarLegibilityIssue {
+  reason: "indistinguishable-from-empty" | "invisible-on-surface";
   ratio: number;
 }
 
-// Real validation, not a fake control — only ever checks color PAIRS this system actually
-// renders together (text over the review-card surface; the accent/star color over that same
-// surface, since a "boxed" card treatment renders the accent color as inline SVG/text against
-// the surface). Silently skips textColor when it's null ("inherit currentColor") since that
-// has no fixed value to check against — this system cannot know the merchant's theme
-// background at save time, so it never fabricates a pass or fail for that case.
+/**
+ * Whether a star rating drawn in `starColor` can actually be read as a score.
+ *
+ * The question a star rating poses is not "does this colour contrast with the card?" — it is
+ * "can I tell a filled star from an empty one?", because that difference IS the rating. So
+ * this compares the filled star against the unfilled star it sits beside (SC 1.4.11's
+ * adjacent-colour framing), not against the card surface.
+ *
+ * Crucially, that comparison cannot be luminance-only. WCAG's contrast ratio ignores hue, so
+ * the conventional amber star (#f5a623) scores just 1.4:1 against the grey unfilled star it
+ * sits next to and 2.0:1 against a white card — yet nobody has ever struggled to read an
+ * Amazon star rating, because amber and grey differ in hue, and because this widget always
+ * prints the numeral and review count as real text beside the stars. Judging stars by
+ * luminance alone therefore condemns the one colour the entire category uses, which is how
+ * Brand Studio came to show every merchant on default settings a contrast warning no amber
+ * could ever clear.
+ *
+ * So a star is legible if it differs from the unfilled star in EITHER dimension — chroma (an
+ * amber or brand hue against a grey) or luminance (a near-black star). A desaturated grey
+ * fails both, which is precisely the case worth warning about: grey-on-grey stars render a
+ * 3-star review and a 5-star review identical.
+ */
+export function checkStarLegibility(
+  starColor: string,
+  surfaceColor: string,
+  starEmptyColor: string,
+): StarLegibilityIssue | null {
+  const surfaceRatio = contrastRatio(starColor, surfaceColor);
+  if (surfaceRatio !== null && surfaceRatio < MIN_STAR_VISIBILITY_CONTRAST) {
+    return { reason: "invisible-on-surface", ratio: surfaceRatio };
+  }
+
+  const chroma = chromaOf(starColor);
+  if (chroma === null || chroma >= MIN_STAR_CHROMA) return null;
+
+  const emptyHex = flattenOntoSurface(starEmptyColor, surfaceColor);
+  const emptyRatio = emptyHex ? contrastRatio(starColor, emptyHex) : null;
+  if (emptyRatio !== null && emptyRatio < WCAG_AA_MIN_NON_TEXT_CONTRAST) {
+    return { reason: "indistinguishable-from-empty", ratio: emptyRatio };
+  }
+
+  return null;
+}
+
+export interface ContrastWarning {
+  pair: "text-on-surface" | "star-vs-empty" | "star-on-surface";
+  ratio: number;
+}
+
+// Real validation, not a fake control — only ever checks colour pairs this system actually
+// renders together, and only ones a merchant can act on. Silently skips textColor when it's
+// null ("inherit currentColor") since that has no fixed value to check against — this system
+// cannot know the merchant's theme background at save time, so it never fabricates a pass or
+// fail for that case.
 export function checkAppearanceContrast(tokens: AppearanceTokens): ContrastWarning[] {
   const warnings: ContrastWarning[] = [];
   const surface = tokens.colors.surfaceColor;
@@ -319,9 +423,12 @@ export function checkAppearanceContrast(tokens: AppearanceTokens): ContrastWarni
     }
   }
 
-  const accentRatio = contrastRatio(tokens.colors.starColor, surface);
-  if (accentRatio !== null && accentRatio < WCAG_AA_MIN_CONTRAST) {
-    warnings.push({ pair: "accent-on-surface", ratio: accentRatio });
+  const starIssue = checkStarLegibility(tokens.colors.starColor, surface, tokens.colors.starEmptyColor);
+  if (starIssue) {
+    warnings.push({
+      pair: starIssue.reason === "invisible-on-surface" ? "star-on-surface" : "star-vs-empty",
+      ratio: starIssue.ratio,
+    });
   }
 
   return warnings;

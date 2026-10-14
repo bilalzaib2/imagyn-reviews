@@ -15,6 +15,7 @@
 // tokens client-side (app.appearance.tsx), and only becomes real once the merchant clicks the
 // existing Save action.
 import { getAiProvider } from "./ai/provider.server";
+import { checkStarLegibility, getDefaultAppearanceTokens } from "./appearance.shared";
 
 export interface BrandSuggestion {
   starColor: string;
@@ -22,6 +23,44 @@ export interface BrandSuggestion {
   rationale: string;
   provider: string;
   modelUsed: string;
+}
+
+/**
+ * Replaces a star color that would render the rating unreadable with the default amber.
+ *
+ * A suggestion is applied to the merchant's draft tokens with one click, so an illegible
+ * accent becomes their live storefront as soon as they hit Save. The model is now asked for a
+ * readable hue (buildBrandSuggestionSystemPrompt), but a prompt is guidance, not a guarantee:
+ * before this guard existed, one live store was suggested — and shipped — #B0B0B0 stars,
+ * which are indistinguishable from the grey unfilled stars beside them.
+ *
+ * Substituting rather than throwing, and saying so in the rationale, is deliberate. The rest
+ * of the suggestion (typography, and the reasoning behind it) is still useful, and an error
+ * toast would leave the merchant with nothing; silently applying grey stars would be worse
+ * than either. Judged against the DEFAULT surface, which is what this service knows — the
+ * merchant's own surface color is checked separately, and continuously, by
+ * checkAppearanceContrast against their live draft in app.appearance.tsx.
+ */
+function withLegibleStarColor(result: {
+  starColor: string;
+  typography: { scale: number; letterSpacing: "tight" | "normal" };
+  rationale: string;
+  modelUsed: string;
+}) {
+  const defaults = getDefaultAppearanceTokens().colors;
+  const issue = checkStarLegibility(result.starColor, defaults.surfaceColor, defaults.starEmptyColor);
+  if (!issue) return result;
+
+  const note =
+    issue.reason === "invisible-on-surface"
+      ? `Used the default star color instead of ${result.starColor}, which would be almost invisible on a white review card.`
+      : `Used the default star color instead of ${result.starColor}, which is too close to grey to tell a filled star from an empty one.`;
+
+  return {
+    ...result,
+    starColor: defaults.starColor,
+    rationale: result.rationale ? `${result.rationale} ${note}` : note,
+  };
 }
 
 export async function generateAiBrandSuggestion(input: {
@@ -34,5 +73,5 @@ export async function generateAiBrandSuggestion(input: {
     detectedColor: input.detectedColor,
   });
 
-  return { ...result, provider: provider.name };
+  return { ...withLegibleStarColor(result), provider: provider.name };
 }
