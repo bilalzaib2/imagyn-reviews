@@ -118,3 +118,83 @@ describe("saveOverride / resetOverride — Surface-Specific Override", () => {
     expect(result).toEqual({ ok: true, intent: "resetOverride", surfaceKey: "trust_badge" });
   });
 });
+
+// Reset to Defaults. The two scopes are deliberately separate operations, and the property
+// that matters most is that neither one reaches past its own scope: a global reset must not
+// silently wipe the per-surface overrides a merchant has built up, and a surface reset must
+// not touch the global brand or any sibling surface.
+describe("Reset to Defaults — global scope", () => {
+  it("persists the canonical system defaults, not whatever the client happened to send", async () => {
+    const result = await postAction({
+      _intent: "reset",
+      // A client-supplied payload must be ignored entirely for a reset.
+      tokens: JSON.stringify({ colors: { starColor: "#ff0000" } }),
+      preset: "custom",
+    });
+
+    expect(upsertActiveMock).toHaveBeenCalledWith("store_1", {
+      tokens: getDefaultAppearanceTokens(),
+      preset: "editorial",
+    });
+    expect(result).toEqual({
+      ok: true,
+      intent: "reset",
+      tokens: getDefaultAppearanceTokens(),
+      preset: "editorial",
+    });
+  });
+
+  it("does not delete any surface override — an overridden surface keeps its own look", async () => {
+    await postAction({ _intent: "reset" });
+
+    expect(resetSurfaceOverrideMock).not.toHaveBeenCalled();
+    expect(setSurfaceOverrideMock).not.toHaveBeenCalled();
+  });
+
+  it("does not touch email templates — reset is an appearance operation only", async () => {
+    await postAction({ _intent: "reset" });
+
+    expect(applyBrandingMock).not.toHaveBeenCalled();
+  });
+
+  it("returns tokens the merchant can actually be shown, with every category populated", async () => {
+    const result = (await postAction({ _intent: "reset" })) as { tokens: Record<string, unknown> };
+
+    for (const category of Object.keys(getDefaultAppearanceTokens())) {
+      expect(result.tokens[category]).toBeDefined();
+    }
+  });
+});
+
+describe("Reset to Defaults — single-surface scope", () => {
+  it("removes only that surface's override and leaves the global brand alone", async () => {
+    await postAction({ _intent: "resetOverride", surfaceKey: "floating_reviews" });
+
+    expect(resetSurfaceOverrideMock).toHaveBeenCalledTimes(1);
+    expect(resetSurfaceOverrideMock).toHaveBeenCalledWith("store_1", "floating_reviews");
+    // The global brand is not rewritten as a side effect.
+    expect(upsertActiveMock).not.toHaveBeenCalled();
+  });
+
+  it("never resets a sibling surface", async () => {
+    await postAction({ _intent: "resetOverride", surfaceKey: "trust_badge" });
+
+    const resetKeys = resetSurfaceOverrideMock.mock.calls.map((call) => (call as unknown as [string, string])[1]);
+    expect(resetKeys).toEqual(["trust_badge"]);
+  });
+
+  it("rejects an unknown surface key instead of resetting something arbitrary", async () => {
+    const result = await postAction({ _intent: "resetOverride", surfaceKey: "../all" });
+
+    expect(result).toEqual({ ok: false, intent: "resetOverride", error: "Unknown surface." });
+    expect(resetSurfaceOverrideMock).not.toHaveBeenCalled();
+  });
+
+  it("stays available to a Free store — reset is not a paid capability", async () => {
+    canUseBrandStudio = false;
+    const result = (await postAction({ _intent: "resetOverride", surfaceKey: "store_reviews" })) as { ok: boolean };
+
+    expect(result.ok).toBe(true);
+    expect(resetSurfaceOverrideMock).toHaveBeenCalledWith("store_1", "store_reviews");
+  });
+});

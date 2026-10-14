@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useFetcher, useLoaderData, useLocation, useRevalidator } from "react-router";
 import type { ActionFunctionArgs, LoaderFunctionArgs } from "react-router";
-import { RangeSlider, Select, TextField, Frame, Toast } from "@shopify/polaris";
+import { Modal, RangeSlider, Select, TextField, Frame, Toast } from "@shopify/polaris";
 
 import { Button } from "../components/ui/Button";
 import { ColorField, toDisplayHex } from "../components/ui/ColorField";
@@ -355,6 +355,12 @@ export default function AppearancePage() {
 
   const previewFrameRef = useRef<HTMLIFrameElement>(null);
 
+  // Reset is the one irreversible control on this page — it overwrites a brand the merchant
+  // may have spent real time on, and (unlike Discard) it persists immediately rather than
+  // waiting for a save. So it asks first, and the dialog names the exact scope, because
+  // "global" and "this one surface" are very different amounts of work to lose.
+  const [pendingReset, setPendingReset] = useState<null | { scope: "global" } | { scope: "surface"; surfaceKey: SurfaceKey }>(null);
+
   // What the preview is showing: the global brand across every surface, or one surface as it
   // would really render (its override merged over the global brand). Editing a control on
   // either side switches this automatically, so the preview is never quietly showing
@@ -471,6 +477,7 @@ export default function AppearancePage() {
   }, [selectedSurface]);
 
   const hasSelectedOverride = selectedSurface in overridesState;
+  const hasOverrideDraftChanges = Object.keys(overrideDraft).length > 0;
   const overrideResolvedTokens = useMemo(
     () => mergeAppearanceTokens(overrideDraft, draftTokens),
     [overrideDraft, draftTokens],
@@ -594,11 +601,7 @@ export default function AppearancePage() {
     setDraftTokens(baselineTokens);
   };
 
-  const handleReset = () => {
-    const formData = new FormData();
-    formData.append("_intent", "reset");
-    fetcher.submit(formData, { method: "post" });
-  };
+  const handleReset = () => setPendingReset({ scope: "global" });
 
   const handleSaveOverride = () => {
     const formData = new FormData();
@@ -609,10 +612,30 @@ export default function AppearancePage() {
   };
 
   const handleResetOverride = () => {
+    // An unsaved draft on a surface that has no saved override is purely local — there is no
+    // row to delete, so clearing it is a discard, not a reset, and needs no confirmation or
+    // round trip.
+    if (!hasSelectedOverride) {
+      setOverrideDraft({});
+      return;
+    }
+    setPendingReset({ scope: "surface", surfaceKey: selectedSurface });
+  };
+
+  const confirmPendingReset = () => {
+    if (!pendingReset) return;
     const formData = new FormData();
-    formData.append("_intent", "resetOverride");
-    formData.append("surfaceKey", selectedSurface);
-    overrideFetcher.submit(formData, { method: "post" });
+
+    if (pendingReset.scope === "global") {
+      formData.append("_intent", "reset");
+      fetcher.submit(formData, { method: "post" });
+    } else {
+      formData.append("_intent", "resetOverride");
+      formData.append("surfaceKey", pendingReset.surfaceKey);
+      overrideFetcher.submit(formData, { method: "post" });
+    }
+
+    setPendingReset(null);
   };
 
   const handleCreateTheme = () => {
@@ -1132,8 +1155,13 @@ export default function AppearancePage() {
                   <Button type="button" variant="primary" onClick={handleSaveOverride} disabled={isOverrideBusy}>
                     {isOverrideBusy ? "Saving…" : `Save override for ${SURFACE_LABELS[selectedSurface]}`}
                   </Button>
-                  <Button type="button" variant="ghost" onClick={handleResetOverride} disabled={!hasSelectedOverride || isOverrideBusy}>
-                    Reset to Brand Studio
+                  <Button
+                    type="button"
+                    variant="secondary"
+                    onClick={handleResetOverride}
+                    disabled={(!hasSelectedOverride && !hasOverrideDraftChanges) || isOverrideBusy}
+                  >
+                    {hasSelectedOverride ? "Reset to global brand" : "Clear unsaved changes"}
                   </Button>
                 </div>
               </Section>
@@ -1223,14 +1251,49 @@ export default function AppearancePage() {
                 <Button variant="secondary" onClick={handleDiscard} disabled={!hasUnsavedChanges || isSaving}>
                   Discard
                 </Button>
-                <Button variant="ghost" onClick={handleReset} disabled={isSaving}>
-                  Reset to Default
+                <Button variant="secondary" onClick={handleReset} disabled={isSaving}>
+                  Reset to Defaults
                 </Button>
               </div>
             </div>
           </div>
         </div>
       </Container>
+
+      {/* Names the exact scope, and — just as importantly — what it will NOT touch. A
+          merchant resetting one surface should not have to wonder whether their global brand
+          or their other eight surfaces are about to go with it. */}
+      <Modal
+        open={pendingReset !== null}
+        onClose={() => setPendingReset(null)}
+        title={
+          pendingReset?.scope === "surface"
+            ? `Reset ${SURFACE_LABELS[pendingReset.surfaceKey]} to your global brand?`
+            : "Reset your global brand to defaults?"
+        }
+        primaryAction={{
+          content: "Reset",
+          destructive: true,
+          onAction: confirmPendingReset,
+        }}
+        secondaryActions={[{ content: "Cancel", onAction: () => setPendingReset(null) }]}
+      >
+        <Modal.Section>
+          {pendingReset?.scope === "surface" ? (
+            <p>
+              This removes only {SURFACE_LABELS[pendingReset.surfaceKey]}&rsquo;s own override, so it goes back to
+              inheriting your global brand. Your global brand and every other surface are left exactly as they are.
+            </p>
+          ) : (
+            <p>
+              Every surface that inherits your global brand goes back to Imagyn&rsquo;s default colours, typography,
+              spacing, corners and buttons. Surfaces with their own override keep it, and your reviews, saved themes and
+              other settings are not affected. This saves immediately and cannot be undone.
+            </p>
+          )}
+        </Modal.Section>
+      </Modal>
+
       <Frame>
         {toastState ? <Toast content={toastState.content} error={toastState.error} onDismiss={() => setToastState(null)} /> : null}
       </Frame>
