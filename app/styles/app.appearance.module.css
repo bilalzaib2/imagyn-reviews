@@ -222,6 +222,82 @@
   line-height: 1.4;
 }
 
+/* Miniature review card inside each preset button. Its radius, border width and shadow are
+   set inline from the preset's OWN tokens (see PresetSwatch) — only the parts that are the
+   same for every preset live here, so the swatch can never claim a look the preset doesn't
+   actually apply. */
+.swatch {
+  display: grid;
+  gap: 6px;
+  align-content: start;
+  margin-bottom: var(--space-2);
+  padding: 10px;
+  min-height: 74px;
+  border-style: solid;
+  border-color: var(--color-border);
+  background: var(--color-surface);
+}
+
+.swatchStars {
+  font-size: 11px;
+  line-height: 1;
+  letter-spacing: 0.06em;
+}
+
+.swatchLine {
+  height: 4px;
+  width: 100%;
+  border-radius: 999px;
+  background: var(--color-border);
+}
+
+.swatchLineShort {
+  width: 62%;
+}
+
+.swatchButton {
+  margin-top: 2px;
+  height: 12px;
+  width: 44px;
+  border: 1px solid var(--color-text);
+}
+
+.swatchButton[data-button-style="solid"] {
+  background: var(--color-text);
+}
+
+.swatchButton[data-button-style="outline"] {
+  background: transparent;
+}
+
+.swatchButton[data-button-style="ghost"] {
+  background: transparent;
+  border-color: transparent;
+  box-shadow: inset 0 0 0 1px var(--color-border);
+}
+
+/* The quick path's own two rows — the one colour that matters, then the action. Kept visually
+   distinct from the fine-tuning sections below so the short route reads as complete. */
+.quickAccentRow {
+  margin-top: var(--space-4);
+  max-width: 320px;
+}
+
+.quickApplyRow {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-3);
+  margin-top: var(--space-4);
+  padding-top: var(--space-4);
+  border-top: 1px solid var(--color-border);
+}
+
+.quickApplyRow .mutedHint {
+  flex: 1 1 220px;
+  margin: 0;
+}
+
 .groupLabel {
   margin: var(--space-2) 0 calc(-1 * var(--space-4));
   font-size: var(--text-xs);

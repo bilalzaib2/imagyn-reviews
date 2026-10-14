@@ -292,6 +292,60 @@ function GroupLabel({ children }: { children: string }) {
   return <p className={styles.groupLabel}>{children}</p>;
 }
 
+const SWATCH_SHADOW: Record<string, string> = {
+  none: "none",
+  subtle: "0 1px 3px rgba(0, 0, 0, 0.08)",
+  medium: "0 4px 12px rgba(0, 0, 0, 0.12)",
+};
+
+/**
+ * A miniature review card drawn from a preset's OWN tokens.
+ *
+ * The preset cards used to be label + sentence only, which asks a merchant to imagine the
+ * difference between "Editorial" and "Luxury" from prose. Every value shown here — corner
+ * radius, border weight, card treatment, shadow, button style — is read from the preset it
+ * belongs to, so the swatch cannot drift from what clicking the preset actually does. The
+ * accent colour comes from the merchant's live draft, so the row of stars is their colour,
+ * not a stock one.
+ */
+function PresetSwatch({
+  tokens,
+  accentColor,
+}: {
+  tokens: AppearancePresetDefinition["tokens"];
+  accentColor: string;
+}) {
+  // "Custom" carries no tokens — it stands for whatever the merchant already has, so it
+  // shows the neutral default shape rather than pretending to a look of its own.
+  const radius = tokens?.corners?.radius ?? 8;
+  const boxed = tokens?.reviewCards?.separator === "boxed";
+  const borderWidth = boxed ? (tokens?.borders?.width ?? 1) : 0;
+  const buttonStyle = tokens?.buttons?.style ?? "solid";
+
+  return (
+    <span
+      aria-hidden="true"
+      className={styles.swatch}
+      style={{
+        borderRadius: `${radius}px`,
+        borderWidth: `${borderWidth}px`,
+        boxShadow: SWATCH_SHADOW[tokens?.cards?.shadowIntensity ?? "none"] ?? "none",
+      }}
+    >
+      <span className={styles.swatchStars} style={{ color: accentColor }}>
+        &#9733;&#9733;&#9733;&#9733;&#9733;
+      </span>
+      <span className={styles.swatchLine} />
+      <span className={`${styles.swatchLine} ${styles.swatchLineShort}`} />
+      <span
+        className={styles.swatchButton}
+        data-button-style={buttonStyle}
+        style={{ borderRadius: `${Math.min(radius, 12)}px` }}
+      />
+    </span>
+  );
+}
+
 function ReservedNote({ label }: { label: string }) {
   return (
     <div className={styles.reservedNote}>
@@ -684,6 +738,56 @@ export default function AppearancePage() {
 
           <div className={styles.layout}>
             <div className={styles.settingsColumn}>
+              {/* The two-click path, first on the page. Everything below this is fine-tuning
+                  for merchants who want it; a merchant who only wants their widgets to look
+                  right should never have to scroll past fifteen sections to find out how. */}
+              <GroupLabel>Start here</GroupLabel>
+
+              <Section
+                title="Pick a style"
+                description="Each one sets corners, spacing, borders and buttons together. Preview updates instantly — nothing is live until you apply."
+              >
+                <div className={styles.presetGrid}>
+                  {appearancePresets.map((definition) =>
+                    definition.available ? (
+                      <button
+                        key={definition.id}
+                        type="button"
+                        className={`${styles.presetCard} ${preset === definition.id ? styles.presetCardActive : ""}`}
+                        onClick={() => handlePresetSelect(definition)}
+                      >
+                        <PresetSwatch tokens={definition.tokens} accentColor={toDisplayHex(draftTokens.colors.starColor)} />
+                        <span className={styles.presetCardLabel}>{definition.label}</span>
+                        <span className={styles.presetCardDescription}>{definition.description}</span>
+                      </button>
+                    ) : (
+                      <span key={definition.id} className={`${styles.presetCard} ${styles.presetCardDisabled}`}>
+                        <span className={styles.presetCardLabel}>{definition.label}</span>
+                        <span className={styles.comingSoonTag}>Soon</span>
+                      </span>
+                    ),
+                  )}
+                </div>
+
+                <div className={styles.quickAccentRow}>
+                  <ColorField
+                    label="Accent color — your stars and highlights"
+                    value={draftTokens.colors.starColor}
+                    onChange={(value) => update("colors", { starColor: value })}
+                  />
+                </div>
+
+                <div className={styles.quickApplyRow}>
+                  <Button variant="primary" onClick={handleApplyBrandEverywhere} disabled={isSaving}>
+                    {isSaving ? "Applying…" : "Apply to all widgets"}
+                  </Button>
+                  <p className={styles.mutedHint}>
+                    Applies to every widget, Theme App Block and page that inherits your global brand. Surfaces with
+                    their own override keep it.
+                  </p>
+                </div>
+              </Section>
+
               <GroupLabel>One-Click Branding</GroupLabel>
 
               {canUseBrandStudio ? (
@@ -802,29 +906,6 @@ export default function AppearancePage() {
               )}
 
               <GroupLabel>Style</GroupLabel>
-
-              <Section title="Widget Style" description="Start from a look, then fine-tune anything below.">
-                <div className={styles.presetGrid}>
-                  {appearancePresets.map((definition) =>
-                    definition.available ? (
-                      <button
-                        key={definition.id}
-                        type="button"
-                        className={`${styles.presetCard} ${preset === definition.id ? styles.presetCardActive : ""}`}
-                        onClick={() => handlePresetSelect(definition)}
-                      >
-                        <span className={styles.presetCardLabel}>{definition.label}</span>
-                        <span className={styles.presetCardDescription}>{definition.description}</span>
-                      </button>
-                    ) : (
-                      <span key={definition.id} className={`${styles.presetCard} ${styles.presetCardDisabled}`}>
-                        <span className={styles.presetCardLabel}>{definition.label}</span>
-                        <span className={styles.comingSoonTag}>Soon</span>
-                      </span>
-                    ),
-                  )}
-                </div>
-              </Section>
 
               <Section title="Button Style" description="How buttons appear across your reviews.">
                 <Select
