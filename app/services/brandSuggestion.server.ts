@@ -16,6 +16,7 @@
 // existing Save action.
 import { getAiProvider } from "./ai/provider.server";
 import { checkStarLegibility, getDefaultAppearanceTokens } from "./appearance.shared";
+import { getStorePalette, isDarkBackground } from "./storePalette.server";
 
 export interface BrandSuggestion {
   starColor: string;
@@ -66,11 +67,24 @@ function withLegibleStarColor(result: {
 export async function generateAiBrandSuggestion(input: {
   shopName: string;
   detectedColor: string | null;
+  /** The merchant's myshopify domain, used to read their live storefront's palette. */
+  shopDomain?: string | null;
 }): Promise<BrandSuggestion> {
   const provider = getAiProvider();
+
+  // Read what the store actually looks like before asking for a suggestion. This is what
+  // makes the result match their brand rather than their shop name: without it the model is
+  // given a name and nothing else. Failure is fine and expected (a password-protected store,
+  // a slow storefront, a theme with no named brand colour) — getStorePalette returns null and
+  // the prompt is told plainly that nothing could be read.
+  const palette = input.shopDomain ? await getStorePalette(input.shopDomain) : null;
+
   const result = await provider.generateBrandSuggestion({
     shopName: input.shopName,
     detectedColor: input.detectedColor,
+    storeAccent: palette?.accent ?? null,
+    storeBackground: palette?.background ?? null,
+    storeIsDark: isDarkBackground(palette?.background ?? null),
   });
 
   return { ...withLegibleStarColor(result), provider: provider.name };

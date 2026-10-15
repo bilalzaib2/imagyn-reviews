@@ -28,12 +28,19 @@ export interface AiSummaryResult {
 // untouched by this.
 export interface AiBrandSuggestionRequest {
   shopName: string;
-  // Optional known brand color, given as context so the AI can complement/refine it rather
-  // than suggesting something unrelated. Currently always null — Shopify's Admin API has no
-  // reliable, universal way to detect a merchant's brand color (see app.appearance.tsx).
-  // Kept as a parameter rather than removed: a future legitimate source (e.g. the merchant's
-  // own already-configured Imagyn accent color) can populate it without an API change.
+  // A brand colour already known to the app, given as context so the AI complements it
+  // rather than suggesting something unrelated. Shopify's Admin API exposes no brand colour
+  // (no `Shop.brand` field, no brand query — both confirmed against the schema), so this is
+  // populated from the merchant's own already-configured Imagyn accent colour.
   detectedColor: string | null;
+  // Read from the merchant's live storefront (storePalette.server.ts) — the only universally
+  // available source for what their store actually looks like, and the thing that lets a
+  // suggestion "match the store" instead of being derived from the shop name alone.
+  // All null when the storefront could not be read, or had nothing conclusive in it; the
+  // prompt then says so rather than letting the model invent a brand it was never shown.
+  storeAccent?: string | null;
+  storeBackground?: string | null;
+  storeIsDark?: boolean;
 }
 
 export interface AiBrandSuggestionResult {

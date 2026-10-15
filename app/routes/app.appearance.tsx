@@ -14,6 +14,7 @@ import { authenticateAdminDeduped } from "../services/auth-dedupe.server";
 import { getOrCreateStore } from "../services/store.server";
 import { appearanceService, type AppearanceRecord } from "../services/appearance.server";
 import { appearancePresets, type AppearancePresetDefinition } from "../services/appearance.presets";
+import { appearanceThemes } from "../services/appearance.themes";
 import { generateAiBrandSuggestion, type BrandSuggestion } from "../services/brandSuggestion.server";
 import { emailTemplateService } from "../services/emailTemplate.server";
 import { assertPermission, getStorePermissions } from "../services/permissions";
@@ -153,11 +154,17 @@ export const action = async ({ request }: ActionFunctionArgs): Promise<ActionDat
       // widget editing.
       assertPermission(permissions, "canUseBrandStudio", "AI brand suggestions require the Pro plan.", "growth");
 
-      // Sent by the client rather than re-fetched here — the loader already fetched Brand
-      // Match once for the page; re-querying Shopify's Brand API on every suggestion click
-      // would be a duplicate GraphQL request for data the client already has.
+      // There is no Shopify Brand API to query (no `Shop.brand`, no brand query — confirmed
+      // against the schema), and this field was never actually populated by the client. The
+      // real context now comes from two honest sources: whatever accent the merchant has
+      // already configured here, and their live storefront's own palette, which
+      // generateAiBrandSuggestion reads from the domain below.
       const detectedColor = String(formData.get("detectedColor") || "").trim() || null;
-      const suggestion = await generateAiBrandSuggestion({ shopName: store.name, detectedColor });
+      const suggestion = await generateAiBrandSuggestion({
+        shopName: store.name,
+        detectedColor,
+        shopDomain: session.shop,
+      });
       return { ok: true, intent: "aiSuggestBrand", suggestion };
     }
 
@@ -312,7 +319,7 @@ function PresetSwatch({
   tokens,
   accentColor,
 }: {
-  tokens: AppearancePresetDefinition["tokens"];
+  tokens: Partial<AppearanceTokens> | null;
   accentColor: string;
 }) {
   // "Custom" carries no tokens — it stands for whatever the merchant already has, so it
@@ -322,6 +329,15 @@ function PresetSwatch({
   const borderWidth = boxed ? (tokens?.borders?.width ?? 1) : 0;
   const buttonStyle = tokens?.buttons?.style ?? "solid";
 
+  // A pre-built THEME carries its own palette, so its swatch must show that palette rather
+  // than the merchant's current one — otherwise every theme card looks identical and the
+  // gallery tells the merchant nothing. A structural preset carries no colours, so its
+  // swatch correctly keeps showing the merchant's live accent.
+  const themed = tokens?.colors;
+  const stars = themed?.starColor ?? accentColor;
+  const surface = themed?.surfaceColor;
+  const ink = themed?.textColor ?? undefined;
+
   return (
     <span
       aria-hidden="true"
@@ -330,17 +346,26 @@ function PresetSwatch({
         borderRadius: `${radius}px`,
         borderWidth: `${borderWidth}px`,
         boxShadow: SWATCH_SHADOW[tokens?.cards?.shadowIntensity ?? "none"] ?? "none",
+        ...(surface ? { background: surface } : null),
+        ...(themed?.borderColor ? { borderColor: themed.borderColor } : null),
       }}
     >
-      <span className={styles.swatchStars} style={{ color: accentColor }}>
-        &#9733;&#9733;&#9733;&#9733;&#9733;
+      <span className={styles.swatchStars} style={{ color: stars }}>
+        &#9733;&#9733;&#9733;
+        <span style={{ color: themed?.starEmptyColor ?? "rgba(0, 0, 0, 0.15)" }}>&#9734;&#9734;</span>
       </span>
-      <span className={styles.swatchLine} />
-      <span className={`${styles.swatchLine} ${styles.swatchLineShort}`} />
+      <span className={styles.swatchLine} style={ink ? { background: ink, opacity: 0.22 } : undefined} />
+      <span
+        className={`${styles.swatchLine} ${styles.swatchLineShort}`}
+        style={ink ? { background: ink, opacity: 0.22 } : undefined}
+      />
       <span
         className={styles.swatchButton}
         data-button-style={buttonStyle}
-        style={{ borderRadius: `${Math.min(radius, 12)}px` }}
+        style={{
+          borderRadius: `${Math.min(radius, 12)}px`,
+          ...(ink ? { borderColor: ink, ...(buttonStyle === "solid" ? { background: ink } : null) } : null),
+        }}
       />
     </span>
   );
@@ -594,6 +619,19 @@ export default function AppearancePage() {
   // corners, borders, buttons, card treatment) — never `colors`, so switching styles never
   // overwrites the merchant's own Accent Color. mergeAppearanceTokens's second argument
   // (base) is the current draft, not the documented defaults, for exactly that reason.
+  // Both galleries apply a look the same way; they differ only in what the look contains.
+  // A theme carries a palette, a Widget Style preset deliberately does not — see
+  // appearance.themes.ts's header for why that distinction is kept.
+  const applyLook = (id: AppearancePreset, tokens: Partial<AppearanceTokens> | null) => {
+    setPreset(id);
+    // A look is a GLOBAL change, so show it across every surface rather than leaving the
+    // preview pinned to whichever single surface was last inspected.
+    setPreviewScope("global");
+    if (tokens) {
+      setDraftTokens((current) => mergeAppearanceTokens(tokens, current));
+    }
+  };
+
   const handlePresetSelect = (definition: AppearancePresetDefinition) => {
     setPreset(definition.id);
     if (definition.tokens) {
@@ -744,29 +782,22 @@ export default function AppearancePage() {
               <GroupLabel>Start here</GroupLabel>
 
               <Section
-                title="Pick a style"
-                description="Each one sets corners, spacing, borders and buttons together. Preview updates instantly — nothing is live until you apply."
+                title="Pick a theme"
+                description="A complete look — colours, corners, spacing and buttons together. Your logo is kept. Preview updates instantly; nothing is live until you apply."
               >
                 <div className={styles.presetGrid}>
-                  {appearancePresets.map((definition) =>
-                    definition.available ? (
-                      <button
-                        key={definition.id}
-                        type="button"
-                        className={`${styles.presetCard} ${preset === definition.id ? styles.presetCardActive : ""}`}
-                        onClick={() => handlePresetSelect(definition)}
-                      >
-                        <PresetSwatch tokens={definition.tokens} accentColor={toDisplayHex(draftTokens.colors.starColor)} />
-                        <span className={styles.presetCardLabel}>{definition.label}</span>
-                        <span className={styles.presetCardDescription}>{definition.description}</span>
-                      </button>
-                    ) : (
-                      <span key={definition.id} className={`${styles.presetCard} ${styles.presetCardDisabled}`}>
-                        <span className={styles.presetCardLabel}>{definition.label}</span>
-                        <span className={styles.comingSoonTag}>Soon</span>
-                      </span>
-                    ),
-                  )}
+                  {appearanceThemes.map((theme) => (
+                    <button
+                      key={theme.id}
+                      type="button"
+                      className={`${styles.presetCard} ${preset === theme.id ? styles.presetCardActive : ""}`}
+                      onClick={() => applyLook(theme.id, theme.tokens)}
+                    >
+                      <PresetSwatch tokens={theme.tokens} accentColor={toDisplayHex(draftTokens.colors.starColor)} />
+                      <span className={styles.presetCardLabel}>{theme.label}</span>
+                      <span className={styles.presetCardDescription}>{theme.description}</span>
+                    </button>
+                  ))}
                 </div>
 
                 <div className={styles.quickAccentRow}>
@@ -906,6 +937,33 @@ export default function AppearancePage() {
               )}
 
               <GroupLabel>Style</GroupLabel>
+
+              <Section
+                title="Widget Style"
+                description="Layout only — corners, spacing, borders and buttons. Your colours are left exactly as they are."
+              >
+                <div className={styles.presetGrid}>
+                  {appearancePresets.map((definition) =>
+                    definition.available ? (
+                      <button
+                        key={definition.id}
+                        type="button"
+                        className={`${styles.presetCard} ${preset === definition.id ? styles.presetCardActive : ""}`}
+                        onClick={() => handlePresetSelect(definition)}
+                      >
+                        <PresetSwatch tokens={definition.tokens} accentColor={toDisplayHex(draftTokens.colors.starColor)} />
+                        <span className={styles.presetCardLabel}>{definition.label}</span>
+                        <span className={styles.presetCardDescription}>{definition.description}</span>
+                      </button>
+                    ) : (
+                      <span key={definition.id} className={`${styles.presetCard} ${styles.presetCardDisabled}`}>
+                        <span className={styles.presetCardLabel}>{definition.label}</span>
+                        <span className={styles.comingSoonTag}>Soon</span>
+                      </span>
+                    ),
+                  )}
+                </div>
+              </Section>
 
               <Section title="Button Style" description="How buttons appear across your reviews.">
                 <Select

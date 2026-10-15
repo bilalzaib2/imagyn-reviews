@@ -11,6 +11,18 @@ let suggestion: FakeSuggestion;
 
 const generateBrandSuggestion = vi.fn(async () => suggestion);
 
+let palette: { accent: string | null; background: string | null; candidates: string[] } | null = null;
+const getStorePaletteMock = vi.fn(async () => palette);
+vi.mock("./storePalette.server", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("./storePalette.server")>();
+  return {
+    ...actual,
+    // Never reach the network in a unit test; isDarkBackground stays real so the dark-store
+    // signal is exercised rather than stubbed.
+    getStorePalette: () => getStorePaletteMock(),
+  };
+});
+
 vi.mock("./ai/provider.server", () => ({
   getAiProvider: () => ({
     name: "fake-provider",
@@ -22,6 +34,9 @@ vi.mock("./ai/provider.server", () => ({
 const { generateAiBrandSuggestion } = await import("./brandSuggestion.server");
 
 beforeEach(() => {
+  generateBrandSuggestion.mockClear();
+  getStorePaletteMock.mockClear();
+  palette = null;
   suggestion = {
     starColor: "#2B2B2B",
     typography: { scale: 1.05, letterSpacing: "tight" },
@@ -33,18 +48,16 @@ beforeEach(() => {
 describe("generateAiBrandSuggestion", () => {
   it("passes shop name and detected color through to the provider", async () => {
     await generateAiBrandSuggestion({ shopName: "Verve Studio", detectedColor: "#123456" });
-    expect(generateBrandSuggestion).toHaveBeenCalledWith({
-      shopName: "Verve Studio",
-      detectedColor: "#123456",
-    });
+    expect(generateBrandSuggestion).toHaveBeenCalledWith(
+      expect.objectContaining({ shopName: "Verve Studio", detectedColor: "#123456" }),
+    );
   });
 
   it("passes a null detectedColor through unchanged when Brand Match found nothing", async () => {
     await generateAiBrandSuggestion({ shopName: "Verve Studio", detectedColor: null });
-    expect(generateBrandSuggestion).toHaveBeenCalledWith({
-      shopName: "Verve Studio",
-      detectedColor: null,
-    });
+    expect(generateBrandSuggestion).toHaveBeenCalledWith(
+      expect.objectContaining({ shopName: "Verve Studio", detectedColor: null }),
+    );
   });
 
   it("returns the provider's result with the provider name attached", async () => {
@@ -107,5 +120,56 @@ describe("star color legibility guard", () => {
 
     expect(result.starColor).toBe("#2B2B2B");
     expect(result.rationale).toBe("A restrained neutral.");
+  });
+});
+
+// The whole point of the feature: a suggestion should be informed by what the merchant's
+// store actually looks like, not by their shop name alone.
+describe("store context", () => {
+  it("reads the live storefront palette and passes it to the model", async () => {
+    palette = { accent: "#2453d3", background: "#f6f6f8", candidates: ["#2453d3"] };
+    await generateAiBrandSuggestion({
+      shopName: "Grace Store",
+      detectedColor: null,
+      shopDomain: "gracestoreofficial.myshopify.com",
+    });
+
+    expect(generateBrandSuggestion).toHaveBeenCalledWith(
+      expect.objectContaining({ storeAccent: "#2453d3", storeBackground: "#f6f6f8", storeIsDark: false }),
+    );
+  });
+
+  it("tells the model when the store is dark, so the accent can stay bright", async () => {
+    palette = { accent: "#f5b544", background: "#101014", candidates: ["#f5b544"] };
+    await generateAiBrandSuggestion({ shopName: "Dark Co", detectedColor: null, shopDomain: "dark.myshopify.com" });
+
+    expect(generateBrandSuggestion).toHaveBeenCalledWith(expect.objectContaining({ storeIsDark: true }));
+  });
+
+  it("does not invent a palette when the storefront could not be read", async () => {
+    palette = null;
+    await generateAiBrandSuggestion({ shopName: "Quiet Co", detectedColor: null, shopDomain: "quiet.myshopify.com" });
+
+    expect(generateBrandSuggestion).toHaveBeenCalledWith(
+      expect.objectContaining({ storeAccent: null, storeBackground: null, storeIsDark: false }),
+    );
+  });
+
+  it("skips the storefront read entirely when no domain is known", async () => {
+    await generateAiBrandSuggestion({ shopName: "No Domain", detectedColor: null });
+
+    expect(getStorePaletteMock).not.toHaveBeenCalled();
+  });
+
+  it("still returns a suggestion when the storefront read fails", async () => {
+    palette = null;
+    const result = await generateAiBrandSuggestion({
+      shopName: "Quiet Co",
+      detectedColor: null,
+      shopDomain: "quiet.myshopify.com",
+    });
+
+    expect(result.starColor).toBe("#2B2B2B");
+    expect(result.provider).toBe("fake-provider");
   });
 });

@@ -35,7 +35,21 @@
 // rather than a parallel, disconnected mechanism — a source-of-truth redirect, not a
 // deletion, and out of scope for this pass ("do not redesign existing widgets").
 
-export type AppearancePreset = "minimal" | "modern" | "editorial" | "luxury" | "custom";
+// Widget Style presets (appearance.presets.ts) plus the pre-built themes
+// (appearance.themes.ts). Both are persisted in Appearance.preset, which is a plain String
+// column — adding an id here is a compile-time change only, never a migration.
+export type AppearancePreset =
+  | "minimal"
+  | "modern"
+  | "editorial"
+  | "luxury"
+  | "custom"
+  // Pre-built themes — complete looks, palette included.
+  | "amber"
+  | "ink"
+  | "midnight"
+  | "forest"
+  | "rose";
 
 // Global Brand inheritance — every customer-facing surface this app renders, each a real,
 // independently-fetched backend call (see each key's own consumer below). A surface with no

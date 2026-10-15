@@ -137,15 +137,36 @@ export function buildBrandSuggestionSystemPrompt(): string {
     "refine it, not replace it with something unrelated. Do not invent facts about the " +
     "merchant or their products; base the suggestion only on the shop name and brand color " +
     "provided. " +
+    "When a brand colour read from their live storefront is given, that is what their store " +
+    "actually looks like to shoppers: your accent should visibly belong beside it — the same " +
+    "colour, or a more readable relative of it with the hue kept. Only depart from it if it " +
+    "would make the rating unreadable. When their storefront is dark, pick an accent that " +
+    "stays bright against a dark card. When no storefront colour could be read, say so in " +
+    "the rationale rather than implying you matched a brand you never saw. " +
     BRAND_SUGGESTION_JSON_SHAPE
   );
 }
 
 export function buildBrandSuggestionUserPrompt(request: AiBrandSuggestionRequest): string {
-  return (
-    `Shop name: ${request.shopName}\n` +
-    `Detected brand color: ${request.detectedColor ?? "none — no brand color configured in Shopify"}`
-  );
+  const lines = [
+    `Shop name: ${request.shopName}`,
+    `Their current accent colour in this app: ${request.detectedColor ?? "not set yet"}`,
+  ];
+
+  // Only state what was actually observed. Saying "none found" is honest and useful; saying
+  // nothing at all invites the model to assume a palette it was never given.
+  if (request.storeAccent) {
+    lines.push(`Brand colour read from their live storefront: ${request.storeAccent}`);
+  } else {
+    lines.push("Brand colour read from their live storefront: none could be read");
+  }
+  if (request.storeBackground) {
+    lines.push(
+      `Their storefront background: ${request.storeBackground} (${request.storeIsDark ? "a DARK store" : "a light store"})`,
+    );
+  }
+
+  return lines.join("\n");
 }
 
 const HEX_COLOR_PATTERN = /^#[0-9a-fA-F]{6}$/;
