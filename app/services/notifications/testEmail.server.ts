@@ -2,6 +2,7 @@ import { getEmailProvider } from "./provider.server";
 import { buildReviewRequestEmail } from "./templates.server";
 import { emailTemplateService } from "../emailTemplate.server";
 import type { EmailTemplateContent, EmailTemplateType } from "../email.shared";
+import type { SenderIdentity } from "../emailSenderIdentity.shared";
 
 // Sends a real email using sample data, so a merchant can verify Resend is configured
 // correctly (API key, verified sender) and see exactly what a customer receives — before any
@@ -17,6 +18,12 @@ export interface TestEmailOptions {
    *  plan-sanitized and HTML-sanitized by the caller (app.email-studio.tsx's action); the
    *  render path in templates.server.tsx sanitizes custom HTML again regardless. */
   draft?: EmailTemplateContent;
+  /** The resolved sender identity, so a test send shows the same From name and Reply-To a
+   *  real customer send would. Supplied by the caller, which already has the store and its
+   *  entitlements — resolving it here would mean a database read inside the send path for a
+   *  value the caller is holding. Omitted falls back to the store name, which is exactly
+   *  what this function did before branded senders existed. */
+  senderIdentity?: SenderIdentity;
 }
 
 export async function sendTestReviewRequestEmail(
@@ -41,6 +48,12 @@ export async function sendTestReviewRequestEmail(
     template,
   });
 
+  // Resolved by the caller through the same function the real sends use, so this stays an
+  // honest preview of the From header rather than drifting from it. A test send showing a
+  // different sender than the real one would be worse than no test at all — it is the only
+  // way a merchant can confirm their branded sender name before a customer sees it.
+  const senderIdentity = options.senderIdentity;
+
   return getEmailProvider().sendEmail({
     to,
     // Prefixed so a test landing in a shared inbox is never mistaken for a real customer
@@ -48,9 +61,7 @@ export async function sendTestReviewRequestEmail(
     subject: `[Test] ${subject}`,
     html,
     text,
-    // Matches dispatchRequestEmail/dispatchReminderEmail's sender identity exactly, so this
-    // "here's exactly what your customers will see" test send is honest about the From header
-    // too, not just the body content.
-    fromName: storeName,
+    fromName: senderIdentity?.displayName ?? storeName,
+    ...(senderIdentity?.replyTo ? { replyTo: senderIdentity.replyTo } : {}),
   });
 }

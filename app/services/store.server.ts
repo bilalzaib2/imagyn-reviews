@@ -345,3 +345,24 @@ export async function deleteStore(id: string) {
     },
   });
 }
+
+/**
+ * Branded Email Sender Identity — the display name customers see for review requests and
+ * reminders (Pro; see emailSenderIdentity.server.ts).
+ *
+ * Stores only the display name. There is no merchant From address to persist: that stays on
+ * the platform's verified sending domain for every plan.
+ *
+ * Entitlement is deliberately NOT checked here. This is the persistence layer, and the
+ * enforcement that matters happens where the value is used — resolveSenderIdentity ignores a
+ * saved name for an unentitled store at send time. Keeping the write unconditional is what
+ * lets a downgraded merchant's configuration survive for a later upgrade instead of being
+ * erased; the route still refuses the write for a Free store so the UI cannot be used to set
+ * one in the first place.
+ */
+export async function updateEmailSenderName(id: string, emailSenderName: string | null) {
+  return prisma.store.update({
+    where: { id },
+    data: { emailSenderName },
+  });
+}

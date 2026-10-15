@@ -59,6 +59,13 @@ export interface Permissions {
   canUseMultipleWidgetThemes: boolean;
   canUseWhiteLabel: boolean;
 
+  /** Sending customer emails under the merchant's own brand name rather than their raw
+   *  Shopify store name. The From ADDRESS is unaffected — it stays on the platform's
+   *  verified domain in every plan (see emailSenderIdentity.server.ts for why); this gates
+   *  the display name shown in the inbox, which is the part that is actually deliverable
+   *  without per-merchant domain verification. Distinct from canUseCustomEmailDomain, which
+   *  is the (still unimplemented) real custom-domain capability. */
+  canUseBrandedEmailSender: boolean;
   canUseCustomEmailDomain: boolean;
   canUseSMTP: boolean;
   canUseAPI: boolean;
@@ -118,6 +125,7 @@ const STARTER: Permissions = {
   canUseBrandStudio: false,
   canUseMultipleWidgetThemes: false,
   canUseWhiteLabel: false,
+  canUseBrandedEmailSender: false,
   canUseCustomEmailDomain: false,
   canUseSMTP: false,
   canUseAPI: false,
@@ -148,6 +156,7 @@ const SCALE: Permissions = {
   // pricing surface until then.
   canUseVideoReviews: true,
   canUseWhiteLabel: true,
+  canUseBrandedEmailSender: true,
   canUseCustomEmailDomain: true,
   canUseSMTP: true,
   canUseAPI: true,
@@ -173,6 +182,7 @@ const OWNER: Permissions = {
   canUseBrandStudio: true,
   canUseMultipleWidgetThemes: true,
   canUseWhiteLabel: true,
+  canUseBrandedEmailSender: true,
   canUseCustomEmailDomain: true,
   canUseSMTP: true,
   canUseAPI: true,

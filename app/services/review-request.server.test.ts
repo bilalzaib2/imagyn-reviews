@@ -323,6 +323,15 @@ vi.mock("./notifications/provider.server", () => ({
   }),
 }));
 
+// dispatchRequestEmail/dispatchReminderEmail now resolve the sender identity, which needs
+// the store's entitlements. Mocked rather than modelled in the fake Prisma client: this file
+// is about scheduling and eligibility, and the branded-sender behaviour has its own tests in
+// emailSenderIdentity.server.test.ts.
+const brandedSenderEntitled = false;
+vi.mock("./permissions", () => ({
+  getStorePermissions: vi.fn(async () => ({ canUseBrandedEmailSender: brandedSenderEntitled })),
+}));
+
 process.env.SHOPIFY_API_SECRET ||= "test-secret-for-unsubscribe-hmac";
 
 const { reviewRequestService, dispatchRequestEmail, dispatchReminderEmail, RequestNotEligibleError } = await import(

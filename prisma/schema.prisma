@@ -131,6 +131,17 @@ model Store {
   newReviewNotifyEnabled Boolean @default(false)
   newReviewNotifyEmail   String?
 
+  // Branded Email Sender Identity (Pro — permissions.ts's canUseBrandedEmailSender).
+  // The display name customers see in their inbox for review requests and reminders.
+  // null = use the real Shopify store name, which is exactly what every store does today,
+  // so this column changing nothing for existing stores is the point of it being nullable
+  // rather than backfilled.
+  //
+  // Only the DISPLAY NAME. The From address is never merchant-controlled: it stays on the
+  // platform's verified Resend domain, because sending as an unverified merchant address
+  // is spoofing and would fail SPF/DKIM. See emailSenderIdentity.server.ts.
+  emailSenderName String?
+
   // Public IMAGYN Reviews Network participation (see publicDiscovery.server.ts, which is
   // the single place every public/consumer read is filtered). When false, this store and
   // all of its reviews and products disappear from every public discovery surface — the

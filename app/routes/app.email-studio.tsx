@@ -11,8 +11,14 @@ import { ContextualSaveBar } from "../components/ui/ContextualSaveBar";
 import { Section } from "../components/ui/Section";
 import { SettingsBreadcrumb } from "../components/ui/SettingsBreadcrumb";
 import { authenticateAdminDeduped } from "../services/auth-dedupe.server";
-import { getOrCreateStore } from "../services/store.server";
+import { getOrCreateStore, updateEmailSenderName } from "../services/store.server";
 import { getStorePermissions } from "../services/permissions";
+import { resolveSenderIdentity } from "../services/emailSenderIdentity.server";
+import {
+  MAX_SENDER_NAME_LENGTH,
+  sanitizeSenderName,
+  type SenderIdentity,
+} from "../services/emailSenderIdentity.shared";
 import { emailTemplateService } from "../services/emailTemplate.server";
 import { buildReviewRequestEmail } from "../services/notifications/templates.server";
 import { sendTestReviewRequestEmail } from "../services/notifications/testEmail.server";
@@ -88,10 +94,17 @@ type LoaderData = {
   canUseCustomBranding: boolean;
   /** Does NOT gate editing. Drives the "Sending requires Pro" note on the reminder tabs. */
   canUseEmailReminders: boolean;
+  /** Branded Email Sender Identity — Pro. Gates saving a custom sender display name. */
+  canUseBrandedEmailSender: boolean;
+  /** The saved value, shown even to a downgraded store so their configuration is visible. */
+  emailSenderName: string | null;
+  /** What will actually be sent, entitlement already applied. */
+  senderIdentity: SenderIdentity;
 };
 
 type ActionData =
   | { ok: true; intent: "save" }
+  | { ok: true; intent: "save-sender-identity"; emailSenderName: string | null; senderIdentity: SenderIdentity }
   | { ok: true; intent: "reset"; content: EmailTemplateContent }
   | { ok: true; intent: "preview"; html: string }
   | { ok: true; intent: "upload-logo"; slot: LogoSlot; url: string }
@@ -222,12 +235,20 @@ export const loader = async ({ request }: LoaderFunctionArgs): Promise<LoaderDat
   // requested type actually exists.
   const type: EmailTemplateType = isEmailTemplateType(requested) ? requested : "review_request";
 
+  const content = await emailTemplateService.getActiveContent(store.id, type);
+
   return {
     type,
-    content: await emailTemplateService.getActiveContent(store.id, type),
+    content,
     storeName: store.name,
     canUseCustomBranding: permissions.canUseCustomBranding,
     canUseEmailReminders: permissions.canUseEmailReminders,
+    canUseBrandedEmailSender: permissions.canUseBrandedEmailSender,
+    // The raw saved value, so a downgraded merchant still sees what they configured and can
+    // tell it apart from never having set one. What will ACTUALLY be sent is senderIdentity
+    // below, which applies the entitlement.
+    emailSenderName: store.emailSenderName,
+    senderIdentity: resolveSenderIdentity(store, permissions, content.replyToEmail),
   };
 };
 
@@ -241,6 +262,48 @@ export const action = async ({ request }: ActionFunctionArgs): Promise<ActionDat
 
   try {
     const permissions = await getStorePermissions(store.id);
+
+    // ---- Branded Email Sender Identity (Pro) -----------------------------------------
+    // The entitlement is enforced HERE, on the server, before anything is written. Hiding
+    // the field in the UI is a courtesy; this is what stops a Free store setting a branded
+    // sender with a direct POST. resolveSenderIdentity enforces it a second time at send
+    // time, so even a value saved during a Pro period stops applying after a downgrade.
+    if (intent === "save-sender-identity") {
+      if (!permissions.canUseBrandedEmailSender) {
+        return {
+          ok: false,
+          intent,
+          error: "A custom sender name requires the Pro plan.",
+        };
+      }
+
+      const raw = String(formData.get("emailSenderName") || "");
+      // Sanitised, not merely validated: this value ends up inside a mail header, so what
+      // gets persisted is already free of CR/LF and the quoting characters.
+      const sanitized = sanitizeSenderName(raw);
+
+      if (raw.trim().length > 0 && sanitized === null) {
+        return {
+          ok: false,
+          intent,
+          error: "That sender name has no usable characters. Use your brand name as customers know it.",
+        };
+      }
+
+      await updateEmailSenderName(store.id, sanitized);
+
+      const content = await emailTemplateService.getActiveContent(store.id, type);
+      return {
+        ok: true,
+        intent,
+        emailSenderName: sanitized,
+        senderIdentity: resolveSenderIdentity(
+          { name: store.name, emailSenderName: sanitized },
+          permissions,
+          content.replyToEmail,
+        ),
+      };
+    }
 
     // ---- Logo: SVG validation step -------------------------------------------------
     // Email clients do not render SVG, so an SVG logo can never be the asset the email
@@ -340,9 +403,13 @@ export const action = async ({ request }: ActionFunctionArgs): Promise<ActionDat
       // looking at is the only behaviour that is actually useful here. Plan rules still
       // apply, so a Free store's test email carries the attribution footer exactly as a real
       // send would.
+      const sanitizedDraft = sanitizeEmailTemplateContentForPlan(content, permissions);
       await sendTestReviewRequestEmail(to, store.id, store.name, {
         type,
-        draft: sanitizeEmailTemplateContentForPlan(content, permissions),
+        draft: sanitizedDraft,
+        // Same sender the real send would use, so this test is a true preview of the From
+        // header and not just the body.
+        senderIdentity: resolveSenderIdentity(store, permissions, sanitizedDraft.replyToEmail),
       });
 
       return { ok: true, intent: "send-test", to };
@@ -490,6 +557,9 @@ export default function EmailStudioPage() {
     storeName,
     canUseCustomBranding,
     canUseEmailReminders,
+    canUseBrandedEmailSender,
+    emailSenderName,
+    senderIdentity,
   } = useLoaderData<typeof loader>();
 
   const saveFetcher = useFetcher<ActionData>();
@@ -498,6 +568,7 @@ export default function EmailStudioPage() {
   const uploadFetcher = useFetcher<ActionData>();
   const testFetcher = useFetcher<ActionData>();
   const duplicateFetcher = useFetcher<ActionData>();
+  const senderFetcher = useFetcher<ActionData>();
 
   const [draft, setDraft] = useState<EmailTemplateContent>(initialContent);
   const [previewMode, setPreviewMode] = useState<PreviewMode>("desktop");
@@ -738,6 +809,34 @@ export default function EmailStudioPage() {
     setDraft((current) => ({ ...current, [field]: `${current[field]}${current[field] ? " " : ""}${token}` }));
   };
 
+  const [senderNameDraft, setSenderNameDraft] = useState(emailSenderName ?? "");
+  // The identity the server last confirmed. Held in state rather than read straight from the
+  // loader so the inbox preview updates the moment a save succeeds, without a full reload.
+  const [savedIdentity, setSavedIdentity] = useState(senderIdentity);
+  const [senderError, setSenderError] = useState<string | null>(null);
+  const isSavingSender = senderFetcher.state !== "idle";
+
+  useEffect(() => {
+    const data = senderFetcher.data;
+    if (!data) return;
+    if (!data.ok) {
+      if (data.intent === "save-sender-identity") setSenderError(data.error);
+      return;
+    }
+    if (data.intent === "save-sender-identity") {
+      setSenderError(null);
+      setSenderNameDraft(data.emailSenderName ?? "");
+      setSavedIdentity(data.senderIdentity);
+    }
+  }, [senderFetcher.data]);
+
+  const senderNameDirty = (emailSenderName ?? "") !== senderNameDraft;
+
+  // What the inbox will show once saved — the typed name while editing, falling back to the
+  // real store name exactly as resolveSenderIdentity would.
+  const previewSenderName =
+    canUseBrandedEmailSender && senderNameDraft.trim().length > 0 ? senderNameDraft.trim() : storeName;
+
   const submitIntent = (fetcher: ReturnType<typeof useFetcher<ActionData>>, intent: string, extra: Record<string, string> = {}) => {
     fetcher.submit(toFormData({ _intent: intent, ...extra }), { method: "post" });
   };
@@ -834,8 +933,9 @@ export default function EmailStudioPage() {
                     disabled={isBusy}
                   />
                   <p className={styles.fieldHint}>
-                    Where customer replies land. The sender name and address stay as they are — changing those needs a
-                    verified sending domain, which this app doesn&apos;t support yet.
+                    Where customer replies land, for this template. The sender ADDRESS stays on our verified domain —
+                    changing that needs your own domain verified, which this app doesn&apos;t support yet. The sender
+                    NAME is set under Sender identity.
                   </p>
                 </div>
               </Section>
@@ -993,9 +1093,112 @@ export default function EmailStudioPage() {
                 </>
               )}
 
-              <Section title="Branding" description="Logo, store name, and sender identity.">
+              {/* Sender identity — who the email comes FROM, as distinct from the Branding
+                  section below, which is what the email looks like once opened. */}
+              <Section
+                title="Sender identity"
+                description="Who this email appears to come from in your customer's inbox."
+              >
+                <div className={styles.fieldGroup}>
+                  <div className={styles.poweredByRow}>
+                    <label className={styles.fieldLabel} htmlFor="emailSenderName">
+                      Sender name
+                    </label>
+                    {!canUseBrandedEmailSender ? <span className={styles.lockedTag}>Pro</span> : null}
+                  </div>
+                  <input
+                    id="emailSenderName"
+                    className={styles.textInput}
+                    value={senderNameDraft}
+                    maxLength={MAX_SENDER_NAME_LENGTH}
+                    onChange={(event) => setSenderNameDraft(event.target.value)}
+                    placeholder={storeName}
+                    disabled={isSavingSender || !canUseBrandedEmailSender}
+                  />
+                  <p className={styles.fieldHint}>
+                    {canUseBrandedEmailSender
+                      ? `The name customers see in their inbox. Leave empty to use your store name (${storeName}).`
+                      : `On the Free plan emails are sent as your store name (${storeName}). Pro lets you use your brand name instead.`}
+                  </p>
+                  {senderError ? <p className={styles.fieldError}>{senderError}</p> : null}
+                </div>
+
+                {/* Stated plainly rather than implied. A merchant who expects their own
+                    address here should find out now, not after a deliverability problem. */}
+                <div className={styles.fieldGroup}>
+                  <span className={styles.fieldLabel}>From address</span>
+                  <p className={styles.senderIdentityNote}>
+                    {savedIdentity.fromAddressConfigured ? (
+                      <>
+                        <strong>{savedIdentity.fromAddress}</strong> — verified sending domain.
+                      </>
+                    ) : (
+                      <>No verified sending address is configured. Review emails cannot be sent until one is.</>
+                    )}
+                  </p>
+                  <p className={styles.fieldHint}>
+                    This address is shared and always verified, which is what keeps your emails out of spam. Sending
+                    from your own domain would need that domain verified first, which this app doesn&apos;t support
+                    yet — so replies are the supported way to reach your own inbox.
+                  </p>
+                </div>
+
+                <div className={styles.fieldGroup}>
+                  <span className={styles.fieldLabel}>Reply-to</span>
+                  <p className={styles.senderIdentityNote}>
+                    {savedIdentity.replyTo ? (
+                      <strong>{savedIdentity.replyTo}</strong>
+                    ) : (
+                      <>Not set — replies go to the shared address above.</>
+                    )}
+                  </p>
+                  <p className={styles.fieldHint}>Set this per template under Delivery.</p>
+                </div>
+
+                {/* A realistic inbox row, so the merchant sees the combination rather than
+                    three separate fields they have to assemble in their head. */}
+                <div className={styles.fieldGroup}>
+                  <span className={styles.fieldLabel}>How it appears in the inbox</span>
+                  <div className={styles.inboxPreview}>
+                    {draft.logoUrl ? (
+                      <img className={styles.inboxPreviewAvatar} src={draft.logoUrl} alt="" />
+                    ) : (
+                      <span className={styles.inboxPreviewAvatar} aria-hidden="true">
+                        {previewSenderName.trim().charAt(0).toUpperCase() || "S"}
+                      </span>
+                    )}
+                    <span className={styles.inboxPreviewBody}>
+                      <span className={styles.inboxPreviewSender}>{previewSenderName}</span>
+                      <span className={styles.inboxPreviewSubject}>
+                        {draft.subject.replace(/\{\{\s*store_name\s*\}\}/g, previewSenderName) || "(no subject)"}
+                      </span>
+                      <span className={styles.inboxPreviewSnippet}>
+                        {draft.previewText || draft.subject || ""}
+                      </span>
+                    </span>
+                  </div>
+                </div>
+
+                {canUseBrandedEmailSender ? (
+                  <div className={styles.actionsRow}>
+                    <Button
+                      type="button"
+                      variant="primary"
+                      onClick={() =>
+                        submitIntent(senderFetcher, "save-sender-identity", { emailSenderName: senderNameDraft })
+                      }
+                      disabled={isSavingSender || !senderNameDirty}
+                    >
+                      {isSavingSender ? "Saving…" : "Save sender name"}
+                    </Button>
+                    {senderNameDirty ? <span className={styles.fieldHint}>Unsaved</span> : null}
+                  </div>
+                ) : null}
+              </Section>
+
+              <Section title="Branding" description="Logo, store name, and how the email body reads.">
                 <p className={styles.senderIdentityNote}>
-                  These change what the email looks like, not who it comes from.
+                  These change what the email looks like once opened. Who it comes from is set above.
                 </p>
 
                 <LogoField

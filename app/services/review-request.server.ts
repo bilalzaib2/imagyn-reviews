@@ -5,6 +5,8 @@ import { buildReviewRequestEmail } from "./notifications/templates.server";
 import { emailTemplateService } from "./emailTemplate.server";
 import { buildUnsubscribeUrl, emailSuppressionService } from "./emailSuppression.server";
 import { recordDataAccess } from "./auditLog.server";
+import { resolveSenderIdentity } from "./emailSenderIdentity.server";
+import { getStorePermissions } from "./permissions";
 
 // Full lifecycle: pending -> scheduled -> sending -> sent -> delivered -> opened -> clicked
 // -> completed, with failed/cancelled as terminal branches off any pre-completed state.
@@ -77,7 +79,7 @@ export interface ReviewRequestRecord {
   reminderFinalSentAt: Date | null;
   createdAt: Date;
   updatedAt: Date;
-  store: { id: string; name: string; domain: string | null };
+  store: { id: string; name: string; domain: string | null; emailSenderName: string | null };
   product: { id: string; name: string | null; featuredImage: string | null } | null;
 }
 
@@ -92,7 +94,7 @@ export interface ReviewRequestListResult {
 // (the shop's myshopify.com domain) is needed by r.$token.tsx to get an unauthenticated Admin
 // API session for photo uploads, and product.featuredImage is shown on the public review page.
 const REQUEST_INCLUDE = {
-  store: { select: { id: true, name: true, domain: true } },
+  store: { select: { id: true, name: true, domain: true, emailSenderName: true } },
   product: { select: { id: true, name: true, featuredImage: true } },
 } as const;
 
@@ -122,7 +124,7 @@ const mapRequestRecord = (request: {
   reminderFinalSentAt: Date | null;
   createdAt: Date;
   updatedAt: Date;
-  store: { id: string; name: string; domain: string | null };
+  store: { id: string; name: string; domain: string | null; emailSenderName: string | null };
   product: { id: string; name: string | null; featuredImage: string | null } | null;
 }): ReviewRequestRecord => ({
   id: request.id,
@@ -255,6 +257,15 @@ export const dispatchRequestEmail = async (request: ReviewRequestRecord): Promis
     template,
   });
 
+  // Resolved once per send rather than per retry attempt: the entitlement and the brand
+  // name cannot change between two attempts milliseconds apart, and re-reading permissions
+  // inside the retry loop would multiply the billing lookup by MAX_SEND_ATTEMPTS.
+  const senderIdentity = resolveSenderIdentity(
+    request.store,
+    await getStorePermissions(request.store.id),
+    template.replyToEmail,
+  );
+
   let lastError: unknown;
 
   for (let attempt = request.sendAttempts; attempt < MAX_SEND_ATTEMPTS; attempt += 1) {
@@ -264,13 +275,15 @@ export const dispatchRequestEmail = async (request: ReviewRequestRecord): Promis
         subject,
         html,
         text,
-        // Customer-facing send — reads as coming from the store, not Imagyn (see
-        // resend.server.ts's fromName handling).
-        fromName: request.store.name,
+        // Customer-facing send — reads as coming from the store, not Imagyn. The display
+        // name is the merchant's own brand name on Pro and their store name otherwise;
+        // resolveSenderIdentity applies that entitlement at SEND time, so a downgrade stops
+        // the branded name taking effect even for requests already scheduled.
+        fromName: senderIdentity.displayName,
         // Merchant-configured in Email Studio (email.shared.ts's replyToEmail) — a real
         // customer reply lands in an inbox the merchant actually reads. Omitted entirely when
         // not configured, same as fromName's own optionality.
-        ...(template.replyToEmail ? { replyTo: template.replyToEmail } : {}),
+        ...(senderIdentity.replyTo ? { replyTo: senderIdentity.replyTo } : {}),
         // Lets webhooks.resend.tsx correlate a delivery event back to this exact row via the
         // existing unique requestToken column — no new schema column needed for that lookup.
         tags: { request_token: request.requestToken },
@@ -362,15 +375,25 @@ export const dispatchReminderEmail = async (request: ReviewRequestRecord, remind
     template,
   });
 
+  // Same identity rules as the initial request — a reminder is still the store talking to
+  // its own customer, so it must not arrive under a different sender name than the request
+  // it is reminding about.
+  const senderIdentity = resolveSenderIdentity(
+    request.store,
+    await getStorePermissions(request.store.id),
+    template.replyToEmail,
+  );
+
   try {
     await getEmailProvider().sendEmail({
       to: request.email,
       subject,
       html,
       text,
-      // Same as dispatchRequestEmail — a reminder is still the store talking to its own
-      // customer, not Imagyn.
-      fromName: request.store.name,
+      fromName: senderIdentity.displayName,
+      // Previously omitted on reminders, so a customer replying to a reminder reached the
+      // shared platform address while a reply to the original request reached the merchant.
+      ...(senderIdentity.replyTo ? { replyTo: senderIdentity.replyTo } : {}),
       tags: { request_token: request.requestToken, email_type: reminderType },
     });
   } catch (error) {

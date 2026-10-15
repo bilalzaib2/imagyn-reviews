@@ -10,6 +10,8 @@ import { authenticateAdminDeduped } from "../services/auth-dedupe.server";
 import { getOrCreateStore, updateAutoRequestSettings, updateReminderSettings } from "../services/store.server";
 import { sendTestReviewRequestEmail } from "../services/notifications/testEmail.server";
 import { getStorePermissions } from "../services/permissions";
+import { emailTemplateService } from "../services/emailTemplate.server";
+import { resolveSenderIdentity } from "../services/emailSenderIdentity.server";
 import { ORDER_AUTOMATION_ENABLED, SHOPIFY_PROTECTED_CUSTOMER_DATA_APPROVED } from "../config/features";
 import styles from "../styles/app.management.module.css";
 
@@ -66,7 +68,11 @@ export const action = async ({ request }: ActionFunctionArgs): Promise<ActionDat
     }
 
     try {
-      await sendTestReviewRequestEmail(testEmail, store.id, store.name);
+      // Resolved the same way a real send does, so the merchant sees their actual sender.
+      const content = await emailTemplateService.getActiveContent(store.id, "review_request");
+      await sendTestReviewRequestEmail(testEmail, store.id, store.name, {
+        senderIdentity: resolveSenderIdentity(store, await getStorePermissions(store.id), content.replyToEmail),
+      });
       return { ok: true, message: `Test email sent to ${testEmail}.` };
     } catch (error) {
       return { ok: false, error: error instanceof Error ? error.message : "Unable to send test email." };
