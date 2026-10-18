@@ -145,7 +145,7 @@ vi.mock("./review-request.server", () => ({
   },
 }));
 
-const { runDueReviewRequestSweep, runDueReminderSweep, runRetentionPurgeSweep } = await import(
+const { runDueReviewRequestSweep, runDueReminderSweep, runRetentionPurgeSweep, getSchedulerStatus } = await import(
   "./reviewRequestScheduler.server"
 );
 
@@ -594,5 +594,25 @@ describe("runRetentionPurgeSweep", () => {
 
     expect(result).toEqual({ storesProcessed: 0, redacted: 0 });
     expect(purgeStaleContactInfoMock).not.toHaveBeenCalled();
+  });
+});
+
+// Observability. The scheduler previously logged only failures, so an empty log could not be
+// told apart from a loop that was never running. These assertions pin the shape operators
+// and any future status UI read.
+describe("getSchedulerStatus", () => {
+  it("reports the real sweep interval rather than a hardcoded guess", () => {
+    expect(getSchedulerStatus().intervalMinutes).toBe(5);
+  });
+
+  it("reports not-running before the scheduler is started in this process", () => {
+    // The module under test never calls startReviewRequestScheduler, so this is the honest
+    // answer — and it is what makes "running" a meaningful signal rather than always true.
+    expect(getSchedulerStatus().running).toBe(false);
+  });
+
+  it("has no last run until a sweep has actually completed", () => {
+    // Never a fabricated timestamp: a process that has not swept yet says so.
+    expect(getSchedulerStatus().lastRun).toBeNull();
   });
 });

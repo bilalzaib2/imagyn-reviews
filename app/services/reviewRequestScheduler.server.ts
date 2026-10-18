@@ -203,6 +203,41 @@ export async function runRetentionPurgeSweep(now: Date = new Date()): Promise<{ 
   return { storesProcessed: stores.length, redacted };
 }
 
+export interface SchedulerRunSummary {
+  startedAt: Date;
+  requests: { due: number; dispatched: number } | null;
+  reminders: { due: number; dispatched: number } | null;
+  retention: { storesProcessed: number; redacted: number } | null;
+  /** Which sweeps threw. Empty on a fully successful pass. */
+  errors: string[];
+}
+
+// How many consecutive do-nothing sweeps pass before a heartbeat is logged anyway, so an
+// idle but healthy scheduler still proves it is alive. 12 x 5min = hourly.
+const IDLE_TICKS_PER_HEARTBEAT = 12;
+
+let lastRun: SchedulerRunSummary | null = null;
+let idleTicks = 0;
+
+/**
+ * The last completed sweep, for operator/merchant-facing status ("last successful run").
+ *
+ * In-process and therefore reset by a deploy — which is honest: after a restart there
+ * genuinely has not been a run yet in this process, and the boot pass fills it within
+ * seconds. Nothing schedules off this value; it is observability only.
+ */
+export function getSchedulerStatus(): {
+  running: boolean;
+  intervalMinutes: number;
+  lastRun: SchedulerRunSummary | null;
+} {
+  return {
+    running: global.reviewRequestSchedulerStarted === true,
+    intervalMinutes: SWEEP_INTERVAL_MS / 60000,
+    lastRun,
+  };
+}
+
 declare global {
   // eslint-disable-next-line no-var
   var reviewRequestSchedulerStarted: boolean | undefined;
@@ -219,21 +254,78 @@ export function startReviewRequestScheduler(): void {
   }
   global.reviewRequestSchedulerStarted = true;
 
-  const runAllSweeps = () => {
-    runDueReviewRequestSweep().catch((error) => {
+  const runAllSweeps = async () => {
+    const startedAt = new Date();
+    const status: SchedulerRunSummary = {
+      startedAt,
+      requests: null,
+      reminders: null,
+      retention: null,
+      errors: [],
+    };
+
+    // Each sweep is awaited and recorded separately so one failing sweep neither hides nor
+    // aborts the other two — a retention error must not stop reminders going out.
+    try {
+      status.requests = await runDueReviewRequestSweep();
+    } catch (error) {
+      status.errors.push("requests");
       console.error("[reviewRequestScheduler] Sweep failed:", error);
-    });
-    runDueReminderSweep().catch((error) => {
+    }
+    try {
+      status.reminders = await runDueReminderSweep();
+    } catch (error) {
+      status.errors.push("reminders");
       console.error("[reviewRequestScheduler] Reminder sweep failed:", error);
-    });
-    runRetentionPurgeSweep().catch((error) => {
+    }
+    try {
+      status.retention = await runRetentionPurgeSweep();
+    } catch (error) {
+      status.errors.push("retention");
       console.error("[reviewRequestScheduler] Retention purge sweep failed:", error);
-    });
+    }
+
+    lastRun = status;
+
+    // Observability, deliberately quiet. Before this the scheduler logged only failures, so
+    // an empty log was indistinguishable from "the loop is not running at all" — there was
+    // no way for an operator to confirm the automation was alive. A line is emitted when a
+    // sweep actually did something, and otherwise only once an hour, so liveness is always
+    // provable without 288 idle lines a day. Counts only: no email address, customer name or
+    // review content ever reaches the log.
+    const didWork =
+      (status.requests?.dispatched ?? 0) > 0 ||
+      (status.reminders?.dispatched ?? 0) > 0 ||
+      (status.retention?.redacted ?? 0) > 0 ||
+      status.errors.length > 0;
+
+    idleTicks = didWork ? 0 : idleTicks + 1;
+
+    if (didWork || idleTicks >= IDLE_TICKS_PER_HEARTBEAT) {
+      if (!didWork) idleTicks = 0;
+      console.log(
+        `[reviewRequestScheduler] sweep ok in ${Date.now() - startedAt.getTime()}ms — ` +
+          `requests due=${status.requests?.due ?? 0} sent=${status.requests?.dispatched ?? 0}; ` +
+          `reminders due=${status.reminders?.due ?? 0} sent=${status.reminders?.dispatched ?? 0}; ` +
+          `retention stores=${status.retention?.storesProcessed ?? 0} redacted=${status.retention?.redacted ?? 0}` +
+          (status.errors.length ? `; FAILED: ${status.errors.join(",")}` : ""),
+      );
+    }
   };
 
-  setInterval(runAllSweeps, SWEEP_INTERVAL_MS);
+  console.log(
+    `[reviewRequestScheduler] started — sweeping every ${SWEEP_INTERVAL_MS / 60000} minutes`,
+  );
+
+  setInterval(() => {
+    void runAllSweeps();
+  }, SWEEP_INTERVAL_MS);
 
   // Also run one pass shortly after boot rather than waiting a full interval for the first
-  // pass — catches anything that became due while the process was down for a deploy.
-  setTimeout(runAllSweeps, 10_000);
+  // pass — catches anything that became due while the process was down for a deploy. Due
+  // work lives in the database, not in process memory, so a restart delays a send by at most
+  // one interval and can never lose one.
+  setTimeout(() => {
+    void runAllSweeps();
+  }, 10_000);
 }
