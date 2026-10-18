@@ -28,6 +28,10 @@ import type { Permissions } from "./permissions";
 export interface SenderIdentityStore {
   name: string;
   emailSenderName: string | null;
+  /** The store-wide Reply-To candidate. Only honoured once verified. */
+  replyToEmail?: string | null;
+  /** Proof the merchant can read that inbox. Null means the address is NOT used. */
+  replyToVerifiedAt?: Date | string | null;
 }
 
 export interface SenderIdentity {
@@ -39,6 +43,8 @@ export interface SenderIdentity {
   fromAddressConfigured: boolean;
   /** A real merchant inbox for replies, when configured. */
   replyTo: string | null;
+  /** Where replyTo came from, so the UI can explain it rather than just showing an address. */
+  replyToSource: "verified-store" | "template" | "none";
   /** True when the merchant's own brand name is what will actually be sent. */
   brandedNameActive: boolean;
   /** Why the brand name is not in effect, when it isn't. */
@@ -103,11 +109,22 @@ export function resolveSenderIdentityWith(
   const entitled = permissions.canUseBrandedEmailSender === true;
   const brandedNameActive = entitled && configured !== null;
 
+  // Reply-To precedence. A VERIFIED store address wins, because it is the only one anyone
+  // has proven they can read. An unverified store address is ignored entirely — saving an
+  // address is not verifying it, and it must never silently override a verified one. The
+  // per-template address remains the fallback so existing behaviour is unchanged for every
+  // store that has not used this feature.
+  const verifiedStoreReplyTo =
+    entitled && store.replyToVerifiedAt && store.replyToEmail?.trim() ? store.replyToEmail.trim() : null;
+  const templateReplyTo = replyTo?.trim() || null;
+  const resolvedReplyTo = verifiedStoreReplyTo ?? templateReplyTo;
+
   return {
     displayName: brandedNameActive ? configured! : store.name,
     fromAddress: fromAddress ?? "",
     fromAddressConfigured: fromAddress !== null,
-    replyTo: replyTo?.trim() || null,
+    replyTo: resolvedReplyTo,
+    replyToSource: verifiedStoreReplyTo ? "verified-store" : templateReplyTo ? "template" : "none",
     brandedNameActive,
     brandedNameBlockedReason: brandedNameActive ? null : !entitled ? "not-entitled" : "not-configured",
   };

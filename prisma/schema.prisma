@@ -154,6 +154,25 @@ model Store {
   emailLogoUrl     String?
   emailLogoDarkUrl String?
 
+  // Verified Reply-To (Pro — permissions.ts's canUseBrandedEmailSender).
+  //
+  // A merchant address that customer replies are routed to, proven by clicking a one-time
+  // link sent to that address. This verifies only that the merchant can READ the inbox; it
+  // says nothing about their sending domain, and the From address is unaffected — it stays
+  // on the platform's verified Resend domain. See emailSenderIdentity.server.ts.
+  //
+  // replyToEmail holds the candidate address from the moment it is saved; it is only
+  // honoured once replyToVerifiedAt is set. Changing the address clears the verification,
+  // so an unverified address can never inherit a previous address's verified status.
+  replyToEmail       String?
+  replyToVerifiedAt  DateTime?
+  // SHA-256 of the verification token, never the token itself — a database leak must not
+  // hand out working verification links.
+  replyToTokenHash   String?
+  replyToTokenExpiresAt DateTime?
+  // Rate limiting for resend attempts.
+  replyToTokenSentAt DateTime?
+
   // Public IMAGYN Reviews Network participation (see publicDiscovery.server.ts, which is
   // the single place every public/consumer read is filtered). When false, this store and
   // all of its reviews and products disappear from every public discovery surface — the

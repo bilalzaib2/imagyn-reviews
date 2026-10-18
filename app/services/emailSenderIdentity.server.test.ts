@@ -180,3 +180,70 @@ describe("store isolation", () => {
     expect(b.displayName).toBe("store-b");
   });
 });
+
+// Verified Reply-To precedence. The rule that matters: an address nobody has proven they
+// can read must never be used, and must never displace one that was proven.
+describe("verified store Reply-To", () => {
+  const VERIFIED = new Date("2026-10-19T12:00:00.000Z");
+
+  function storeWith(extra: Record<string, unknown>) {
+    return { name: "gracestoreofficial", emailSenderName: null, ...extra };
+  }
+
+  it("uses a verified store address in preference to the template's", () => {
+    const identity = resolveSenderIdentity(
+      storeWith({ replyToEmail: "support@grace.test", replyToVerifiedAt: VERIFIED }),
+      PRO,
+      "template@grace.test",
+    );
+
+    expect(identity.replyTo).toBe("support@grace.test");
+    expect(identity.replyToSource).toBe("verified-store");
+  });
+
+  it("ignores an UNVERIFIED store address entirely", () => {
+    // Saving is not verifying. The template address remains in effect.
+    const identity = resolveSenderIdentity(
+      storeWith({ replyToEmail: "unproven@grace.test", replyToVerifiedAt: null }),
+      PRO,
+      "template@grace.test",
+    );
+
+    expect(identity.replyTo).toBe("template@grace.test");
+    expect(identity.replyToSource).toBe("template");
+  });
+
+  it("does not fall back to an unverified store address when no template address exists", () => {
+    const identity = resolveSenderIdentity(
+      storeWith({ replyToEmail: "unproven@grace.test", replyToVerifiedAt: null }),
+      PRO,
+      null,
+    );
+
+    expect(identity.replyTo).toBeNull();
+    expect(identity.replyToSource).toBe("none");
+  });
+
+  it("does not honour a verified store address on Free — it is a Pro capability", () => {
+    const identity = resolveSenderIdentity(
+      storeWith({ replyToEmail: "support@grace.test", replyToVerifiedAt: VERIFIED }),
+      FREE,
+      "template@grace.test",
+    );
+
+    expect(identity.replyTo).toBe("template@grace.test");
+  });
+
+  it("leaves the From address untouched — this is inbox proof, not domain authentication", () => {
+    const identity = resolveSenderIdentity(
+      storeWith({ replyToEmail: "support@grace.test", replyToVerifiedAt: VERIFIED }),
+      PRO,
+    );
+
+    expect(identity.fromAddress).toBe("reviews@notifications.imagyn.co");
+  });
+
+  it("reports 'none' when nothing is configured anywhere", () => {
+    expect(resolveSenderIdentity(storeWith({}), PRO).replyToSource).toBe("none");
+  });
+});
