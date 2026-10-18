@@ -15,6 +15,8 @@
 
 import prisma from "../db.server";
 import { emailTemplateService } from "./emailTemplate.server";
+import { resolveSenderIdentity } from "./emailSenderIdentity.server";
+import { getStorePermissions } from "./permissions";
 import { buildReviewRequestEmail } from "./notifications/templates.server";
 import { getEmailProvider } from "./notifications/provider.server";
 import { createShopifyDiscount } from "./shopifyDiscount.server";
@@ -239,6 +241,21 @@ export async function evaluateAndIssueReward(input: RewardEvaluationInput): Prom
     // EmailTemplateType "reward"), not a separate hardcoded template.
     try {
       const template = await emailTemplateService.getActiveContent(input.storeId, "reward");
+      // The reward email is a customer-facing send like any other, so it gets the same
+      // sender identity and the same shared Email Branding. It previously passed the raw
+      // store name as fromName and no Reply-To at all, which meant a Pro merchant's branded
+      // sender name silently did not apply here and a reply to a reward landed on the shared
+      // platform address rather than in their inbox.
+      const store = await prisma.store.findUnique({
+        where: { id: input.storeId },
+        select: { name: true, emailSenderName: true, emailLogoUrl: true, emailLogoDarkUrl: true },
+      });
+      const senderIdentity = resolveSenderIdentity(
+        { name: store?.name ?? input.storeName, emailSenderName: store?.emailSenderName ?? null },
+        await getStorePermissions(input.storeId),
+        template.replyToEmail,
+      );
+
       const { subject, html, text } = await buildReviewRequestEmail({
         customerName: input.customerName,
         productName: input.productName,
@@ -246,6 +263,7 @@ export async function evaluateAndIssueReward(input: RewardEvaluationInput): Prom
         reviewUrl: `https://${input.storeDomain}`,
         customMessage: null,
         template,
+        branding: store,
         discountCode: code,
       });
 
@@ -254,7 +272,8 @@ export async function evaluateAndIssueReward(input: RewardEvaluationInput): Prom
         subject,
         html,
         text,
-        fromName: input.storeName,
+        fromName: senderIdentity.displayName,
+        ...(senderIdentity.replyTo ? { replyTo: senderIdentity.replyTo } : {}),
         tags: { reward_review_id: input.reviewId },
       });
     } catch (emailError) {

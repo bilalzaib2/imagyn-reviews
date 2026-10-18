@@ -72,6 +72,7 @@ export const action = async ({ request }: ActionFunctionArgs): Promise<ActionDat
       const content = await emailTemplateService.getActiveContent(store.id, "review_request");
       await sendTestReviewRequestEmail(testEmail, store.id, store.name, {
         senderIdentity: resolveSenderIdentity(store, await getStorePermissions(store.id), content.replyToEmail),
+        branding: store,
       });
       return { ok: true, message: `Test email sent to ${testEmail}.` };
     } catch (error) {

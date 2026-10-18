@@ -94,6 +94,7 @@ describe("buildReviewRequestEmail — with a saved Email Studio template", () =>
         buttonText: "Leave feedback",
         accentColor: "#ff6600",
         logoUrl: "https://example.com/merchant-logo.png",
+        logoSource: "custom" as const,
         displayName: null,
         showStoreName: true,
         showPoweredBy: true,
@@ -147,6 +148,7 @@ describe("buildReviewRequestEmail — appearance, sections and custom HTML", () 
         ...getDefaultEmailTemplateContent(),
         theme: "dark",
         logoUrl: "https://cdn.example.com/light.png",
+        logoSource: "custom" as const,
         logoDarkUrl: "https://cdn.example.com/dark.png",
       },
     });
@@ -163,6 +165,7 @@ describe("buildReviewRequestEmail — appearance, sections and custom HTML", () 
         ...getDefaultEmailTemplateContent(),
         theme: "dark",
         logoUrl: "https://cdn.example.com/light.png",
+        logoSource: "custom" as const,
         logoDarkUrl: null,
       },
     });

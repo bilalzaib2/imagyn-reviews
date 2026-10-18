@@ -366,3 +366,25 @@ export async function updateEmailSenderName(id: string, emailSenderName: string 
     data: { emailSenderName },
   });
 }
+
+/**
+ * Shared Email Branding — the store-wide logo pair inherited by every customer-facing
+ * review email template that has not explicitly overridden it (emailBranding.shared.ts).
+ *
+ * Writing both fields together, with null meaning "removed", is what makes removal
+ * propagate: a template on the shared source immediately falls back to the clean text brand
+ * header rather than holding a stale URL of its own.
+ *
+ * No entitlement check here — this is persistence. Email branding is deliberately available
+ * on every plan (only the SENDER NAME and the "Powered by" removal are Pro), so the route
+ * does not gate it either.
+ */
+export async function updateEmailBrandingLogos(
+  id: string,
+  data: { emailLogoUrl: string | null; emailLogoDarkUrl: string | null },
+) {
+  return prisma.store.update({
+    where: { id },
+    data: { emailLogoUrl: data.emailLogoUrl, emailLogoDarkUrl: data.emailLogoDarkUrl },
+  });
+}

@@ -12,6 +12,7 @@ import {
   type EmailTemplateContent,
 } from "../email.shared";
 import { sanitizeEmailHtml } from "../emailSanitize.server";
+import { resolveEmailLogo, type SharedEmailBranding } from "../emailBranding.shared";
 
 export interface ReviewRequestEmailData {
   customerName: string;
@@ -30,6 +31,12 @@ export interface ReviewRequestEmailData {
   // getDefaultEmailTemplateContent(), which reproduces this template's original hardcoded
   // copy/colors exactly, so an unconfigured store's emails are unaffected by this feature.
   template?: EmailTemplateContent;
+  // The store's shared Email Branding (Store.emailLogoUrl/emailLogoDarkUrl). Every caller
+  // that renders a real customer email passes this; omitting it simply means the template
+  // has no shared logo to inherit, which is the correct result for a store that has not set
+  // one. Resolution itself lives in emailBranding.shared.ts so the preview and the real send
+  // cannot diverge.
+  branding?: SharedEmailBranding | null;
   // Omitted by the Email Studio preview/test-email paths (sample data, no real recipient to
   // unsubscribe) — the footer link only renders when this is present. Real sends
   // (dispatchRequestEmail/dispatchReminderEmail in review-request.server.ts) always pass one.
@@ -102,6 +109,9 @@ export async function buildReviewRequestEmail(data: ReviewRequestEmailData): Pro
   // be able to ship script into a customer's inbox or into the admin preview iframe.
   const customHtml = content.customHtmlEnabled ? sanitizeEmailHtml(resolve(content.customHtml)) : null;
 
+  // One resolution, shared by the preview and the real send.
+  const resolvedLogo = resolveEmailLogo(content, data.branding ?? null);
+
   const element = (
     <ReviewRequestEmail
       previewText={previewText}
@@ -120,8 +130,8 @@ export async function buildReviewRequestEmail(data: ReviewRequestEmailData): Pro
       cornerRadius={content.cornerRadius}
       buttonStyle={content.buttonStyle}
       buttonAlign={content.buttonAlign}
-      logoUrl={content.logoUrl}
-      logoDarkUrl={content.logoDarkUrl}
+      logoUrl={resolvedLogo.logoUrl}
+      logoDarkUrl={resolvedLogo.logoDarkUrl}
       logoWidth={content.logoWidth}
       storeName={effectiveStoreName}
       showStoreName={content.showStoreName}

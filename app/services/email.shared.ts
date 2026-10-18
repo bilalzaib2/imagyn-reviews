@@ -34,6 +34,8 @@
  *  inconsistently (Gmail and Outlook both auto-invert in ways a sender cannot predict), so
  *  this picks a real, fixed palette that renders identically everywhere instead of pretending
  *  to follow the reader's OS setting. */
+export type EmailLogoSource = "shared" | "custom";
+
 export type EmailTheme = "light" | "dark";
 
 /** Email-safe stacks only — no webfonts. Email clients do not reliably load @font-face, so
@@ -167,6 +169,20 @@ export interface EmailTemplateContent {
   /** null = reuse logoUrl. A separate asset for the dark palette, since a dark-ink wordmark
    *  disappears on a dark background. */
   logoDarkUrl: string | null;
+  /** Where this template's logo comes from.
+   *
+   *  "shared"  — the store's Email Branding logo (Store.emailLogoUrl/emailLogoDarkUrl).
+   *              This is the default, and it is the whole point of the shared system: a
+   *              merchant uploads once and every template follows, with no stale copy
+   *              cached per template.
+   *  "custom"  — this template deliberately overrides the shared logo with logoUrl /
+   *              logoDarkUrl above.
+   *
+   *  MIGRATION: absent on every template saved before this field existed. normalize infers
+   *  "custom" when such a template already has a logoUrl, so an existing merchant keeps the
+   *  exact asset they uploaded instead of silently switching to a shared logo that is not
+   *  set yet. Templates with no logo default to "shared" and start inheriting immediately. */
+  logoSource: EmailLogoSource;
   /** Rendered logo width in px, clamped by normalizeEmailTemplateContent. Height is always
    *  auto so a wordmark is never squashed. */
   logoWidth: number;
@@ -250,6 +266,7 @@ const BASE_PRESENTATION = {
   buttonAlign: "left" as EmailAlign,
   logoUrl: null,
   logoDarkUrl: null,
+  logoSource: "shared" as EmailLogoSource,
   logoWidth: DEFAULT_LOGO_WIDTH,
   displayName: null,
   showStoreName: true,
@@ -392,6 +409,16 @@ export function normalizeEmailTemplateContent(
 
     logoUrl: content.logoUrl?.trim() || null,
     logoDarkUrl: content.logoDarkUrl?.trim() || null,
+    // The one piece of real migration logic in this contract. A template saved before
+    // logoSource existed carries no value for it; inferring "custom" whenever it already
+    // has a logo is what stops the shared-branding rollout from blanking a logo a merchant
+    // uploaded months ago. Anything else — including an explicitly stored value — is taken
+    // at face value, so a merchant who switches a template back to "shared" stays shared.
+    logoSource: pickEnum<EmailLogoSource>(
+      content.logoSource,
+      ["shared", "custom"],
+      content.logoUrl?.trim() ? "custom" : defaults.logoSource,
+    ),
     logoWidth: clampInt(content.logoWidth, LOGO_WIDTH_RANGE, defaults.logoWidth),
 
     displayName: content.displayName?.trim() || null,
@@ -446,6 +473,7 @@ export function sanitizeEmailTemplateContentForPlan(
 
     logoUrl: content.logoUrl,
     logoDarkUrl: content.logoDarkUrl,
+    logoSource: content.logoSource,
     logoWidth: content.logoWidth,
 
     displayName: content.displayName,

@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Link, useFetcher, useLoaderData } from "react-router";
 import type { ActionFunctionArgs, LoaderFunctionArgs, ShouldRevalidateFunctionArgs } from "react-router";
-import { Frame, Toast } from "@shopify/polaris";
+import { Frame, Select, Toast } from "@shopify/polaris";
 
 import { Button } from "../components/ui/Button";
 import { Card } from "../components/ui/Card";
@@ -11,7 +11,7 @@ import { ContextualSaveBar } from "../components/ui/ContextualSaveBar";
 import { Section } from "../components/ui/Section";
 import { SettingsBreadcrumb } from "../components/ui/SettingsBreadcrumb";
 import { authenticateAdminDeduped } from "../services/auth-dedupe.server";
-import { getOrCreateStore, updateEmailSenderName } from "../services/store.server";
+import { getOrCreateStore, updateEmailBrandingLogos, updateEmailSenderName } from "../services/store.server";
 import { getStorePermissions } from "../services/permissions";
 import { resolveSenderIdentity } from "../services/emailSenderIdentity.server";
 import {
@@ -19,6 +19,7 @@ import {
   sanitizeSenderName,
   type SenderIdentity,
 } from "../services/emailSenderIdentity.shared";
+import { logoForTheme, resolveEmailLogo, type SharedEmailBranding } from "../services/emailBranding.shared";
 import { emailTemplateService } from "../services/emailTemplate.server";
 import { buildReviewRequestEmail } from "../services/notifications/templates.server";
 import { sendTestReviewRequestEmail } from "../services/notifications/testEmail.server";
@@ -37,6 +38,7 @@ import {
   sanitizeEmailTemplateContentForPlan,
   variablesForType,
   type EmailAlign,
+  type EmailLogoSource,
   type EmailDensity,
   type EmailFontFamily,
   type EmailSection,
@@ -100,7 +102,13 @@ type LoaderData = {
   emailSenderName: string | null;
   /** What will actually be sent, entitlement already applied. */
   senderIdentity: SenderIdentity;
+  /** Shared Email Branding — one logo pair, inherited by every template that has not
+   *  explicitly overridden it. */
+  sharedBranding: SharedEmailBranding;
 };
+
+/** Where a logo upload's resulting URL should be written. */
+type LogoTarget = "template" | "shared";
 
 type ActionData =
   | { ok: true; intent: "save" }
@@ -108,6 +116,7 @@ type ActionData =
   | { ok: true; intent: "reset"; content: EmailTemplateContent }
   | { ok: true; intent: "preview"; html: string }
   | { ok: true; intent: "upload-logo"; slot: LogoSlot; url: string }
+  | { ok: true; intent: "save-shared-branding"; emailLogoUrl: string | null; emailLogoDarkUrl: string | null }
   | { ok: true; intent: "validate-svg"; svg: string }
   | { ok: true; intent: "send-test"; to: string }
   | { ok: true; intent: "duplicate"; targetType: EmailTemplateType }
@@ -161,6 +170,7 @@ const readContentFromForm = (formData: FormData, type: EmailTemplateType): Email
 
       logoUrl: String(formData.get("logoUrl") || "").trim() || null,
       logoDarkUrl: String(formData.get("logoDarkUrl") || "").trim() || null,
+      logoSource: String(formData.get("logoSource") || defaults.logoSource) as EmailLogoSource,
       logoWidth: readInt(formData, "logoWidth", defaults.logoWidth),
 
       displayName: String(formData.get("displayName") || "").trim() || null,
@@ -249,6 +259,7 @@ export const loader = async ({ request }: LoaderFunctionArgs): Promise<LoaderDat
     // below, which applies the entitlement.
     emailSenderName: store.emailSenderName,
     senderIdentity: resolveSenderIdentity(store, permissions, content.replyToEmail),
+    sharedBranding: { emailLogoUrl: store.emailLogoUrl, emailLogoDarkUrl: store.emailLogoDarkUrl },
   };
 };
 
@@ -354,6 +365,18 @@ export const action = async ({ request }: ActionFunctionArgs): Promise<ActionDat
       return { ok: true, intent: "upload-logo", slot, url: uploaded.url };
     }
 
+    // ---- Shared Email Branding ---------------------------------------------------------
+    // One write, every template that inherits follows. Templates are NOT touched here on
+    // purpose: nothing is copied into them, so there is no stale per-template URL to go
+    // stale later, and a template's own copy/scheduling is never disturbed by a logo change.
+    if (intent === "save-shared-branding") {
+      const light = String(formData.get("emailLogoUrl") || "").trim() || null;
+      const dark = String(formData.get("emailLogoDarkUrl") || "").trim() || null;
+
+      await updateEmailBrandingLogos(store.id, { emailLogoUrl: light, emailLogoDarkUrl: dark });
+      return { ok: true, intent: "save-shared-branding", emailLogoUrl: light, emailLogoDarkUrl: dark };
+    }
+
     if (intent === "reset") {
       await emailTemplateService.resetToDefault(store.id, type);
       return { ok: true, intent: "reset", content: getDefaultEmailTemplateContent(type) };
@@ -385,6 +408,7 @@ export const action = async ({ request }: ActionFunctionArgs): Promise<ActionDat
         discountCode: type === "reward" ? "SAMPLE-CODE" : undefined,
         customMessage: null,
         template: previewContent,
+        branding: store,
       });
 
       return { ok: true, intent: "preview", html };
@@ -410,6 +434,7 @@ export const action = async ({ request }: ActionFunctionArgs): Promise<ActionDat
         // Same sender the real send would use, so this test is a true preview of the From
         // header and not just the body.
         senderIdentity: resolveSenderIdentity(store, permissions, sanitizedDraft.replyToEmail),
+        branding: store,
       });
 
       return { ok: true, intent: "send-test", to };
@@ -560,6 +585,7 @@ export default function EmailStudioPage() {
     canUseBrandedEmailSender,
     emailSenderName,
     senderIdentity,
+    sharedBranding,
   } = useLoaderData<typeof loader>();
 
   const saveFetcher = useFetcher<ActionData>();
@@ -645,6 +671,7 @@ export default function EmailStudioPage() {
     formData.set("buttonAlign", draft.buttonAlign);
     formData.set("logoUrl", draft.logoUrl ?? "");
     formData.set("logoDarkUrl", draft.logoDarkUrl ?? "");
+    formData.set("logoSource", draft.logoSource);
     formData.set("logoWidth", String(draft.logoWidth));
     formData.set("displayName", draft.displayName ?? "");
     formData.set("showStoreName", String(draft.showStoreName));
@@ -701,7 +728,18 @@ export default function EmailStudioPage() {
     const result = uploadFetcher.data;
     if (!result) return;
     if (result.ok && result.intent === "upload-logo") {
-      updateField(result.slot === "dark" ? "logoDarkUrl" : "logoUrl", result.url);
+      if (uploadTarget.current === "shared") {
+        // A shared upload is a store-wide change, so it persists immediately and must never
+        // be written into this template's draft — that would recreate the per-template copy
+        // the shared system exists to eliminate.
+        persistSharedLogos(
+          result.slot === "dark"
+            ? { ...sharedLogos, emailLogoDarkUrl: result.url }
+            : { ...sharedLogos, emailLogoUrl: result.url },
+        );
+      } else {
+        updateField(result.slot === "dark" ? "logoDarkUrl" : "logoUrl", result.url);
+      }
       setToast({ content: "Logo uploaded. Save to apply it." });
     } else if (!result.ok) {
       setToast({ content: result.error, error: true });
@@ -735,7 +773,8 @@ export default function EmailStudioPage() {
   /** Raster files upload directly. An SVG goes through the server for validation and
    *  sanitization first, then is rasterized to a PNG here, because no mainstream email client
    *  renders SVG — the PNG is what actually reaches the inbox. */
-  const uploadLogoFile = async (file: File, slot: LogoSlot) => {
+  const uploadLogoFile = async (file: File, slot: LogoSlot, target: LogoTarget = "template") => {
+    uploadTarget.current = target;
     if (file.type !== SVG_MIME_TYPE) {
       const formData = new FormData();
       formData.set("_intent", "upload-logo");
@@ -809,6 +848,25 @@ export default function EmailStudioPage() {
     setDraft((current) => ({ ...current, [field]: `${current[field]}${current[field] ? " " : ""}${token}` }));
   };
 
+  // Shared logos are store-wide, so they are saved immediately on change rather than riding
+  // along with this template's save — a merchant changing the shared logo is not editing
+  // this template, and making them press this template's Save to apply a store-wide change
+  // is exactly the confusion the shared system is meant to remove.
+  const uploadTarget = useRef<LogoTarget>("template");
+  const [sharedLogos, setSharedLogos] = useState(sharedBranding);
+  const brandingFetcher = useFetcher<ActionData>();
+  const isSavingBranding = brandingFetcher.state !== "idle";
+
+  const persistSharedLogos = (next: SharedEmailBranding) => {
+    setSharedLogos(next);
+    const form = new FormData();
+    form.set("_intent", "save-shared-branding");
+    form.set("type", activeType);
+    form.set("emailLogoUrl", next.emailLogoUrl ?? "");
+    form.set("emailLogoDarkUrl", next.emailLogoDarkUrl ?? "");
+    brandingFetcher.submit(form, { method: "post" });
+  };
+
   const [senderNameDraft, setSenderNameDraft] = useState(emailSenderName ?? "");
   // The identity the server last confirmed. Held in state rather than read straight from the
   // loader so the inbox preview updates the moment a save succeeds, without a full reload.
@@ -831,6 +889,11 @@ export default function EmailStudioPage() {
   }, [senderFetcher.data]);
 
   const senderNameDirty = (emailSenderName ?? "") !== senderNameDraft;
+
+  // The logo this template will really use — shared or overridden — resolved through the
+  // same function the renderer uses, so the inbox preview cannot show one logo while the
+  // email carries another.
+  const inboxAvatarLogo = logoForTheme(resolveEmailLogo(draft, sharedLogos), draft.theme);
 
   // What the inbox will show once saved — the typed name while editing, falling back to the
   // real store name exactly as resolveSenderIdentity would.
@@ -1160,8 +1223,8 @@ export default function EmailStudioPage() {
                 <div className={styles.fieldGroup}>
                   <span className={styles.fieldLabel}>How it appears in the inbox</span>
                   <div className={styles.inboxPreview}>
-                    {draft.logoUrl ? (
-                      <img className={styles.inboxPreviewAvatar} src={draft.logoUrl} alt="" />
+                    {inboxAvatarLogo ? (
+                      <img className={styles.inboxPreviewAvatar} src={inboxAvatarLogo} alt="" />
                     ) : (
                       <span className={styles.inboxPreviewAvatar} aria-hidden="true">
                         {previewSenderName.trim().charAt(0).toUpperCase() || "S"}
@@ -1196,10 +1259,70 @@ export default function EmailStudioPage() {
                 ) : null}
               </Section>
 
+              {/* Shared across every template. Separate from the per-template Branding
+                  section below so it is obvious at a glance which settings are store-wide
+                  and which belong to the email currently being edited. */}
+              <Section
+                title="Email branding"
+                description="Shared by every review email — the request, both reminders and the reward. Upload once and they all follow."
+              >
+                <LogoField
+                  slot="light"
+                  label="Logo"
+                  url={sharedLogos.emailLogoUrl}
+                  busy={isSavingBranding}
+                  uploading={uploadingSlot === "light" && uploadTarget.current === "shared"}
+                  onPick={(file) => uploadLogoFile(file, "light", "shared")}
+                  onClear={() => persistSharedLogos({ ...sharedLogos, emailLogoUrl: null })}
+                  hint="Used on light email backgrounds. Removing it falls back to a clean text header."
+                />
+
+                <LogoField
+                  slot="dark"
+                  label="Logo for dark backgrounds (optional)"
+                  url={sharedLogos.emailLogoDarkUrl}
+                  busy={isSavingBranding}
+                  uploading={uploadingSlot === "dark" && uploadTarget.current === "shared"}
+                  onPick={(file) => uploadLogoFile(file, "dark", "shared")}
+                  onClear={() => persistSharedLogos({ ...sharedLogos, emailLogoDarkUrl: null })}
+                  hint="Only used when a template renders on the dark theme. Without it, the logo above is reused."
+                />
+
+                <p className={styles.fieldHint}>
+                  {isSavingBranding
+                    ? "Saving…"
+                    : "Saved automatically and applied to every template that inherits the shared logo."}
+                </p>
+              </Section>
+
               <Section title="Branding" description="Logo, store name, and how the email body reads.">
                 <p className={styles.senderIdentityNote}>
                   These change what the email looks like once opened. Who it comes from is set above.
                 </p>
+
+                {/* Inheritance is stated explicitly, and overriding is a deliberate choice
+                    rather than a side effect of uploading something here. */}
+                <div className={styles.fieldGroup}>
+                  <span className={styles.fieldLabel}>Logo for this email</span>
+                  <Select
+                    label="Logo source"
+                    labelHidden
+                    options={[
+                      { label: "Use the shared email logo", value: "shared" },
+                      { label: "Use a different logo for this email", value: "custom" },
+                    ]}
+                    value={draft.logoSource}
+                    onChange={(value) => updateField("logoSource", value as EmailLogoSource)}
+                    disabled={isBusy}
+                  />
+                  <p className={styles.fieldHint}>
+                    {draft.logoSource === "shared"
+                      ? sharedLogos.emailLogoUrl
+                        ? "Inheriting the shared email logo. Change it once above and every template follows."
+                        : "Inheriting the shared email logo, which is not set — this email shows a text header."
+                      : "This email overrides the shared logo with the asset below."}
+                  </p>
+                </div>
 
                 <LogoField
                   slot="light"

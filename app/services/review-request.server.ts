@@ -79,7 +79,14 @@ export interface ReviewRequestRecord {
   reminderFinalSentAt: Date | null;
   createdAt: Date;
   updatedAt: Date;
-  store: { id: string; name: string; domain: string | null; emailSenderName: string | null };
+  store: {
+    id: string;
+    name: string;
+    domain: string | null;
+    emailSenderName: string | null;
+    emailLogoUrl: string | null;
+    emailLogoDarkUrl: string | null;
+  };
   product: { id: string; name: string | null; featuredImage: string | null } | null;
 }
 
@@ -94,7 +101,18 @@ export interface ReviewRequestListResult {
 // (the shop's myshopify.com domain) is needed by r.$token.tsx to get an unauthenticated Admin
 // API session for photo uploads, and product.featuredImage is shown on the public review page.
 const REQUEST_INCLUDE = {
-  store: { select: { id: true, name: true, domain: true, emailSenderName: true } },
+  store: {
+    select: {
+      id: true,
+      name: true,
+      domain: true,
+      emailSenderName: true,
+      // Shared Email Branding — inherited by every template that has not explicitly
+      // overridden its logo (emailBranding.shared.ts).
+      emailLogoUrl: true,
+      emailLogoDarkUrl: true,
+    },
+  },
   product: { select: { id: true, name: true, featuredImage: true } },
 } as const;
 
@@ -124,7 +142,14 @@ const mapRequestRecord = (request: {
   reminderFinalSentAt: Date | null;
   createdAt: Date;
   updatedAt: Date;
-  store: { id: string; name: string; domain: string | null; emailSenderName: string | null };
+  store: {
+    id: string;
+    name: string;
+    domain: string | null;
+    emailSenderName: string | null;
+    emailLogoUrl: string | null;
+    emailLogoDarkUrl: string | null;
+  };
   product: { id: string; name: string | null; featuredImage: string | null } | null;
 }): ReviewRequestRecord => ({
   id: request.id,
@@ -255,6 +280,7 @@ export const dispatchRequestEmail = async (request: ReviewRequestRecord): Promis
     unsubscribeUrl: buildUnsubscribeUrl(request.store.id, request.email),
     customMessage: request.customMessage,
     template,
+    branding: request.store,
   });
 
   // Resolved once per send rather than per retry attempt: the entitlement and the brand
@@ -373,6 +399,7 @@ export const dispatchReminderEmail = async (request: ReviewRequestRecord, remind
     // Day 0 — a reminder is its own distinct email and shouldn't repeat it.
     customMessage: null,
     template,
+    branding: request.store,
   });
 
   // Same identity rules as the initial request — a reminder is still the store talking to

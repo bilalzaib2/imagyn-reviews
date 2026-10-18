@@ -65,6 +65,10 @@ vi.mock("../shopify.server", () => ({
   },
 }));
 
+vi.mock("./permissions", () => ({
+  getStorePermissions: vi.fn(async () => ({ canUseBrandedEmailSender: false })),
+}));
+
 vi.mock("./notifications/provider.server", () => ({
   getEmailProvider: () => ({ name: "fake", sendEmail: sendEmailMock }),
 }));
@@ -82,6 +86,19 @@ vi.mock("../db.server", () => ({
         if (!store) throw new Error("Store not found");
         Object.assign(store, data);
         return store;
+      }),
+      // Backs the reward email's sender identity and shared Email Branding lookup. Reads
+      // the same fake store list as everything else here, so the email resolves against the
+      // real fixture rather than a second invented store.
+      findUnique: vi.fn(async ({ where }: { where: { id: string } }) => {
+        const store = stores.find((s) => s.id === where.id);
+        if (!store) return null;
+        return {
+          name: store.name ?? "Verve Outdoor",
+          emailSenderName: null,
+          emailLogoUrl: null,
+          emailLogoDarkUrl: null,
+        };
       }),
     },
     // Backs emailTemplateService.getActiveContent (called when sending the reward email) —

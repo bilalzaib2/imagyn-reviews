@@ -3,6 +3,7 @@ import { buildReviewRequestEmail } from "./templates.server";
 import { emailTemplateService } from "../emailTemplate.server";
 import type { EmailTemplateContent, EmailTemplateType } from "../email.shared";
 import type { SenderIdentity } from "../emailSenderIdentity.shared";
+import type { SharedEmailBranding } from "../emailBranding.shared";
 
 // Sends a real email using sample data, so a merchant can verify Resend is configured
 // correctly (API key, verified sender) and see exactly what a customer receives — before any
@@ -24,6 +25,8 @@ export interface TestEmailOptions {
    *  value the caller is holding. Omitted falls back to the store name, which is exactly
    *  what this function did before branded senders existed. */
   senderIdentity?: SenderIdentity;
+  /** The store's shared Email Branding, so a test renders the same logo a customer gets. */
+  branding?: SharedEmailBranding | null;
 }
 
 export async function sendTestReviewRequestEmail(
@@ -41,6 +44,7 @@ export async function sendTestReviewRequestEmail(
     storeName,
     reviewUrl: "https://example.com/r/sample-token",
     customMessage: null,
+    branding: options.branding ?? null,
     // Sample-only, matching the sample-token URL's own "never real" convention — a reward
     // template needs some code to show {{discount_code}} substituted, but this string is
     // never a real, redeemable Shopify discount.
