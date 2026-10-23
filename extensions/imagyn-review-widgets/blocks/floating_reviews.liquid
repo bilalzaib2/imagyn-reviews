@@ -30,20 +30,20 @@
 <div
   class="imagyn-floating-reviews"
   data-imagyn-floating-reviews
-  data-enabled="{{ block.settings.enabled }}"
+  data-enabled="{{ block.settings.enabled | escape }}"
   data-product-id="{% if product %}{{ product.id }}{% endif %}"
-  data-position="{{ block.settings.position }}"
-  data-vertical-position="{{ block.settings.vertical_position }}"
-  data-label="{{ block.settings.label }}"
-  data-heading="{{ block.settings.heading }}"
-  data-cta-label="{{ block.settings.cta_label }}"
+  data-position="{{ block.settings.position | escape }}"
+  data-vertical-position="{{ block.settings.vertical_position | escape }}"
+  data-label="{{ block.settings.label | escape }}"
+  data-heading="{{ block.settings.heading | escape }}"
+  data-cta-label="{{ block.settings.cta_label | escape }}"
   data-cta-url="{% if product %}{{ product.url }}{% else %}{{ routes.all_products_collection_url }}{% endif %}"
-  data-show-rating="{{ block.settings.show_rating }}"
-  data-show-count="{{ block.settings.show_count }}"
-  data-show-distribution="{{ block.settings.show_distribution }}"
-  data-show-verified="{{ block.settings.show_verified }}"
-  data-show-media="{{ block.settings.show_media }}"
-  data-close-on-overlay="{{ block.settings.close_on_overlay }}"
+  data-show-rating="{{ block.settings.show_rating | escape }}"
+  data-show-count="{{ block.settings.show_count | escape }}"
+  data-show-distribution="{{ block.settings.show_distribution | escape }}"
+  data-show-verified="{{ block.settings.show_verified | escape }}"
+  data-show-media="{{ block.settings.show_media | escape }}"
+  data-close-on-overlay="{{ block.settings.close_on_overlay | escape }}"
 ></div>
 
 {% comment %}

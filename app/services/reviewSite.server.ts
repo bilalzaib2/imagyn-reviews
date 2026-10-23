@@ -7,6 +7,72 @@ import type { AppearanceTokens } from "./appearance.shared";
 
 const PAGE_SIZE = 12;
 
+// The display-safe projection of a Review for this page, and the reason it exists:
+// reviews-site.$slug.tsx is a PUBLIC, unauthenticated route, and React Router serializes a
+// loader's ENTIRE return value into the HTML document for hydration — independently of what
+// the component chooses to render. Returning review rows straight from getStoreReviews
+// therefore published every Review scalar to anyone who could guess a store slug, because
+// review.server.ts's `reviewInclude` deliberately uses Prisma's `include` (correct for the
+// admin UI, which needs the whole row) rather than a `select`.
+//
+// So this layer applies the same explicit field allow-list every other public surface in this
+// app already applies — api.reviews.tsx's loader, api.reviews.featured.tsx,
+// api.reviews.floating.tsx, api.reviews.video-carousel.tsx and publicDiscovery.server.ts's
+// REVIEW_SELECT. The shape mirrors review.server.ts's FeaturedReview, which is this codebase's
+// established "store-wide public review" contract.
+//
+// NEVER add to this interface: reviewerEmail, reviewerLocation, moderationStatus,
+// moderationReason, externalId, importSource, importBatchId, sourceVerified, reward (its
+// discountCode is a live, redeemable Shopify discount), storeId, isPublished, photoUrls, or
+// anything else that isn't already shown to shoppers on the merchant's own storefront.
+export interface PublicSiteReview {
+  id: string;
+  reviewerName: string;
+  verifiedPurchase: boolean;
+  rating: number;
+  title: string | null;
+  content: string;
+  createdAt: Date;
+  product: { id: string; name: string; handle: string | null; featuredImage: string | null };
+  media: Array<{
+    id: string;
+    type: string;
+    url: string;
+    thumbnailUrl: string | null;
+    width: number | null;
+    height: number | null;
+  }>;
+}
+
+// Explicit, field-by-field — never a spread of the Prisma row. Adding a column to the Review
+// model can therefore never silently publish it, which is the same guarantee
+// publicDiscovery.server.ts's header states for the consumer network.
+function toPublicSiteReview(review: ReviewWithProduct): PublicSiteReview {
+  return {
+    id: review.id,
+    reviewerName: review.reviewerName,
+    verifiedPurchase: review.verifiedPurchase,
+    rating: review.rating,
+    title: review.title,
+    content: review.content,
+    createdAt: review.createdAt,
+    product: {
+      id: review.product.id,
+      name: review.product.name,
+      handle: review.product.handle,
+      featuredImage: review.product.featuredImage,
+    },
+    media: review.media.map((item) => ({
+      id: item.id,
+      type: item.type,
+      url: item.url,
+      thumbnailUrl: item.thumbnailUrl,
+      width: item.width,
+      height: item.height,
+    })),
+  };
+}
+
 export interface ReviewSiteData {
   storeName: string;
   averageRating: number;
@@ -15,7 +81,8 @@ export interface ReviewSiteData {
   // uses) — added so the public page can show a genuine rating breakdown instead of just the
   // single average number, without a second query.
   ratingCounts: { 5: number; 4: number; 3: number; 2: number; 1: number };
-  reviews: ReviewWithProduct[];
+  // Display-safe only — see PublicSiteReview above for why this is NOT ReviewWithProduct.
+  reviews: PublicSiteReview[];
   nextCursor: string | null;
   hasMore: boolean;
   // The real, persisted Store AI Summary (never a per-product fallback) — only populated when
@@ -68,7 +135,7 @@ export async function getReviewSiteData(slug: string, cursor?: string | null): P
     averageRating: stats.averageRating,
     publishedReviews: stats.publishedReviews,
     ratingCounts: stats.ratingCounts,
-    reviews: page.reviews,
+    reviews: page.reviews.map(toPublicSiteReview),
     nextCursor: page.nextCursor,
     hasMore: page.hasMore,
     storeAiSummary: storeAiSummary

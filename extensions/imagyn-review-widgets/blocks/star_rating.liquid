@@ -21,26 +21,26 @@
 {% endcomment %}
 <div class="imagyn-ratings-section" data-imagyn-ratings-section>
   <div class="imagyn-ratings-section__inner">
-    <h2 class="imagyn-ratings-section__heading">{{ block.settings.section_heading | default: "Ratings & Reviews" }}</h2>
+    <h2 class="imagyn-ratings-section__heading">{{ block.settings.section_heading | default: "Ratings & Reviews" | escape }}</h2>
 
     <div
       class="imagyn-reviews"
       data-imagyn-reviews
       data-product-id="{{ product.id }}"
-      data-show-average-rating="{{ block.settings.show_average_rating }}"
-      data-show-review-count="{{ block.settings.show_review_count }}"
-      data-show-write-review-button="{{ block.settings.show_write_review_button }}"
-      data-show-ai-summary="{{ block.settings.show_ai_summary }}"
-      data-reviews-per-page="{{ block.settings.reviews_per_page }}"
-      data-star-color="{{ block.settings.star_color }}"
-      data-button-color="{{ block.settings.button_color }}"
-      data-background-color="{{ block.settings.background_color }}"
-      data-border-color="{{ block.settings.border_color }}"
-      data-border-radius="{{ block.settings.border_radius }}"
-      data-heading-font-size="{{ block.settings.heading_size }}"
-      data-body-font-size="{{ block.settings.body_size }}"
-      data-layout="{{ block.settings.layout }}"
-      data-show-load-more-button="{{ block.settings.show_load_more_button }}"
+      data-show-average-rating="{{ block.settings.show_average_rating | escape }}"
+      data-show-review-count="{{ block.settings.show_review_count | escape }}"
+      data-show-write-review-button="{{ block.settings.show_write_review_button | escape }}"
+      data-show-ai-summary="{{ block.settings.show_ai_summary | escape }}"
+      data-reviews-per-page="{{ block.settings.reviews_per_page | escape }}"
+      data-star-color="{{ block.settings.star_color | escape }}"
+      data-button-color="{{ block.settings.button_color | escape }}"
+      data-background-color="{{ block.settings.background_color | escape }}"
+      data-border-color="{{ block.settings.border_color | escape }}"
+      data-border-radius="{{ block.settings.border_radius | escape }}"
+      data-heading-font-size="{{ block.settings.heading_size | escape }}"
+      data-body-font-size="{{ block.settings.body_size | escape }}"
+      data-layout="{{ block.settings.layout | escape }}"
+      data-show-load-more-button="{{ block.settings.show_load_more_button | escape }}"
     >
       <div data-imagyn-summary></div>
       <div data-imagyn-attributes></div>

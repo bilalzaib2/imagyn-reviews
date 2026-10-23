@@ -37,3 +37,22 @@ database.sqlite
 
 # Cursor local workspace settings
 .cursor/rules/.cache/
+
+# Local AI-agent tooling — never project source, and never safe to commit.
+#
+# .claude/settings.local.json is the important one: it is a per-machine permission allowlist
+# that accumulates verbatim copies of previously approved shell commands, so any command that
+# ever carried a connection string or API key on its command line is now stored in it in
+# plaintext. Until now the only thing keeping it out of a commit was a developer's personal
+# ~/.config/git/ignore, which protects one machine and does not travel with the repo — a fresh
+# clone, a teammate or CI had no protection at all. This makes the guarantee a property of the
+# repository instead.
+#
+# .claude/skills/ and .agents/skills/ are vendored third-party skill bundles (several MB of
+# upstream data), local developer tooling rather than anything this app builds or ships.
+#
+# Nothing here is deleted by this rule — existing local files stay exactly where they are, they
+# simply stop being commit candidates. Force-add deliberately (git add -f) if a genuinely
+# shared, secret-free project skill is ever introduced.
+.claude/
+.agents/

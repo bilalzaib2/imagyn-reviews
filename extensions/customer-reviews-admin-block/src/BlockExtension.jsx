@@ -76,7 +76,7 @@ export default async () => {
     if (error) {
       return (
         <s-admin-block heading={i18n.translate("name")}>
-          <s-text tone="subdued">Couldn&apos;t load review data right now.</s-text>
+          <s-text color="subdued">Couldn&apos;t load review data right now.</s-text>
         </s-admin-block>
       );
     }
@@ -84,7 +84,7 @@ export default async () => {
     if (!stats || stats.reviewCount === 0) {
       return (
         <s-admin-block heading={i18n.translate("name")}>
-          <s-text tone="subdued">No reviews from this customer yet.</s-text>
+          <s-text color="subdued">No reviews from this customer yet.</s-text>
         </s-admin-block>
       );
     }
@@ -103,12 +103,12 @@ export default async () => {
 
           {stats.mostRecent ? (
             <s-stack direction="block" gap="small-300">
-              <s-text tone="subdued">Most recent — {formatDate(stats.mostRecent.createdAt)}</s-text>
+              <s-text color="subdued">Most recent — {formatDate(stats.mostRecent.createdAt)}</s-text>
               <s-text>
                 {stats.mostRecent.rating} ★{stats.mostRecent.title ? ` — ${stats.mostRecent.title}` : ""}
               </s-text>
               {stats.mostRecent.productTitle ? (
-                <s-text tone="subdued">{stats.mostRecent.productTitle}</s-text>
+                <s-text color="subdued">{stats.mostRecent.productTitle}</s-text>
               ) : null}
             </s-stack>
           ) : null}

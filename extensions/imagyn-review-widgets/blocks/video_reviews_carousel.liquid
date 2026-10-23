@@ -26,25 +26,25 @@
   the video element's source is attached on play.
 {% endcomment %}
 <div
-  class="imagyn-vcarousel imagyn-vcarousel--align-{{ block.settings.text_align }} imagyn-vcarousel--width-{{ block.settings.width }}"
+  class="imagyn-vcarousel imagyn-vcarousel--align-{{ block.settings.text_align | escape }} imagyn-vcarousel--width-{{ block.settings.width | escape }}"
   data-imagyn-video-carousel
   data-heading="{{ block.settings.heading | escape }}"
   data-subheading="{{ block.settings.subheading | escape }}"
-  data-video-count="{{ block.settings.video_count }}"
-  data-color-scheme="{{ block.settings.color_scheme }}"
-  data-show-rating="{{ block.settings.show_rating }}"
-  data-show-name="{{ block.settings.show_name }}"
-  data-show-verified="{{ block.settings.show_verified }}"
-  data-show-text="{{ block.settings.show_text }}"
-  data-text-length="{{ block.settings.text_length }}"
-  data-show-product="{{ block.settings.show_product }}"
-  data-show-product-image="{{ block.settings.show_product_image }}"
-  data-show-arrows="{{ block.settings.show_arrows }}"
-  data-show-dots="{{ block.settings.show_dots }}"
-  data-play-button-style="{{ block.settings.play_button_style }}"
-  data-empty-behavior="{{ block.settings.empty_behavior }}"
+  data-video-count="{{ block.settings.video_count | escape }}"
+  data-color-scheme="{{ block.settings.color_scheme | escape }}"
+  data-show-rating="{{ block.settings.show_rating | escape }}"
+  data-show-name="{{ block.settings.show_name | escape }}"
+  data-show-verified="{{ block.settings.show_verified | escape }}"
+  data-show-text="{{ block.settings.show_text | escape }}"
+  data-text-length="{{ block.settings.text_length | escape }}"
+  data-show-product="{{ block.settings.show_product | escape }}"
+  data-show-product-image="{{ block.settings.show_product_image | escape }}"
+  data-show-arrows="{{ block.settings.show_arrows | escape }}"
+  data-show-dots="{{ block.settings.show_dots | escape }}"
+  data-play-button-style="{{ block.settings.play_button_style | escape }}"
+  data-empty-behavior="{{ block.settings.empty_behavior | escape }}"
   data-empty-message="{{ block.settings.empty_message | escape }}"
-  style="--imagyn-vcarousel-cards-desktop: {{ block.settings.cards_desktop }}; --imagyn-vcarousel-cards-tablet: {{ block.settings.cards_tablet }}; --imagyn-vcarousel-cards-mobile: {{ block.settings.cards_mobile }}; --imagyn-vcarousel-gap: {{ block.settings.card_spacing }}px; --imagyn-vcarousel-radius: {{ block.settings.card_radius }}px; --imagyn-vcarousel-ratio: {{ block.settings.media_ratio | replace: ':', ' / ' }}; --imagyn-vcarousel-play-size: {{ block.settings.play_button_size }}px;"
+  style="--imagyn-vcarousel-cards-desktop: {{ block.settings.cards_desktop | escape }}; --imagyn-vcarousel-cards-tablet: {{ block.settings.cards_tablet | escape }}; --imagyn-vcarousel-cards-mobile: {{ block.settings.cards_mobile | escape }}; --imagyn-vcarousel-gap: {{ block.settings.card_spacing | escape }}px; --imagyn-vcarousel-radius: {{ block.settings.card_radius | escape }}px; --imagyn-vcarousel-ratio: {{ block.settings.media_ratio | replace: ':', ' / ' | escape }}; --imagyn-vcarousel-play-size: {{ block.settings.play_button_size | escape }}px;"
 >
   <div class="imagyn-vcarousel__header" data-imagyn-vcarousel-header hidden></div>
   <div class="imagyn-vcarousel__viewport" data-imagyn-vcarousel-viewport>

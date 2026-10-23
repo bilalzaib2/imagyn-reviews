@@ -30,7 +30,17 @@ const getStoreReviewStatsMock = vi.fn(async () => ({
   verifiedReviews: 1,
   ratingCounts: { 5: 1, 4: 1, 3: 0, 2: 0, 1: 0 },
 }));
-const getStoreReviewsMock = vi.fn(async () => ({
+// Deliberately typed loose on `reviews` so a test can hand it a realistically COMPLETE Prisma
+// row (every Review scalar, exactly what review.server.ts's `include`-based reviewInclude
+// really returns) and assert the public projection drops the private half of it.
+interface FakeReviewPage {
+  reviews: Array<Record<string, unknown>>;
+  nextCursor: string | null;
+  hasMore: boolean;
+  totalCount: number;
+}
+
+const getStoreReviewsMock = vi.fn<() => Promise<FakeReviewPage>>(async () => ({
   reviews: [],
   nextCursor: null,
   hasMore: false,
@@ -143,6 +153,164 @@ describe("getReviewSiteData", () => {
     getActiveAppearanceMock = vi.fn(async () => ({ id: "appearance_1" }));
     const result = await getReviewSiteData("example-store");
     expect(result?.hasCustomBrand).toBe(true);
+  });
+});
+
+// A realistically COMPLETE row, shaped exactly like what review.server.ts's reviewInclude
+// (Prisma `include`, not `select`) actually hands back — private columns and all. The whole
+// point of these tests is that this is the real input, so a regression can't hide behind a
+// conveniently thin fixture.
+function fullReviewRow(): Record<string, unknown> {
+  return {
+    id: "review_1",
+    storeId: "store_1",
+    productId: "product_1",
+    productTitle: "Linen Shirt",
+    rating: 5,
+    title: "Excellent",
+    content: "Fits perfectly and the fabric is lovely.",
+    reviewerName: "A. Customer",
+    reviewerEmail: "a.customer@example.com",
+    reviewerLocation: "Lahore, PK",
+    verifiedPurchase: true,
+    status: "APPROVED",
+    isPublished: true,
+    helpfulCount: 7,
+    notHelpfulCount: 1,
+    featured: true,
+    reply: "Thanks so much!",
+    repliedAt: new Date("2026-02-02T00:00:00Z"),
+    photoUrls: "legacy,csv,urls",
+    deletedAt: null,
+    moderationStatus: "held",
+    moderationReason: "Matched blocked word: discount",
+    externalId: "judgeme-uuid-abc123",
+    importSource: "judgeme",
+    importBatchId: "batch_9",
+    sourceVerified: true,
+    createdAt: new Date("2026-02-01T00:00:00Z"),
+    updatedAt: new Date("2026-02-01T00:00:00Z"),
+    product: {
+      id: "product_1",
+      name: "Linen Shirt",
+      handle: "linen-shirt",
+      featuredImage: "https://cdn.example.com/shirt.jpg",
+    },
+    media: [
+      {
+        id: "media_1",
+        reviewId: "review_1",
+        type: "IMAGE",
+        url: "https://cdn.example.com/photo.jpg",
+        thumbnailUrl: "https://cdn.example.com/photo-thumb.jpg",
+        width: 800,
+        height: 600,
+        createdAt: new Date("2026-02-01T00:00:00Z"),
+      },
+    ],
+    // A live, redeemable Shopify discount code — the single worst field to publish.
+    reward: { status: "issued", discountCode: "IMAGYN-THANKS-7F3A", valueType: "percentage", value: 10 },
+  };
+}
+
+// reviews-site.$slug.tsx is public and unauthenticated, and React Router serializes a loader's
+// whole return value into the HTML for hydration regardless of what the component renders. So
+// anything reaching ReviewSiteData.reviews is effectively published. These tests pin that
+// boundary.
+describe("getReviewSiteData — public payload must never carry private fields", () => {
+  const FORBIDDEN_FIELDS = [
+    "reviewerEmail",
+    "reviewerLocation",
+    "moderationStatus",
+    "moderationReason",
+    "externalId",
+    "importSource",
+    "importBatchId",
+    "sourceVerified",
+    "reward",
+    "storeId",
+    "isPublished",
+    "photoUrls",
+    "deletedAt",
+    "status",
+    "notHelpfulCount",
+    "featured",
+    "productTitle",
+    "updatedAt",
+  ] as const;
+
+  beforeEach(() => {
+    getStoreReviewsMock.mockResolvedValueOnce({
+      reviews: [fullReviewRow()],
+      nextCursor: null,
+      hasMore: false,
+      totalCount: 1,
+    });
+  });
+
+  it.each(FORBIDDEN_FIELDS)("never exposes %s", async (field) => {
+    const result = await getReviewSiteData("example-store");
+    expect(result?.reviews).toHaveLength(1);
+    expect(result!.reviews[0]).not.toHaveProperty(field);
+  });
+
+  it("never leaks a customer email address anywhere in the serialized payload", async () => {
+    const result = await getReviewSiteData("example-store");
+    expect(JSON.stringify(result)).not.toContain("a.customer@example.com");
+  });
+
+  it("never leaks a redeemable reward discount code anywhere in the serialized payload", async () => {
+    const result = await getReviewSiteData("example-store");
+    expect(JSON.stringify(result)).not.toContain("IMAGYN-THANKS-7F3A");
+  });
+
+  it("never leaks internal moderation reasoning anywhere in the serialized payload", async () => {
+    const result = await getReviewSiteData("example-store");
+    expect(JSON.stringify(result)).not.toContain("Matched blocked word");
+  });
+
+  it("exposes exactly the display-safe field set, and nothing beyond it", async () => {
+    const result = await getReviewSiteData("example-store");
+    expect(Object.keys(result!.reviews[0]).sort()).toEqual(
+      [
+        "content",
+        "createdAt",
+        "id",
+        "media",
+        "product",
+        "rating",
+        "reviewerName",
+        "title",
+        "verifiedPurchase",
+      ].sort(),
+    );
+  });
+
+  it("still renders everything the page actually needs", async () => {
+    const result = await getReviewSiteData("example-store");
+    expect(result!.reviews[0]).toMatchObject({
+      id: "review_1",
+      reviewerName: "A. Customer",
+      rating: 5,
+      title: "Excellent",
+      content: "Fits perfectly and the fabric is lovely.",
+      verifiedPurchase: true,
+    });
+    expect(result!.reviews[0].product.name).toBe("Linen Shirt");
+  });
+
+  it("projects media down to display-safe fields only (no reviewId back-reference)", async () => {
+    const result = await getReviewSiteData("example-store");
+    expect(Object.keys(result!.reviews[0].media[0]).sort()).toEqual(
+      ["height", "id", "thumbnailUrl", "type", "url", "width"].sort(),
+    );
+  });
+
+  it("projects product down to display-safe fields only", async () => {
+    const result = await getReviewSiteData("example-store");
+    expect(Object.keys(result!.reviews[0].product).sort()).toEqual(
+      ["featuredImage", "handle", "id", "name"].sort(),
+    );
   });
 });
 

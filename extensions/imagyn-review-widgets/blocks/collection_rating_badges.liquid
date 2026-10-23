@@ -12,8 +12,8 @@
 <script
   src="{{ 'collection-rating-badges.js' | asset_url }}"
   data-imagyn-collection-badges
-  data-star-color="{{ block.settings.star_color }}"
-  data-text-color="{{ block.settings.text_color }}"
+  data-star-color="{{ block.settings.star_color | escape }}"
+  data-text-color="{{ block.settings.text_color | escape }}"
   defer
 ></script>
 

@@ -17,14 +17,14 @@
 {% endcomment %}
 {% if block.settings.enabled %}
   <div
-    class="imagyn-trust-badge-wrap imagyn-trust-badge-wrap--{{ block.settings.alignment }}"
+    class="imagyn-trust-badge-wrap imagyn-trust-badge-wrap--{{ block.settings.alignment | escape }}"
     data-imagyn-trust-badge
-    data-badge-style="{{ block.settings.style }}"
-    data-size="{{ block.settings.size }}"
-    data-star-style="{{ block.settings.star_style }}"
-    data-star-color="{{ block.settings.star_color }}"
-    data-show-certification="{{ block.settings.show_certification }}"
-    style="--imagyn-trust-badge-spacing: {{ block.settings.spacing }}px;"
+    data-badge-style="{{ block.settings.style | escape }}"
+    data-size="{{ block.settings.size | escape }}"
+    data-star-style="{{ block.settings.star_style | escape }}"
+    data-star-color="{{ block.settings.star_color | escape }}"
+    data-show-certification="{{ block.settings.show_certification | escape }}"
+    style="--imagyn-trust-badge-spacing: {{ block.settings.spacing | escape }}px;"
     hidden
   ></div>
 

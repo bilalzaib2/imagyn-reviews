@@ -7,9 +7,9 @@
   class="imagyn-rating-badge"
   data-imagyn-rating-badge
   data-product-id="{{ product.id }}"
-  data-empty-state="{{ block.settings.empty_state }}"
-  data-star-color="{{ block.settings.star_color }}"
-  data-text-color="{{ block.settings.text_color }}"
+  data-empty-state="{{ block.settings.empty_state | escape }}"
+  data-star-color="{{ block.settings.star_color | escape }}"
+  data-text-color="{{ block.settings.text_color | escape }}"
   hidden
 ></div>
 

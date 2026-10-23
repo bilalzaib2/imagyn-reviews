@@ -26,16 +26,16 @@
 {% endcomment %}
 <div
   data-imagyn-store-reviews
-  data-heading="{{ block.settings.heading }}"
-  data-cta-label="{{ block.settings.cta_label }}"
+  data-heading="{{ block.settings.heading | escape }}"
+  data-cta-label="{{ block.settings.cta_label | escape }}"
   data-cta-url="{{ routes.all_products_collection_url }}"
-  data-max-width="{{ block.settings.max_width }}"
-  data-size="{{ block.settings.size }}"
-  data-show-rating="{{ block.settings.show_rating }}"
-  data-show-distribution="{{ block.settings.show_distribution }}"
-  data-show-cta="{{ block.settings.show_cta }}"
-  data-show-achievements="{{ block.settings.show_achievements }}"
-  data-show-ai-summary="{{ block.settings.show_ai_summary }}"
+  data-max-width="{{ block.settings.max_width | escape }}"
+  data-size="{{ block.settings.size | escape }}"
+  data-show-rating="{{ block.settings.show_rating | escape }}"
+  data-show-distribution="{{ block.settings.show_distribution | escape }}"
+  data-show-cta="{{ block.settings.show_cta | escape }}"
+  data-show-achievements="{{ block.settings.show_achievements | escape }}"
+  data-show-ai-summary="{{ block.settings.show_ai_summary | escape }}"
 ></div>
 
 <script src="{{ 'imagyn-appearance.js' | asset_url }}" defer></script>
