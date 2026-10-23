@@ -515,6 +515,13 @@ export const loader = ({ request }: LoaderFunctionArgs) => {
     }
 
     window.addEventListener("message", function (event) {
+      // Only this app's own origin may drive this frame. The Appearance page that legitimately
+      // posts here is a route on the same app, so a same-origin check costs nothing — whereas
+      // without it any third-party page could iframe this route and push arbitrary appearance
+      // tokens into it, since the route is deliberately unauthenticated (it renders fixed
+      // fixtures, never store data). The sender performs the mirror-image check by targeting
+      // window.location.origin rather than "*".
+      if (event.origin !== window.location.origin) return;
       if (!event.data || event.data.source !== "imagyn-appearance-draft") return;
       applyScope(event.data.scope);
       if (window.ImagynAppearance) {

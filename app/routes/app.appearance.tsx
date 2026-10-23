@@ -576,9 +576,14 @@ export default function AppearancePage() {
   // app/routes/appearance-preview.tsx. The scope travels with the tokens in one message, so
   // the frame can never paint one surface's widgets in another surface's colours.
   const postPreview = useCallback(() => {
+    // Targeted at this app's own origin, never "*". The preview frame is a route on this same
+    // app (appearance-preview.tsx), so its origin is known — and a wildcard target would hand
+    // the merchant's unsaved Brand Studio draft to whatever document happened to occupy that
+    // frame, rather than only to the one we intend. The receiving side performs the mirror-image
+    // check on event.origin.
     previewFrameRef.current?.contentWindow?.postMessage(
       { source: "imagyn-appearance-draft", tokens: previewTokens, scope: previewScope },
-      "*",
+      window.location.origin,
     );
   }, [previewTokens, previewScope]);
 

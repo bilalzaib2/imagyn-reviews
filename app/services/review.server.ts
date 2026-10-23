@@ -1045,7 +1045,16 @@ export interface HelpfulVoteResult {
 // inside the same transaction as the upsert (never incremented ad hoc), so a race between
 // two concurrent votes can't produce a count that doesn't match what's actually stored —
 // this is the "never trust client-side counts" rule applied server-side too.
+//
+// `storeId` is REQUIRED and is the tenant gate, matching the storeId-scoped ownership check
+// every mutation in this file already performs (see requireReview). Without it this function
+// accepted any review id in the database: an App-Proxy-signed request from one shop could vote
+// on another shop's reviews, and review ids are not secret — api.public.v1.reviews.tsx returns
+// them for every approved review on the network, unauthenticated, 48 per page. Since
+// rankByHelpfulness orders the storefront's "Most helpful" tab by helpfulCount, that was a
+// cross-tenant write to a signal shoppers actually see.
 export async function castHelpfulVote(
+  storeId: string,
   reviewId: string,
   visitorId: string,
   vote: HelpfulVoteValue,
@@ -1056,7 +1065,9 @@ export async function castHelpfulVote(
 
   return prisma.$transaction(async (tx) => {
     const review = await tx.review.findFirst({
-      where: { id: reviewId, deletedAt: null, status: ReviewStatus.APPROVED },
+      // storeId inside the same query as the visibility rules, not a second check afterwards —
+      // a review belonging to another store is indistinguishable from one that doesn't exist.
+      where: { id: reviewId, storeId, deletedAt: null, status: ReviewStatus.APPROVED },
       select: { id: true },
     });
 

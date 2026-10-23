@@ -1,7 +1,9 @@
 import type { ActionFunctionArgs, LoaderFunctionArgs } from "react-router";
 import { authenticate } from "../shopify.server";
 import { HelpfulVoteValue, castHelpfulVote } from "../services/review.server";
-import { json, isPreflight, preflightResponse } from "./api.reviews";
+import { getStoreBySlug } from "../services/store.server";
+import { checkAndRecordSubmission } from "../services/reviewSubmissionThrottle.server";
+import { json, isPreflight, preflightResponse, storeSlugFromShop } from "./api.reviews";
 
 // Public, unauthenticated write for the storefront widget's "Was this helpful?" control.
 // GET is unsupported on purpose — this endpoint only ever mutates a vote; the reviews
@@ -27,6 +29,27 @@ export const action = async ({ request }: ActionFunctionArgs) => {
   // Proxy (missing/invalid signature) — this is what actually rejects non-Shopify traffic.
   await authenticate.public.appProxy(request);
 
+  // `shop` is one of the query params covered by the signature just verified above, so it is a
+  // trusted value — the same reasoning api.reviews.tsx's own loader/action documents.
+  //
+  // Resolving it is NOT optional. A valid App Proxy signature only proves "some shop with this
+  // app installed forwarded this request"; it says nothing about which shop's reviews the body
+  // refers to. Without scoping the vote to this shop's store, any installer could vote on any
+  // review on the platform, and review ids are freely enumerable from the public consumer API
+  // (api.public.v1.reviews.tsx returns them unauthenticated). See castHelpfulVote's own header.
+  const url = new URL(request.url);
+  const shop = url.searchParams.get("shop")?.trim() || "";
+
+  if (!shop) {
+    return json({ ok: false, error: "shop is required." }, { status: 400 });
+  }
+
+  const store = await getStoreBySlug(storeSlugFromShop(shop));
+
+  if (!store) {
+    return json({ ok: false, error: "Shop not found." }, { status: 404 });
+  }
+
   let payload: Record<string, unknown>;
   try {
     payload = await request.json();
@@ -49,8 +72,21 @@ export const action = async ({ request }: ActionFunctionArgs) => {
     return json({ ok: false, error: errors.join(" ") }, { status: 400 });
   }
 
+  // `visitorId` is client-generated and entirely unverifiable, so the per-visitor uniqueness
+  // constraint alone can't bound abuse — rotating it mints a fresh vote every time. This is the
+  // same IP-bucketed defense the two submission endpoints already use, on its own "vote" scope
+  // with a much higher ceiling, so a shopper marking a page full of reviews helpful is never
+  // mistaken for a script (see reviewSubmissionThrottle.server.ts's MAX_VOTES_PER_WINDOW).
+  const throttle = await checkAndRecordSubmission(store.id, request, "vote");
+  if (!throttle.allowed) {
+    return json(
+      { ok: false, error: "Too many votes from this connection. Please try again later." },
+      { status: 429 },
+    );
+  }
+
   try {
-    const result = await castHelpfulVote(reviewId, visitorId, voteValue as HelpfulVoteValue);
+    const result = await castHelpfulVote(store.id, reviewId, visitorId, voteValue as HelpfulVoteValue);
     return json({ ok: true, ...result });
   } catch (error) {
     return json(
