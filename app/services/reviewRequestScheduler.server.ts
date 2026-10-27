@@ -18,6 +18,47 @@ const SWEEP_INTERVAL_MS = 5 * 60 * 1000;
 // is still "scheduled" and gets picked up by the next tick.
 const SWEEP_BATCH_SIZE = 25;
 
+// How long a claimed-but-undelivered row may sit before another sweep may reclaim it.
+//
+// A claim is "status: scheduled -> sending" taken before the send. That is what makes two
+// workers safe, but it introduces one failure mode the old select-then-send did not have: if the
+// process dies between the claim and the send's own terminal write, the row is left on "sending"
+// with nothing scheduled to finish it. Under the previous code that row would have stayed
+// "scheduled" and simply been retried next tick, so leaving it stranded would be a regression in
+// delivery, not just in tidiness.
+//
+// Three sweep intervals, deliberately generous. A real send finishes in seconds, and
+// dispatchRequestEmail refreshes updatedAt on every attempt (it writes sendAttempts each time),
+// so an in-progress retry sequence keeps extending its own lease. Nothing legitimate is still
+// working after 15 minutes.
+//
+// NOTE: this also recovers rows stranded by the pre-existing path — reviewRequestService's
+// resendRequest/createRequest set "sending" before dispatching too, so a crash there has always
+// been able to strand a row. Those were previously stuck forever; they now rejoin the schedule.
+const STALE_CLAIM_MS = 3 * SWEEP_INTERVAL_MS;
+
+/**
+ * Returns claimed rows to "scheduled" so a later sweep can retry them.
+ *
+ * Matches on updatedAt rather than a new column: Prisma maintains it via @updatedAt on every
+ * write, so the claim itself timestamps the lease and no migration is needed. `status` is
+ * indexed (@@index([status]) on ReviewRequest), so this stays cheap.
+ */
+export async function recoverStaleClaims(now: Date = new Date()): Promise<{ recovered: number }> {
+  const cutoff = new Date(now.getTime() - STALE_CLAIM_MS);
+
+  const result = await prisma.reviewRequest.updateMany({
+    where: { status: "sending", updatedAt: { lt: cutoff } },
+    data: { status: "scheduled" },
+  });
+
+  if (result.count > 0) {
+    console.log(`[reviewRequestScheduler] recovered ${result.count} stale claim(s) back to scheduled`);
+  }
+
+  return { recovered: result.count };
+}
+
 // One pass: finds every request still "scheduled" whose scheduledFor has arrived, across every
 // store — dispatchRequestEmail needs no Shopify Admin session (only Prisma + the email
 // provider), so this sweep is deliberately store-agnostic rather than looped per shop. Returns
@@ -25,6 +66,13 @@ const SWEEP_BATCH_SIZE = 25;
 // throws on a send failure (the row lands on "failed", visible in the admin UI) — the try/catch
 // below only guards against something genuinely unexpected (e.g. a DB blip), so one bad row can
 // never abort the rest of the sweep.
+//
+// CONCURRENCY: the findMany below is only a candidate list. Selecting a row grants no right to
+// send it — every row must be claimed with the conditional update inside the loop, and only the
+// worker whose update reports count === 1 proceeds. Without that, two Railway replicas (or two
+// overlapping ticks in one process) both select the same "scheduled" rows and both send, because
+// the terminal "sent"/"failed" write happens after the email leaves. `status` is the lock: the
+// database serialises the transition out of "scheduled", so exactly one claimant can win.
 export async function runDueReviewRequestSweep(now: Date = new Date()): Promise<{ due: number; dispatched: number }> {
   const due = await prisma.reviewRequest.findMany({
     where: { status: "scheduled", scheduledFor: { lte: now } },
@@ -37,6 +85,20 @@ export async function runDueReviewRequestSweep(now: Date = new Date()): Promise<
 
   for (const request of due) {
     try {
+      // The claim. "sending" is the existing in-flight status (resendRequest already uses it),
+      // so this introduces no new state and nothing downstream needs teaching about it —
+      // dispatchRequestEmail overwrites it with "sent" or "failed" either way.
+      const claim = await prisma.reviewRequest.updateMany({
+        where: { id: request.id, status: "scheduled" },
+        data: { status: "sending" },
+      });
+
+      // Lost the race, or the row stopped being eligible between select and claim (cancelled
+      // from the admin, completed by the customer). Either way another party owns it now.
+      if (claim.count !== 1) {
+        continue;
+      }
+
       await enqueueReviewRequestDispatch(request.id);
       dispatched += 1;
     } catch (error) {
@@ -158,15 +220,66 @@ export async function runDueReminderSweep(now: Date = new Date()): Promise<{ due
       continue;
     }
 
+    // The claim, same principle as the Day-0 sweep but on the reminder's own field rather than
+    // `status` — a reminder must never touch status (see dispatchReminderEmail's header). The
+    // field flips null -> timestamp here, BEFORE the send, so the database serialises it and only
+    // one worker can win. Previously the field was written after the send, which is why two
+    // replicas could both pass the `null` check and both email the same customer.
+    const field = REMINDER_CLAIM_FIELD[reminderType];
+    const claim = await prisma.reviewRequest.updateMany({
+      where: { id: request.id, [field]: null },
+      data: { [field]: now },
+    });
+
+    if (claim.count !== 1) {
+      continue;
+    }
+
     try {
-      await enqueueReminderDispatch(request.id, reminderType);
-      dispatched += 1;
+      const sent = await enqueueReminderDispatch(request.id, reminderType);
+
+      if (sent) {
+        dispatched += 1;
+      } else {
+        // Roll the claim back so the row is eligible again next tick. This is what preserves the
+        // pre-existing retry-by-next-tick behaviour under a pre-send claim: without it, a send
+        // that failed (provider error, suppression discovered at dispatch time) would leave the
+        // field stamped and the reminder would never be sent at all.
+        await releaseReminderClaim(request.id, field);
+      }
     } catch (error) {
       console.error(`[reviewRequestScheduler] Failed to dispatch ${reminderType} for request ${request.id}:`, error);
+      // Same rollback on an unexpected throw — a claim must never outlive the attempt it was
+      // taken for.
+      await releaseReminderClaim(request.id, field);
     }
   }
 
   return { due, dispatched };
+}
+
+const REMINDER_CLAIM_FIELD: Record<ReminderType, "reminder1SentAt" | "reminderFinalSentAt"> = {
+  reminder_1: "reminder1SentAt",
+  reminder_final: "reminderFinalSentAt",
+};
+
+// Undoes a reminder claim. Guarded on the row still being terminal-free is unnecessary — the
+// only writer of these fields is the claim above and dispatchReminderEmail's own confirmation
+// write, and we only reach here when no send happened. Never throws: a rollback failure must not
+// abort the rest of the sweep, and the stale-claim case degrades to "this reminder is skipped",
+// never to a duplicate email.
+async function releaseReminderClaim(
+  requestId: string,
+  field: "reminder1SentAt" | "reminderFinalSentAt",
+): Promise<void> {
+  try {
+    await prisma.reviewRequest.updateMany({
+      where: { id: requestId },
+      data: { [field]: null },
+    });
+  } catch (error) {
+    console.error(`[reviewRequestScheduler] Failed to release ${field} claim on ${requestId}:`, error);
+  }
 }
 
 // Data-retention purge (see docs/DATA_RETENTION_POLICY.md) — 90 days, a real business
@@ -205,6 +318,8 @@ export async function runRetentionPurgeSweep(now: Date = new Date()): Promise<{ 
 
 export interface SchedulerRunSummary {
   startedAt: Date;
+  /** Rows returned from a stranded "sending" claim to "scheduled" this tick. */
+  recovery: { recovered: number } | null;
   requests: { due: number; dispatched: number } | null;
   reminders: { due: number; dispatched: number } | null;
   retention: { storesProcessed: number; redacted: number } | null;
@@ -258,11 +373,23 @@ export function startReviewRequestScheduler(): void {
     const startedAt = new Date();
     const status: SchedulerRunSummary = {
       startedAt,
+      recovery: null,
       requests: null,
       reminders: null,
       retention: null,
       errors: [],
     };
+
+    // Recovery runs FIRST, before the request sweep, so a row stranded on "sending" by a crashed
+    // worker is back on "scheduled" in time for this same tick to pick it up — rather than
+    // waiting a further interval. Its own try/catch for the same reason as the sweeps below: a
+    // recovery failure must not stop mail going out.
+    try {
+      status.recovery = await recoverStaleClaims();
+    } catch (error) {
+      status.errors.push("recovery");
+      console.error("[reviewRequestScheduler] Stale-claim recovery failed:", error);
+    }
 
     // Each sweep is awaited and recorded separately so one failing sweep neither hides nor
     // aborts the other two — a retention error must not stop reminders going out.
@@ -294,6 +421,7 @@ export function startReviewRequestScheduler(): void {
     // provable without 288 idle lines a day. Counts only: no email address, customer name or
     // review content ever reaches the log.
     const didWork =
+      (status.recovery?.recovered ?? 0) > 0 ||
       (status.requests?.dispatched ?? 0) > 0 ||
       (status.reminders?.dispatched ?? 0) > 0 ||
       (status.retention?.redacted ?? 0) > 0 ||
@@ -305,6 +433,7 @@ export function startReviewRequestScheduler(): void {
       if (!didWork) idleTicks = 0;
       console.log(
         `[reviewRequestScheduler] sweep ok in ${Date.now() - startedAt.getTime()}ms — ` +
+          `recovered=${status.recovery?.recovered ?? 0}; ` +
           `requests due=${status.requests?.due ?? 0} sent=${status.requests?.dispatched ?? 0}; ` +
           `reminders due=${status.reminders?.due ?? 0} sent=${status.reminders?.dispatched ?? 0}; ` +
           `retention stores=${status.retention?.storesProcessed ?? 0} redacted=${status.retention?.redacted ?? 0}` +

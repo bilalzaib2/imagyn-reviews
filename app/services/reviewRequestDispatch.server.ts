@@ -22,12 +22,16 @@ export async function enqueueReviewRequestDispatch(requestId: string): Promise<v
 // runDueReminderSweep) — kept as its own function rather than a parameter on
 // enqueueReviewRequestDispatch, since a reminder dispatch and the original Day-0 dispatch have
 // different eligibility rules and never share a call site.
-export async function enqueueReminderDispatch(requestId: string, reminderType: ReminderType): Promise<void> {
+//
+// Reports whether an email actually went out, so runDueReminderSweep can roll back the claim it
+// placed on the reminder field and leave the row eligible for the next tick. Without that
+// signal a failed send would silently consume the claim and the reminder would never arrive.
+export async function enqueueReminderDispatch(requestId: string, reminderType: ReminderType): Promise<boolean> {
   const request = await reviewRequestService.getRequest(requestId);
 
   if (!request) {
-    return;
+    return false;
   }
 
-  await dispatchReminderEmail(request, reminderType);
+  return dispatchReminderEmail(request, reminderType);
 }

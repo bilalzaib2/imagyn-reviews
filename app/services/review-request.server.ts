@@ -369,22 +369,33 @@ const REMINDER_FIELD: Record<ReminderType, "reminder1SentAt" | "reminderFinalSen
 // visibility isn't tracked separately, an accepted limitation for this pass.
 //
 // Idempotency: the caller (reviewRequestScheduler.server.ts's runDueReminderSweep) only ever
-// selects rows where the relevant field is still null, and this function is the only writer of
-// that field — once set, the row can never be selected again, so the same reminder can never be
-// sent twice. On a send failure, the field is deliberately left unset (unlike
-// dispatchRequestEmail's bounded MAX_SEND_ATTEMPTS retry) — the next sweep tick (5 minutes
-// later) naturally retries, since nothing else about the row's eligibility changed. A reminder
-// has no customer-facing urgency the way the Day-0 send does, so this simpler, unbounded-retry-
-// by-next-tick approach is deliberate, not an oversight.
-export const dispatchReminderEmail = async (request: ReviewRequestRecord, reminderType: ReminderType): Promise<void> => {
+// selects rows where the relevant field is still null. Within ONE process that sufficed on its
+// own, because this function is that field's only writer. Across processes it does NOT: the
+// field is written AFTER the send, so two workers sweeping the same tick both see null, both
+// send, and the customer receives the reminder twice. The sweep now claims the field before
+// calling this (see runDueReminderSweep's claimReminder), so the guarantee no longer rests on
+// there being exactly one process.
+//
+// On a send failure the reminder is still left for the next tick to retry (unlike
+// dispatchRequestEmail's bounded MAX_SEND_ATTEMPTS retry) — a reminder has no customer-facing
+// urgency the way the Day-0 send does, so retry-by-next-tick is deliberate, not an oversight.
+// Preserving that under a pre-send claim is exactly why this function now reports whether it
+// sent: the caller rolls its claim back on `false`, so a failed send becomes eligible again next
+// tick instead of being silently consumed.
+//
+// Returns true only when an email actually went out.
+export const dispatchReminderEmail = async (
+  request: ReviewRequestRecord,
+  reminderType: ReminderType,
+): Promise<boolean> => {
   if (!request.email || !request.requestToken) {
-    return;
+    return false;
   }
 
   // Same suppression guard as dispatchRequestEmail — a suppressed recipient never receives a
   // reminder, whether this call came from the scheduler sweep or a manual admin action.
   if (await emailSuppressionService.isSuppressed(request.store.id, request.email)) {
-    return;
+    return false;
   }
 
   const template = await emailTemplateService.getActiveContent(request.store.id, reminderType);
@@ -425,13 +436,19 @@ export const dispatchReminderEmail = async (request: ReviewRequestRecord, remind
     });
   } catch (error) {
     console.error(`Failed to send ${reminderType} email for request ${request.id}:`, error);
-    return;
+    return false;
   }
 
+  // Still written here even though the sweep's claim already set it: this function is also
+  // reachable without a claim (a direct call, and every existing test), so it must leave the
+  // row correct on its own. Re-stamping an already-claimed row is harmless — the field is only
+  // ever read as "is this null", never for its exact value.
   await prisma.reviewRequest.update({
     where: { id: request.id },
     data: { [REMINDER_FIELD[reminderType]]: new Date() },
   });
+
+  return true;
 };
 
 // Monotonic rank for the delivery-tracking portion of the lifecycle — used only by

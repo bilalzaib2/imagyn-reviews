@@ -14,6 +14,8 @@ interface FakeRequestRow {
   reviewedAt?: Date | null;
   reminder1SentAt?: Date | null;
   reminderFinalSentAt?: Date | null;
+  /** Prisma maintains this via @updatedAt; the claim uses it as the lease timestamp. */
+  updatedAt?: Date;
 }
 
 interface FakeStoreRow {
@@ -33,6 +35,8 @@ let dispatchedIds: string[];
 let failingIds: Set<string>;
 let reminderDispatches: Array<{ id: string; type: string }>;
 let failingReminderIds: Set<string>;
+/** Reminder ids whose dispatch returns false (no email sent) instead of throwing. */
+let notSendingReminderIds: Set<string>;
 let suppressedPairs: Set<string>;
 
 vi.mock("../db.server", () => ({
@@ -92,6 +96,32 @@ vi.mock("../db.server", () => ({
           .slice(0, args.take)
           .map((row) => ({ id: row.id }));
       }),
+
+      // Models Prisma/Postgres conditional-update semantics, which is what the atomic claim
+      // relies on: the predicate and the write are one indivisible step, and `count` reports how
+      // many rows actually matched. Returning count 0 is how a losing worker learns it lost.
+      updateMany: vi.fn(async (args: { where: Record<string, unknown>; data: Record<string, unknown> }) => {
+        const { where, data } = args;
+        let count = 0;
+
+        for (const row of fakeRequests) {
+          if (where.id !== undefined && row.id !== where.id) continue;
+          if (where.status !== undefined && row.status !== where.status) continue;
+          if ("reminder1SentAt" in where && where.reminder1SentAt === null && row.reminder1SentAt != null) continue;
+          if ("reminderFinalSentAt" in where && where.reminderFinalSentAt === null && row.reminderFinalSentAt != null)
+            continue;
+          if (where.updatedAt !== undefined) {
+            const lt = (where.updatedAt as { lt: Date }).lt;
+            if (!row.updatedAt || row.updatedAt.getTime() >= lt.getTime()) continue;
+          }
+
+          Object.assign(row, data);
+          row.updatedAt = new Date();
+          count += 1;
+        }
+
+        return { count };
+      }),
     },
   },
 }));
@@ -107,7 +137,14 @@ vi.mock("./reviewRequestDispatch.server", () => ({
     if (failingReminderIds.has(id)) {
       throw new Error(`Simulated reminder dispatch failure for ${id}`);
     }
+    if (notSendingReminderIds.has(id)) {
+      // Reached the dispatch layer but sent nothing (provider error, suppression discovered
+      // there). Returns false rather than throwing — the sweep must roll its claim back either
+      // way, and both routes are covered below.
+      return false;
+    }
     reminderDispatches.push({ id, type });
+    return true;
   }),
 }));
 
@@ -145,9 +182,13 @@ vi.mock("./review-request.server", () => ({
   },
 }));
 
-const { runDueReviewRequestSweep, runDueReminderSweep, runRetentionPurgeSweep, getSchedulerStatus } = await import(
-  "./reviewRequestScheduler.server"
-);
+const {
+  runDueReviewRequestSweep,
+  runDueReminderSweep,
+  runRetentionPurgeSweep,
+  recoverStaleClaims,
+  getSchedulerStatus,
+} = await import("./reviewRequestScheduler.server");
 
 describe("runDueReviewRequestSweep", () => {
   beforeEach(() => {
@@ -157,6 +198,7 @@ describe("runDueReviewRequestSweep", () => {
     failingIds = new Set();
     reminderDispatches = [];
     failingReminderIds = new Set();
+    notSendingReminderIds = new Set();
     suppressedPairs = new Set();
   });
 
@@ -235,6 +277,7 @@ describe("runDueReminderSweep", () => {
     failingIds = new Set();
     reminderDispatches = [];
     failingReminderIds = new Set();
+    notSendingReminderIds = new Set();
     suppressedPairs = new Set();
   });
 
@@ -614,5 +657,397 @@ describe("getSchedulerStatus", () => {
   it("has no last run until a sweep has actually completed", () => {
     // Never a fabricated timestamp: a process that has not swept yet says so.
     expect(getSchedulerStatus().lastRun).toBeNull();
+  });
+});
+
+// ─────────────────────────────────────────────────────────────────────────────────────────────
+// Atomic claim: duplicate-send prevention across concurrent workers.
+//
+// The bug these pin: both sweeps used to select candidate rows and then send, with the terminal
+// write (status "sent" / reminder timestamp) happening AFTER the email left. Two Railway replicas
+// ticking in the same window therefore both selected the same rows and both emailed the same
+// customer. Nothing in the codebase locked anything — a repo-wide grep for advisory locks,
+// FOR UPDATE and SKIP LOCKED found nothing.
+//
+// The fake updateMany above models Prisma/Postgres conditional-update semantics (predicate and
+// write as one indivisible step, `count` reporting matches), which is the exact primitive the fix
+// relies on. Concurrency is driven with Promise.all: the sweeps interleave at their real await
+// points, so a claim taken by one worker is visible to the other mid-flight.
+// ─────────────────────────────────────────────────────────────────────────────────────────────
+describe("atomic claim — concurrent workers", () => {
+  beforeEach(() => {
+    fakeRequests = [];
+    fakeStores = {};
+    dispatchedIds = [];
+    failingIds = new Set();
+    reminderDispatches = [];
+    failingReminderIds = new Set();
+    notSendingReminderIds = new Set();
+    suppressedPairs = new Set();
+  });
+
+  const NOW = new Date("2026-08-10T12:00:00Z");
+  const dueRow = (id: string): FakeRequestRow => ({
+    id,
+    status: "scheduled",
+    scheduledFor: new Date("2026-08-09T12:00:00Z"),
+    updatedAt: new Date("2026-08-09T12:00:00Z"),
+  });
+
+  it("two workers sweeping the same due row send it exactly once", async () => {
+    fakeRequests = [dueRow("req_1")];
+
+    const [a, b] = await Promise.all([runDueReviewRequestSweep(NOW), runDueReviewRequestSweep(NOW)]);
+
+    expect(dispatchedIds).toEqual(["req_1"]);
+    expect(a.dispatched + b.dispatched).toBe(1);
+  });
+
+  it("both workers still SEE the row — the claim, not the query, is what dedupes", async () => {
+    // Guards against a future refactor "fixing" this by narrowing the select instead: `due`
+    // legitimately reports 1 for both, because both observed an eligible row.
+    fakeRequests = [dueRow("req_1")];
+
+    const [a, b] = await Promise.all([runDueReviewRequestSweep(NOW), runDueReviewRequestSweep(NOW)]);
+
+    expect(a.due).toBe(1);
+    expect(b.due).toBe(1);
+    expect(dispatchedIds).toHaveLength(1);
+  });
+
+  it("a batch of due rows is dispatched once each across four workers", async () => {
+    fakeRequests = Array.from({ length: 12 }, (_, i) => dueRow(`req_${i}`));
+
+    const results = await Promise.all([
+      runDueReviewRequestSweep(NOW),
+      runDueReviewRequestSweep(NOW),
+      runDueReviewRequestSweep(NOW),
+      runDueReviewRequestSweep(NOW),
+    ]);
+
+    expect(dispatchedIds).toHaveLength(12);
+    expect(new Set(dispatchedIds).size).toBe(12);
+    expect(results.reduce((n, r) => n + r.dispatched, 0)).toBe(12);
+  });
+
+  it("a claimed row leaves 'scheduled' so a later sweep cannot re-send it", async () => {
+    fakeRequests = [dueRow("req_1")];
+
+    await runDueReviewRequestSweep(NOW);
+    expect(dispatchedIds).toEqual(["req_1"]);
+
+    // The dispatch layer is faked, so nothing moved the row to "sent" — it is still "sending".
+    // A subsequent sweep must not pick it up regardless.
+    await runDueReviewRequestSweep(NOW);
+    expect(dispatchedIds).toEqual(["req_1"]);
+  });
+
+  it("claims via a conditional update predicated on status, not an unconditional write", async () => {
+    const prisma = (await import("../db.server")).default as unknown as {
+      reviewRequest: {
+        updateMany: {
+          mock: { calls: Array<[{ where: Record<string, unknown>; data: Record<string, unknown> }]> };
+          mockClear: () => void;
+        };
+      };
+    };
+    // Mock calls accumulate across tests in this file, so start from a clean slate.
+    prisma.reviewRequest.updateMany.mockClear();
+
+    fakeRequests = [dueRow("req_1")];
+    await runDueReviewRequestSweep(NOW);
+
+    const claimCall = prisma.reviewRequest.updateMany.mock.calls.find(
+      (c) => (c[0].where as { id?: string }).id === "req_1" && "status" in c[0].where,
+    );
+    expect(claimCall).toBeDefined();
+    // The predicate is what makes it a claim: an unconditional `where: { id }` would let both
+    // workers "win" and send twice.
+    expect(claimCall![0].where).toMatchObject({ id: "req_1", status: "scheduled" });
+    expect(claimCall![0].data).toMatchObject({ status: "sending" });
+  });
+
+  it("a row cancelled between select and claim is never sent", async () => {
+    fakeRequests = [dueRow("req_1")];
+    const row = fakeRequests[0];
+
+    // Models the admin cancelling it in the gap: the select already returned it, but the claim's
+    // `status: "scheduled"` predicate no longer matches.
+    const { default: prisma } = (await import("../db.server")) as unknown as {
+      default: { reviewRequest: { findMany: { mockImplementationOnce: (f: () => unknown) => void } } };
+    };
+    prisma.reviewRequest.findMany.mockImplementationOnce(async () => {
+      row.status = "cancelled";
+      return [{ id: "req_1" }];
+    });
+
+    const result = await runDueReviewRequestSweep(NOW);
+
+    expect(dispatchedIds).toEqual([]);
+    expect(result.dispatched).toBe(0);
+  });
+});
+
+describe("atomic claim — reminders, concurrent workers", () => {
+  beforeEach(() => {
+    fakeRequests = [];
+    fakeStores = {};
+    dispatchedIds = [];
+    failingIds = new Set();
+    reminderDispatches = [];
+    failingReminderIds = new Set();
+    notSendingReminderIds = new Set();
+    suppressedPairs = new Set();
+  });
+
+  const NOW = new Date("2026-08-20T12:00:00Z");
+
+  function proStoreWithDueReminder(id: string) {
+    fakeStores = {
+      store_1: {
+        reminderEmailsEnabled: true,
+        remindersEnabledAt: new Date("2026-01-01T00:00:00Z"),
+        reminder1DelayDays: 3,
+        reminderFinalDelayDays: 7,
+      },
+    };
+    fakeRequests = [
+      {
+        id,
+        status: "sent",
+        scheduledFor: null,
+        storeId: "store_1",
+        email: "customer@example.com",
+        sentAt: new Date("2026-08-10T12:00:00Z"),
+        reviewedAt: null,
+        reminder1SentAt: null,
+        reminderFinalSentAt: null,
+        updatedAt: new Date("2026-08-10T12:00:00Z"),
+      },
+    ];
+  }
+
+  it("two workers send a due reminder exactly once", async () => {
+    proStoreWithDueReminder("req_1");
+
+    const [a, b] = await Promise.all([runDueReminderSweep(NOW), runDueReminderSweep(NOW)]);
+
+    expect(reminderDispatches).toEqual([{ id: "req_1", type: "reminder_1" }]);
+    expect(a.dispatched + b.dispatched).toBe(1);
+  });
+
+  it("claims the reminder field BEFORE sending, not after", async () => {
+    proStoreWithDueReminder("req_1");
+    await runDueReminderSweep(NOW);
+
+    const prisma = (await import("../db.server")).default as unknown as {
+      reviewRequest: { updateMany: { mock: { calls: Array<[{ where: Record<string, unknown> }]> } } };
+    };
+    const claim = prisma.reviewRequest.updateMany.mock.calls.find(
+      (c) => "reminder1SentAt" in (c[0].where as Record<string, unknown>),
+    );
+    expect(claim).toBeDefined();
+    expect(claim![0].where).toMatchObject({ id: "req_1", reminder1SentAt: null });
+  });
+
+  it("a claimed reminder is not re-sent by a later sweep", async () => {
+    proStoreWithDueReminder("req_1");
+
+    await runDueReminderSweep(NOW);
+    await runDueReminderSweep(NOW);
+
+    // reminder_1 exactly once — that is the duplicate-send guarantee.
+    expect(reminderDispatches.filter((d) => d.type === "reminder_1")).toHaveLength(1);
+
+    // The second sweep legitimately sends reminder_final: this row was sent 10 days before NOW
+    // and the store's reminderFinalDelayDays is 7, so once reminder_1 is claimed the final
+    // reminder is genuinely due. Each reminder is claimed on its own field, so they never
+    // contend with each other — asserted explicitly so this is never mistaken for a duplicate.
+    expect(reminderDispatches.filter((d) => d.type === "reminder_final")).toHaveLength(1);
+    expect(reminderDispatches.map((d) => d.id)).toEqual(["req_1", "req_1"]);
+  });
+
+  it("eight workers over four due reminders send four emails total", async () => {
+    proStoreWithDueReminder("req_0");
+    for (let i = 1; i < 4; i++) {
+      fakeRequests.push({ ...fakeRequests[0], id: `req_${i}` });
+    }
+
+    await Promise.all(Array.from({ length: 8 }, () => runDueReminderSweep(NOW)));
+
+    expect(reminderDispatches).toHaveLength(4);
+    expect(new Set(reminderDispatches.map((d) => d.id)).size).toBe(4);
+  });
+});
+
+describe("claim rollback — retries and failure recovery", () => {
+  beforeEach(() => {
+    fakeRequests = [];
+    fakeStores = {};
+    dispatchedIds = [];
+    failingIds = new Set();
+    reminderDispatches = [];
+    failingReminderIds = new Set();
+    notSendingReminderIds = new Set();
+    suppressedPairs = new Set();
+  });
+
+  const NOW = new Date("2026-08-20T12:00:00Z");
+
+  function dueReminder(id: string) {
+    fakeStores = {
+      store_1: {
+        reminderEmailsEnabled: true,
+        remindersEnabledAt: new Date("2026-01-01T00:00:00Z"),
+        reminder1DelayDays: 3,
+        reminderFinalDelayDays: 7,
+      },
+    };
+    fakeRequests = [
+      {
+        id,
+        status: "sent",
+        scheduledFor: null,
+        storeId: "store_1",
+        email: "customer@example.com",
+        sentAt: new Date("2026-08-10T12:00:00Z"),
+        reviewedAt: null,
+        reminder1SentAt: null,
+        reminderFinalSentAt: null,
+        updatedAt: new Date("2026-08-10T12:00:00Z"),
+      },
+    ];
+  }
+
+  // The behaviour the pre-send claim could easily have destroyed: a reminder whose send fails
+  // must stay eligible, exactly as it did when the field was written only after a success.
+  it("a reminder whose dispatch sends nothing has its claim rolled back", async () => {
+    dueReminder("req_1");
+    notSendingReminderIds = new Set(["req_1"]);
+
+    const result = await runDueReminderSweep(NOW);
+
+    expect(result.dispatched).toBe(0);
+    expect(fakeRequests[0].reminder1SentAt).toBeNull();
+  });
+
+  it("a reminder whose dispatch THROWS also has its claim rolled back", async () => {
+    dueReminder("req_1");
+    failingReminderIds = new Set(["req_1"]);
+
+    const result = await runDueReminderSweep(NOW);
+
+    expect(result.dispatched).toBe(0);
+    expect(fakeRequests[0].reminder1SentAt).toBeNull();
+  });
+
+  it("a rolled-back reminder is retried on the next tick and then succeeds", async () => {
+    dueReminder("req_1");
+    notSendingReminderIds = new Set(["req_1"]);
+
+    await runDueReminderSweep(NOW);
+    expect(reminderDispatches).toHaveLength(0);
+    expect(fakeRequests[0].reminder1SentAt).toBeNull();
+
+    // Provider recovers.
+    notSendingReminderIds = new Set();
+    const second = await runDueReminderSweep(NOW);
+
+    expect(second.dispatched).toBe(1);
+    expect(reminderDispatches).toEqual([{ id: "req_1", type: "reminder_1" }]);
+  });
+
+  it("one failing reminder never blocks another store's reminder in the same batch", async () => {
+    dueReminder("req_bad");
+    fakeRequests.push({ ...fakeRequests[0], id: "req_good" });
+    failingReminderIds = new Set(["req_bad"]);
+
+    const result = await runDueReminderSweep(NOW);
+
+    expect(result.dispatched).toBe(1);
+    expect(reminderDispatches).toEqual([{ id: "req_good", type: "reminder_1" }]);
+    expect(fakeRequests.find((r) => r.id === "req_bad")!.reminder1SentAt).toBeNull();
+  });
+});
+
+describe("recoverStaleClaims — crash between claim and send", () => {
+  beforeEach(() => {
+    fakeRequests = [];
+    fakeStores = {};
+    dispatchedIds = [];
+    failingIds = new Set();
+    reminderDispatches = [];
+    failingReminderIds = new Set();
+    notSendingReminderIds = new Set();
+    suppressedPairs = new Set();
+  });
+
+  const NOW = new Date("2026-08-20T12:00:00Z");
+  const minutesAgo = (m: number) => new Date(NOW.getTime() - m * 60 * 1000);
+
+  it("returns a long-stranded 'sending' row to 'scheduled'", async () => {
+    // 20 minutes > STALE_CLAIM_MS (3 x 5min). Models a worker killed mid-send.
+    fakeRequests = [{ id: "req_1", status: "sending", scheduledFor: minutesAgo(60), updatedAt: minutesAgo(20) }];
+
+    const result = await recoverStaleClaims(NOW);
+
+    expect(result.recovered).toBe(1);
+    expect(fakeRequests[0].status).toBe("scheduled");
+  });
+
+  it("leaves a freshly claimed row alone — an in-flight send is not stolen", async () => {
+    fakeRequests = [{ id: "req_1", status: "sending", scheduledFor: minutesAgo(60), updatedAt: minutesAgo(1) }];
+
+    const result = await recoverStaleClaims(NOW);
+
+    expect(result.recovered).toBe(0);
+    expect(fakeRequests[0].status).toBe("sending");
+  });
+
+  it("does not touch a row still inside the lease window (14 min < 15 min)", async () => {
+    fakeRequests = [{ id: "req_1", status: "sending", scheduledFor: minutesAgo(60), updatedAt: minutesAgo(14) }];
+
+    expect((await recoverStaleClaims(NOW)).recovered).toBe(0);
+    expect(fakeRequests[0].status).toBe("sending");
+  });
+
+  it("never touches terminal or pre-claim rows", async () => {
+    fakeRequests = [
+      { id: "sent", status: "sent", scheduledFor: null, updatedAt: minutesAgo(600) },
+      { id: "failed", status: "failed", scheduledFor: null, updatedAt: minutesAgo(600) },
+      { id: "cancelled", status: "cancelled", scheduledFor: null, updatedAt: minutesAgo(600) },
+      { id: "completed", status: "completed", scheduledFor: null, updatedAt: minutesAgo(600) },
+      { id: "scheduled", status: "scheduled", scheduledFor: minutesAgo(10), updatedAt: minutesAgo(600) },
+    ];
+
+    expect((await recoverStaleClaims(NOW)).recovered).toBe(0);
+    expect(fakeRequests.map((r) => r.status)).toEqual(["sent", "failed", "cancelled", "completed", "scheduled"]);
+  });
+
+  it("a recovered row is picked up and sent by the following sweep", async () => {
+    fakeRequests = [{ id: "req_1", status: "sending", scheduledFor: minutesAgo(60), updatedAt: minutesAgo(20) }];
+
+    await recoverStaleClaims(NOW);
+    const sweep = await runDueReviewRequestSweep(NOW);
+
+    expect(sweep.dispatched).toBe(1);
+    expect(dispatchedIds).toEqual(["req_1"]);
+  });
+
+  it("recovery is idempotent — a second pass finds nothing left to do", async () => {
+    fakeRequests = [{ id: "req_1", status: "sending", scheduledFor: minutesAgo(60), updatedAt: minutesAgo(20) }];
+
+    expect((await recoverStaleClaims(NOW)).recovered).toBe(1);
+    expect((await recoverStaleClaims(NOW)).recovered).toBe(0);
+  });
+
+  it("recovery plus two concurrent workers still yields exactly one send", async () => {
+    // The full crash-recovery path under contention: the end-to-end guarantee, not just a claim.
+    fakeRequests = [{ id: "req_1", status: "sending", scheduledFor: minutesAgo(60), updatedAt: minutesAgo(20) }];
+
+    await recoverStaleClaims(NOW);
+    await Promise.all([runDueReviewRequestSweep(NOW), runDueReviewRequestSweep(NOW)]);
+
+    expect(dispatchedIds).toEqual(["req_1"]);
   });
 });
