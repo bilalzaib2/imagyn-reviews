@@ -53,20 +53,28 @@ export function createResendEmailProvider(): EmailProvider {
       const from = sanitizedName ? `${sanitizedName} <${extractAddress(fromEnv)}>` : fromEnv;
 
       const resend = new Resend(apiKey);
-      const { data, error } = await resend.emails.send({
-        from,
-        to: request.to,
-        subject: request.subject,
-        html: request.html,
-        text: request.text,
-        ...(request.replyTo ? { replyTo: request.replyTo } : {}),
-        // Echoed back verbatim on every delivery webhook event (see webhooks.resend.tsx) —
-        // this is how that endpoint correlates an event back to a ReviewRequest without a
-        // separate stored-message-id column.
-        ...(request.tags
-          ? { tags: Object.entries(request.tags).map(([name, value]) => ({ name, value })) }
-          : {}),
-      });
+      const { data, error } = await resend.emails.send(
+        {
+          from,
+          to: request.to,
+          subject: request.subject,
+          html: request.html,
+          text: request.text,
+          ...(request.replyTo ? { replyTo: request.replyTo } : {}),
+          // Echoed back verbatim on every delivery webhook event (see webhooks.resend.tsx) —
+          // this is how that endpoint correlates an event back to a ReviewRequest without a
+          // separate stored-message-id column.
+          ...(request.tags
+            ? { tags: Object.entries(request.tags).map(([name, value]) => ({ name, value })) }
+            : {}),
+        },
+        // Second argument, not part of the payload: Resend sends this as the `Idempotency-Key`
+        // header, and a repeat with the same key returns the original response WITHOUT sending
+        // again (keys retained 24h). This is what makes the scheduler's crash-recovery retry
+        // safe — see EmailSendRequest.idempotencyKey for the full reasoning. Omitted entirely
+        // when the caller supplies none, so every existing send path is byte-identical.
+        request.idempotencyKey ? { idempotencyKey: request.idempotencyKey } : undefined,
+      );
 
       if (error) {
         throw new NotificationProviderError(`Resend request failed: ${error.message}`, "resend");

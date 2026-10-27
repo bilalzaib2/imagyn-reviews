@@ -286,7 +286,7 @@ describe("runDueReminderSweep", () => {
 
     const result = await runDueReminderSweep(now);
 
-    expect(result).toEqual({ due: 1, dispatched: 1 });
+    expect(result).toEqual({ due: 1, dispatched: 1, claimLeaks: 0 });
     expect(reminderDispatches).toEqual([{ id: "req_1", type: "reminder_1" }]);
   });
 
@@ -295,7 +295,7 @@ describe("runDueReminderSweep", () => {
 
     const result = await runDueReminderSweep(now);
 
-    expect(result).toEqual({ due: 0, dispatched: 0 });
+    expect(result).toEqual({ due: 0, dispatched: 0, claimLeaks: 0 });
   });
 
   it("dispatches reminder_final for a request sent exactly 7 days ago whose reminder_1 already went out", async () => {
@@ -312,7 +312,7 @@ describe("runDueReminderSweep", () => {
 
     const result = await runDueReminderSweep(now);
 
-    expect(result).toEqual({ due: 1, dispatched: 1 });
+    expect(result).toEqual({ due: 1, dispatched: 1, claimLeaks: 0 });
     expect(reminderDispatches).toEqual([{ id: "req_1", type: "reminder_final" }]);
   });
 
@@ -343,7 +343,7 @@ describe("runDueReminderSweep", () => {
 
     const result = await runDueReminderSweep(now);
 
-    expect(result).toEqual({ due: 0, dispatched: 0 });
+    expect(result).toEqual({ due: 0, dispatched: 0, claimLeaks: 0 });
     expect(reminderDispatches).toEqual([]);
   });
 
@@ -357,7 +357,7 @@ describe("runDueReminderSweep", () => {
 
     const second = await runDueReminderSweep(now);
 
-    expect(second).toEqual({ due: 0, dispatched: 0 });
+    expect(second).toEqual({ due: 0, dispatched: 0, claimLeaks: 0 });
     expect(reminderDispatches).toEqual([{ id: "req_1", type: "reminder_1" }]);
   });
 
@@ -368,7 +368,7 @@ describe("runDueReminderSweep", () => {
 
     const result = await runDueReminderSweep(now);
 
-    expect(result).toEqual({ due: 0, dispatched: 0 });
+    expect(result).toEqual({ due: 0, dispatched: 0, claimLeaks: 0 });
   });
 
   it("never sweeps a request whose store has reminders disabled", async () => {
@@ -377,7 +377,7 @@ describe("runDueReminderSweep", () => {
 
     const result = await runDueReminderSweep(now);
 
-    expect(result).toEqual({ due: 0, dispatched: 0 });
+    expect(result).toEqual({ due: 0, dispatched: 0, claimLeaks: 0 });
   });
 
   it("never sweeps a request sent before the store's remindersEnabledAt cutoff (no backfill for historical requests)", async () => {
@@ -393,7 +393,7 @@ describe("runDueReminderSweep", () => {
     // "due" reflects the raw DB-side match (the query can't express the cross-row
     // sentAt-vs-remindersEnabledAt comparison — see runDueReminderSweep's own comment); the
     // backlog guard runs in application code afterward, which is what "dispatched: 0" proves.
-    expect(result).toEqual({ due: 1, dispatched: 0 });
+    expect(result).toEqual({ due: 1, dispatched: 0, claimLeaks: 0 });
   });
 
   it("does sweep a request sent after the store's remindersEnabledAt cutoff", async () => {
@@ -402,7 +402,7 @@ describe("runDueReminderSweep", () => {
 
     const result = await runDueReminderSweep(now);
 
-    expect(result).toEqual({ due: 1, dispatched: 1 });
+    expect(result).toEqual({ due: 1, dispatched: 1, claimLeaks: 0 });
   });
 
   it("excludes cancelled and failed requests, same as completed", async () => {
@@ -413,7 +413,7 @@ describe("runDueReminderSweep", () => {
 
     const result = await runDueReminderSweep(now);
 
-    expect(result).toEqual({ due: 0, dispatched: 0 });
+    expect(result).toEqual({ due: 0, dispatched: 0, claimLeaks: 0 });
   });
 
   it("a single failing reminder dispatch does not prevent the rest of the sweep from completing", async () => {
@@ -425,7 +425,7 @@ describe("runDueReminderSweep", () => {
 
     const result = await runDueReminderSweep(now);
 
-    expect(result).toEqual({ due: 2, dispatched: 1 });
+    expect(result).toEqual({ due: 2, dispatched: 1, claimLeaks: 0 });
     expect(reminderDispatches).toEqual([{ id: "req_ok", type: "reminder_1" }]);
   });
 
@@ -437,7 +437,7 @@ describe("runDueReminderSweep", () => {
 
     const result = await runDueReminderSweep(now);
 
-    expect(result).toEqual({ due: 1, dispatched: 0 });
+    expect(result).toEqual({ due: 1, dispatched: 0, claimLeaks: 0 });
     expect(reminderDispatches).toEqual([]);
   });
 
@@ -449,7 +449,7 @@ describe("runDueReminderSweep", () => {
 
     const result = await runDueReminderSweep(now);
 
-    expect(result).toEqual({ due: 1, dispatched: 1 });
+    expect(result).toEqual({ due: 1, dispatched: 1, claimLeaks: 0 });
     expect(reminderDispatches).toEqual([{ id: "req_1", type: "reminder_1" }]);
   });
 
@@ -462,7 +462,7 @@ describe("runDueReminderSweep", () => {
 
       const result = await runDueReminderSweep(now);
 
-      expect(result).toEqual({ due: 0, dispatched: 0 });
+      expect(result).toEqual({ due: 0, dispatched: 0, claimLeaks: 0 });
     });
 
     it("dispatches reminder_1 once a request crosses this store's own configured delay", async () => {
@@ -471,7 +471,7 @@ describe("runDueReminderSweep", () => {
 
       const result = await runDueReminderSweep(now);
 
-      expect(result).toEqual({ due: 1, dispatched: 1 });
+      expect(result).toEqual({ due: 1, dispatched: 1, claimLeaks: 0 });
       expect(reminderDispatches).toEqual([{ id: "req_1", type: "reminder_1" }]);
     });
 
@@ -491,11 +491,11 @@ describe("runDueReminderSweep", () => {
 
       // Final reminder configured for 10 days — 9 days in, not yet due.
       const notYetDue = await runDueReminderSweep(now);
-      expect(notYetDue).toEqual({ due: 0, dispatched: 0 });
+      expect(notYetDue).toEqual({ due: 0, dispatched: 0, claimLeaks: 0 });
 
       fakeRequests[0].sentAt = day(10);
       const due = await runDueReminderSweep(now);
-      expect(due).toEqual({ due: 1, dispatched: 1 });
+      expect(due).toEqual({ due: 1, dispatched: 1, claimLeaks: 0 });
       expect(reminderDispatches).toEqual([{ id: "req_1", type: "reminder_final" }]);
     });
 
@@ -510,7 +510,7 @@ describe("runDueReminderSweep", () => {
       const result = await runDueReminderSweep(now);
 
       // store_1's 2-day delay makes req_fast_store due; store_2's 8-day delay does not.
-      expect(result).toEqual({ due: 1, dispatched: 1 });
+      expect(result).toEqual({ due: 1, dispatched: 1, claimLeaks: 0 });
       expect(reminderDispatches).toEqual([{ id: "req_fast_store", type: "reminder_1" }]);
     });
   });
@@ -529,7 +529,7 @@ describe("runDueReminderSweep", () => {
 
       // Still counted as "due" (its date condition is genuinely met) — but never sent, the
       // same way the remindersEnabledAt and suppression guards behave.
-      expect(result).toEqual({ due: 1, dispatched: 0 });
+      expect(result).toEqual({ due: 1, dispatched: 0, claimLeaks: 0 });
       expect(reminderDispatches).toEqual([]);
     });
 
@@ -541,7 +541,7 @@ describe("runDueReminderSweep", () => {
 
       const result = await runDueReminderSweep(now);
 
-      expect(result).toEqual({ due: 1, dispatched: 0 });
+      expect(result).toEqual({ due: 1, dispatched: 0, claimLeaks: 0 });
       expect(reminderDispatches).toEqual([]);
     });
 
@@ -561,7 +561,7 @@ describe("runDueReminderSweep", () => {
 
       const result = await runDueReminderSweep(now);
 
-      expect(result).toEqual({ due: 2, dispatched: 1 });
+      expect(result).toEqual({ due: 2, dispatched: 1, claimLeaks: 0 });
       expect(reminderDispatches).toEqual([{ id: "req_pro", type: "reminder_1" }]);
     });
 
@@ -1049,5 +1049,126 @@ describe("recoverStaleClaims — crash between claim and send", () => {
     await Promise.all([runDueReviewRequestSweep(NOW), runDueReviewRequestSweep(NOW)]);
 
     expect(dispatchedIds).toEqual(["req_1"]);
+  });
+});
+
+// A claim that is taken but neither sent nor released is the one path in the whole sweep that
+// can lose a reminder. It must never be silent — releaseReminderClaim swallows the error so one
+// bad row can't abort the batch, so the count is what makes it visible.
+describe("leaked reminder claims are counted, not silently swallowed", () => {
+  beforeEach(() => {
+    fakeRequests = [];
+    fakeStores = {};
+    dispatchedIds = [];
+    failingIds = new Set();
+    reminderDispatches = [];
+    failingReminderIds = new Set();
+    notSendingReminderIds = new Set();
+    suppressedPairs = new Set();
+  });
+
+  const NOW = new Date("2026-08-20T12:00:00Z");
+
+  function dueReminder(id: string) {
+    fakeStores = {
+      store_1: {
+        reminderEmailsEnabled: true,
+        remindersEnabledAt: new Date("2026-01-01T00:00:00Z"),
+        reminder1DelayDays: 3,
+        reminderFinalDelayDays: 7,
+      },
+    };
+    fakeRequests = [
+      {
+        id,
+        status: "sent",
+        scheduledFor: null,
+        storeId: "store_1",
+        email: "customer@example.com",
+        sentAt: new Date("2026-08-10T12:00:00Z"),
+        reviewedAt: null,
+        reminder1SentAt: null,
+        reminderFinalSentAt: null,
+        updatedAt: new Date("2026-08-10T12:00:00Z"),
+      },
+    ];
+  }
+
+  type UpdateManyFn = (args: unknown) => Promise<{ count: number }>;
+  type UpdateManyMock = {
+    getMockImplementation: () => UpdateManyFn | undefined;
+    mockImplementation: (f: UpdateManyFn) => void;
+  };
+
+  // Captured once, before any test swaps it out — mockReset() would discard the fake table's
+  // real behaviour for every later test in this block, which is exactly the bug the first
+  // version of this helper had.
+  let originalUpdateMany: UpdateManyFn;
+
+  async function updateManyMock(): Promise<UpdateManyMock> {
+    const prisma = (await import("../db.server")).default as unknown as {
+      reviewRequest: { updateMany: UpdateManyMock };
+    };
+    return prisma.reviewRequest.updateMany;
+  }
+
+  /** Lets the claim succeed, then makes only the rollback write fail. Returns a restore fn. */
+  async function failOnlyTheRollback(): Promise<() => void> {
+    const mock = await updateManyMock();
+    if (!originalUpdateMany) {
+      const captured = mock.getMockImplementation();
+      if (!captured) throw new Error("fake updateMany implementation missing");
+      originalUpdateMany = captured;
+    }
+
+    mock.mockImplementation(async (args: unknown) => {
+      const a = args as { data: Record<string, unknown> };
+      // A release sets the field back to null; a claim sets it to a Date.
+      const isRelease = Object.values(a.data).some((v) => v === null);
+      if (isRelease) throw new Error("simulated DB failure during rollback");
+      return originalUpdateMany(args);
+    });
+
+    return () => mock.mockImplementation(originalUpdateMany);
+  }
+
+  it("reports claimLeaks when the rollback write fails", async () => {
+    dueReminder("req_1");
+    notSendingReminderIds = new Set(["req_1"]);
+    const restore = await failOnlyTheRollback();
+
+    const result = await runDueReminderSweep(NOW);
+
+    expect(result.dispatched).toBe(0);
+    expect(result.claimLeaks).toBe(1);
+    // The claim is still stamped — that IS the loss being reported.
+    expect(fakeRequests[0].reminder1SentAt).not.toBeNull();
+
+    restore();
+  });
+
+  it("reports zero leaks on a clean rollback", async () => {
+    dueReminder("req_1");
+    notSendingReminderIds = new Set(["req_1"]);
+
+    const result = await runDueReminderSweep(NOW);
+
+    expect(result.claimLeaks).toBe(0);
+    expect(fakeRequests[0].reminder1SentAt).toBeNull();
+  });
+
+  it("a rollback failure never aborts the rest of the batch", async () => {
+    dueReminder("req_leak");
+    fakeRequests.push({ ...fakeRequests[0], id: "req_ok" });
+    notSendingReminderIds = new Set(["req_leak"]);
+    const restore = await failOnlyTheRollback();
+
+    const result = await runDueReminderSweep(NOW);
+
+    // req_ok still got its email even though req_leak's rollback blew up.
+    expect(reminderDispatches.map((d) => d.id)).toContain("req_ok");
+    expect(result.claimLeaks).toBe(1);
+
+    restore();
   });
 });

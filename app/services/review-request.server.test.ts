@@ -316,10 +316,18 @@ vi.mock("../db.server", () => ({
 // Avoids a real Resend API call (and the ~2s of retry/sleep a genuine failure would take) for
 // the one test below that reaches dispatchRequestEmail — resolves instantly, like a
 // successfully-configured provider would.
+// Captured into a shared array (rather than a fresh vi.fn per call) so tests can assert what
+// was actually handed to the provider — specifically the Idempotency-Key, which is the only
+// thing standing between a crash-recovery retry and a duplicate customer email.
+const sentEmails: Array<Record<string, unknown>> = [];
+
 vi.mock("./notifications/provider.server", () => ({
   getEmailProvider: () => ({
     name: "fake",
-    sendEmail: vi.fn(async () => ({ id: "fake-message-id" })),
+    sendEmail: async (request: Record<string, unknown>) => {
+      sentEmails.push(request);
+      return { id: "fake-message-id" };
+    },
   }),
 }));
 
@@ -1295,5 +1303,92 @@ describe("purgeStaleContactInfo — retention purge (scheduled via reviewRequest
   it("rejects an invalid retentionDays instead of silently purging everything", async () => {
     await expect(reviewRequestService.purgeStaleContactInfo("store_1", { retentionDays: 0 })).rejects.toThrow();
     await expect(reviewRequestService.purgeStaleContactInfo("store_1", { retentionDays: -5 })).rejects.toThrow();
+  });
+});
+
+// The provider-level duplicate guard. The scheduler's claim prevents two workers sending the
+// same row, but one window stays open that no database claim can close: a worker dying after
+// the provider accepted the email and before the terminal "sent" write lands. The row then
+// looks unsent, recovery retries it, and the customer gets a second copy. A stable
+// Idempotency-Key makes that retry a no-op at Resend (24h retention, verified against its
+// official docs) rather than a second email.
+//
+// The key must identify the intended delivery, never its content: Resend rejects a key reused
+// with a different payload (409), so a content-derived key would turn a legitimate retry into an
+// error. requestToken is exactly right — stable across retries of one attempt, and regenerated
+// by resendRequest when a merchant deliberately sends again.
+describe("email idempotency keys", () => {
+  beforeEach(() => {
+    sentEmails.length = 0;
+  });
+
+  // Uses this file's own seeding helper, so these tests exercise the real dispatch path rather
+  // than a parallel fixture.
+  async function dispatchable() {
+    seedRequest({
+      id: "req_idem",
+      storeId: "store_1",
+      status: "sent",
+      sentAt: new Date("2026-08-01"),
+      reminder1SentAt: null,
+      reminderFinalSentAt: null,
+    });
+    const request = await reviewRequestService.getRequest("req_idem");
+    expect(request).toBeTruthy();
+    return request!;
+  }
+
+  it("the Day-0 request send is keyed on its request token", async () => {
+    const request = await dispatchable();
+    await dispatchRequestEmail(request);
+
+    expect(sentEmails).toHaveLength(1);
+    expect(sentEmails[0].idempotencyKey).toBe(`review-request/${request.requestToken}`);
+  });
+
+  it("a retry of the same attempt reuses the same key", async () => {
+    // Two dispatches of one unchanged row — what crash-recovery produces. Identical keys mean
+    // Resend suppresses the second rather than delivering twice.
+    const request = await dispatchable();
+    await dispatchRequestEmail(request);
+    await dispatchRequestEmail(request);
+
+    expect(sentEmails).toHaveLength(2);
+    expect(sentEmails[0].idempotencyKey).toBe(sentEmails[1].idempotencyKey);
+  });
+
+  it("each reminder type gets its own key, so they never suppress each other", async () => {
+    const request = await dispatchable();
+
+    await dispatchReminderEmail(request, "reminder_1");
+    await dispatchReminderEmail(request, "reminder_final");
+
+    const keys = sentEmails.map((e) => e.idempotencyKey);
+    expect(keys).toEqual([
+      `reminder_1/${request.requestToken}`,
+      `reminder_final/${request.requestToken}`,
+    ]);
+    expect(new Set(keys).size).toBe(2);
+  });
+
+  it("a reminder key is distinct from the Day-0 key for the same request", async () => {
+    const request = await dispatchable();
+
+    await dispatchRequestEmail(request);
+    await dispatchReminderEmail(request, "reminder_1");
+
+    expect(sentEmails[0].idempotencyKey).not.toBe(sentEmails[1].idempotencyKey);
+  });
+
+  it("every key stays inside Resend's 256-character limit", async () => {
+    const request = await dispatchable();
+    await dispatchRequestEmail(request);
+    await dispatchReminderEmail(request, "reminder_final");
+
+    for (const email of sentEmails) {
+      const key = email.idempotencyKey as string;
+      expect(key.length).toBeGreaterThan(0);
+      expect(key.length).toBeLessThanOrEqual(256);
+    }
   });
 });

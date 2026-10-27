@@ -25,6 +25,9 @@ database.sqlite
 
 
 /extensions/*/dist
+# Written by `shopify app build` (the extension's resolved target map), regenerated on every
+# build from shopify.extension.toml — a build artifact, not source.
+/extensions/*/manifest.json
 
 # Ignore shopify files created during app dev
 .shopify/*

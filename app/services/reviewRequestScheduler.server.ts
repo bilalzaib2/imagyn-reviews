@@ -151,7 +151,9 @@ async function canUseRemindersCached(storeId: string, cache: Map<string, boolean
 // safety and suppression tests below rely on to distinguish "was due" from "was sent". At most
 // one reminder is dispatched per row per tick (reminder1 takes priority if both happen to be due
 // at once, e.g. after extended downtime) — the other becomes eligible on the very next tick.
-export async function runDueReminderSweep(now: Date = new Date()): Promise<{ due: number; dispatched: number }> {
+export async function runDueReminderSweep(
+  now: Date = new Date(),
+): Promise<{ due: number; dispatched: number; claimLeaks: number }> {
   const candidates = await prisma.reviewRequest.findMany({
     where: {
       reviewedAt: null,
@@ -176,6 +178,8 @@ export async function runDueReminderSweep(now: Date = new Date()): Promise<{ due
 
   let due = 0;
   let dispatched = 0;
+  // Claims taken but neither sent nor released — each one is a reminder silently consumed.
+  let claimLeaks = 0;
   const reminderEntitlementByStore = new Map<string, boolean>();
 
   for (const request of candidates) {
@@ -245,17 +249,21 @@ export async function runDueReminderSweep(now: Date = new Date()): Promise<{ due
         // pre-existing retry-by-next-tick behaviour under a pre-send claim: without it, a send
         // that failed (provider error, suppression discovered at dispatch time) would leave the
         // field stamped and the reminder would never be sent at all.
-        await releaseReminderClaim(request.id, field);
+        if (!(await releaseReminderClaim(request.id, field)).released) {
+          claimLeaks += 1;
+        }
       }
     } catch (error) {
       console.error(`[reviewRequestScheduler] Failed to dispatch ${reminderType} for request ${request.id}:`, error);
       // Same rollback on an unexpected throw — a claim must never outlive the attempt it was
       // taken for.
-      await releaseReminderClaim(request.id, field);
+      if (!(await releaseReminderClaim(request.id, field)).released) {
+        claimLeaks += 1;
+      }
     }
   }
 
-  return { due, dispatched };
+  return { due, dispatched, claimLeaks };
 }
 
 const REMINDER_CLAIM_FIELD: Record<ReminderType, "reminder1SentAt" | "reminderFinalSentAt"> = {
@@ -263,22 +271,34 @@ const REMINDER_CLAIM_FIELD: Record<ReminderType, "reminder1SentAt" | "reminderFi
   reminder_final: "reminderFinalSentAt",
 };
 
-// Undoes a reminder claim. Guarded on the row still being terminal-free is unnecessary — the
-// only writer of these fields is the claim above and dispatchReminderEmail's own confirmation
-// write, and we only reach here when no send happened. Never throws: a rollback failure must not
-// abort the rest of the sweep, and the stale-claim case degrades to "this reminder is skipped",
-// never to a duplicate email.
+// Undoes a reminder claim. No guard on the row still being terminal-free is needed — the only
+// writers of these fields are the claim above and dispatchReminderEmail's own confirmation
+// write, and we only reach here when no send happened.
+//
+// Never throws: a rollback failure must not abort the rest of the sweep, and it can only ever
+// degrade to "this one reminder is skipped", never to a duplicate email. That is the safe
+// direction, but it IS a silent loss, so the failure is counted and surfaced rather than only
+// logged — see SchedulerRunSummary.reminderClaimLeaks and getSchedulerStatus, which the admin's
+// automation status already reads. A non-zero count means a reminder was consumed without being
+// sent, and the affected row needs a manual resend.
 async function releaseReminderClaim(
   requestId: string,
   field: "reminder1SentAt" | "reminderFinalSentAt",
-): Promise<void> {
+): Promise<{ released: boolean }> {
   try {
     await prisma.reviewRequest.updateMany({
       where: { id: requestId },
       data: { [field]: null },
     });
+    return { released: true };
   } catch (error) {
-    console.error(`[reviewRequestScheduler] Failed to release ${field} claim on ${requestId}:`, error);
+    // Deliberately loud: this is the one path in the whole sweep that can lose a reminder.
+    console.error(
+      `[reviewRequestScheduler] LEAKED CLAIM — failed to release ${field} on ${requestId}; ` +
+        `this reminder will not be retried and needs a manual resend:`,
+      error,
+    );
+    return { released: false };
   }
 }
 
@@ -321,7 +341,7 @@ export interface SchedulerRunSummary {
   /** Rows returned from a stranded "sending" claim to "scheduled" this tick. */
   recovery: { recovered: number } | null;
   requests: { due: number; dispatched: number } | null;
-  reminders: { due: number; dispatched: number } | null;
+  reminders: { due: number; dispatched: number; claimLeaks: number } | null;
   retention: { storesProcessed: number; redacted: number } | null;
   /** Which sweeps threw. Empty on a fully successful pass. */
   errors: string[];
@@ -424,6 +444,7 @@ export function startReviewRequestScheduler(): void {
       (status.recovery?.recovered ?? 0) > 0 ||
       (status.requests?.dispatched ?? 0) > 0 ||
       (status.reminders?.dispatched ?? 0) > 0 ||
+      (status.reminders?.claimLeaks ?? 0) > 0 ||
       (status.retention?.redacted ?? 0) > 0 ||
       status.errors.length > 0;
 
@@ -435,7 +456,9 @@ export function startReviewRequestScheduler(): void {
         `[reviewRequestScheduler] sweep ok in ${Date.now() - startedAt.getTime()}ms — ` +
           `recovered=${status.recovery?.recovered ?? 0}; ` +
           `requests due=${status.requests?.due ?? 0} sent=${status.requests?.dispatched ?? 0}; ` +
-          `reminders due=${status.reminders?.due ?? 0} sent=${status.reminders?.dispatched ?? 0}; ` +
+          `reminders due=${status.reminders?.due ?? 0} sent=${status.reminders?.dispatched ?? 0}` +
+          ((status.reminders?.claimLeaks ?? 0) > 0 ? ` LEAKED=${status.reminders?.claimLeaks}` : "") +
+          `; ` +
           `retention stores=${status.retention?.storesProcessed ?? 0} redacted=${status.retention?.redacted ?? 0}` +
           (status.errors.length ? `; FAILED: ${status.errors.join(",")}` : ""),
       );
