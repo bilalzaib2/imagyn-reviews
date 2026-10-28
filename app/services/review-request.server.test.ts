@@ -59,7 +59,7 @@ let requests: FakeRequest[];
 let products: FakeProduct[];
 let reviews: FakeReview[];
 let stores: FakeStoreRow[];
-let suppressions: Array<{ storeId: string; email: string }>;
+let suppressions: Array<{ storeId: string; email: string; source?: string }>;
 let nextId: number;
 
 function seedRequest(overrides: Partial<FakeRequest> & { id: string; storeId: string }): FakeRequest {
@@ -301,6 +301,25 @@ vi.mock("../db.server", () => ({
         async ({ where }: { where: { storeId_email: { storeId: string; email: string } } }) => {
           const { storeId, email } = where.storeId_email;
           return suppressions.find((s) => s.storeId === storeId && s.email === email) ?? null;
+        },
+      ),
+      // Backs emailSuppressionService.suppress. Models the real (storeId, email) unique upsert,
+      // so a replayed webhook never duplicates a row — which is what makes the bounce/complaint
+      // path safe for Resend to retry.
+      upsert: vi.fn(
+        async ({
+          where,
+          create,
+        }: {
+          where: { storeId_email: { storeId: string; email: string } };
+          create: { storeId: string; email: string; source: string };
+        }) => {
+          const { storeId, email } = where.storeId_email;
+          const existing = suppressions.find((s) => s.storeId === storeId && s.email === email);
+          if (existing) return existing;
+          const row = { storeId: create.storeId, email: create.email, source: create.source };
+          suppressions.push(row);
+          return row;
         },
       ),
     },
@@ -1390,5 +1409,78 @@ describe("email idempotency keys", () => {
       expect(key.length).toBeGreaterThan(0);
       expect(key.length).toBeLessThanOrEqual(256);
     }
+  });
+});
+
+// ─────────────────────────────────────────────────────────────────────────────────────────────
+// Bounce / complaint suppression. markRequestDeliveryFailed stops the request that bounced from
+// getting reminders (a "failed" row leaves the sweep's candidate set). What it cannot do is stop
+// the NEXT request — a repeat customer's second order starts a fresh ReviewRequest, and with no
+// suppression row the sweep mails the same dead or hostile address again. A spam complaint in
+// particular has to be honoured across every future send.
+// ─────────────────────────────────────────────────────────────────────────────────────────────
+describe("suppressRecipientForRequest — bounce and complaint handling", () => {
+  it("suppresses the address so a LATER request to the same customer is never sent", async () => {
+    seedRequest({ id: "req_a", storeId: "store_1", email: "jordan@example.com", requestToken: "tok_a" });
+
+    const suppressed = await reviewRequestService.suppressRecipientForRequest("tok_a", "spam_complaint");
+
+    expect(suppressed).toBe(true);
+    // The real check: a brand-new request for the same customer's next order.
+    seedRequest({
+      id: "req_b",
+      storeId: "store_1",
+      email: "jordan@example.com",
+      status: "sending",
+      sentAt: new Date("2026-08-02"),
+      requestToken: "tok_b",
+    });
+    const later = await reviewRequestService.getRequest("req_b");
+    // sentEmails is module-level and deliberately not reset by the global beforeEach, so this
+    // measures only what THIS dispatch sends.
+    sentEmails.length = 0;
+    const result = await dispatchRequestEmail(later!);
+
+    expect(result.status).toBe("sending");
+    expect(sentEmails).toHaveLength(0);
+  });
+
+  it("records why the address was suppressed", async () => {
+    seedRequest({ id: "req_1", storeId: "store_1", email: "jordan@example.com", requestToken: "tok_1" });
+
+    await reviewRequestService.suppressRecipientForRequest("tok_1", "hard_bounce");
+
+    expect(suppressions).toContainEqual(
+      expect.objectContaining({ storeId: "store_1", email: "jordan@example.com", source: "hard_bounce" }),
+    );
+  });
+
+  it("is store-scoped — one store's bounce never suppresses another store's customer", async () => {
+    seedRequest({ id: "req_1", storeId: "store_1", email: "jordan@example.com", requestToken: "tok_1" });
+
+    await reviewRequestService.suppressRecipientForRequest("tok_1", "hard_bounce");
+
+    expect(suppressions.filter((s) => s.storeId === "store_2")).toHaveLength(0);
+  });
+
+  it("is idempotent — a replayed webhook never duplicates the suppression", async () => {
+    seedRequest({ id: "req_1", storeId: "store_1", email: "jordan@example.com", requestToken: "tok_1" });
+
+    await reviewRequestService.suppressRecipientForRequest("tok_1", "spam_complaint");
+    await reviewRequestService.suppressRecipientForRequest("tok_1", "spam_complaint");
+
+    expect(suppressions.filter((s) => s.email === "jordan@example.com")).toHaveLength(1);
+  });
+
+  it("does nothing for an unknown token", async () => {
+    expect(await reviewRequestService.suppressRecipientForRequest("tok_missing", "hard_bounce")).toBe(false);
+    expect(suppressions).toHaveLength(0);
+  });
+
+  it("does nothing for a redacted request with no address left to suppress", async () => {
+    seedRequest({ id: "req_1", storeId: "store_1", email: null, requestToken: "tok_1" });
+
+    expect(await reviewRequestService.suppressRecipientForRequest("tok_1", "hard_bounce")).toBe(false);
+    expect(suppressions).toHaveLength(0);
   });
 });

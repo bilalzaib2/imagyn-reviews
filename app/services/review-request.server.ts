@@ -1139,6 +1139,40 @@ export const reviewRequestService = {
     return true;
   },
 
+  // A hard bounce or a spam complaint is a signal about the ADDRESS, not just about the one
+  // email that triggered it. markRequestDeliveryFailed above already stops that request's own
+  // chain — a "failed" row leaves the reminder sweep's candidate set, so no reminder follows a
+  // bounce. What it cannot do is stop the NEXT request: a repeat customer's second order starts
+  // a brand-new ReviewRequest, and with no suppression row the sweep happily mails the same
+  // dead or hostile address again.
+  //
+  // That is the gap this closes. A spam complaint in particular has to be honoured across every
+  // future send, not just the one complained about, and a permanently-dead address re-mailed on
+  // every order burns the reputation of a sending domain shared by every merchant on it.
+  // EmailSuppression.source already exists for exactly this ("a future suppression source (e.g.
+  // a hard bounce) is a new value here, not a schema change" — see schema.prisma), so no
+  // migration is involved.
+  //
+  // Deliberately NOT called for email.failed, which is a transient provider-side error: a
+  // temporary outage must never permanently suppress a real customer.
+  async suppressRecipientForRequest(token: string, source: string): Promise<boolean> {
+    const existing = await prisma.reviewRequest.findUnique({
+      where: { requestToken: token },
+      select: { storeId: true, email: true },
+    });
+
+    // A redacted row (retention purge / GDPR) has no address left to suppress, and nothing to
+    // protect — there is no way to mail it either.
+    if (!existing?.email) {
+      return false;
+    }
+
+    // Idempotent: suppress upserts on (storeId, email), so a provider retry of the same webhook
+    // never errors and never duplicates.
+    await emailSuppressionService.suppress(existing.storeId, existing.email, source);
+    return true;
+  },
+
   async consumeRequestToken(id: string) {
     return prisma.reviewRequest.update({
       where: { id },

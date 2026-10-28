@@ -54,6 +54,15 @@ function extractRequestToken(event: WebhookEventPayload): string | null {
   return data?.tags?.request_token ?? null;
 }
 
+// Why a suppressed recipient was suppressed, recorded on EmailSuppression.source so a merchant
+// (or a later support question) can tell an unsubscribe apart from a bounce apart from a spam
+// complaint. The schema already anticipated these values; none of them is a new column.
+const SUPPRESSION_SOURCE: Record<"email.bounced" | "email.complained" | "email.suppressed", string> = {
+  "email.bounced": "hard_bounce",
+  "email.complained": "spam_complaint",
+  "email.suppressed": "provider_suppression",
+};
+
 // Receives Resend's delivery-tracking events for review-request emails and reflects them onto
 // the matching ReviewRequest row — never creates a ReviewRequest or a Review, only updates a
 // status/timestamp on one that already exists (see review-request.server.ts's
@@ -129,12 +138,32 @@ export const action = async ({ request }: ActionFunctionArgs) => {
         console.log(`[webhooks.resend] email.opened (token ${tokenPrefix}…): ${changed ? "applied" : "no-op"}`);
         break;
       }
-      case "email.bounced":
-      case "email.complained":
-      case "email.failed":
-      case "email.suppressed": {
+      // Transient provider-side failure. Fails this request, but deliberately does NOT suppress
+      // the address — a temporary Resend outage must never permanently stop mailing a real
+      // customer.
+      case "email.failed": {
         const changed = await reviewRequestService.markRequestDeliveryFailed(requestToken);
         console.log(`[webhooks.resend] ${event.type} (token ${tokenPrefix}…): ${changed ? "applied" : "no-op"}`);
+        break;
+      }
+
+      // Signals about the ADDRESS, not just this one email. Failing the request alone stops only
+      // its own reminder chain; without a suppression row the customer's next order starts a
+      // fresh request and mails them again — which a spam complaint must prevent outright, and
+      // which for a dead address burns the reputation of a sending domain shared by every
+      // merchant on it.
+      case "email.bounced":
+      case "email.complained":
+      case "email.suppressed": {
+        const changed = await reviewRequestService.markRequestDeliveryFailed(requestToken);
+        const suppressed = await reviewRequestService.suppressRecipientForRequest(
+          requestToken,
+          SUPPRESSION_SOURCE[event.type],
+        );
+        console.log(
+          `[webhooks.resend] ${event.type} (token ${tokenPrefix}…): ${changed ? "applied" : "no-op"}` +
+            `; recipient ${suppressed ? "suppressed" : "not suppressed (no address on file)"}`,
+        );
         break;
       }
       default:
