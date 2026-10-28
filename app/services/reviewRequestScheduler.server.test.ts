@@ -52,6 +52,14 @@ let crashAfterSendIds: Set<string>;
 let notSendingReminderIds: Set<string>;
 let suppressedPairs: Set<string>;
 
+/**
+ * A fixture that omits `email` means "an ordinary recipient with a working address" — most
+ * reminder fixtures predate the sweep caring about the column. An explicit `email: null` models
+ * a row whose address the 90-day retention purge has redacted, which can never be emailed.
+ */
+const rowEmail = (row: FakeRequestRow): string | null =>
+  row.email === undefined ? `${row.id}@example.com` : row.email;
+
 vi.mock("../db.server", () => ({
   default: {
     // Two callers, two shapes. runRetentionPurgeSweep asks for every store and passes no `where`;
@@ -87,21 +95,39 @@ vi.mock("../db.server", () => ({
         if (args.where.storeId !== undefined) {
           const storeId = args.where.storeId as string;
           const sentAtFilter = args.where.sentAt as { not: null; gte: Date };
-          const or = args.where.OR as Array<{ reminder1SentAt?: null; reminderFinalSentAt?: null }>;
+          const emailFilter = args.where.email as { not: null; notIn?: string[] };
+          const or = args.where.OR as Array<{
+            reminder1SentAt?: null;
+            reminderFinalSentAt?: null;
+            sentAt?: { lte: Date };
+          }>;
 
           return fakeRequests
             .filter((row) => row.storeId === storeId)
             .filter((row) => row.reviewedAt == null)
             .filter((row) => !["completed", "cancelled", "failed"].includes(row.status))
             .filter((row) => row.sentAt != null)
-            // THE FIX UNDER TEST. The database, not application code, drops requests sent before
-            // this store's remindersEnabledAt. Modelled faithfully and deliberately: if this line
-            // is wrong or missing, the reachability regression test below proves nothing.
+            // THE FIXES UNDER TEST, all three modelled faithfully and deliberately: if any of
+            // these is wrong or missing, the PROOF/regression tests below prove nothing.
+            // (1) rows sent before this store's remindersEnabledAt never reach the batch.
             .filter((row) => row.sentAt!.getTime() >= sentAtFilter.gte.getTime())
+            // (2) a reminder needs an address, and this store's suppressed addresses are excluded
+            //     in SQL. Matches on the stored value exactly as Postgres would — deliberately
+            //     NOT normalising, so the casing gap the JS backstop covers stays visible here.
+            //     A fixture that omits `email` means "an ordinary recipient"; only an explicit
+            //     `email: null` models a row whose address retention has redacted.
+            //     Both predicates are READ FROM THE QUERY, never assumed — a mock that drops
+            //     null emails unconditionally would make the redacted-row test pass even with
+            //     the production filter removed, which is precisely what it must not do.
+            .filter((row) => (emailFilter?.not === null ? rowEmail(row) != null : true))
+            .filter((row) => !(emailFilter?.notIn ?? []).includes(rowEmail(row)!))
+            // (3) each OR branch now carries this store's own delay cutoff, so a row not yet due
+            //     for either reminder never reaches the batch.
             .filter((row) =>
               or.some((clause) => {
                 if ("reminder1SentAt" in clause && row.reminder1SentAt != null) return false;
                 if ("reminderFinalSentAt" in clause && row.reminderFinalSentAt != null) return false;
+                if (clause.sentAt && row.sentAt!.getTime() > clause.sentAt.lte.getTime()) return false;
                 return true;
               }),
             )
@@ -109,7 +135,7 @@ vi.mock("../db.server", () => ({
             .slice(0, args.take)
             .map((row) => ({
               id: row.id,
-              email: row.email ?? null,
+              email: rowEmail(row),
               sentAt: row.sentAt ?? null,
               reminder1SentAt: row.reminder1SentAt ?? null,
               reminderFinalSentAt: row.reminderFinalSentAt ?? null,
@@ -229,6 +255,13 @@ vi.mock("./emailSuppression.server", () => ({
       if (!email) return false;
       return suppressedPairs.has(`${storeId}:${email}`);
     }),
+    // Backs the reminder sweep's per-store SQL exclusion. Derived from the same `suppressedPairs`
+    // the per-row check uses, so a test cannot accidentally make the two disagree.
+    listSuppressedEmails: vi.fn(async (storeId: string) =>
+      [...suppressedPairs]
+        .filter((pair) => pair.startsWith(`${storeId}:`))
+        .map((pair) => pair.slice(storeId.length + 1)),
+    ),
   },
 }));
 
@@ -515,7 +548,12 @@ describe("runDueReminderSweep", () => {
 
     const result = await runDueReminderSweep(now);
 
-    expect(result).toEqual({ due: 1, dispatched: 0, claimLeaks: 0 });
+    // REVISED SEMANTICS. This used to assert `due: 1` — the row was fetched, then rejected in JS.
+    // The store's suppressed addresses are now excluded by the candidate query, so the row is
+    // never a candidate. "dispatched: 0" still proves no suppressed recipient is emailed; "due: 0"
+    // additionally proves the row no longer holds a slot, which is what stopped newer deliverable
+    // reminders being starved behind an unsubscribe list that only ever grows.
+    expect(result).toEqual({ due: 0, dispatched: 0, claimLeaks: 0 });
     expect(reminderDispatches).toEqual([]);
   });
 
@@ -1655,21 +1693,12 @@ describe("reminder reachability — a historical backlog must never starve a new
     expect(reminderDispatches).toHaveLength(25);
   });
 
-  // ───────────────────────────────────────────────────────────────────────────────────────────
-  // RESIDUAL RISK, found by the budget test above rather than by inspection. This fix addresses
-  // the one gate whose rows are PERMANENTLY ineligible. A row that has had reminder_1 but is not
-  // yet due for reminder_final is a different case: it still matches the `OR` (reminderFinalSentAt
-  // is null), still sorts oldest-first, and still produces no dispatch — so it holds a batch slot
-  // without doing work, exactly as the historical rows did.
-  //
-  // It is bounded where the historical backlog was not: the row becomes due at
-  // reminderFinalDelayDays (7 by default) and then leaves the candidate set for good. So this is
-  // a delay, not a permanent loss. It is NOT fixed here, and it is deliberately pinned so the
-  // limit is explicit rather than implied.
-  // ───────────────────────────────────────────────────────────────────────────────────────────
-  it("RESIDUAL RISK: rows awaiting their final reminder still occupy slots and can delay newer ones", async () => {
+  // This test previously pinned the awaiting-final case as an accepted residual risk. It is no
+  // longer residual: the candidate query carries each store's delay cutoffs, so a row that is not
+  // yet due for either reminder is not a candidate. Kept, inverted, as the regression test.
+  it("a full batch of rows awaiting their final reminder no longer blocks a newer one", async () => {
     fakeStores = {
-      // A long final delay holds the reminded rows in the candidate set for the whole window.
+      // A long final delay holds the reminded rows in the "not yet due" state for the whole window.
       store_1: { reminderEmailsEnabled: true, remindersEnabledAt: day(90), reminder1DelayDays: 3, reminderFinalDelayDays: 365 },
     };
     fakeRequests = [
@@ -1688,9 +1717,73 @@ describe("reminder reachability — a historical backlog must never starve a new
 
     const result = await runDueReminderSweep(now);
 
-    // The newer row is NOT reached. Documented limitation, not an assertion that this is correct.
-    expect(result).toEqual({ due: 0, dispatched: 0, claimLeaks: 0 });
+    expect(result).toEqual({ due: 1, dispatched: 1, claimLeaks: 0 });
+    expect(reminderDispatches).toEqual([{ id: "req_newer", type: "reminder_1" }]);
+  });
+
+  it("a redacted (null email) request is not a candidate — it can never be emailed", async () => {
+    fakeStores = {
+      store_1: { reminderEmailsEnabled: true, remindersEnabledAt: day(90), reminder1DelayDays: 3, reminderFinalDelayDays: 7 },
+    };
+    fakeRequests = [
+      // 26 rows whose address the 90-day retention purge has redacted. Timing-due, permanently
+      // undeliverable, and previously claimed-then-rolled-back on every single tick.
+      ...Array.from({ length: 26 }, (_, i) => ({
+        id: `req_redacted_${i}`,
+        storeId: "store_1",
+        status: "sent",
+        scheduledFor: null,
+        email: null,
+        sentAt: day(40 + i),
+      })),
+      { id: "req_has_email", storeId: "store_1", status: "sent", scheduledFor: null, email: "ok@example.com", sentAt: day(5) },
+    ];
+
+    const result = await runDueReminderSweep(now);
+
+    expect(result).toEqual({ due: 1, dispatched: 1, claimLeaks: 0 });
+    expect(reminderDispatches).toEqual([{ id: "req_has_email", type: "reminder_1" }]);
+  });
+
+  it("suppressing one recipient never excludes another store's identical address", async () => {
+    fakeStores = {
+      store_a: { reminderEmailsEnabled: true, remindersEnabledAt: day(90), reminder1DelayDays: 3, reminderFinalDelayDays: 7 },
+      store_b: { reminderEmailsEnabled: true, remindersEnabledAt: day(90), reminder1DelayDays: 3, reminderFinalDelayDays: 7 },
+    };
+    fakeRequests = [
+      { id: "req_a", storeId: "store_a", status: "sent", scheduledFor: null, email: "same@example.com", sentAt: day(5) },
+      { id: "req_b", storeId: "store_b", status: "sent", scheduledFor: null, email: "same@example.com", sentAt: day(5) },
+    ];
+    // Unsubscribed from store_a only. The per-store list must not leak across the fan-out.
+    suppressedPairs.add("store_a:same@example.com");
+
+    const result = await runDueReminderSweep(now);
+
+    expect(result).toEqual({ due: 1, dispatched: 1, claimLeaks: 0 });
+    expect(reminderDispatches).toEqual([{ id: "req_b", type: "reminder_1" }]);
+  });
+
+  it("a row still inside its reminder_1 delay is not a candidate, and its final reminder still lands later", async () => {
+    fakeStores = {
+      store_1: { reminderEmailsEnabled: true, remindersEnabledAt: day(90), reminder1DelayDays: 3, reminderFinalDelayDays: 7 },
+    };
+    fakeRequests = [{ id: "req_fresh", storeId: "store_1", status: "sent", scheduledFor: null, sentAt: day(1) }];
+
+    // Day 1: too new for either reminder.
+    expect(await runDueReminderSweep(now)).toEqual({ due: 0, dispatched: 0, claimLeaks: 0 });
     expect(reminderDispatches).toEqual([]);
+
+    // Day 4 (3 days later): reminder_1 is due. Timing is unchanged by moving the test into SQL.
+    const atDay4 = new Date(now.getTime() + 3 * 24 * 60 * 60 * 1000);
+    expect(await runDueReminderSweep(atDay4)).toEqual({ due: 1, dispatched: 1, claimLeaks: 0 });
+
+    // Day 8: reminder_final is due, and is sent exactly once.
+    const atDay8 = new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000);
+    expect(await runDueReminderSweep(atDay8)).toEqual({ due: 1, dispatched: 1, claimLeaks: 0 });
+    expect(reminderDispatches).toEqual([
+      { id: "req_fresh", type: "reminder_1" },
+      { id: "req_fresh", type: "reminder_final" },
+    ]);
   });
 
   it("oldest-first ordering is preserved across the per-store merge", async () => {
@@ -1727,6 +1820,60 @@ describe("reminder reachability — a historical backlog must never starve a new
 
     expect(result).toEqual({ due: 0, dispatched: 0, claimLeaks: 0 });
     expect(reminderDispatches).toEqual([]);
+  });
+
+  // ── PROOF TESTS for the two residual risks, written before any fix. If either of these
+  // ── passes against the current code, the risk is not real and must not be "fixed".
+  it("PROOF risk 1: a full band of awaiting-final rows starves a newer reminder_1 (production 3/7 delays)", async () => {
+    fakeStores = {
+      store_1: { reminderEmailsEnabled: true, remindersEnabledAt: day(90), reminder1DelayDays: 3, reminderFinalDelayDays: 7 },
+    };
+    const hoursAgo = (h: number) => new Date(now.getTime() - h * 60 * 60 * 1000);
+    fakeRequests = [
+      // 26 rows sent 5-6 days ago: reminder_1 already went out, reminder_final not due until
+      // day 7, so each produces no dispatch — yet each still matches the OR and still sorts
+      // ahead of anything newer. A store sending ~7 requests/day fills this band naturally.
+      ...Array.from({ length: 26 }, (_, i) => ({
+        id: `req_awaiting_${i}`,
+        storeId: "store_1",
+        status: "sent",
+        scheduledFor: null,
+        sentAt: hoursAgo(144 - i),
+        reminder1SentAt: hoursAgo(72),
+      })),
+      // Genuinely due for reminder_1 (3.5 days old), and newer, so it sorts last.
+      { id: "req_needs_r1", storeId: "store_1", status: "sent", scheduledFor: null, sentAt: hoursAgo(84) },
+    ];
+
+    const result = await runDueReminderSweep(now);
+
+    expect(result).toEqual({ due: 1, dispatched: 1, claimLeaks: 0 });
+    expect(reminderDispatches).toEqual([{ id: "req_needs_r1", type: "reminder_1" }]);
+  });
+
+  it("PROOF risk 2: a full batch of suppressed recipients starves a newer deliverable reminder", async () => {
+    fakeStores = {
+      store_1: { reminderEmailsEnabled: true, remindersEnabledAt: day(90), reminder1DelayDays: 3, reminderFinalDelayDays: 7 },
+    };
+    fakeRequests = [
+      // 26 unsubscribed recipients, all timing-due, none ever dispatchable. Suppression skips
+      // before the claim, so none is ever stamped and none ever leaves the candidate set.
+      ...Array.from({ length: 26 }, (_, i) => ({
+        id: `req_suppressed_${i}`,
+        storeId: "store_1",
+        status: "sent",
+        scheduledFor: null,
+        email: `blocked${i}@example.com`,
+        sentAt: day(20 + i),
+      })),
+      { id: "req_deliverable", storeId: "store_1", status: "sent", scheduledFor: null, email: "ok@example.com", sentAt: day(5) },
+    ];
+    suppressedPairs = new Set(Array.from({ length: 26 }, (_, i) => `store_1:blocked${i}@example.com`));
+
+    const result = await runDueReminderSweep(now);
+
+    expect(result).toEqual({ due: 1, dispatched: 1, claimLeaks: 0 });
+    expect(reminderDispatches).toEqual([{ id: "req_deliverable", type: "reminder_1" }]);
   });
 
   it("a request sent exactly AT the enablement instant is eligible (boundary is inclusive)", async () => {

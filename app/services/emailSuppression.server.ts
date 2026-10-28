@@ -72,6 +72,21 @@ export const emailSuppressionService = {
     return row !== null;
   },
 
+  // Every address this store has suppressed, already normalised (rows are stored normalised by
+  // `suppress` above). The reminder sweep needs the whole set at once so it can exclude them in
+  // SQL: a suppressed row is skipped before the claim, so it is never stamped, and would
+  // otherwise sit at the head of the sweep's oldest-first batch forever. Unbounded by design —
+  // a store's suppression list is small relative to its request volume, and capping it would
+  // reintroduce exactly the silent starvation this exists to prevent.
+  async listSuppressedEmails(storeId: string): Promise<string[]> {
+    const rows = await prisma.emailSuppression.findMany({
+      where: { storeId },
+      select: { email: true },
+    });
+
+    return rows.map((row) => row.email);
+  },
+
   // Idempotent — upsert with an empty update, so re-unsubscribing (e.g. a customer clicking an
   // old email's link twice) never errors and never creates a duplicate row (the (storeId,
   // email) unique constraint would reject a plain create on a second call).

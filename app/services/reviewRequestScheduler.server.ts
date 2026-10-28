@@ -170,19 +170,44 @@ export async function runDueReminderSweep(
   });
 
   // One bounded query per store — the list is only stores with reminders switched on, and each
-  // query is scoped to that store's own rows and its own cutoff, so no store can ever see
-  // another's. The results are merged and re-sorted into the single oldest-first batch this sweep
-  // has always processed, then trimmed to the same shared SWEEP_BATCH_SIZE budget: ordering and
-  // per-sweep dispatch cost are unchanged — only the permanently-ineligible rows are gone.
+  // query is scoped to that store's own rows, its own cutoff and its own delays, so no store can
+  // ever see another's. The results are merged and re-sorted into the single oldest-first batch
+  // this sweep has always processed, then trimmed to the same shared SWEEP_BATCH_SIZE budget:
+  // ordering and per-sweep dispatch cost are unchanged.
+  //
+  // Every filter below exists for one reason: a row that cannot produce an email must not occupy
+  // a slot. Each of these guards used to run in JS, after the fetch, and each `continue`s before
+  // the claim — so the row was never stamped, stayed a candidate, and under oldest-first ordering
+  // with a fixed `take` a large enough set of them starved everything newer. Proven for all three
+  // by the PROOF tests in reviewRequestScheduler.server.test.ts.
   const perStore = await Promise.all(
-    stores.map((store) =>
-      prisma.reviewRequest.findMany({
+    stores.map(async (store) => {
+      // The store's own delays, as values — which is what lets the timing test live in SQL. A row
+      // that has had reminder_1 but is not yet due for reminder_final is the case this closes:
+      // it matched the old unconditioned OR, dispatched nothing, and at production's 3/7 delays a
+      // store sending ~7 requests a day fills the whole band with them.
+      const reminder1Cutoff = daysBefore(now, store.reminder1DelayDays);
+      const reminderFinalCutoff = daysBefore(now, store.reminderFinalDelayDays);
+
+      // Suppressed recipients never leave the candidate set on their own — unsubscribes only
+      // accumulate — so this is the one vector that grows without bound.
+      const suppressedEmails = await emailSuppressionService.listSuppressedEmails(store.id);
+
+      return prisma.reviewRequest.findMany({
         where: {
           storeId: store.id,
           reviewedAt: null,
           status: { notIn: ["completed", "cancelled", "failed"] },
           sentAt: { not: null, gte: store.remindersEnabledAt as Date },
-          OR: [{ reminder1SentAt: null }, { reminderFinalSentAt: null }],
+          // `not: null` first, and not merely for tidiness: email is nullable (retention redacts
+          // it at 90 days), a reminder to no address can never be sent, and in SQL `NULL NOT IN
+          // (...)` is NULL — so without the explicit null check, `notIn` would silently drop
+          // these rows anyway while leaving the no-suppressions case including them.
+          email: suppressedEmails.length > 0 ? { not: null, notIn: suppressedEmails } : { not: null },
+          OR: [
+            { reminder1SentAt: null, sentAt: { lte: reminder1Cutoff } },
+            { reminderFinalSentAt: null, sentAt: { lte: reminderFinalCutoff } },
+          ],
         },
         select: {
           id: true,
@@ -196,8 +221,8 @@ export async function runDueReminderSweep(
         },
         orderBy: { sentAt: "asc" },
         take: SWEEP_BATCH_SIZE,
-      }),
-    ),
+      });
+    }),
   );
 
   const candidates = perStore
@@ -226,6 +251,9 @@ export async function runDueReminderSweep(
       reminderType = "reminder_final";
     }
 
+    // Backstop: the candidate query's OR now carries each store's own delay cutoffs, so every
+    // fetched row is genuinely due for one of the two reminders. Kept so that the timing rule is
+    // still enforced in one place if that `where` is ever loosened.
     if (!reminderType) {
       continue;
     }
@@ -247,13 +275,13 @@ export async function runDueReminderSweep(
       continue;
     }
 
-    // Suppression genuinely cannot move into the `where` — it lives in another table, keyed by
-    // (storeId, email) — so unlike the remindersEnabledAt guard above it stays a real JS check.
-    // It skips before the claim, so a suppressed row does stay a candidate; that is bounded in a
-    // way the historical backlog was not (suppression is reversible, and a store's suppressed
-    // addresses are a small fraction of its requests) but it is the same shape of risk, and worth
-    // revisiting if a store ever suppresses enough addresses to fill a batch. Skipped without
-    // setting reminder1SentAt/
+    // Backstop, for the same reason as the guard above — the candidate query already excluded
+    // this store's suppressed addresses. It is still a real check, not dead code: the SQL
+    // exclusion matches on the stored address, and EmailSuppression normalises to lower case
+    // while ReviewRequest.email is only trimmed, so an address stored with different casing
+    // survives the `notIn` and is caught here instead. Such a row does still hold a slot, but
+    // one needs 25 of them to starve a batch, which no realistic casing mix produces. Skipped
+    // without setting reminder1SentAt/
     // reminderFinalSentAt (dispatchReminderEmail would no-op on this anyway, but checking here
     // too keeps `dispatched` an accurate count of emails actually sent, and avoids an
     // unnecessary dispatch-layer round trip for a row every sweep already knows is suppressed).
