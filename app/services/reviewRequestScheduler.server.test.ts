@@ -1905,6 +1905,66 @@ describe("reminder reachability — a historical backlog must never starve a new
     expect(reminderDispatches).toEqual([{ id: "req_paying", type: "reminder_1" }]);
   });
 
+  // ── REVERSIBILITY. Both new store-level exclusions must gate, never consume. A blocked row is
+  // ── not stamped, so the moment the reason disappears the reminder becomes eligible again.
+  it("plan entitlement is re-resolved every sweep — upgrading restores the store's reminders", async () => {
+    fakeStores = {
+      store_1: { reminderEmailsEnabled: true, remindersEnabledAt: day(90), reminder1DelayDays: 3, reminderFinalDelayDays: 7, canUseEmailReminders: false },
+    };
+    fakeRequests = [{ id: "req_1", storeId: "store_1", status: "sent", scheduledFor: null, sentAt: day(5) }];
+
+    // On Free: gated, and crucially NOT consumed — reminder1SentAt stays null.
+    expect(await runDueReminderSweep(now)).toEqual({ due: 0, dispatched: 0, claimLeaks: 0 });
+    expect(fakeRequests[0].reminder1SentAt ?? null).toBeNull();
+
+    // Upgrades. No persistent entitlement cache, so the very next tick sends it.
+    fakeStores.store_1.canUseEmailReminders = true;
+
+    expect(await runDueReminderSweep(now)).toEqual({ due: 1, dispatched: 1, claimLeaks: 0 });
+    expect(reminderDispatches).toEqual([{ id: "req_1", type: "reminder_1" }]);
+  });
+
+  it("suppression gates without consuming — resubscribing restores the pending reminder", async () => {
+    fakeStores = {
+      store_1: { reminderEmailsEnabled: true, remindersEnabledAt: day(90), reminder1DelayDays: 3, reminderFinalDelayDays: 7 },
+    };
+    fakeRequests = [
+      { id: "req_1", storeId: "store_1", status: "sent", scheduledFor: null, email: "jo@example.com", sentAt: day(5) },
+    ];
+    suppressedPairs.add("store_1:jo@example.com");
+
+    expect(await runDueReminderSweep(now)).toEqual({ due: 0, dispatched: 0, claimLeaks: 0 });
+    // Never stamped — the reminder is withheld, not spent.
+    expect(fakeRequests[0].reminder1SentAt ?? null).toBeNull();
+
+    suppressedPairs.delete("store_1:jo@example.com");
+
+    expect(await runDueReminderSweep(now)).toEqual({ due: 1, dispatched: 1, claimLeaks: 0 });
+    expect(reminderDispatches).toEqual([{ id: "req_1", type: "reminder_1" }]);
+  });
+
+  it("one store's suppression list is never applied to another store's query", async () => {
+    fakeStores = {
+      store_a: { reminderEmailsEnabled: true, remindersEnabledAt: day(90), reminder1DelayDays: 3, reminderFinalDelayDays: 7 },
+      store_b: { reminderEmailsEnabled: true, remindersEnabledAt: day(90), reminder1DelayDays: 3, reminderFinalDelayDays: 7 },
+    };
+    // store_a suppresses three addresses; store_b has pending reminders to all three.
+    fakeRequests = ["x", "y", "z"].map((k, i) => ({
+      id: `req_b_${k}`,
+      storeId: "store_b",
+      status: "sent",
+      scheduledFor: null,
+      email: `${k}@example.com`,
+      sentAt: day(5 + i),
+    }));
+    for (const k of ["x", "y", "z"]) suppressedPairs.add(`store_a:${k}@example.com`);
+
+    const result = await runDueReminderSweep(now);
+
+    expect(result).toEqual({ due: 3, dispatched: 3, claimLeaks: 0 });
+    expect(reminderDispatches.map((d) => d.id).sort()).toEqual(["req_b_x", "req_b_y", "req_b_z"]);
+  });
+
   it("a request sent exactly AT the enablement instant is eligible (boundary is inclusive)", async () => {
     fakeStores = {
       store_1: { reminderEmailsEnabled: true, remindersEnabledAt: day(5), reminder1DelayDays: 3, reminderFinalDelayDays: 7 },

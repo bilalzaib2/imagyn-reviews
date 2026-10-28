@@ -220,10 +220,15 @@ export async function runDueReminderSweep(
           reviewedAt: null,
           status: { notIn: ["completed", "cancelled", "failed"] },
           sentAt: { not: null, gte: store.remindersEnabledAt as Date },
-          // `not: null` first, and not merely for tidiness: email is nullable (retention redacts
-          // it at 90 days), a reminder to no address can never be sent, and in SQL `NULL NOT IN
-          // (...)` is NULL — so without the explicit null check, `notIn` would silently drop
-          // these rows anyway while leaving the no-suppressions case including them.
+          // `not: null` first, and not merely for tidiness. It mirrors dispatchReminderEmail's
+          // own opening guard (`if (!request.email || !request.requestToken) return false`), so
+          // it can never withhold a reminder the dispatch layer would have sent. The reachable
+          // null-email path is the GDPR customers/redact webhook, which nulls email on ANY
+          // status; purgeStaleContactInfo only touches completed/failed/cancelled rows, which
+          // the `status` filter above already excludes. It is also required for correctness once
+          // `notIn` is present: in SQL `NULL NOT IN (...)` is NULL, so without the explicit null
+          // check these rows would be dropped only in the has-suppressions branch and kept in
+          // the other — the filter would quietly mean two different things.
           email: suppressedEmails.length > 0 ? { not: null, notIn: suppressedEmails } : { not: null },
           OR: [
             { reminder1SentAt: null, sentAt: { lte: reminder1Cutoff } },
