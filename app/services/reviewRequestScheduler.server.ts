@@ -143,38 +143,67 @@ async function canUseRemindersCached(storeId: string, cache: Map<string, boolean
 // reminders enabled that still has at least one un-sent reminder, then applies each store's own
 // configured reminder1DelayDays/reminderFinalDelayDays (Settings → Request Scheduling) against
 // that request's sentAt. The day-based cutoff can't live in the Prisma `where` below — it's
-// merchant-configurable per store now, not a fixed constant, and Prisma can't compare a row's
-// own column against a value pulled from its *related* row in a single query — so it's computed
-// in JS per row instead, same pattern already used for the remindersEnabledAt guard just below
-// it. `due` counts every row whose date-based condition is actually met (regardless of whether
-// the remindersEnabledAt/suppression guards go on to block it) — that's what the historical-
-// safety and suppression tests below rely on to distinguish "was due" from "was sent". At most
-// one reminder is dispatched per row per tick (reminder1 takes priority if both happen to be due
-// at once, e.g. after extended downtime) — the other becomes eligible on the very next tick.
+// merchant-configurable per store now, not a fixed constant — so it's computed in JS per row
+// instead. `due` counts every row whose date-based condition is actually met (regardless of
+// whether the plan/suppression guards go on to block it) — that's what the plan-gating and
+// suppression tests below rely on to distinguish "was due" from "was sent". At most one reminder
+// is dispatched per row per tick (reminder1 takes priority if both happen to be due at once, e.g.
+// after extended downtime) — the other becomes eligible on the very next tick.
+//
+// REACHABILITY: the store list is loaded first so each store's own remindersEnabledAt can be a
+// *value* in its candidate query's `where`, instead of the cross-row column comparison Prisma
+// cannot express. That guard used to run in JS, after the rows had already been fetched, and it
+// is the one guard whose rows can never become eligible later: sentAt is fixed in the past and
+// remindersEnabledAt is fixed, so a request sent before its store switched reminders on is
+// permanently ineligible. Because the guard `continue`s before the claim, such a row was never
+// stamped and stayed a candidate forever — and ordered oldest-first under `take:
+// SWEEP_BATCH_SIZE`, a large enough backlog of them filled every slot, so no newer and genuinely
+// eligible request was ever reached. Excluding them in SQL is what keeps the batch reachable.
 export async function runDueReminderSweep(
   now: Date = new Date(),
 ): Promise<{ due: number; dispatched: number; claimLeaks: number }> {
-  const candidates = await prisma.reviewRequest.findMany({
-    where: {
-      reviewedAt: null,
-      status: { notIn: ["completed", "cancelled", "failed"] },
-      sentAt: { not: null },
-      store: { reminderEmailsEnabled: true },
-      OR: [{ reminder1SentAt: null }, { reminderFinalSentAt: null }],
-    },
-    select: {
-      id: true,
-      email: true,
-      sentAt: true,
-      reminder1SentAt: true,
-      reminderFinalSentAt: true,
-      store: {
-        select: { id: true, remindersEnabledAt: true, reminder1DelayDays: true, reminderFinalDelayDays: true },
-      },
-    },
-    orderBy: { sentAt: "asc" },
-    take: SWEEP_BATCH_SIZE,
+  // remindersEnabledAt: null is excluded here for the same reason the JS guard rejected it — a
+  // store that has never switched reminders on has no eligible request at all.
+  const stores = await prisma.store.findMany({
+    where: { reminderEmailsEnabled: true, remindersEnabledAt: { not: null } },
+    select: { id: true, remindersEnabledAt: true, reminder1DelayDays: true, reminderFinalDelayDays: true },
   });
+
+  // One bounded query per store — the list is only stores with reminders switched on, and each
+  // query is scoped to that store's own rows and its own cutoff, so no store can ever see
+  // another's. The results are merged and re-sorted into the single oldest-first batch this sweep
+  // has always processed, then trimmed to the same shared SWEEP_BATCH_SIZE budget: ordering and
+  // per-sweep dispatch cost are unchanged — only the permanently-ineligible rows are gone.
+  const perStore = await Promise.all(
+    stores.map((store) =>
+      prisma.reviewRequest.findMany({
+        where: {
+          storeId: store.id,
+          reviewedAt: null,
+          status: { notIn: ["completed", "cancelled", "failed"] },
+          sentAt: { not: null, gte: store.remindersEnabledAt as Date },
+          OR: [{ reminder1SentAt: null }, { reminderFinalSentAt: null }],
+        },
+        select: {
+          id: true,
+          email: true,
+          sentAt: true,
+          reminder1SentAt: true,
+          reminderFinalSentAt: true,
+          store: {
+            select: { id: true, remindersEnabledAt: true, reminder1DelayDays: true, reminderFinalDelayDays: true },
+          },
+        },
+        orderBy: { sentAt: "asc" },
+        take: SWEEP_BATCH_SIZE,
+      }),
+    ),
+  );
+
+  const candidates = perStore
+    .flat()
+    .sort((a, b) => (a.sentAt?.getTime() ?? 0) - (b.sentAt?.getTime() ?? 0))
+    .slice(0, SWEEP_BATCH_SIZE);
 
   let due = 0;
   let dispatched = 0;
@@ -211,12 +240,20 @@ export async function runDueReminderSweep(
       continue;
     }
 
+    // Backstop only: the candidate query above already excludes these rows, per store, which is
+    // what keeps the batch reachable. Kept because this is the guard that must never regress — if
+    // a later change loosens that `where`, a historical request still cannot be emailed.
     if (!request.store.remindersEnabledAt || request.sentAt < request.store.remindersEnabledAt) {
       continue;
     }
 
-    // Same cross-table-comparison limitation as the remindersEnabledAt guard above — checked in
-    // JS rather than the Prisma `where`. Skipped without setting reminder1SentAt/
+    // Suppression genuinely cannot move into the `where` — it lives in another table, keyed by
+    // (storeId, email) — so unlike the remindersEnabledAt guard above it stays a real JS check.
+    // It skips before the claim, so a suppressed row does stay a candidate; that is bounded in a
+    // way the historical backlog was not (suppression is reversible, and a store's suppressed
+    // addresses are a small fraction of its requests) but it is the same shape of risk, and worth
+    // revisiting if a store ever suppresses enough addresses to fill a batch. Skipped without
+    // setting reminder1SentAt/
     // reminderFinalSentAt (dispatchReminderEmail would no-op on this anyway, but checking here
     // too keeps `dispatched` an accurate count of emails actually sent, and avoids an
     // unnecessary dispatch-layer round trip for a row every sweep already knows is suppressed).
