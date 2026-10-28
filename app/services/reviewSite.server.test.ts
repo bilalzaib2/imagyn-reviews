@@ -10,6 +10,10 @@ interface FakeStore {
   slug: string;
   name: string;
   aiSummaryOnReviewSiteEnabled?: boolean;
+  /** The merchant's own participation control. Default true, matching schema.prisma. */
+  publicNetworkEnabled?: boolean;
+  /** Dev stores are never part of any public surface. */
+  isDevelopmentStore?: boolean | null;
 }
 
 let stores: FakeStore[];
@@ -317,5 +321,56 @@ describe("getReviewSiteData — public payload must never carry private fields",
 describe("getReviewSiteUrl", () => {
   it("builds a real, stable URL from the store's slug", () => {
     expect(getReviewSiteUrl("example-store")).toMatch(/\/reviews-site\/example-store$/);
+  });
+});
+
+// ─────────────────────────────────────────────────────────────────────────────────────────────
+// PUBLIC-NETWORK CONSENT. publicDiscovery.server.ts gates every public surface on
+// PUBLIC_STORE = { isDevelopmentStore: false, publicNetworkEnabled: true }, and its own comment
+// promises that turning publicNetworkEnabled off "removes the store, its products and its
+// reviews from every public surface". /reviews-site/:slug is a public surface and did not apply
+// that gate — it resolved the store by slug alone, so an opted-out merchant's reviews stayed
+// published, as did every development store's.
+// ─────────────────────────────────────────────────────────────────────────────────────────────
+describe("getReviewSiteData — public network opt-out is honoured", () => {
+  beforeEach(() => {
+    stores = [];
+  });
+
+  it("returns null when the merchant has turned the public network off", async () => {
+    stores = [{ id: "store_1", slug: "opted-out", name: "Opted Out", publicNetworkEnabled: false }];
+
+    expect(await getReviewSiteData("opted-out")).toBeNull();
+  });
+
+  it("returns null for a development store", async () => {
+    stores = [
+      { id: "store_1", slug: "dev-shop", name: "Dev Shop", publicNetworkEnabled: true, isDevelopmentStore: true },
+    ];
+
+    expect(await getReviewSiteData("dev-shop")).toBeNull();
+  });
+
+  it("still serves a participating production store", async () => {
+    stores = [
+      { id: "store_1", slug: "live-shop", name: "Live Shop", publicNetworkEnabled: true, isDevelopmentStore: false },
+    ];
+
+    const site = await getReviewSiteData("live-shop");
+
+    expect(site).not.toBeNull();
+    expect(site?.storeName).toBe("Live Shop");
+  });
+
+  it("treats an unset publicNetworkEnabled as participating (schema default is true)", async () => {
+    stores = [{ id: "store_1", slug: "default-shop", name: "Default Shop" }];
+
+    expect(await getReviewSiteData("default-shop")).not.toBeNull();
+  });
+
+  it("treats an unset isDevelopmentStore as a production store", async () => {
+    stores = [{ id: "store_1", slug: "unknown-kind", name: "Unknown Kind", publicNetworkEnabled: true }];
+
+    expect(await getReviewSiteData("unknown-kind")).not.toBeNull();
   });
 });

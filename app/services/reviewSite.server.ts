@@ -120,6 +120,21 @@ export async function getReviewSiteData(slug: string, cursor?: string | null): P
     return null;
   }
 
+  // "Discoverable and shared" is not the same as "published regardless of consent". This page is
+  // a public surface, and publicDiscovery.server.ts's PUBLIC_STORE gate — the one whose own
+  // comment promises that turning publicNetworkEnabled off "removes the store, its products and
+  // its reviews from every public surface, including counts, facets, search, the sitemap and
+  // structured data" — was not applied here. Resolving by slug alone meant a merchant who
+  // explicitly opted out still had their reviews served, and every development store had a live
+  // public page. Both are now 404s, exactly as an unknown slug is.
+  //
+  // Checked against `=== false` / `=== true` rather than truthiness: publicNetworkEnabled
+  // defaults to true in the schema and isDevelopmentStore is nullable, so an unset value means
+  // "ordinary participating production store", not "block it".
+  if (store.publicNetworkEnabled === false || store.isDevelopmentStore === true) {
+    return null;
+  }
+
   const [stats, page, storeAiSummary, appearance, activeAppearance] = await Promise.all([
     getStoreReviewStats(store.id),
     getStoreReviews(store.id, { status: ReviewStatus.APPROVED, cursor: cursor ?? undefined, limit: PAGE_SIZE }),
