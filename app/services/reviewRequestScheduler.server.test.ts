@@ -16,6 +16,8 @@ interface FakeRequestRow {
   reminderFinalSentAt?: Date | null;
   /** Prisma maintains this via @updatedAt; the claim uses it as the lease timestamp. */
   updatedAt?: Date;
+  /** Basis of the Day-0 idempotency key (`review-request/<token>`), stable across recovery. */
+  requestToken?: string;
 }
 
 interface FakeStoreRow {
@@ -35,6 +37,17 @@ let dispatchedIds: string[];
 let failingIds: Set<string>;
 let reminderDispatches: Array<{ id: string; type: string }>;
 let failingReminderIds: Set<string>;
+/** Every idempotency key handed to the provider, including deduplicated repeats. */
+let providerAttempts: string[];
+/** Keys that resulted in a REAL email. A duplicate customer email = two entries for one key. */
+let providerDeliveries: string[];
+/** key -> logical time it was stored, modelling Resend's 24h key retention. */
+let providerRetention: Map<string, number>;
+/** Logical clock; retention entries older than providerRetentionFloor have expired. */
+let providerClock: number;
+let providerRetentionFloor: number;
+/** Ids whose dispatch sends successfully and THEN throws, as a crash would. */
+let crashAfterSendIds: Set<string>;
 /** Reminder ids whose dispatch returns false (no email sent) instead of throwing. */
 let notSendingReminderIds: Set<string>;
 let suppressedPairs: Set<string>;
@@ -131,6 +144,32 @@ vi.mock("./reviewRequestDispatch.server", () => ({
     if (failingIds.has(id)) {
       throw new Error(`Simulated dispatch failure for ${id}`);
     }
+
+    // --- provider model -------------------------------------------------------------------
+    // Mirrors Resend: the key is derived from requestToken exactly as review-request.server.ts
+    // builds it, and a repeat within the retention window returns the original response WITHOUT
+    // sending again. Only `providerDeliveries` counts real emails leaving the building.
+    const row = fakeRequests.find((r) => r.id === id);
+    if (row?.requestToken) {
+      const key = `review-request/${row.requestToken}`;
+      providerAttempts.push(key);
+      const seen = providerRetention.get(key);
+      if (seen !== undefined && seen >= providerRetentionFloor) {
+        // Deduplicated at the provider — no second email.
+        dispatchedIds.push(id);
+        return;
+      }
+      providerRetention.set(key, providerClock);
+      providerDeliveries.push(key);
+    }
+
+    // Models the process dying after the provider accepted the email but before the terminal
+    // "sent" write lands: the email is out, the row is left on "sending".
+    if (crashAfterSendIds.has(id)) {
+      crashAfterSendIds.delete(id);
+      throw new Error(`Simulated crash after provider accepted, before status write (${id})`);
+    }
+
     dispatchedIds.push(id);
   }),
   enqueueReminderDispatch: vi.fn(async (id: string, type: string) => {
@@ -199,6 +238,12 @@ describe("runDueReviewRequestSweep", () => {
     reminderDispatches = [];
     failingReminderIds = new Set();
     notSendingReminderIds = new Set();
+    providerAttempts = [];
+    providerDeliveries = [];
+    providerRetention = new Map();
+    providerClock = 0;
+    providerRetentionFloor = 0;
+    crashAfterSendIds = new Set();
     suppressedPairs = new Set();
   });
 
@@ -278,6 +323,12 @@ describe("runDueReminderSweep", () => {
     reminderDispatches = [];
     failingReminderIds = new Set();
     notSendingReminderIds = new Set();
+    providerAttempts = [];
+    providerDeliveries = [];
+    providerRetention = new Map();
+    providerClock = 0;
+    providerRetentionFloor = 0;
+    crashAfterSendIds = new Set();
     suppressedPairs = new Set();
   });
 
@@ -683,6 +734,12 @@ describe("atomic claim — concurrent workers", () => {
     reminderDispatches = [];
     failingReminderIds = new Set();
     notSendingReminderIds = new Set();
+    providerAttempts = [];
+    providerDeliveries = [];
+    providerRetention = new Map();
+    providerClock = 0;
+    providerRetentionFloor = 0;
+    crashAfterSendIds = new Set();
     suppressedPairs = new Set();
   });
 
@@ -797,6 +854,12 @@ describe("atomic claim — reminders, concurrent workers", () => {
     reminderDispatches = [];
     failingReminderIds = new Set();
     notSendingReminderIds = new Set();
+    providerAttempts = [];
+    providerDeliveries = [];
+    providerRetention = new Map();
+    providerClock = 0;
+    providerRetentionFloor = 0;
+    crashAfterSendIds = new Set();
     suppressedPairs = new Set();
   });
 
@@ -889,6 +952,12 @@ describe("claim rollback — retries and failure recovery", () => {
     reminderDispatches = [];
     failingReminderIds = new Set();
     notSendingReminderIds = new Set();
+    providerAttempts = [];
+    providerDeliveries = [];
+    providerRetention = new Map();
+    providerClock = 0;
+    providerRetentionFloor = 0;
+    crashAfterSendIds = new Set();
     suppressedPairs = new Set();
   });
 
@@ -979,6 +1048,12 @@ describe("recoverStaleClaims — crash between claim and send", () => {
     reminderDispatches = [];
     failingReminderIds = new Set();
     notSendingReminderIds = new Set();
+    providerAttempts = [];
+    providerDeliveries = [];
+    providerRetention = new Map();
+    providerClock = 0;
+    providerRetentionFloor = 0;
+    crashAfterSendIds = new Set();
     suppressedPairs = new Set();
   });
 
@@ -1064,6 +1139,12 @@ describe("leaked reminder claims are counted, not silently swallowed", () => {
     reminderDispatches = [];
     failingReminderIds = new Set();
     notSendingReminderIds = new Set();
+    providerAttempts = [];
+    providerDeliveries = [];
+    providerRetention = new Map();
+    providerClock = 0;
+    providerRetentionFloor = 0;
+    crashAfterSendIds = new Set();
     suppressedPairs = new Set();
   });
 
@@ -1170,5 +1251,176 @@ describe("leaked reminder claims are counted, not silently swallowed", () => {
     expect(result.claimLeaks).toBe(1);
 
     restore();
+  });
+});
+
+// ─────────────────────────────────────────────────────────────────────────────────────────────
+// END-TO-END: provider accepted the email, the app died before recording success.
+//
+// This is the one window no database claim can close, and it was previously covered only as two
+// disconnected halves — the stale-claim recovery here, the idempotency key over in
+// review-request.server.test.ts. The seam between them was untested. These tests close it.
+//
+// Sequence modelled, in order:
+//   1. the sweep claims the row (scheduled -> sending)
+//   2. the provider ACCEPTS the email — a real send; the customer has it
+//   3. the process dies before the terminal "sent" write, leaving the row on "sending"
+//   4. no delivery webhook arrives (the crashed process's endpoint was down too)
+//   5. the lease expires and recoverStaleClaims returns the row to "scheduled"
+//   6. a later sweep re-dispatches it
+//
+// The provider model mirrors Resend's documented contract: the key is `review-request/<token>`,
+// a repeat within the retention window returns the original response WITHOUT sending again, and
+// keys are retained 24 hours. `providerDeliveries` counts only real emails, so a duplicate
+// customer email shows up as the same key appearing twice.
+//
+// NOTE ON COMPOSITION: the claim and recovery here are the REAL scheduler functions. The key's
+// derivation from requestToken is pinned separately by review-request.server.test.ts's
+// "the Day-0 request send is keyed on its request token", which asserts the production code
+// emits exactly this string. Together those cover the chain end to end.
+// ─────────────────────────────────────────────────────────────────────────────────────────────
+describe("crash after provider acceptance — recovery must not duplicate the email", () => {
+  beforeEach(() => {
+    fakeRequests = [];
+    fakeStores = {};
+    dispatchedIds = [];
+    failingIds = new Set();
+    reminderDispatches = [];
+    failingReminderIds = new Set();
+    notSendingReminderIds = new Set();
+    providerAttempts = [];
+    providerDeliveries = [];
+    providerRetention = new Map();
+    providerClock = 0;
+    providerRetentionFloor = 0;
+    crashAfterSendIds = new Set();
+    suppressedPairs = new Set();
+  });
+
+  const NOW = new Date("2026-08-20T12:00:00Z");
+  const minutesAgo = (m: number) => new Date(NOW.getTime() - m * 60 * 1000);
+
+  function dueRow(id: string, token: string): FakeRequestRow {
+    return {
+      id,
+      status: "scheduled",
+      scheduledFor: minutesAgo(60),
+      updatedAt: minutesAgo(60),
+      requestToken: token,
+    };
+  }
+
+  /** Steps 1-3: claim, provider accepts, process dies before the status write. */
+  async function sendThenCrash(id: string) {
+    crashAfterSendIds.add(id);
+    await runDueReviewRequestSweep(NOW);
+  }
+
+  it("the crash leaves the row on 'sending' with the email already delivered", async () => {
+    fakeRequests = [dueRow("req_1", "tok_abc")];
+
+    await sendThenCrash("req_1");
+
+    expect(providerDeliveries).toEqual(["review-request/tok_abc"]);
+    // Claimed, never completed — exactly the state recovery exists to repair.
+    expect(fakeRequests[0].status).toBe("sending");
+  });
+
+  it("recovery retries with the IDENTICAL key and the provider sends nothing further", async () => {
+    fakeRequests = [dueRow("req_1", "tok_abc")];
+    await sendThenCrash("req_1");
+
+    // Step 5: lease expires (STALE_CLAIM_MS = 15 min).
+    fakeRequests[0].updatedAt = minutesAgo(20);
+    expect((await recoverStaleClaims(NOW)).recovered).toBe(1);
+
+    // Step 6: re-dispatch.
+    await runDueReviewRequestSweep(NOW);
+
+    // The provider was asked twice...
+    expect(providerAttempts).toEqual(["review-request/tok_abc", "review-request/tok_abc"]);
+    // ...but only ONE email ever left. This is the whole point.
+    expect(providerDeliveries).toEqual(["review-request/tok_abc"]);
+  });
+
+  it("the retry key is byte-identical — recovery never rotates requestToken", async () => {
+    fakeRequests = [dueRow("req_1", "tok_abc")];
+    await sendThenCrash("req_1");
+
+    const tokenAfterCrash = fakeRequests[0].requestToken;
+    fakeRequests[0].updatedAt = minutesAgo(20);
+    await recoverStaleClaims(NOW);
+
+    // A rotated token would mint a NEW key and defeat provider dedup entirely.
+    expect(fakeRequests[0].requestToken).toBe(tokenAfterCrash);
+    expect(new Set(providerAttempts).size).toBe(1);
+  });
+
+  it("concurrent workers racing the recovered row still produce exactly one email", async () => {
+    fakeRequests = [dueRow("req_1", "tok_abc")];
+    await sendThenCrash("req_1");
+    fakeRequests[0].updatedAt = minutesAgo(20);
+    await recoverStaleClaims(NOW);
+
+    await Promise.all([runDueReviewRequestSweep(NOW), runDueReviewRequestSweep(NOW)]);
+
+    // The claim stops the second worker before it ever reaches the provider.
+    expect(providerAttempts).toHaveLength(2); // original + one retry
+    expect(providerDeliveries).toEqual(["review-request/tok_abc"]);
+  });
+
+  it("several crashed rows each recover to exactly one email apiece", async () => {
+    fakeRequests = [dueRow("a", "tok_a"), dueRow("b", "tok_b"), dueRow("c", "tok_c")];
+    crashAfterSendIds = new Set(["a", "b", "c"]);
+
+    await runDueReviewRequestSweep(NOW);
+    for (const r of fakeRequests) r.updatedAt = minutesAgo(20);
+    await recoverStaleClaims(NOW);
+    await Promise.all([runDueReviewRequestSweep(NOW), runDueReviewRequestSweep(NOW)]);
+
+    expect(providerDeliveries.sort()).toEqual([
+      "review-request/tok_a",
+      "review-request/tok_b",
+      "review-request/tok_c",
+    ]);
+  });
+
+  // ── The residual risk, pinned as a KNOWN behaviour rather than left implicit ────────────────
+  it("RESIDUAL RISK: past the retention window the same key DOES send a second email", async () => {
+    fakeRequests = [dueRow("req_1", "tok_abc")];
+    await sendThenCrash("req_1");
+    expect(providerDeliveries).toHaveLength(1);
+
+    // More than 24h pass: Resend has forgotten the key, so it can no longer deduplicate.
+    providerClock = 1;
+    providerRetentionFloor = 1;
+
+    fakeRequests[0].updatedAt = minutesAgo(20);
+    await recoverStaleClaims(NOW);
+    await runDueReviewRequestSweep(NOW);
+
+    // Two real emails for one request. This is the documented residual risk and CANNOT be
+    // eliminated by the idempotency key alone — past retention the provider has no memory, and
+    // the app has no independent way to establish whether delivery occurred. It requires a
+    // delivery signal (the Resend webhook, which normally moves the row off "sending" within
+    // seconds) or a stored provider message id to resolve.
+    expect(providerDeliveries).toEqual(["review-request/tok_abc", "review-request/tok_abc"]);
+  });
+
+  it("a delivery webhook makes the residual risk unreachable — the row leaves 'sending'", async () => {
+    fakeRequests = [dueRow("req_1", "tok_abc")];
+    await sendThenCrash("req_1");
+
+    // webhooks.resend.tsx -> applyForwardOnlyStatus promotes sending(1) -> delivered(3).
+    fakeRequests[0].status = "delivered";
+    fakeRequests[0].updatedAt = minutesAgo(20);
+
+    // Even with the retention window fully expired, recovery cannot see a delivered row.
+    providerClock = 1;
+    providerRetentionFloor = 1;
+
+    expect((await recoverStaleClaims(NOW)).recovered).toBe(0);
+    await runDueReviewRequestSweep(NOW);
+    expect(providerDeliveries).toEqual(["review-request/tok_abc"]);
   });
 });
