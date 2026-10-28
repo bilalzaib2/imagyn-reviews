@@ -643,9 +643,10 @@ describe("runDueReminderSweep", () => {
 
       const result = await runDueReminderSweep(now);
 
-      // Still counted as "due" (its date condition is genuinely met) — but never sent, the
-      // same way the remindersEnabledAt and suppression guards behave.
-      expect(result).toEqual({ due: 1, dispatched: 0, claimLeaks: 0 });
+      // REVISED SEMANTICS. This used to assert `due: 1` — the row was fetched, then rejected in
+      // JS. Plan entitlement is now resolved before the store is queried at all, so the row is
+      // never a candidate. `due` means actionable reminders, and a Free store has none.
+      expect(result).toEqual({ due: 0, dispatched: 0, claimLeaks: 0 });
       expect(reminderDispatches).toEqual([]);
     });
 
@@ -657,7 +658,7 @@ describe("runDueReminderSweep", () => {
 
       const result = await runDueReminderSweep(now);
 
-      expect(result).toEqual({ due: 1, dispatched: 0, claimLeaks: 0 });
+      expect(result).toEqual({ due: 0, dispatched: 0, claimLeaks: 0 });
       expect(reminderDispatches).toEqual([]);
     });
 
@@ -677,7 +678,9 @@ describe("runDueReminderSweep", () => {
 
       const result = await runDueReminderSweep(now);
 
-      expect(result).toEqual({ due: 2, dispatched: 1, claimLeaks: 0 });
+      // due: 1, not 2 — the Free store's row is never fetched, so it is not actionable work.
+      // Nothing about the Pro store's outcome changes.
+      expect(result).toEqual({ due: 1, dispatched: 1, claimLeaks: 0 });
       expect(reminderDispatches).toEqual([{ id: "req_pro", type: "reminder_1" }]);
     });
 
@@ -1874,6 +1877,32 @@ describe("reminder reachability — a historical backlog must never starve a new
 
     expect(result).toEqual({ due: 1, dispatched: 1, claimLeaks: 0 });
     expect(reminderDispatches).toEqual([{ id: "req_deliverable", type: "reminder_1" }]);
+  });
+
+  it("PROOF risk 4: a Free store's stale-due rows starve a PAYING store's reminders", async () => {
+    fakeStores = {
+      // Downgraded to Free, but reminderEmailsEnabled is still stuck on — the exact scenario
+      // canUseRemindersCached exists for. Its rows are timing-due and never dispatchable.
+      store_free: { reminderEmailsEnabled: true, remindersEnabledAt: day(90), reminder1DelayDays: 3, reminderFinalDelayDays: 7, canUseEmailReminders: false },
+      store_paying: { reminderEmailsEnabled: true, remindersEnabledAt: day(90), reminder1DelayDays: 3, reminderFinalDelayDays: 7, canUseEmailReminders: true },
+    };
+    fakeRequests = [
+      ...Array.from({ length: 26 }, (_, i) => ({
+        id: `req_free_${i}`,
+        storeId: "store_free",
+        status: "sent",
+        scheduledFor: null,
+        sentAt: day(40 + i),
+      })),
+      // The batch is merged across stores and then sliced, so the Free store's older rows take
+      // every slot and this paying store's reminder is never reached.
+      { id: "req_paying", storeId: "store_paying", status: "sent", scheduledFor: null, sentAt: day(5) },
+    ];
+
+    const result = await runDueReminderSweep(now);
+
+    expect(result).toEqual({ due: 1, dispatched: 1, claimLeaks: 0 });
+    expect(reminderDispatches).toEqual([{ id: "req_paying", type: "reminder_1" }]);
   });
 
   it("a request sent exactly AT the enablement instant is eligible (boundary is inclusive)", async () => {

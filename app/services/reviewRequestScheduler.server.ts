@@ -139,26 +139,33 @@ async function canUseRemindersCached(storeId: string, cache: Map<string, boolean
   return permissions.canUseEmailReminders;
 }
 
-// One pass: finds every non-terminal, unreviewed ReviewRequest belonging to a store with
-// reminders enabled that still has at least one un-sent reminder, then applies each store's own
-// configured reminder1DelayDays/reminderFinalDelayDays (Settings → Request Scheduling) against
-// that request's sentAt. The day-based cutoff can't live in the Prisma `where` below — it's
-// merchant-configurable per store now, not a fixed constant — so it's computed in JS per row
-// instead. `due` counts every row whose date-based condition is actually met (regardless of
-// whether the plan/suppression guards go on to block it) — that's what the plan-gating and
-// suppression tests below rely on to distinguish "was due" from "was sent". At most one reminder
-// is dispatched per row per tick (reminder1 takes priority if both happen to be due at once, e.g.
-// after extended downtime) — the other becomes eligible on the very next tick.
+// One pass: finds every ReviewRequest that is genuinely ready for one of its two reminders, and
+// dispatches it. At most one reminder per row per tick (reminder1 takes priority if both happen
+// to be due at once, e.g. after extended downtime) — the other becomes eligible on the next tick.
 //
-// REACHABILITY: the store list is loaded first so each store's own remindersEnabledAt can be a
-// *value* in its candidate query's `where`, instead of the cross-row column comparison Prisma
-// cannot express. That guard used to run in JS, after the rows had already been fetched, and it
-// is the one guard whose rows can never become eligible later: sentAt is fixed in the past and
-// remindersEnabledAt is fixed, so a request sent before its store switched reminders on is
-// permanently ineligible. Because the guard `continue`s before the claim, such a row was never
-// stamped and stayed a candidate forever — and ordered oldest-first under `take:
-// SWEEP_BATCH_SIZE`, a large enough backlog of them filled every slot, so no newer and genuinely
-// eligible request was ever reached. Excluding them in SQL is what keeps the batch reachable.
+// WHAT `due` MEANS: actionable reminders — rows eligible for dispatch on this tick. It is NOT a
+// backlog size and must never be read as one. A row that cannot produce an email is excluded by
+// the candidate query and never counted: a request predating its store's remindersEnabledAt, a
+// suppressed or redacted recipient, a store without the plan entitlement, or a row not yet past
+// its store's configured delay. `due` minus `dispatched` is therefore real failure — a send that
+// errored or a claim lost to another worker — not routine filtering, which is what makes the
+// heartbeat's `reminders due=N sent=M` worth alerting on.
+//
+// REACHABILITY — why those exclusions live in SQL rather than in the loop below. Every one of
+// them used to be a JS guard applied after the fetch, and every one `continue`s before the claim,
+// so a blocked row was never stamped and stayed a candidate forever. Ordered oldest-first under
+// `take: SWEEP_BATCH_SIZE`, a large enough set of permanently-blocked rows filled every slot and
+// nothing newer was ever reached. Production hit exactly this: a heartbeat reading
+// `reminders due=25 sent=0` against a 182-row backlog, with the batch size at 25.
+//
+// The store list is therefore loaded first, which turns each store's own remindersEnabledAt,
+// delay days and plan entitlement into *values* — a cross-row column comparison Prisma cannot
+// express in a single query, which is why these checks were in JS to begin with. The plan check
+// in particular must happen here and not per row: the batch is merged and sliced ACROSS stores,
+// so a downgraded store's permanently-stuck rows would otherwise starve paying stores too.
+//
+// The JS guards below are kept as backstops, so loosening the `where` cannot start emailing
+// someone it should not. Each exclusion has a PROOF test pinning the starvation it prevents.
 export async function runDueReminderSweep(
   now: Date = new Date(),
 ): Promise<{ due: number; dispatched: number; claimLeaks: number }> {
@@ -175,13 +182,27 @@ export async function runDueReminderSweep(
   // this sweep has always processed, then trimmed to the same shared SWEEP_BATCH_SIZE budget:
   // ordering and per-sweep dispatch cost are unchanged.
   //
-  // Every filter below exists for one reason: a row that cannot produce an email must not occupy
-  // a slot. Each of these guards used to run in JS, after the fetch, and each `continue`s before
-  // the claim — so the row was never stamped, stayed a candidate, and under oldest-first ordering
-  // with a fixed `take` a large enough set of them starved everything newer. Proven for all three
-  // by the PROOF tests in reviewRequestScheduler.server.test.ts.
+  // Every exclusion below exists for one reason: a row that cannot produce an email must not
+  // occupy a slot. Each of these guards used to run in JS, after the fetch, and each `continue`s
+  // before the claim — so the row was never stamped, stayed a candidate, and under oldest-first
+  // ordering with a fixed `take` a large enough set of them starved everything newer. Each is
+  // proven by its own PROOF test in reviewRequestScheduler.server.test.ts.
+  const reminderEntitlementByStore = new Map<string, boolean>();
+
   const perStore = await Promise.all(
     stores.map(async (store) => {
+      // Plan entitlement, resolved before this store's rows are fetched at all. Free never
+      // receives an automated reminder sequence (only the single initial request, dispatched by
+      // runDueReviewRequestSweep entirely independently of this sweep) — see
+      // canUseRemindersCached for why a stale-true preference outlives a downgrade.
+      //
+      // Checked HERE rather than per row because the batch is merged and sliced ACROSS stores:
+      // a downgraded store's rows stay timing-due forever, and fetching them hands that store a
+      // share of a shared budget it can never use — starving PAYING stores, not just itself.
+      if (!(await canUseRemindersCached(store.id, reminderEntitlementByStore))) {
+        return [];
+      }
+
       // The store's own delays, as values — which is what lets the timing test live in SQL. A row
       // that has had reminder_1 but is not yet due for reminder_final is the case this closes:
       // it matched the old unconditioned OR, dispatched nothing, and at production's 3/7 delays a
@@ -234,7 +255,6 @@ export async function runDueReminderSweep(
   let dispatched = 0;
   // Claims taken but neither sent nor released — each one is a reminder silently consumed.
   let claimLeaks = 0;
-  const reminderEntitlementByStore = new Map<string, boolean>();
 
   for (const request of candidates) {
     if (!request.sentAt) {
