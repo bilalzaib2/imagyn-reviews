@@ -327,6 +327,15 @@ export async function finishProductSync(id: string, data: { status: "completed" 
   });
 }
 
+/** Persists the synced shop.contactEmail and advances its staleness marker. Stores null too —
+ *  a merchant who cleared the field in Shopify must stop having the old value used. */
+export async function setShopContactEmail(id: string, contactEmail: string | null, syncedAt: Date = new Date()) {
+  return prisma.store.update({
+    where: { id },
+    data: { contactEmail, contactEmailSyncedAt: syncedAt },
+  });
+}
+
 export async function setDevelopmentStoreFlag(id: string, isDevelopmentStore: boolean) {
   return prisma.store.update({
     where: {

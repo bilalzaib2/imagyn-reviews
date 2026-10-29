@@ -102,6 +102,20 @@ model Store {
   // every request. Development stores always bypass billing entirely (see billing.server.ts).
   isDevelopmentStore    Boolean?
 
+  // The merchant's PUBLIC-FACING contact email, synced from Shopify's `shop.contactEmail`
+  // ("Customers will use this email to communicate with the shop owner" — Admin API). Used as
+  // the default Reply-To on customer-facing review emails so a reply reaches the merchant
+  // rather than Imagyn's shared inbox. Deliberately NOT shop.email, which is the shop OWNER's
+  // account address that Shopify itself uses to reach the merchant.
+  //
+  // Never used in the From header: Reply-To needs no domain authentication, the From does.
+  // Nullable so a store that has not synced yet falls back safely instead of blocking a send.
+  contactEmail          String?
+  // Staleness marker. A merchant can change their contact email in Shopify at any time, so
+  // unlike isDevelopmentStore this cannot be fetched once and trusted forever — it is
+  // re-synced when older than CONTACT_EMAIL_TTL_MS on an authenticated page load.
+  contactEmailSyncedAt  DateTime?
+
   // Moderation Rules (see app/services/moderationRules.server.ts) — automatic screening for
   // new customer-submitted reviews, applied in the submission pipeline (api.reviews.tsx,
   // r.$token.tsx) before a review row is even created. Off by default so an existing store's

@@ -315,7 +315,17 @@ export async function evaluateAndIssueReward(input: RewardEvaluationInput): Prom
       // platform address rather than in their inbox.
       const store = await prisma.store.findUnique({
         where: { id: input.storeId },
-        select: { name: true, domain: true, slug: true, emailSenderName: true, emailLogoUrl: true, emailLogoDarkUrl: true },
+        select: {
+          name: true,
+          domain: true,
+          slug: true,
+          emailSenderName: true,
+          contactEmail: true,
+          replyToEmail: true,
+          replyToVerifiedAt: true,
+          emailLogoUrl: true,
+          emailLogoDarkUrl: true,
+        },
       });
       const senderIdentity = resolveSenderIdentity(
         {
@@ -323,6 +333,9 @@ export async function evaluateAndIssueReward(input: RewardEvaluationInput): Prom
           domain: store?.domain ?? input.storeDomain,
           slug: store?.slug ?? null,
           emailSenderName: store?.emailSenderName ?? null,
+          contactEmail: store?.contactEmail ?? null,
+          replyToEmail: store?.replyToEmail ?? null,
+          replyToVerifiedAt: store?.replyToVerifiedAt ?? null,
         },
         await getStorePermissions(input.storeId),
         template.replyToEmail,

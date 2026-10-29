@@ -19,6 +19,7 @@ import enTranslations from "@shopify/polaris/locales/en.json";
 import { authenticateAdminDeduped } from "../services/auth-dedupe.server";
 import { getOrCreateStore } from "../services/store.server";
 import { ensureDevelopmentStoreFlag, getBillingSnapshot } from "../services/billing/billing.server";
+import { ensureShopContactEmail } from "../services/shopContactEmail.server";
 import { FloatingHelp } from "../components/ui/FloatingHelp";
 import styles from "../styles/app.shell.module.css";
 
@@ -35,6 +36,13 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
   // billing. app.billing.tsx already calls getOrCreateStore itself, so hoisting this out of
   // the gate adds no query that page wasn't already making.
   const store = await getOrCreateStore(session.shop);
+
+  // Keeps the merchant's public-facing contact email current so customer replies to review
+  // emails reach them rather than Imagyn's shared inbox. Fire-and-forget: it must never delay
+  // or break a page load, and the scheduler reads the persisted value, not this call.
+  void ensureShopContactEmail(admin, store).catch(() => {
+    // ensureShopContactEmail already degrades internally; this guards the floating promise.
+  });
 
   const url = new URL(request.url);
   if (url.pathname !== BILLING_PATH) {

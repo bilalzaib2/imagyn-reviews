@@ -107,6 +107,11 @@ const REQUEST_INCLUDE = {
       name: true,
       domain: true,
       emailSenderName: true,
+      // Default Reply-To for every customer-facing send — Shopify's shop.contactEmail, the
+      // address Shopify designates for customers to reach the shop owner.
+      contactEmail: true,
+      replyToEmail: true,
+      replyToVerifiedAt: true,
       // Shared Email Branding — inherited by every template that has not explicitly
       // overridden its logo (emailBranding.shared.ts).
       emailLogoUrl: true,

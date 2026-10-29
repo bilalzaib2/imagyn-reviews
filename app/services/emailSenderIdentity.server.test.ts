@@ -380,3 +380,110 @@ describe("merchant-scoped From address", () => {
     expect(identity.fromAddressIsMerchantScoped).toBe(true);
   });
 });
+
+// ─────────────────────────────────────────────────────────────────────────────────────────────
+// SHOPIFY CONTACT EMAIL AS THE DEFAULT REPLY-TO.
+//
+// shop.contactEmail is what Shopify designates for customers to reach the shop owner ("Customers
+// will use this email to communicate with the shop owner"), as distinct from shop.email, the
+// owner's own account address. It sits BELOW the two deliberate merchant choices and ABOVE the
+// platform fallback, so an explicit Email Studio setting still wins while a merchant who
+// configured nothing still receives their own customers' replies.
+// ─────────────────────────────────────────────────────────────────────────────────────────────
+describe("Shopify contact email as the default Reply-To", () => {
+  const PLATFORM = "reviews@notifications.imagyn.co";
+  const VERIFIED = new Date("2026-10-19T12:00:00.000Z");
+
+  function shop(extra: Record<string, unknown> = {}) {
+    return { name: "Grace Store", emailSenderName: null, domain: "grace.myshopify.com", ...extra };
+  }
+
+  it("is used when the merchant has configured nothing else", () => {
+    const identity = resolveSenderIdentity(shop({ contactEmail: "hello@gracestore.com" }), FREE);
+
+    expect(identity.replyTo).toBe("hello@gracestore.com");
+    expect(identity.replyToSource).toBe("shopify-contact");
+  });
+
+  it("applies on every plan", () => {
+    for (const plan of [FREE, PRO]) {
+      expect(resolveSenderIdentity(shop({ contactEmail: "hello@gracestore.com" }), plan).replyTo).toBe(
+        "hello@gracestore.com",
+      );
+    }
+  });
+
+  it("reflects an updated contact email", () => {
+    // What a re-sync produces: same store, newer value.
+    expect(resolveSenderIdentity(shop({ contactEmail: "old@gracestore.com" }), PRO).replyTo).toBe(
+      "old@gracestore.com",
+    );
+    expect(resolveSenderIdentity(shop({ contactEmail: "new@gracestore.com" }), PRO).replyTo).toBe(
+      "new@gracestore.com",
+    );
+  });
+
+  it("yields to a deliberate merchant choice — a verified store address wins", () => {
+    const identity = resolveSenderIdentity(
+      shop({ contactEmail: "hello@gracestore.com", replyToEmail: "support@grace.test", replyToVerifiedAt: VERIFIED }),
+      PRO,
+    );
+
+    expect(identity.replyTo).toBe("support@grace.test");
+    expect(identity.replyToSource).toBe("verified-store");
+  });
+
+  it("yields to a per-template address too", () => {
+    const identity = resolveSenderIdentity(shop({ contactEmail: "hello@gracestore.com" }), PRO, "tpl@grace.test");
+
+    expect(identity.replyTo).toBe("tpl@grace.test");
+    expect(identity.replyToSource).toBe("template");
+  });
+
+  it("falls back to the platform address when the contact email is missing or blank", () => {
+    for (const contactEmail of [null, undefined, "", "   "]) {
+      const identity = resolveSenderIdentity(shop({ contactEmail }), PRO);
+
+      expect(identity.replyTo).toBe(PLATFORM);
+      expect(identity.replyToSource).toBe("platform");
+    }
+  });
+
+  it("rejects anything that could control the header, falling back instead", () => {
+    for (const hostile of [
+      "not-an-address",
+      "a@b@c.test",
+      "a b@c.test",
+      "x@y.test, evil@attacker.com",
+      "x@y.test; evil@attacker.com",
+      'x@y.test" <evil@attacker.com>',
+      "x@y.test\r\nBcc: evil@attacker.com",
+      "<evil@attacker.com>",
+      "no-at-sign.test",
+      `${"a".repeat(300)}@x.test`,
+    ]) {
+      const identity = resolveSenderIdentity(shop({ contactEmail: hostile }), PRO);
+
+      expect(identity.replyTo).toBe(PLATFORM);
+      expect(identity.replyToSource).toBe("platform");
+      expect(identity.replyTo).not.toContain("attacker.com");
+    }
+  });
+
+  it("never leaks into the From header", () => {
+    const identity = resolveSenderIdentity(shop({ contactEmail: "hello@gracestore.com" }), PRO);
+
+    // Reply-To needs no domain authentication; From does. The merchant's own domain must never
+    // appear in From, which is the whole reason this value is Reply-To only.
+    expect(identity.fromAddress).toBe("requests+grace.myshopify.com@notifications.imagyn.co");
+    expect(identity.fromAddress).not.toContain("gracestore.com");
+  });
+
+  it("isolates stores — one shop's contact email never reaches another's email", () => {
+    const a = resolveSenderIdentity(shop({ domain: "a.myshopify.com", contactEmail: "a@a.test" }), PRO);
+    const b = resolveSenderIdentity(shop({ domain: "b.myshopify.com", contactEmail: "b@b.test" }), PRO);
+
+    expect(a.replyTo).toBe("a@a.test");
+    expect(b.replyTo).toBe("b@b.test");
+  });
+});

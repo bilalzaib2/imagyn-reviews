@@ -45,6 +45,10 @@ export interface SenderIdentityStore {
   domain?: string | null;
   /** Fallback identifier when `domain` is absent on an older row. */
   slug?: string | null;
+  /** The merchant's public-facing contact email, synced from Shopify's shop.contactEmail.
+   *  Shopify designates this as the address customers use to reach the shop owner, so it is
+   *  the correct default Reply-To. Never used in the From header. */
+  contactEmail?: string | null;
   /** The store-wide Reply-To candidate. Only honoured once verified. */
   replyToEmail?: string | null;
   /** Proof the merchant can read that inbox. Null means the address is NOT used. */
@@ -64,7 +68,7 @@ export interface SenderIdentity {
   /** A real merchant inbox for replies, when configured. */
   replyTo: string | null;
   /** Where replyTo came from, so the UI can explain it rather than just showing an address. */
-  replyToSource: "verified-store" | "template" | "platform";
+  replyToSource: "verified-store" | "template" | "shopify-contact" | "platform";
   /** True when the merchant's own brand name is what will actually be sent. */
   brandedNameActive: boolean;
   /** Why the brand name is not in effect, when it isn't. */
@@ -105,6 +109,14 @@ export function sanitizeSenderName(raw: string | null | undefined): string | nul
     .slice(0, MAX_SENDER_NAME_LENGTH)
     .trim();
   return cleaned.length > 0 ? cleaned : null;
+}
+
+/** A Reply-To must be a single address: exactly one "@", no delimiter, quote or whitespace, so
+ *  no stored value can terminate the header and append a second recipient. */
+export function isHeaderSafeAddress(value: string | null | undefined): boolean {
+  if (typeof value !== "string") return false;
+  const trimmed = value.trim();
+  return trimmed.length > 0 && trimmed.length <= 254 && /^[^\s<>,;"@]+@[^\s<>,;"@]+\.[^\s<>,;"@]+$/.test(trimmed);
 }
 
 /** Fixed, non-merchant-controllable local-part prefix. Mirrors Judge.me's `requests+…`. */
@@ -191,7 +203,16 @@ export function resolveSenderIdentityWith(
   const verifiedStoreReplyTo =
     store.replyToVerifiedAt && store.replyToEmail?.trim() ? store.replyToEmail.trim() : null;
   const templateReplyTo = replyTo?.trim() || null;
-  const resolvedReplyTo = verifiedStoreReplyTo ?? templateReplyTo ?? fromAddress;
+
+  // Shopify's shop.contactEmail — the address Shopify itself designates for customers to reach
+  // the shop owner. It sits BELOW the two deliberate merchant choices and ABOVE the platform
+  // fallback: a merchant who explicitly set an address in Email Studio meant it, but a merchant
+  // who set nothing should still receive their own customers' replies rather than having them
+  // land in Imagyn's shared inbox. Re-validated here even though the sync already validated it,
+  // because this is the value that actually becomes a header.
+  const shopifyContactReplyTo = isHeaderSafeAddress(store.contactEmail) ? store.contactEmail!.trim() : null;
+
+  const resolvedReplyTo = verifiedStoreReplyTo ?? templateReplyTo ?? shopifyContactReplyTo ?? fromAddress;
 
   return {
     displayName: brandedNameActive ? configured! : store.name,
@@ -199,7 +220,13 @@ export function resolveSenderIdentityWith(
     fromAddressIsMerchantScoped: from?.merchantScoped ?? false,
     fromAddressConfigured: from !== null,
     replyTo: resolvedReplyTo,
-    replyToSource: verifiedStoreReplyTo ? "verified-store" : templateReplyTo ? "template" : "platform",
+    replyToSource: verifiedStoreReplyTo
+      ? "verified-store"
+      : templateReplyTo
+        ? "template"
+        : shopifyContactReplyTo
+          ? "shopify-contact"
+          : "platform",
     brandedNameActive,
     brandedNameBlockedReason: brandedNameActive ? null : !entitled ? "not-entitled" : "not-configured",
   };
