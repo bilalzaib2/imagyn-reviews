@@ -66,6 +66,7 @@ export async function sendTestReviewRequestEmail(
     html,
     text,
     fromName: senderIdentity?.displayName ?? storeName,
+    ...(senderIdentity?.fromAddress ? { fromAddress: senderIdentity.fromAddress } : {}),
     ...(senderIdentity?.replyTo ? { replyTo: senderIdentity.replyTo } : {}),
   });
 }

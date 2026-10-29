@@ -306,6 +306,7 @@ export const dispatchRequestEmail = async (request: ReviewRequestRecord): Promis
         // resolveSenderIdentity applies that entitlement at SEND time, so a downgrade stops
         // the branded name taking effect even for requests already scheduled.
         fromName: senderIdentity.displayName,
+        ...(senderIdentity.fromAddress ? { fromAddress: senderIdentity.fromAddress } : {}),
         // Merchant-configured in Email Studio (email.shared.ts's replyToEmail) — a real
         // customer reply lands in an inbox the merchant actually reads. Omitted entirely when
         // not configured, same as fromName's own optionality.
@@ -436,6 +437,7 @@ export const dispatchReminderEmail = async (
       html,
       text,
       fromName: senderIdentity.displayName,
+      ...(senderIdentity.fromAddress ? { fromAddress: senderIdentity.fromAddress } : {}),
       // Previously omitted on reminders, so a customer replying to a reminder reached the
       // shared platform address while a reply to the original request reached the merchant.
       ...(senderIdentity.replyTo ? { replyTo: senderIdentity.replyTo } : {}),

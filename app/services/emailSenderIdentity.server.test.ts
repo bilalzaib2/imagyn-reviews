@@ -118,9 +118,12 @@ describe("reply-to", () => {
     expect(resolveSenderIdentity(store("Grace"), PRO, "hello@grace.test").replyTo).toBe("hello@grace.test");
   });
 
-  it("is null when not configured, so the send omits the header entirely", () => {
-    expect(resolveSenderIdentity(store("Grace"), PRO).replyTo).toBeNull();
-    expect(resolveSenderIdentity(store("Grace"), PRO, "   ").replyTo).toBeNull();
+  it("falls back to the platform address rather than omitting the header", () => {
+    // REVISED: this used to assert null. With a merchant-scoped From local part there is no
+    // mailbox behind the From address, so omitting Reply-To would send replies nowhere. The
+    // platform address is exactly where replies landed before the change.
+    expect(resolveSenderIdentity(store("Grace"), PRO).replyTo).toBe("reviews@notifications.imagyn.co");
+    expect(resolveSenderIdentity(store("Grace"), PRO, "   ").replyTo).toBe("reviews@notifications.imagyn.co");
   });
 
   it("is independent of the branded-name entitlement", () => {
@@ -213,28 +216,39 @@ describe("verified store Reply-To", () => {
     expect(identity.replyToSource).toBe("template");
   });
 
-  it("does not fall back to an unverified store address when no template address exists", () => {
+  it("never falls back to an UNVERIFIED store address, even with no template address", () => {
     const identity = resolveSenderIdentity(
       storeWith({ replyToEmail: "unproven@grace.test", replyToVerifiedAt: null }),
       PRO,
       null,
     );
 
-    expect(identity.replyTo).toBeNull();
-    expect(identity.replyToSource).toBe("none");
+    // The property that matters is unchanged: an unproven address is never used. What it falls
+    // back TO is now the platform address rather than nothing.
+    expect(identity.replyTo).not.toBe("unproven@grace.test");
+    expect(identity.replyTo).toBe("reviews@notifications.imagyn.co");
+    expect(identity.replyToSource).toBe("platform");
   });
 
-  it("does not honour a verified store address on Free — it is a Pro capability", () => {
-    const identity = resolveSenderIdentity(
-      storeWith({ replyToEmail: "support@grace.test", replyToVerifiedAt: VERIFIED }),
-      FREE,
-      "template@grace.test",
-    );
+  it("honours a verified store address on EVERY plan", () => {
+    // DELIBERATE CHANGE. This was Pro-gated. A merchant who proved they own an inbox should
+    // receive their customers' replies regardless of plan, and gating it meant replies silently
+    // stopped reaching them on downgrade. Judge.me's default sender likewise routes replies to
+    // the merchant's admin address with no plan condition. The custom brand-NAME override
+    // remains the Pro feature; this is not it.
+    for (const plan of [FREE, PRO]) {
+      const identity = resolveSenderIdentity(
+        storeWith({ replyToEmail: "support@grace.test", replyToVerifiedAt: VERIFIED }),
+        plan,
+        "template@grace.test",
+      );
 
-    expect(identity.replyTo).toBe("template@grace.test");
+      expect(identity.replyTo).toBe("support@grace.test");
+      expect(identity.replyToSource).toBe("verified-store");
+    }
   });
 
-  it("leaves the From address untouched — this is inbox proof, not domain authentication", () => {
+  it("leaves the From DOMAIN untouched — this is inbox proof, not domain authentication", () => {
     const identity = resolveSenderIdentity(
       storeWith({ replyToEmail: "support@grace.test", replyToVerifiedAt: VERIFIED }),
       PRO,
@@ -243,7 +257,126 @@ describe("verified store Reply-To", () => {
     expect(identity.fromAddress).toBe("reviews@notifications.imagyn.co");
   });
 
-  it("reports 'none' when nothing is configured anywhere", () => {
-    expect(resolveSenderIdentity(storeWith({}), PRO).replyToSource).toBe("none");
+  it("reports 'platform' when nothing merchant-specific is configured anywhere", () => {
+    expect(resolveSenderIdentity(storeWith({}), PRO).replyToSource).toBe("platform");
+  });
+});
+
+// ─────────────────────────────────────────────────────────────────────────────────────────────
+// MERCHANT-SCOPED FROM ADDRESS.
+//
+// Mirrors Judge.me's documented default sender (requests+<myshopify_domain>@judge.me): the
+// DOMAIN stays the platform's verified one so DKIM still signs d=<platform>, while the LOCAL
+// PART identifies the merchant. The security property under test throughout is that this is
+// merchant-SCOPED, never merchant-CONTROLLED — no store-supplied value may change which domain
+// the mail claims to come from.
+// ─────────────────────────────────────────────────────────────────────────────────────────────
+describe("merchant-scoped From address", () => {
+  const PLATFORM = "reviews@notifications.imagyn.co";
+
+  function shop(extra: Record<string, unknown> = {}) {
+    return { name: "Grace Store", emailSenderName: null, domain: "gracestoreofficial.myshopify.com", ...extra };
+  }
+
+  it("scopes the local part to the shop domain on the platform's domain", () => {
+    const identity = resolveSenderIdentity(shop(), FREE);
+
+    expect(identity.fromAddress).toBe("requests+gracestoreofficial.myshopify.com@notifications.imagyn.co");
+    expect(identity.fromAddressIsMerchantScoped).toBe(true);
+    expect(identity.fromAddressConfigured).toBe(true);
+  });
+
+  it("applies on every plan — identifying the merchant is the product, not an upsell", () => {
+    for (const plan of [FREE, PRO]) {
+      expect(resolveSenderIdentity(shop(), plan).fromAddress).toBe(
+        "requests+gracestoreofficial.myshopify.com@notifications.imagyn.co",
+      );
+    }
+  });
+
+  it("always stays on the platform domain, whatever the store claims its domain is", () => {
+    // The spoofing case. A store row whose domain is an attacker-controlled host must not move
+    // the From onto that host.
+    const identity = resolveSenderIdentity(shop({ domain: "attacker.com" }), PRO);
+
+    expect(identity.fromAddress.endsWith("@notifications.imagyn.co")).toBe(true);
+    expect(identity.fromAddress).toBe("requests+attacker.com@notifications.imagyn.co");
+  });
+
+  it("cannot be used to inject a different address or a second recipient", () => {
+    for (const hostile of [
+      "evil@attacker.com",
+      "x@attacker.com>, y@attacker.com",
+      'a" <b@attacker.com',
+      "a\r\nBcc: c@attacker.com",
+      "a b@attacker.com",
+      "a;b@attacker.com",
+    ]) {
+      const identity = resolveSenderIdentity(shop({ domain: hostile }), PRO);
+      const at = identity.fromAddress.split("@");
+
+      expect(at).toHaveLength(2);
+      expect(at[1]).toBe("notifications.imagyn.co");
+      expect(identity.fromAddress).not.toMatch(/[\s<>,;"]/);
+    }
+  });
+
+  it("falls back to the shared platform address when no usable identifier exists", () => {
+    for (const domain of [null, undefined, "", "   ", "...", "---"]) {
+      const identity = resolveSenderIdentity(shop({ domain, slug: null }), PRO);
+
+      expect(identity.fromAddress).toBe(PLATFORM);
+      expect(identity.fromAddressIsMerchantScoped).toBe(false);
+      // Still a usable configuration — a send must not be blocked by this.
+      expect(identity.fromAddressConfigured).toBe(true);
+    }
+  });
+
+  it("uses the slug when the domain is missing on an older row", () => {
+    const identity = resolveSenderIdentity(shop({ domain: null, slug: "gracestoreofficial" }), PRO);
+
+    expect(identity.fromAddress).toBe("requests+gracestoreofficial@notifications.imagyn.co");
+  });
+
+  it("keeps the local part within the 64-octet limit", () => {
+    const identity = resolveSenderIdentity(shop({ domain: `${"a".repeat(200)}.myshopify.com` }), PRO);
+    const localPart = identity.fromAddress.split("@")[0];
+
+    expect(localPart.length).toBeLessThanOrEqual(64);
+    expect(localPart.startsWith("requests+")).toBe(true);
+  });
+
+  it("isolates stores — two shops never resolve to the same address", () => {
+    const a = resolveSenderIdentity(shop({ domain: "shop-a.myshopify.com" }), PRO);
+    const b = resolveSenderIdentity(shop({ domain: "shop-b.myshopify.com" }), PRO);
+
+    expect(a.fromAddress).not.toBe(b.fromAddress);
+    expect(a.fromAddress).toContain("shop-a.myshopify.com");
+    expect(b.fromAddress).toContain("shop-b.myshopify.com");
+  });
+
+  it("reports an unusable platform configuration instead of inventing a domain", () => {
+    process.env.RESEND_FROM_EMAIL = "not-an-address";
+
+    const identity = resolveSenderIdentity(shop(), PRO);
+
+    expect(identity.fromAddressConfigured).toBe(false);
+    expect(identity.fromAddress).toBe("");
+    expect(identity.fromAddressIsMerchantScoped).toBe(false);
+  });
+
+  it("pairs the merchant display name with the merchant-scoped address", () => {
+    // What a customer's inbox actually shows, end to end.
+    const identity = resolveSenderIdentity(shop({ emailSenderName: "Grace" }), PRO);
+
+    expect(identity.displayName).toBe("Grace");
+    expect(identity.fromAddress).toBe("requests+gracestoreofficial.myshopify.com@notifications.imagyn.co");
+  });
+
+  it("falls back to the real store name for the display name on Free, address unchanged", () => {
+    const identity = resolveSenderIdentity(shop({ emailSenderName: "Grace" }), FREE);
+
+    expect(identity.displayName).toBe("Grace Store");
+    expect(identity.fromAddressIsMerchantScoped).toBe(true);
   });
 });

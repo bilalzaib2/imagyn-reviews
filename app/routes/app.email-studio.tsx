@@ -1200,9 +1200,9 @@ export default function EmailStudioPage() {
                     )}
                   </p>
                   <p className={styles.fieldHint}>
-                    This address is shared and always verified, which is what keeps your emails out of spam. Sending
-                    from your own domain would need that domain verified first, which this app doesn&apos;t support
-                    yet — so replies are the supported way to reach your own inbox.
+                    {savedIdentity.fromAddressIsMerchantScoped
+                      ? "This address is unique to your store, on our verified sending domain. That combination is what keeps your emails out of spam while still identifying you as the sender. Sending from your own domain instead would need that domain verified first, which this app doesn't support yet — so Reply-to below is how replies reach your own inbox."
+                      : "This address is shared and always verified, which is what keeps your emails out of spam. Sending from your own domain would need that domain verified first, which this app doesn't support yet — so replies are the supported way to reach your own inbox."}
                   </p>
                 </div>
 
@@ -1210,9 +1210,12 @@ export default function EmailStudioPage() {
                   <span className={styles.fieldLabel}>Reply-to</span>
                   <p className={styles.senderIdentityNote}>
                     {savedIdentity.replyTo ? (
-                      <strong>{savedIdentity.replyTo}</strong>
+                      <>
+                        <strong>{savedIdentity.replyTo}</strong>
+                        {savedIdentity.replyToSource === "platform" ? " — our shared inbox, until you set your own." : null}
+                      </>
                     ) : (
-                      <>Not set — replies go to the shared address above.</>
+                      <>Not set.</>
                     )}
                   </p>
                   <p className={styles.fieldHint}>Set this per template under Delivery.</p>

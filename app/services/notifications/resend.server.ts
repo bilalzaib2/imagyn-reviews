@@ -42,15 +42,26 @@ export function createResendEmailProvider(): EmailProvider {
         );
       }
 
-      // A customer-facing send (review requests/reminders) gets the merchant's own store name
-      // as the display name — e.g. "Coastal Threads <reviews@notifications.imagyn.co>" — so it
-      // reads as coming from the store, not a generic "Imagyn Reviews" identity, without
-      // requiring per-merchant domain verification (see docs on canUseCustomEmailDomain for
-      // the real future capability this stands in for). Imagyn's own merchant-facing
-      // notifications (fromName omitted) keep whatever display name RESEND_FROM_EMAIL itself
-      // already carries.
+      // A customer-facing send gets the merchant's own store name as the display name AND a
+      // merchant-scoped local part on the platform's verified domain — e.g.
+      // "Coastal Threads <requests+coastal.myshopify.com@notifications.imagyn.co>" — so both
+      // halves of the From header identify the store rather than Imagyn. The domain is never
+      // merchant-supplied, so DKIM still signs d=<platform domain>; see
+      // emailSenderIdentity.shared.ts for why that is the line between scoped and spoofed.
+      // Imagyn's own merchant-facing notifications (fromName omitted) keep whatever display
+      // name RESEND_FROM_EMAIL itself already carries.
+      //
+      // Validated here as well as at construction: this is the last point before a mail header.
+      // Exactly one "@" is permitted and no delimiter or whitespace, so a value like
+      // "a@b@x.test" or "x@y.test>, evil@attacker.com" can never forge a second address.
+      const resolvedAddress = request.fromAddress?.trim();
+      const safeAddress =
+        resolvedAddress && /^[^\s<>,;"@]+@[^\s<>,;"@]+$/.test(resolvedAddress)
+          ? resolvedAddress
+          : extractAddress(fromEnv);
+
       const sanitizedName = request.fromName ? sanitizeDisplayName(request.fromName) : "";
-      const from = sanitizedName ? `${sanitizedName} <${extractAddress(fromEnv)}>` : fromEnv;
+      const from = sanitizedName ? `${sanitizedName} <${safeAddress}>` : fromEnv;
 
       const resend = new Resend(apiKey);
       const { data, error } = await resend.emails.send(

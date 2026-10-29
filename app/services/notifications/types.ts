@@ -10,6 +10,11 @@ export interface EmailSendRequest {
   // constraint — see resend.server.ts). Omitted entirely for Imagyn's own merchant-facing
   // notifications (e.g. ReviewHeldEmail), which should keep the Imagyn identity as-is.
   fromName?: string;
+  /** The resolved From ADDRESS. Supplied by callers that resolved a sender identity, so the
+   *  merchant-scoped local part (see emailSenderIdentity.shared.ts) actually reaches the
+   *  provider instead of being rebuilt from the env default. Omitted falls back to
+   *  RESEND_FROM_EMAIL, which is what Imagyn's own merchant-facing notifications want. */
+  fromAddress?: string;
   // Merchant-configurable reply-to (Email Studio's "Reply-to" field, email.shared.ts's
   // EmailTemplateContent.replyToEmail) — real customer replies land in an inbox the merchant
   // actually reads, without requiring per-merchant sending-domain verification (the From
