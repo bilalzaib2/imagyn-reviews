@@ -460,6 +460,78 @@ Ranked by what I would actually worry about.
 
 ---
 
+## 9a. RESUME POINT — read this first
+
+**Session of 2026-11-06 (second), stopped at the Anthropic usage limit during state recovery.**
+Nothing was changed in that session. The tree and HEAD are exactly as §1 and §4 describe.
+
+A new mission was issued ("FULL PRODUCT COMPLETION NIGHT SHIFT") with three parts: the full
+product completion brief, a **Review Management page redesign** to match Judge.me, and a
+**design direction update** (intelligent green gradients, stronger editorial typography, no
+AI-design clichés). The usage limit was reached before any of it could be implemented.
+
+### What that session actually completed
+
+1. **Verified every claim in this handover against the repository.** All accurate: HEAD
+   `f34e50d`, branch `main`, in sync with `origin/main`, 4 session commits, **1,714 tests
+   passing across 89 files**, typecheck / lint / build clean, three deliberately untracked
+   paths, database untouched.
+2. **Inventoried the existing Coupons and Rewards implementation** (below), so the next
+   session does not rebuild what is already there.
+
+### Existing Coupons / Rewards capability — do NOT rebuild
+
+More exists than the new brief assumes. Audit before implementing:
+
+| File | Lines | What it already provides |
+|---|---|---|
+| `app/services/coupons.server.ts` | 461 | `couponsService` — campaign CRUD, activation/pause, per-customer code issuance, revocation |
+| `app/services/rewards.server.ts` | 418 | `getRewardSettings`, `updateRewardSettings`, `evaluateEligibility`, `evaluateAndIssueReward`, `getRewardStats` |
+| `app/services/shopifyDiscount.server.ts` | 235 | **Real Shopify mutations**: `createShopifyDiscount` (`discountCodeBasicCreate`), `deactivateShopifyDiscount`, `activateShopifyDiscount`, `getShopifyDiscountUsageCount` |
+| `app/routes/app.settings.coupons.tsx` | 420 | Campaign UI |
+| `app/routes/app.settings.rewards.tsx` | 226 | Reward settings UI (already uses the house `Metric`) |
+| Tests | 41 | `coupons.server.test.ts` (21), `rewards.server.test.ts` (20) |
+
+Schema already models `Coupon`, `CouponRedemption` and `Reward`, including `discountType`
+(percentage / fixed_amount), `eligibility` (all / new_customers), `minimumOrderAmount`,
+`startsAt` / `endsAt`, `usageLimit`, `perCustomerLimit`, and real `shopifyDiscountId` /
+`discountCode` fields that are documented as never being set speculatively before Shopify
+confirms.
+
+**So the coupon gap is most likely UX, campaign-level reporting and end-to-end verification —
+not the core Shopify integration.** Confirm that by reading those five files before writing
+anything.
+
+### The exact next task
+
+**Research Judge.me's coupon and reward workflow** (mission §1 and §3A), then audit the five
+files above against it. Only then implement.
+
+After that, in the mission's own priority order: coupons → Email Studio default branding →
+Brand Studio defaults → dashboard visual QA → Review Management redesign → parity gaps.
+
+### Known constraints for the next session
+
+- **The two screenshots were not attached** to the mission message (our current Review
+  Management page, and Judge.me's). Sections 1–9 of that brief describe the target layout in
+  enough detail to build from, but the comparison is written, not visual. Ask for them again
+  if a pixel-level match matters.
+- **The Review Management redesign replaces a layout that works.** `app.reviews.tsx` is the
+  most complex screen in the app (optimistic updates, bulk actions, keyboard navigation, the
+  shared `Table`). The brief asks to drop the permanent right-hand detail panel for a
+  full-width table with a drawer or modal. Treat it as its own commit, and keep the existing
+  regression tests green rather than rewriting them to fit.
+- **Three new screens the brief asks for do not exist yet:** Customer Questions / Product Q&A
+  (no model at all — audit §4.3), Spam and Archive review categories (no such statuses;
+  `ReviewStatus` is PENDING / APPROVED / REJECTED only). Each needs a migration, so each needs
+  explicit approval. Do not assume they are UI-only.
+- **Store Reviews vs Product Reviews** as separate categories also has no model behind it —
+  every `Review` currently belongs to a product.
+- The design direction update asks for green gradients and a typography reconsideration
+  (Montserrat / Geist / Inter / Manrope / Helvetica Neue). Geist Sans is currently installed,
+  self-hosted and working; changing the typeface is a deliberate design decision, not a
+  cleanup, so decide it before touching `design-system.css`.
+
 ## 10. Next steps, in the order I would take them
 
 1. **Click through every merchant screen** and confirm the visual work. This is the single
