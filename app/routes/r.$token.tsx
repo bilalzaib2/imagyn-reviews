@@ -5,6 +5,7 @@ import type { ActionFunctionArgs, LoaderFunctionArgs } from "react-router";
 
 import { reviewRequestService } from "../services/review-request.server";
 import { parseRatingParam, RATING_QUERY_PARAM } from "../services/email.shared";
+import { suggestReviewTitle, SUGGESTED_TITLE_MAX_LENGTH } from "../services/review.shared";
 import { createReview, issueRewardIfEligible } from "../services/review.server";
 import { evaluateReview, getModerationSettings, sendHeldReviewNotification } from "../services/moderationRules.server";
 import { sendNewReviewNotification } from "../services/reviewNotifications.server";
@@ -322,6 +323,28 @@ export default function ReviewLinkPage() {
   // row). Not a judgement that five is the expected answer — it is the pre-existing behaviour,
   // and the star row is what makes the opening value genuinely theirs.
   const [rating, setRating] = useState(initialRating ?? 5);
+  /** The headline. Controlled now (it was uncontrolled) so a suggestion can be offered as the
+   *  customer writes — see onBodyChange below. */
+  const [title, setTitle] = useState("");
+  /** Whether the customer has typed in the headline field themselves. Once true, no suggestion
+   *  is ever applied again: a headline they wrote must never be overwritten by one derived from
+   *  their body text. */
+  const [titleTouched, setTitleTouched] = useState(false);
+  const [content, setContent] = useState("");
+  /**
+   * Offers a headline derived from the first sentence of the body, while the customer has not
+   * written one themselves.
+   *
+   * Judge.me parity. A suggestion, not an imposition: it stops the moment they touch the
+   * headline field, it is fully editable, and clearing the body clears an unedited suggestion
+   * rather than leaving a stale one behind.
+   */
+  const onBodyChange = (next: string) => {
+    setContent(next);
+    if (titleTouched) return;
+    setTitle(suggestReviewTitle(next) ?? "");
+  };
+
   const [photos, setPhotos] = useState<File[]>([]);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -449,14 +472,33 @@ export default function ReviewLinkPage() {
             <label className={styles.label} htmlFor="title">
               Headline <span style={{ fontWeight: 400, color: "var(--color-text-muted)" }}>(optional)</span>
             </label>
-            <input id="title" name="title" type="text" className={styles.input} maxLength={120} />
+            <input
+              id="title"
+              name="title"
+              type="text"
+              className={styles.input}
+              maxLength={SUGGESTED_TITLE_MAX_LENGTH}
+              value={title}
+              onChange={(event) => {
+                setTitleTouched(true);
+                setTitle(event.target.value);
+              }}
+            />
+            <p className={styles.hint}>We&apos;ll suggest one from your review — edit or clear it freely.</p>
           </div>
 
           <div className={styles.field}>
             <label className={styles.label} htmlFor="content">
               Your review
             </label>
-            <textarea id="content" name="content" className={styles.textarea} required />
+            <textarea
+              id="content"
+              name="content"
+              className={styles.textarea}
+              value={content}
+              onChange={(event) => onBodyChange(event.target.value)}
+              required
+            />
           </div>
 
           <div className={styles.field}>
