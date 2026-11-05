@@ -1,4 +1,4 @@
-import { Badge } from "@shopify/polaris";
+import { StatusBadge, type StatusBadgeTone } from "../ui/StatusBadge";
 import { ReviewStatus } from "../../services/review.shared";
 
 const STATUS_LABEL: Record<ReviewStatus, string> = {
@@ -7,12 +7,19 @@ const STATUS_LABEL: Record<ReviewStatus, string> = {
   [ReviewStatus.REJECTED]: "Rejected",
 };
 
-const STATUS_TONE: Record<ReviewStatus, "success" | "warning" | "attention"> = {
+// Converting this one component moved every screen that renders a review status onto the house
+// badge at once — the Reviews queue, the review detail panel, and the product detail page's
+// review list.
+//
+// REJECTED is `danger`, not the `attention` amber it was as a Polaris Badge. Rejecting a review
+// is a terminal negative outcome, and amber said "look at this" where red says "this one is
+// out" — which is the actual state.
+const STATUS_TONE: Record<ReviewStatus, StatusBadgeTone> = {
   [ReviewStatus.PENDING]: "warning",
   [ReviewStatus.APPROVED]: "success",
-  [ReviewStatus.REJECTED]: "attention",
+  [ReviewStatus.REJECTED]: "danger",
 };
 
 export function ReviewStatusBadge({ status }: { status: ReviewStatus }) {
-  return <Badge tone={STATUS_TONE[status]}>{STATUS_LABEL[status]}</Badge>;
+  return <StatusBadge tone={STATUS_TONE[status]}>{STATUS_LABEL[status]}</StatusBadge>;
 }

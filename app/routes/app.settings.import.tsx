@@ -3,10 +3,11 @@ import type { ChangeEvent, DragEvent } from "react";
 import { useFetcher, useLoaderData, useRouteError } from "react-router";
 import type { ActionFunctionArgs, HeadersFunction, LoaderFunctionArgs } from "react-router";
 import { boundary } from "@shopify/shopify-app-react-router/server";
-import { Banner, Frame, Toast } from "@shopify/polaris";
+import { Frame, Toast } from "@shopify/polaris";
 import { Button } from "../components/ui/Button";
 import { Section } from "../components/ui/Section";
 import { EmptyState } from "../components/ui/EmptyState";
+import { Banner } from "../components/ui/Banner";
 import { authenticateAdminDeduped } from "../services/auth-dedupe.server";
 import { getOrCreateStore } from "../services/store.server";
 import {

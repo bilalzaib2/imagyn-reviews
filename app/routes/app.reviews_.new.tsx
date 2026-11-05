@@ -2,11 +2,13 @@ import { useState } from "react";
 import { redirect, useFetcher, useLoaderData, useLocation, useRouteError } from "react-router";
 import type { ActionFunctionArgs, HeadersFunction, LoaderFunctionArgs } from "react-router";
 import { boundary } from "@shopify/shopify-app-react-router/server";
-import { Banner, Card } from "@shopify/polaris";
+
 
 import { Button } from "../components/ui/Button";
 import { Container } from "../components/ui/Container";
 import { LinkButton } from "../components/ui/LinkButton";
+import { Banner } from "../components/ui/Banner";
+import { Card } from "../components/ui/Card";
 import { ReviewForm, type ReviewFormValues } from "../components/reviews/ReviewForm";
 import { authenticateAdminDeduped } from "../services/auth-dedupe.server";
 import { getOrCreateStore } from "../services/store.server";

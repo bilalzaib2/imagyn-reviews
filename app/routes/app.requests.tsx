@@ -10,29 +10,19 @@ import {
 } from "react-router";
 import type { ActionFunctionArgs, HeadersFunction, LoaderFunctionArgs } from "react-router";
 import { boundary } from "@shopify/shopify-app-react-router/server";
-import {
-  ActionList,
-  Autocomplete,
-  Badge,
-  Banner,
-  BlockStack,
-  Card,
-  Frame,
-  Icon,
-  Modal,
-  Popover,
-  Select,
-  Text,
-  TextField,
-  Toast,
-} from "@shopify/polaris";
+import { ActionList, Autocomplete, Frame, Icon, Modal, Popover, Select, TextField, Toast } from "@shopify/polaris";
 import { PersonIcon, SearchIcon } from "@shopify/polaris-icons";
 
 import { Button } from "../components/ui/Button";
 import { Table, type TableColumn } from "../components/ui/Table";
+import { StatusBadge, type StatusBadgeTone } from "../components/ui/StatusBadge";
 import { LinkButton } from "../components/ui/LinkButton";
 import { Container } from "../components/ui/Container";
 import { Section } from "../components/ui/Section";
+import { Banner } from "../components/ui/Banner";
+import { Card } from "../components/ui/Card";
+import { Stack } from "../components/ui/Stack";
+import { Text } from "../components/ui/Text";
 import { RequestStatusBadge } from "../components/requests/RequestStatusBadge";
 import { RequestLifecycleTimeline } from "../components/requests/RequestLifecycleTimeline";
 import { authenticateAdminDeduped } from "../services/auth-dedupe.server";
@@ -786,7 +776,7 @@ function formatOrderDate(value: string): string {
 function getOrderLineItemStatus(
   order: ShopifyOrderRow,
   item: ShopifyOrderLineItemRow,
-): { label: string; tone: "success" | "info" | "warning" } | null {
+): { label: string; tone: StatusBadgeTone } | null {
   if (!order.customerEmail) {
     // Genuinely ambiguous from data alone: a null customerEmail could mean the order really has
     // none on file, *or* Shopify is withholding it pending this app's Protected Customer Data
@@ -1032,9 +1022,9 @@ function ShopifyOrdersPicker({
                     <td className={styles.colDate}>{formatOrderDate(order.createdAt)}</td>
                     <td>
                       {status ? (
-                        <Badge tone={status.tone}>{status.label}</Badge>
+                        <StatusBadge tone={status.tone}>{status.label}</StatusBadge>
                       ) : (
-                        <Badge tone="success">Eligible</Badge>
+                        <StatusBadge tone="success">Eligible</StatusBadge>
                       )}
                     </td>
                   </tr>
@@ -2273,7 +2263,7 @@ export default function RequestsPage() {
             ) : null}
 
             {requestModalMode === "create" && sendSource === "csv" ? (
-              <BlockStack gap="300">
+              <Stack gap="snug">
                 <p className={styles.feedbackMuted}>
                   Upload a CSV with columns for email, name, and product (name or handle) — order number and delay
                   days are optional per row. Customers who already have a pending, sent, or reviewed request for a
@@ -2296,7 +2286,7 @@ export default function RequestsPage() {
                     {fetcher.data.csvResult.errors.length > 0 ? `, ${fetcher.data.csvResult.errors.length} row error(s)` : ""}.
                   </p>
                 ) : null}
-              </BlockStack>
+              </Stack>
             ) : null}
 
             {requestModalMode === "create" && sendSource === "segment" ? (
@@ -2429,13 +2419,13 @@ export default function RequestsPage() {
                 ) : null}
 
                 <Card>
-                  <BlockStack gap="200">
+                  <Stack gap="tight">
                     <Text as="h3" variant="headingSm">Recipient preview</Text>
-                    <Text as="p" variant="bodyMd">To: {selectedCustomerLabel}</Text>
-                    <Text as="p" variant="bodyMd">Product: {selectedProductLabel}</Text>
-                    <Text as="p" variant="bodyMd">Scheduled: {previewSendDate}</Text>
-                    {formState.orderNumber ? <Text as="p" variant="bodyMd">Order: {formState.orderNumber}</Text> : null}
-                  </BlockStack>
+                    <Text as="p" variant="body">To: {selectedCustomerLabel}</Text>
+                    <Text as="p" variant="body">Product: {selectedProductLabel}</Text>
+                    <Text as="p" variant="body">Scheduled: {previewSendDate}</Text>
+                    {formState.orderNumber ? <Text as="p" variant="body">Order: {formState.orderNumber}</Text> : null}
+                  </Stack>
                 </Card>
               </>
             ) : null}

@@ -2,3 +2,13 @@
   display: grid;
   gap: var(--space-2);
 }
+
+/* An inline field error. The rating field is a custom star control rather than a Polaris
+   input, so it has no built-in error slot — this is the matching treatment for the one
+   Polaris renders under a TextField. */
+.inlineError {
+  margin: 0;
+  font-size: var(--text-sm);
+  line-height: var(--leading-normal);
+  color: var(--color-danger);
+}

@@ -9,20 +9,15 @@ import {
 } from "react-router";
 import type { ActionFunctionArgs, HeadersFunction, LoaderFunctionArgs } from "react-router";
 import { boundary } from "@shopify/shopify-app-react-router/server";
-import {
-  Badge,
-  BlockStack,
-  Card,
-  Frame,
-  SkeletonBodyText,
-  SkeletonDisplayText,
-  Text,
-  Toast,
-} from "@shopify/polaris";
+import { Frame, SkeletonBodyText, SkeletonDisplayText, Toast } from "@shopify/polaris";
 
 import { Button } from "../components/ui/Button";
+import { StatusBadge, type StatusBadgeTone } from "../components/ui/StatusBadge";
 import { Container } from "../components/ui/Container";
 import { LinkButton } from "../components/ui/LinkButton";
+import { Card } from "../components/ui/Card";
+import { Stack } from "../components/ui/Stack";
+import { Text } from "../components/ui/Text";
 import { ReviewStatusBadge } from "../components/reviews/ReviewStatusBadge";
 import { VerifiedBadge } from "../components/reviews/VerifiedBadge";
 import { StarRating } from "../components/reviews/StarRating";
@@ -141,7 +136,7 @@ const formatStatusLabel = (status: string | null) => {
   return `${normalized.charAt(0).toUpperCase()}${normalized.slice(1)}`;
 };
 
-const statusToneFor = (status: string | null): "success" | "info" | "attention" => {
+const statusToneFor = (status: string | null): StatusBadgeTone => {
   const normalized = status?.toLowerCase() ?? "";
 
   if (normalized === "active") {
@@ -149,10 +144,10 @@ const statusToneFor = (status: string | null): "success" | "info" | "attention" 
   }
 
   if (normalized === "archived") {
-    return "attention";
+    return "warning";
   }
 
-  return "info";
+  return "neutral";
 };
 
 const formatDate = (value: Date | string) =>
@@ -288,7 +283,9 @@ export default function ProductDetailPage() {
                     <Text as="h2" variant="headingLg">
                       {product.name}
                     </Text>
-                    <Badge tone={statusToneFor(product.status)}>{formatStatusLabel(product.status)}</Badge>
+                    <StatusBadge tone={statusToneFor(product.status)}>
+                      {formatStatusLabel(product.status)}
+                    </StatusBadge>
                   </div>
 
                   <dl className={styles.statGrid}>
@@ -321,7 +318,7 @@ export default function ProductDetailPage() {
             </Card>
 
             <Card>
-              <BlockStack gap="400">
+              <Stack gap="base">
                 <div className={styles.reviewsHeader}>
                   <Text as="h2" variant="headingMd">
                     AI Review Summary
@@ -390,11 +387,11 @@ export default function ProductDetailPage() {
                     has approved reviews.
                   </p>
                 )}
-              </BlockStack>
+              </Stack>
             </Card>
 
             <Card>
-              <BlockStack gap="400">
+              <Stack gap="base">
                 <div className={styles.reviewsHeader}>
                   <Text as="h2" variant="headingMd">
                     Reviews
@@ -445,7 +442,7 @@ export default function ProductDetailPage() {
                     ))}
                   </div>
                 )}
-              </BlockStack>
+              </Stack>
             </Card>
           </>
         )}

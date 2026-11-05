@@ -181,12 +181,80 @@
      makes every button, row, and card feel like the same product. */
   --transition-base: 150ms ease-out;
 
-  /* Polaris renders its own components (Card, Badge, Button, DataTable, ...) using its
-     own token set, independent of the custom properties above. These two overrides keep
-     Polaris-rendered UI visually consistent with the rest of the app: Polaris's default
-     page background is a light gray (not white), and its default font is Inter. */
-  --p-color-bg: #ffffff;
+  /* The accessible boundary colour for a form control.
+     WCAG 1.4.11 wants 3:1 for "visual information required to identify a user interface
+     component", which --color-border (1.3:1 on white) and even --color-border-strong
+     (1.58:1) both miss by a long way. Those two are right for a divider or a card edge —
+     decoration a sighted user navigates past — and wrong for the edge of a text input,
+     which is the only thing telling someone where to type.
+
+     #8a8a93 measures 3.42:1 on white. It is deliberately the same lightness as Polaris's
+     own input border (#8a8a8a), which was chosen for exactly this reason, just moved into
+     the cool-grey family the rest of this palette uses. */
+  --color-border-control: #8a8a93;
+  --color-border-control-hover: #6a6a73;
+
+  /* Pressed/hover state for a charcoal primary button. A touch darker than --color-accent
+     rather than pure black, so a press reads as a state change and not as a different
+     colour. */
+  --color-accent-hover: #0f0f11;
+
+  /* ---------------------------------------------------------------- Polaris alignment
+
+     Polaris renders its own components (TextField, Select, Checkbox, Modal, Popover, Badge,
+     Toast ...) from its OWN token set, independent of every custom property above. Roughly
+     a dozen merchant screens still use Polaris form controls — they are accessible, they
+     handle labels, errors and keyboard behaviour correctly, and replacing forty of them
+     by hand would be a large change with real regression risk for a purely visual gain.
+
+     Re-pointing Polaris's tokens at the Imagyn palette gets the same result for every one
+     of those screens at once, with no behavioural change at all: a Polaris input stops
+     being recognisably Shopify-blue-and-warm-grey next to an Imagyn button.
+
+     Border radius is deliberately absent from this list — Polaris's --p-border-radius-200
+     is already 0.5rem, which is exactly --radius-sm. It was never mismatched.
+
+     Every value below is either an exact Imagyn token or, where contrast demands it, a
+     measured equivalent. Nothing here lowers a contrast ratio: the focus ring goes from
+     Shopify blue (4.6:1 on white) to charcoal (17.7:1), body text from #303030 (12.6:1) to
+     #18181b (17.7:1), and the input border holds at 3.4:1. */
+
+  /* Surfaces. Polaris's default page background is a light grey and its input surface is
+     #fdfdfd; both become the app's real white. */
+  --p-color-bg: var(--color-surface);
+  --p-color-bg-surface: var(--color-surface);
+  --p-color-input-bg-surface: var(--color-surface);
+  --p-color-bg-surface-selected: var(--color-surface-muted);
+  --p-color-bg-surface-hover: var(--color-surface-muted);
+
+  /* Type. Polaris's default face is Inter. */
   --p-font-family-sans: var(--font-sans);
+  --p-color-text: var(--color-text);
+  --p-color-text-secondary: var(--color-text-muted);
+
+  /* Borders. Polaris's neutrals are warm (#e3e3e3/#ebebeb); these are the cool-cast
+     equivalents, so a Polaris card edge and an Imagyn card edge are the same line. */
+  --p-color-border: var(--color-border);
+  --p-color-border-secondary: var(--color-border);
+  --p-color-border-hover: var(--color-border-strong);
+  --p-color-input-border: var(--color-border-control);
+  --p-color-input-border-hover: var(--color-border-control-hover);
+  --p-color-input-border-active: var(--color-accent);
+
+  /* Focus. This is the one that matters most for coherence: Polaris rings its inputs in
+     Shopify blue, which is the only blue anywhere in this interface and reads as a
+     different product. Charcoal matches the single :focus-visible treatment defined below,
+     so every focusable thing in the app — house or Polaris — rings the same way. */
+  --p-color-border-focus: var(--color-accent);
+
+  /* "Brand" in Polaris means its primary action fill, which it sets to #303030. The app's
+     primary button is charcoal; see --color-accent's note on why black rather than green. */
+  --p-color-bg-fill-brand: var(--color-accent);
+  --p-color-bg-fill-brand-hover: var(--color-accent-hover);
+  --p-color-bg-fill-brand-active: var(--color-accent-hover);
+  --p-color-bg-fill-brand-selected: var(--color-accent-hover);
+  --p-color-text-brand: var(--color-text-muted);
+  --p-color-text-brand-hover: var(--color-text);
 }
 
 /* Geist Sans, self-hosted from the `geist` npm package. scripts/copy-fonts.mjs copies the

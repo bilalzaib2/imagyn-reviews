@@ -10,7 +10,7 @@ import {
 } from "react-router";
 import type { ActionFunctionArgs, HeadersFunction, LoaderFunctionArgs } from "react-router";
 import { boundary } from "@shopify/shopify-app-react-router/server";
-import { Card, Frame, SkeletonBodyText, SkeletonDisplayText, Toast } from "@shopify/polaris";
+import { Frame, SkeletonBodyText, SkeletonDisplayText, Toast } from "@shopify/polaris";
 
 import { Button } from "../components/ui/Button";
 import { Container } from "../components/ui/Container";
@@ -18,6 +18,7 @@ import { ProgressBar } from "../components/ui/ProgressBar";
 import { SettingsBreadcrumb } from "../components/ui/SettingsBreadcrumb";
 import { StatusBadge, type StatusBadgeTone } from "../components/ui/StatusBadge";
 import { Table, type TableColumn } from "../components/ui/Table";
+import { Card } from "../components/ui/Card";
 import { authenticateAdminDeduped } from "../services/auth-dedupe.server";
 import { getOrCreateStore, getProductSyncState, startProductSync, type ProductSyncState } from "../services/store.server";
 import { getProductsPage } from "../services/product.server";

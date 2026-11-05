@@ -2,11 +2,12 @@ import { type CSSProperties, type ReactNode, useEffect, useMemo, useState } from
 import { useFetcher, useLoaderData, useLocation, useNavigation, useRevalidator, useRouteError } from "react-router";
 import type { ActionFunctionArgs, HeadersFunction, LoaderFunctionArgs } from "react-router";
 import { boundary } from "@shopify/shopify-app-react-router/server";
-import { ActionList, Checkbox, Frame, Popover, Text, Toast } from "@shopify/polaris";
+import { ActionList, Checkbox, Frame, Popover, Toast } from "@shopify/polaris";
 
 import { Button } from "../components/ui/Button";
 import { Container } from "../components/ui/Container";
 import { SettingsBreadcrumb } from "../components/ui/SettingsBreadcrumb";
+import { Text } from "../components/ui/Text";
 import { Medallion } from "../components/medals/Medallion";
 import { authenticateAdminDeduped } from "../services/auth-dedupe.server";
 import { getOrCreateStore } from "../services/store.server";
@@ -826,7 +827,7 @@ function WidgetPreview({ tokens, settings }: { tokens: AppearanceTokens; setting
             <Text as="h2" variant="headingLg">
               Coastal Cotton Tee
             </Text>
-            <Text as="p" variant="bodyMd" tone="subdued">
+            <Text as="p" variant="body" tone="muted">
               Premium basics with a calm, storefront-native review presentation.
             </Text>
           </div>

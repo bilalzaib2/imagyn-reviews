@@ -81,6 +81,18 @@
   background: color-mix(in srgb, var(--color-success) 6%, var(--color-surface));
 }
 
+.bannerInfo {
+  background: color-mix(in srgb, var(--color-info) 6%, var(--color-surface));
+}
+
+/* A real failure. Deliberately the same restraint as the other tones — a 6% tint and a tinted
+   border rather than a saturated red panel, which is what the Polaris critical Banner this
+   replaced rendered. The message text carries the severity; the box only locates it. */
+.bannerCritical {
+  background: color-mix(in srgb, var(--color-danger) 6%, var(--color-surface));
+  border-color: color-mix(in srgb, var(--color-danger) 24%, var(--color-border));
+}
+
 .bannerText {
   display: grid;
   gap: 0.2rem;
@@ -99,6 +111,14 @@
   font-size: var(--text-sm);
   color: var(--color-text-muted);
   line-height: 1.5;
+}
+
+/* A title-less banner's description is the message itself, so it gets primary ink. */
+.bannerMessage {
+  margin: 0;
+  font-size: var(--text-sm);
+  color: var(--color-text);
+  line-height: var(--leading-normal);
 }
 
 .bannerActions {
@@ -180,6 +200,24 @@
 .statusBadgeNeutral {
   color: var(--color-text-muted);
   background: var(--color-surface-strong);
+}
+
+.statusBadgeDanger {
+  color: var(--color-danger);
+  background: color-mix(in srgb, var(--color-danger) 12%, transparent);
+}
+
+.statusBadgeInfo {
+  color: var(--color-info);
+  background: color-mix(in srgb, var(--color-info) 12%, transparent);
+}
+
+/* The brand sage, for merchant-curated emphasis. --color-brand-strong rather than
+   --color-brand because this is TEXT on a tint: --color-brand is a fills-only value and
+   measures 3.49:1, under the 4.5:1 a label needs. */
+.statusBadgeBrand {
+  color: var(--color-brand-strong);
+  background: var(--color-brand-soft);
 }
 
 .statusBadgePro {

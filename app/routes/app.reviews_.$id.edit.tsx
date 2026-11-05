@@ -2,11 +2,14 @@ import { useState } from "react";
 import { redirect, useFetcher, useLoaderData, useLocation, useRouteError } from "react-router";
 import type { ActionFunctionArgs, HeadersFunction, LoaderFunctionArgs } from "react-router";
 import { boundary } from "@shopify/shopify-app-react-router/server";
-import { Banner, Card, EmptyState } from "@shopify/polaris";
+
 
 import { Button } from "../components/ui/Button";
 import { Container } from "../components/ui/Container";
 import { LinkButton } from "../components/ui/LinkButton";
+import { Banner } from "../components/ui/Banner";
+import { Card } from "../components/ui/Card";
+import { EmptyState } from "../components/ui/EmptyState";
 import { ReviewForm, type ReviewFormValues } from "../components/reviews/ReviewForm";
 import { authenticateAdminDeduped } from "../services/auth-dedupe.server";
 import { getOrCreateStore } from "../services/store.server";
@@ -151,13 +154,15 @@ export default function EditReviewPage() {
         {!review ? (
           <Card>
             <Banner tone="critical">{error}</Banner>
+            {/* The house EmptyState, which draws no illustration. The Polaris one this
+                replaced pointed `image` at a Shopify CDN URL — a third-party request on an
+                error screen, for a decorative graphic that said nothing the heading did not
+                already say. */}
             <EmptyState
-              heading="This review isn't available"
-              action={{ content: "Back to Reviews", url: backHref }}
-              image="https://cdn.shopify.com/s/files/1/0262/4071/2726/files/emptystate-files.png"
-            >
-              <p>It may have been deleted, or you may not have access to it.</p>
-            </EmptyState>
+              title="This review isn't available"
+              description="It may have been deleted, or you may not have access to it."
+              action={{ label: "Back to Reviews", href: backHref }}
+            />
           </Card>
         ) : (
           <>

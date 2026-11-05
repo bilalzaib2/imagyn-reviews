@@ -12,21 +12,14 @@ import {
 import type { ActionFunctionArgs, HeadersFunction, LoaderFunctionArgs } from "react-router";
 import { boundary } from "@shopify/shopify-app-react-router/server";
 import Papa from "papaparse";
-import {
-  ActionList,
-  Banner,
-  Frame,
-  Modal,
-  Popover,
-  TextField,
-  Toast,
-} from "@shopify/polaris";
+import { ActionList, Frame, Modal, Popover, TextField, Toast } from "@shopify/polaris";
 
 import { Button } from "../components/ui/Button";
 import { Table, type TableColumn } from "../components/ui/Table";
 import { Container } from "../components/ui/Container";
 import { LinkButton } from "../components/ui/LinkButton";
 import { Section } from "../components/ui/Section";
+import { Banner } from "../components/ui/Banner";
 import { ReviewStatusBadge } from "../components/reviews/ReviewStatusBadge";
 import { VerifiedBadge } from "../components/reviews/VerifiedBadge";
 import { ImportedBadge } from "../components/reviews/ImportedBadge";

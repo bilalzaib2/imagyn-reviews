@@ -1,4 +1,4 @@
-import { Badge } from "@shopify/polaris";
+import { StatusBadge } from "../ui/StatusBadge";
 
 interface RewardBadgeProps {
   reward: { status: string; discountCode: string | null; valueType: string; value: number } | null;
@@ -18,11 +18,11 @@ export function RewardBadge({ reward }: RewardBadgeProps) {
 
   if (reward.status === "issued") {
     const amount = reward.valueType === "percentage" ? `${reward.value}%` : `$${reward.value}`;
-    return <Badge tone="success">{`Reward issued · ${amount}`}</Badge>;
+    return <StatusBadge tone="success">{`Reward issued · ${amount}`}</StatusBadge>;
   }
 
   if (reward.status === "failed") {
-    return <Badge tone="critical">Reward failed</Badge>;
+    return <StatusBadge tone="danger">Reward failed</StatusBadge>;
   }
 
   return null;

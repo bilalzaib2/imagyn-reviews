@@ -1,4 +1,6 @@
-import { BlockStack, Checkbox, Select, Text, TextField } from "@shopify/polaris";
+import { Stack } from "../ui/Stack";
+import { Text } from "../ui/Text";
+import { Checkbox, Select, TextField } from "@shopify/polaris";
 import { StarRating } from "./StarRating";
 import styles from "./review-form.module.css";
 
@@ -32,7 +34,7 @@ export function ReviewForm({ mode, products, values, onChange, errors, disabled 
   ];
 
   return (
-    <BlockStack gap="400">
+    <Stack gap="base">
       <Select
         label="Product"
         options={productOptions}
@@ -44,14 +46,14 @@ export function ReviewForm({ mode, products, values, onChange, errors, disabled 
       />
 
       <div className={styles.ratingField}>
-        <Text as="p" variant="bodyMd">
+        <Text as="p" variant="body">
           Rating
         </Text>
         <StarRating value={values.rating} onChange={(next) => onChange("rating", next)} size={26} />
         {errors?.rating ? (
-          <Text as="p" tone="critical">
+          <p className={styles.inlineError}>
             {errors.rating}
-          </Text>
+          </p>
         ) : null}
       </div>
 
@@ -115,6 +117,6 @@ export function ReviewForm({ mode, products, values, onChange, errors, disabled 
         onChange={(value) => onChange("featured", value)}
         disabled={disabled}
       />
-    </BlockStack>
+    </Stack>
   );
 }

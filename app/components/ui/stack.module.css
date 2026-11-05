@@ -1,0 +1,25 @@
+/* A vertical stack. Grid rather than flex-column so the gap applies between rows without
+   needing a direction, and so a child that renders null leaves no stray gap behind it. */
+.stack {
+  display: grid;
+  align-content: start;
+}
+
+/* The four steps that were actually in use. Mapped from the Polaris gaps the call sites had:
+   200 -> tight, 300 -> snug, 400 -> base. "loose" exists for the next caller that needs the
+   section-level rhythm rather than the in-card one. */
+.gapTight {
+  gap: var(--space-2);
+}
+
+.gapSnug {
+  gap: var(--space-3);
+}
+
+.gapBase {
+  gap: var(--space-4);
+}
+
+.gapLoose {
+  gap: var(--space-6);
+}

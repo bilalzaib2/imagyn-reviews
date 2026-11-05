@@ -1,0 +1,43 @@
+/* The app's heading sizes, from design-system.css's ladder. Margins are zeroed on all of them:
+   vertical rhythm is the container's job (<Stack>, <Section>, a grid gap), never the text's —
+   which is what stops two adjacent headings from collapsing or doubling their spacing
+   depending on which one happens to be rendered. */
+.headingLg,
+.headingMd,
+.headingSm,
+.body {
+  margin: 0;
+}
+
+.headingLg {
+  font-size: var(--text-xl);
+  font-weight: var(--weight-semibold);
+  letter-spacing: var(--tracking-tight);
+  line-height: var(--leading-snug);
+  color: var(--color-text);
+}
+
+.headingMd {
+  font-size: var(--text-lg);
+  font-weight: var(--weight-semibold);
+  letter-spacing: var(--tracking-tight);
+  line-height: var(--leading-snug);
+  color: var(--color-text);
+}
+
+.headingSm {
+  font-size: var(--text-base);
+  font-weight: var(--weight-semibold);
+  line-height: var(--leading-snug);
+  color: var(--color-text);
+}
+
+.body {
+  font-size: var(--text-sm);
+  line-height: var(--leading-normal);
+  color: var(--color-text);
+}
+
+.muted {
+  color: var(--color-text-muted);
+}
