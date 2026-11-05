@@ -4,6 +4,7 @@ import { data, Form, isRouteErrorResponse, useActionData, useLoaderData, useNavi
 import type { ActionFunctionArgs, LoaderFunctionArgs } from "react-router";
 
 import { reviewRequestService } from "../services/review-request.server";
+import { parseRatingParam, RATING_QUERY_PARAM } from "../services/email.shared";
 import { createReview, issueRewardIfEligible } from "../services/review.server";
 import { evaluateReview, getModerationSettings, sendHeldReviewNotification } from "../services/moderationRules.server";
 import { sendNewReviewNotification } from "../services/reviewNotifications.server";
@@ -46,7 +47,7 @@ const ERROR_COPY: Record<TokenErrorReason, { title: string; message: string; ico
 // Public, unauthenticated on purpose — no authenticate.admin() call. Reached only via the
 // tokenized link in a review request email (see review-request.server.ts's buildReviewUrl),
 // never linked to from the admin or storefront.
-export const loader = async ({ params }: LoaderFunctionArgs) => {
+export const loader = async ({ params, request }: LoaderFunctionArgs) => {
   const token = params.token;
 
   if (!token) {
@@ -71,7 +72,18 @@ export const loader = async ({ params }: LoaderFunctionArgs) => {
     appearanceService.getActive(storeId),
   ]);
 
+  // The rating the customer already tapped in the email's one-tap star row, if they used it.
+  // Strictly parsed and silently ignored when absent or nonsense (see parseRatingParam) — this
+  // is a public page reached from a link anyone can edit, so a bad value must degrade to "no
+  // pre-selection", never to an error a customer cannot get past.
+  //
+  // Pre-selecting is the whole point and it is NOT review gating: every star in the email
+  // links here, this page is identical whichever one was tapped, and the customer can change
+  // the rating freely below before submitting. Nothing was recorded by the tap itself.
+  const initialRating = parseRatingParam(new URL(request.url).searchParams.get(RATING_QUERY_PARAM));
+
   return {
+    initialRating,
     productName: result.request.product?.name ?? "your recent purchase",
     productImage: result.request.product?.featuredImage ?? null,
     storeName: result.request.store.name,
@@ -278,6 +290,7 @@ export function shouldRevalidate() {
 
 export default function ReviewLinkPage() {
   const {
+    initialRating,
     productName,
     productImage,
     storeName,
@@ -304,7 +317,11 @@ export default function ReviewLinkPage() {
   const navigation = useNavigation();
   const isSubmitting = navigation.state === "submitting";
 
-  const [rating, setRating] = useState(5);
+  // Falls back to the five-star default this page has always opened on when the customer
+  // arrived without tapping a star (a copy-pasted link, or the CTA button rather than the star
+  // row). Not a judgement that five is the expected answer — it is the pre-existing behaviour,
+  // and the star row is what makes the opening value genuinely theirs.
+  const [rating, setRating] = useState(initialRating ?? 5);
   const [photos, setPhotos] = useState<File[]>([]);
   const fileInputRef = useRef<HTMLInputElement>(null);
 

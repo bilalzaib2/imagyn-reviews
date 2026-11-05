@@ -10,21 +10,14 @@ import {
 } from "react-router";
 import type { ActionFunctionArgs, HeadersFunction, LoaderFunctionArgs } from "react-router";
 import { boundary } from "@shopify/shopify-app-react-router/server";
-import {
-  Badge,
-  BlockStack,
-  Card,
-  DataTable,
-  Frame,
-  SkeletonBodyText,
-  SkeletonDisplayText,
-  Toast,
-} from "@shopify/polaris";
+import { Card, Frame, SkeletonBodyText, SkeletonDisplayText, Toast } from "@shopify/polaris";
 
 import { Button } from "../components/ui/Button";
 import { Container } from "../components/ui/Container";
 import { ProgressBar } from "../components/ui/ProgressBar";
 import { SettingsBreadcrumb } from "../components/ui/SettingsBreadcrumb";
+import { StatusBadge, type StatusBadgeTone } from "../components/ui/StatusBadge";
+import { Table, type TableColumn } from "../components/ui/Table";
 import { authenticateAdminDeduped } from "../services/auth-dedupe.server";
 import { getOrCreateStore, getProductSyncState, startProductSync, type ProductSyncState } from "../services/store.server";
 import { getProductsPage } from "../services/product.server";
@@ -141,7 +134,12 @@ const formatStatusLabel = (status: string | null) => {
   return `${normalized.charAt(0).toUpperCase()}${normalized.slice(1)}`;
 };
 
-const statusToneFor = (status: string | null): "success" | "info" | "attention" => {
+// House badge tones (StatusBadge), not Polaris's. This page used to render a Polaris <Badge>
+// beside the app's own buttons and headers, which meant one screen showed two different badge
+// shapes, radii and type sizes. Shopify's product statuses map cleanly onto the three neutral
+// tones: active is the working state, archived is the one a merchant may need to act on, and
+// draft is simply not published yet.
+const statusToneFor = (status: string | null): StatusBadgeTone => {
   const normalized = status?.toLowerCase() ?? "";
 
   if (normalized === "active") {
@@ -149,10 +147,10 @@ const statusToneFor = (status: string | null): "success" | "info" | "attention" 
   }
 
   if (normalized === "archived") {
-    return "attention";
+    return "warning";
   }
 
-  return "info";
+  return "neutral";
 };
 
 const formatDate = (value: Date) =>
@@ -367,29 +365,53 @@ export default function ProductsPage() {
   // with no competing onClick, letting App Bridge's own click interception do its job
   // unimpeded, exactly like every other embedded-app link in this codebase already relies on
   // implicitly (this cell was the only place rendering a react-router <Link> instead).
-  const rows = products.map((product: ProductListItem) => [
-    <a
-      key={`${product.id}-image`}
-      href={`/app/products/${product.id}${location.search}`}
-      className={styles.productCell}
-    >
-      {product.featuredImage ? (
-        <img className={styles.productImage} src={product.featuredImage} alt={product.name} loading="lazy" />
-      ) : (
-        <div className={styles.productImagePlaceholder} aria-hidden="true" />
-      )}
-      <div className={styles.productMeta}>
-        <span className={styles.productName}>{product.name}</span>
-        {product.vendor ? <span className={styles.productVendor}>{product.vendor}</span> : null}
-      </div>
-    </a>,
-    product.handle ?? "-",
-    product.productType || "-",
-    <Badge key={`${product.id}-status`} tone={statusToneFor(product.status)}>
-      {formatStatusLabel(product.status)}
-    </Badge>,
-    formatDate(product.updatedAt),
-  ]);
+  // Widths are declared for every column, because the house table is table-layout: fixed and
+  // a partial plan produces exactly the arbitrary columns it exists to avoid. Product takes
+  // the largest share: it is the column a merchant actually scans.
+  const columns: TableColumn<ProductListItem>[] = [
+    {
+      key: "product",
+      header: "Product",
+      width: "38%",
+      render: (product) => (
+        // A genuine <a href> with no competing onClick, deliberately. App Bridge owns
+        // navigation in an embedded app: it intercepts the native click and dispatches
+        // "shopify:navigate", which AppProvider turns into the real navigate() call. A
+        // react-router <Link> preventDefaults that click and performs its own transition,
+        // which in this context never updates the URL at all — this cell was the one place in
+        // the codebase rendering a <Link> instead, and it did not navigate.
+        <a href={`/app/products/${product.id}${location.search}`} className={styles.productCell}>
+          {product.featuredImage ? (
+            <img className={styles.productImage} src={product.featuredImage} alt={product.name} loading="lazy" />
+          ) : (
+            <div className={styles.productImagePlaceholder} aria-hidden="true" />
+          )}
+          <div className={styles.productMeta}>
+            <span className={styles.productName}>{product.name}</span>
+            {product.vendor ? <span className={styles.productVendor}>{product.vendor}</span> : null}
+          </div>
+        </a>
+      ),
+    },
+    { key: "handle", header: "Handle", width: "20%", render: (product) => product.handle ?? "—" },
+    { key: "type", header: "Type", width: "16%", render: (product) => product.productType || "—" },
+    {
+      key: "status",
+      header: "Status",
+      width: "10%",
+      render: (product) => (
+        <StatusBadge tone={statusToneFor(product.status)}>{formatStatusLabel(product.status)}</StatusBadge>
+      ),
+    },
+    {
+      key: "updatedAt",
+      header: "Last synced",
+      width: "16%",
+      align: "end",
+      numeric: true,
+      render: (product) => formatDate(product.updatedAt),
+    },
+  ];
 
   return (
     <>
@@ -461,14 +483,20 @@ export default function ProductsPage() {
               : `Showing ${formatCount(rangeStart)}–${formatCount(rangeEnd)} of ${formatCount(totalCount)} product${totalCount === 1 ? "" : "s"}.`}
           </p>
 
+          {/* The table provides its own bordered surface (components/ui/table.module.css's
+              .wrap), so it is NOT nested in a Card — doing so draws two borders a few pixels
+              apart with Card's padding between them. The loading and empty states still use a
+              Card, because they are content inside a panel rather than a panel themselves. */}
           <div className={styles.tableCard}>
-            <Card>
-              {isLoading ? (
+            {isLoading ? (
+              <Card>
                 <div className={styles.skeletonTable}>
                   <SkeletonDisplayText size="small" />
                   <SkeletonBodyText lines={8} />
                 </div>
-              ) : products.length === 0 ? (
+              </Card>
+            ) : products.length === 0 ? (
+              <Card>
                 <div className={styles.emptyState}>
                   <h2 className={styles.emptyStateTitle}>
                     {initialSearch ? "No products match your search" : "No products synced yet"}
@@ -484,17 +512,15 @@ export default function ProductsPage() {
                     </Button>
                   ) : null}
                 </div>
-              ) : (
-                <BlockStack gap="400">
-                  <DataTable
-                    columnContentTypes={["text", "text", "text", "text", "text"]}
-                    headings={["Product", "Handle", "Type", "Status", "Last synced"]}
-                    rows={rows}
-                    increasedTableDensity
-                  />
-                </BlockStack>
-              )}
-            </Card>
+              </Card>
+            ) : (
+              <Table
+                rows={products}
+                columns={columns}
+                getRowKey={(product) => product.id}
+                ariaLabel="Synced products"
+              />
+            )}
           </div>
 
           <div className={styles.pagination}>

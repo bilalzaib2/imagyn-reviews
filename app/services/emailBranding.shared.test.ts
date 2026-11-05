@@ -154,3 +154,81 @@ describe("existing merchant templates", () => {
     expect(twice.logoSource).toBe("custom");
   });
 });
+
+// ---------------------------------------------------------------------------------------------
+// Tier 3: the merchant's Shopify brand logo.
+//
+// The gap this closed: a store that had never opened Email Studio had no logo at all, so its
+// review requests went out with a text-only header and looked generic next to a competitor's.
+// Shopify already holds a brand logo for most stores, so the branded default was available for
+// free and simply was not being read. See shopBrandLogo.server.ts.
+//
+// The rule being pinned here is that it is a FALLBACK and never an override — a merchant's own
+// choice, including the choice to have no logo on a specific template, always wins.
+// ---------------------------------------------------------------------------------------------
+
+const SHOP_LOGO = "https://cdn.shopify.com/brand/shop-logo.png";
+
+describe("Shopify brand logo fallback", () => {
+  it("is used when the merchant has configured no logo of their own", () => {
+    const resolved = resolveEmailLogo(content(), {
+      emailLogoUrl: null,
+      emailLogoDarkUrl: null,
+      shopBrandLogoUrl: SHOP_LOGO,
+    });
+
+    expect(resolved.logoUrl).toBe(SHOP_LOGO);
+    expect(resolved.inheritsShared).toBe(true);
+  });
+
+  it("never overrides a logo the merchant uploaded in Email Studio", () => {
+    const resolved = resolveEmailLogo(content(), { ...SHARED, shopBrandLogoUrl: SHOP_LOGO });
+
+    expect(resolved.logoUrl).toBe("https://cdn.example.com/shared.png");
+  });
+
+  // An explicit per-template override saying "not the shared logo" must not be reinterpreted
+  // as "then use Shopify's" — that is the same rule the custom-override branch already holds,
+  // extended to the new tier.
+  it("never resurrects a logo for a template that explicitly overrides with none", () => {
+    const resolved = resolveEmailLogo(
+      content({ logoSource: "custom", logoUrl: null, logoDarkUrl: null }),
+      { emailLogoUrl: null, emailLogoDarkUrl: null, shopBrandLogoUrl: SHOP_LOGO },
+    );
+
+    expect(resolved.logoUrl).toBeNull();
+    expect(resolved.inheritsShared).toBe(false);
+  });
+
+  it("yields no logo when the store has nothing configured anywhere", () => {
+    const resolved = resolveEmailLogo(content(), {
+      emailLogoUrl: null,
+      emailLogoDarkUrl: null,
+      shopBrandLogoUrl: null,
+    });
+
+    expect(resolved.logoUrl).toBeNull();
+  });
+
+  // Every pre-existing caller passes a branding object without the new field. Those must keep
+  // behaving exactly as before rather than throwing or resolving something unexpected.
+  it("is backwards compatible with a branding object that omits the field entirely", () => {
+    const resolved = resolveEmailLogo(content(), { emailLogoUrl: null, emailLogoDarkUrl: null });
+
+    expect(resolved.logoUrl).toBeNull();
+    expect(resolved.inheritsShared).toBe(true);
+  });
+
+  it("does not become the dark-palette asset on its own", () => {
+    const resolved = resolveEmailLogo(content(), {
+      emailLogoUrl: null,
+      emailLogoDarkUrl: null,
+      shopBrandLogoUrl: SHOP_LOGO,
+    });
+
+    // logoDarkUrl stays null; the renderer's own "dark falls back to light" rule covers it,
+    // which is correct — a single shop logo has no dark variant to promise.
+    expect(resolved.logoDarkUrl).toBeNull();
+    expect(logoForTheme(resolved, "dark")).toBe(SHOP_LOGO);
+  });
+});

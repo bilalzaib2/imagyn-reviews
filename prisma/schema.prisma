@@ -145,6 +145,21 @@ model Store {
   newReviewNotifyEnabled Boolean @default(false)
   newReviewNotifyEmail   String?
 
+  // The merchant's own brand logo, read from Shopify (shop.brand.logo) and cached — see
+  // shopBrandLogo.server.ts. This exists so a brand-new install's emails are branded with the
+  // merchant's real logo WITHOUT the merchant uploading anything: previously an unconfigured
+  // store sent a text-only header, which is what made a first review request look generic.
+  //
+  // Strictly a FALLBACK, never an override: a logo the merchant uploaded in Email Studio
+  // (Store.emailLogoUrl, or a template's own custom logo) always wins. See
+  // emailBranding.shared.ts's resolveEmailLogo for the full precedence.
+  //
+  // Cached with a TTL for the same reason contactEmail is (above): the reminder sweep runs with
+  // no Shopify session at all, so the value has to be persisted to be usable there, and a
+  // merchant can change their logo at any time so a stored copy goes stale.
+  shopBrandLogoUrl      String?
+  shopBrandLogoSyncedAt DateTime?
+
   // Branded Email Sender Identity (Pro — permissions.ts's canUseBrandedEmailSender).
   // The display name customers see in their inbox for review requests and reminders.
   // null = use the real Shopify store name, which is exactly what every store does today,

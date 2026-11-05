@@ -23,6 +23,7 @@ import {
 } from "@shopify/polaris";
 
 import { Button } from "../components/ui/Button";
+import { Table, type TableColumn } from "../components/ui/Table";
 import { Container } from "../components/ui/Container";
 import { LinkButton } from "../components/ui/LinkButton";
 import { Section } from "../components/ui/Section";
@@ -47,6 +48,13 @@ import {
 import { deleteReviewMedia } from "../services/reviewMedia.server";
 import { getAiSummariesForProducts, type ProductAiSummaryRecord } from "../services/aiSummary.server";
 import { draftReplyForReview } from "../services/aiReplyDraft.server";
+import {
+  AI_REPLY_TONES,
+  AI_REPLY_TONE_LABELS,
+  DEFAULT_AI_REPLY_TONE,
+  isAiReplyTone,
+  type AiReplyTone,
+} from "../services/ai/replyTone.shared";
 import { syncProductStructuredData } from "../services/structuredData/sync.server";
 import { ReviewStatus } from "../services/review.shared";
 import { IMPORT_SOURCES, type ImportSource } from "../services/importers/types";
@@ -284,7 +292,13 @@ export const action = async ({ request }: ActionFunctionArgs): Promise<ActionDat
         return { ok: false, error: "Missing review id." };
       }
 
-      const result = await draftReplyForReview(store.id, reviewId, existingDraft || null);
+      // Validated against the closed set rather than cast: this value reaches a system
+      // prompt, so an unrecognised string must fall back to the default voice, never be
+      // forwarded to the model.
+      const rawTone = String(formData.get("replyTone") || "");
+      const tone = isAiReplyTone(rawTone) ? rawTone : undefined;
+
+      const result = await draftReplyForReview(store.id, reviewId, existingDraft || null, tone);
       return { ok: true, intent, draft: result.draft };
     }
 
@@ -537,6 +551,10 @@ export default function ReviewsPage() {
   const [replyDraft, setReplyDraft] = useState("");
   const [toastState, setToastState] = useState<{ content: string; error?: boolean } | null>(null);
   const [isReplyEditing, setIsReplyEditing] = useState(false);
+  /** The voice "Draft with AI" writes in. Deliberately NOT persisted per store: it is a
+   *  per-reply choice (a complaint and a rave rarely want the same register), and a saved
+   *  default would quietly apply a voice the merchant picked once for one awkward review. */
+  const [replyTone, setReplyTone] = useState<AiReplyTone>(DEFAULT_AI_REPLY_TONE);
   const [actionsMenuOpen, setActionsMenuOpen] = useState(false);
   const [moreActionsMenuOpen, setMoreActionsMenuOpen] = useState(false);
   const [filtersOpen, setFiltersOpen] = useState(false);
@@ -782,7 +800,7 @@ export default function ReviewsPage() {
 
   const draftReplyWithAi = (reviewId: string, existingDraft: string) => {
     setMutationError(null);
-    submitMutation({ _intent: "draftReply", reviewId, existingDraft });
+    submitMutation({ _intent: "draftReply", reviewId, existingDraft, replyTone });
   };
 
   const deleteReplyDraft = (reviewId: string) => {
@@ -912,6 +930,87 @@ export default function ReviewsPage() {
     }
   };
 
+  // The moderation queue's columns. Widths are declared for all five because the house table
+  // is table-layout: fixed — the Review column takes what is left, which is the point: it is
+  // the only column whose content varies in length, and it is the one a merchant reads.
+  const reviewColumns: TableColumn<(typeof effectiveReviews)[number]>[] = [
+    {
+      key: "rating",
+      header: "Rating",
+      width: "5.5rem",
+      render: (review) => (
+        <div className={styles.rating} aria-label={`${review.rating} out of 5 stars`}>
+          <StarRating value={review.rating} size={13} />
+        </div>
+      ),
+    },
+    {
+      key: "review",
+      header: "Review",
+      render: (review) => {
+        const customerName = review.reviewerName;
+        const productName = review.productTitle ?? review.product?.name ?? "Unassigned product";
+
+        return (
+          <>
+            {review.title ? (
+              <p className={styles.reviewTitle}>{review.title}</p>
+            ) : (
+              <p className={`${styles.reviewTitle} ${styles.reviewTitleEmpty}`}>No title provided</p>
+            )}
+            <p className={styles.reviewMetaLine}>
+              <span className={styles.metaCustomer}>{customerName}</span>
+              {review.verifiedPurchase ? (
+                <span className={styles.metaVerified} title="Verified buyer">
+                  ✓ Verified
+                </span>
+              ) : null}
+              <span className={styles.metaSeparator} aria-hidden="true">
+                ·
+              </span>
+              <span className={styles.metaProduct}>{productName}</span>
+              {review.featured || review.media.length > 0 || review.reply ? (
+                <span className={styles.metaSignals}>
+                  {review.featured ? (
+                    <span className={`${styles.metaSignal} ${styles.metaSignalHighlight}`} title="Featured">
+                      <FeaturedIcon />
+                    </span>
+                  ) : null}
+                  {review.media.length > 0 ? (
+                    <span
+                      className={styles.metaSignal}
+                      title={`${review.media.length} photo${review.media.length === 1 ? "" : "s"}/video${review.media.length === 1 ? "" : "s"}`}
+                    >
+                      <MediaIcon />
+                      {review.media.length}
+                    </span>
+                  ) : null}
+                  {review.reply ? (
+                    <span className={`${styles.metaSignal} ${styles.metaSignalSuccess}`} title="Replied">
+                      <ReplyIcon />
+                    </span>
+                  ) : null}
+                </span>
+              ) : null}
+            </p>
+          </>
+        );
+      },
+    },
+    {
+      key: "status",
+      header: "Status",
+      width: "8rem",
+      render: (review) => <ReviewStatusBadge status={review.status} />,
+    },
+    {
+      key: "date",
+      header: "Date",
+      width: "5.5rem",
+      render: (review) => <span className={styles.dateCell}>{formatShortDate(review.createdAt)}</span>,
+    },
+  ];
+
   const onListKeyDown = (event: KeyboardEvent<HTMLDivElement>) => {
     if (effectiveReviews.length === 0) {
       return;
@@ -959,8 +1058,9 @@ export default function ReviewsPage() {
     setSelectedIds(effectiveReviews.map((review) => review.id));
   };
 
-  const allPageSelected =
-    effectiveReviews.length > 0 && effectiveReviews.every((review) => selectedIds.includes(review.id));
+  // "Is every row on this page ticked" now lives in <Table>, which renders the select-all
+  // checkbox and computes it from the same selectedKeys it is handed — so there is one answer
+  // instead of two that can disagree.
 
   // Same status-awareness as the single-review detail panel, extended to a selection: only
   // disable the bulk action when EVERY selected review already shares that exact status (a
@@ -1279,109 +1379,23 @@ export default function ReviewsPage() {
                     ArrowUp/ArrowDown from the already-focusable table rows below; this
                     container itself is never a focus target. */}
                 <div className={styles.listColumn} onKeyDown={onListKeyDown}>
-                  <div className={styles.tableWrap}>
-                    <table className={styles.table}>
-                      <thead>
-                        <tr>
-                          <th className={styles.thCheckbox}>
-                            <input
-                              type="checkbox"
-                              aria-label="Select all reviews on this page"
-                              checked={allPageSelected}
-                              onChange={(event) => toggleSelectAllOnPage(event.target.checked)}
-                              disabled={isLoading || isMutating || effectiveReviews.length === 0}
-                            />
-                          </th>
-                          <th className={styles.colRating}>Rating</th>
-                          <th>Review</th>
-                          <th className={styles.colStatus}>Status</th>
-                          <th className={styles.colDate}>Date</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {effectiveReviews.map((review) => {
-                          const isSelected = review.id === selectedReviewId;
-                          const customerName = review.reviewerName;
-                          const productName = review.productTitle ?? review.product?.name ?? "Unassigned product";
-                          const checked = selectedIds.includes(review.id);
-
-                          return (
-                            <tr
-                              key={review.id}
-                              className={`${styles.tr} ${isSelected ? styles.trSelected : ""}`}
-                              onClick={() => setSelectedReviewId(review.id)}
-                              onKeyDown={(event) => {
-                                if (event.key === "Enter" || event.key === " ") {
-                                  event.preventDefault();
-                                  setSelectedReviewId(review.id);
-                                }
-                              }}
-                              tabIndex={0}
-                              aria-selected={isSelected}
-                            >
-                              <td className={styles.tdCheckbox} onClick={(event) => event.stopPropagation()}>
-                                <input
-                                  type="checkbox"
-                                  checked={checked}
-                                  aria-label={`Select review from ${review.reviewerName}`}
-                                  onChange={(event) => toggleSelection(review.id, event.target.checked)}
-                                />
-                              </td>
-                              <td className={styles.tdRating}>
-                                <div className={styles.rating} aria-label={`${review.rating} out of 5 stars`}>
-                                  <StarRating value={review.rating} size={13} />
-                                </div>
-                              </td>
-                              <td className={styles.tdReview}>
-                                {review.title ? (
-                                  <p className={styles.reviewTitle}>{review.title}</p>
-                                ) : (
-                                  <p className={`${styles.reviewTitle} ${styles.reviewTitleEmpty}`}>No title provided</p>
-                                )}
-                                <p className={styles.reviewMetaLine}>
-                                  <span className={styles.metaCustomer}>{customerName}</span>
-                                  {review.verifiedPurchase ? (
-                                    <span className={styles.metaVerified} title="Verified buyer">
-                                      ✓ Verified
-                                    </span>
-                                  ) : null}
-                                  <span className={styles.metaSeparator} aria-hidden="true">·</span>
-                                  <span className={styles.metaProduct}>{productName}</span>
-                                  {review.featured || review.media.length > 0 || review.reply ? (
-                                    <span className={styles.metaSignals}>
-                                      {review.featured ? (
-                                        <span className={`${styles.metaSignal} ${styles.metaSignalHighlight}`} title="Featured">
-                                          <FeaturedIcon />
-                                        </span>
-                                      ) : null}
-                                      {review.media.length > 0 ? (
-                                        <span
-                                          className={styles.metaSignal}
-                                          title={`${review.media.length} photo${review.media.length === 1 ? "" : "s"}/video${review.media.length === 1 ? "" : "s"}`}
-                                        >
-                                          <MediaIcon />
-                                          {review.media.length}
-                                        </span>
-                                      ) : null}
-                                      {review.reply ? (
-                                        <span className={`${styles.metaSignal} ${styles.metaSignalSuccess}`} title="Replied">
-                                          <ReplyIcon />
-                                        </span>
-                                      ) : null}
-                                    </span>
-                                  ) : null}
-                                </p>
-                              </td>
-                              <td className={styles.tdStatus}>
-                                <ReviewStatusBadge status={review.status} />
-                              </td>
-                              <td className={styles.tdDate}>{formatShortDate(review.createdAt)}</td>
-                            </tr>
-                          );
-                        })}
-                      </tbody>
-                    </table>
-                  </div>
+                  <Table
+                    rows={effectiveReviews}
+                    columns={reviewColumns}
+                    getRowKey={(review) => review.id}
+                    ariaLabel="Reviews"
+                    maxHeight="40rem"
+                    activeRowKey={selectedReviewId}
+                    onActivateRow={setSelectedReviewId}
+                    selection={{
+                      selectedKeys: selectedIds,
+                      onToggleRow: toggleSelection,
+                      onToggleAll: toggleSelectAllOnPage,
+                      rowLabel: (review) => `Select review from ${review.reviewerName}`,
+                      allLabel: "Select all reviews on this page",
+                      disabled: isLoading || isMutating,
+                    }}
+                  />
                 </div>
 
                 {selectedReview ? (
@@ -1607,6 +1621,30 @@ export default function ReviewsPage() {
                               >
                                 {isDraftingReply ? "Drafting…" : "Draft with AI"}
                               </Button>
+                              {/* The voice, next to the button that uses it. A <select>
+                                  rather than three buttons: it is a single-choice setting
+                                  sitting in a row that is already dense with actions, and
+                                  three more buttons there would compete with Save. */}
+                              <label className={styles.replyToneField}>
+                                <span className={styles.replyToneLabel}>Voice</span>
+                                <select
+                                  className={styles.replyToneSelect}
+                                  value={replyTone}
+                                  onChange={(event) =>
+                                    setReplyTone(
+                                      isAiReplyTone(event.target.value) ? event.target.value : DEFAULT_AI_REPLY_TONE,
+                                    )
+                                  }
+                                  disabled={isDraftingReply}
+                                  title={AI_REPLY_TONE_LABELS[replyTone].hint}
+                                >
+                                  {AI_REPLY_TONES.map((tone) => (
+                                    <option key={tone} value={tone}>
+                                      {AI_REPLY_TONE_LABELS[tone].label}
+                                    </option>
+                                  ))}
+                                </select>
+                              </label>
                             </div>
                           </div>
                         ) : (
@@ -1640,6 +1678,31 @@ export default function ReviewsPage() {
                               >
                                 {isDraftingReply ? "Drafting…" : replyDraft.trim() ? "Improve with AI" : "Draft with AI"}
                               </Button>
+                              {/* The voice, next to the button that uses it. A <select>
+                                  rather than three buttons: it is a single-choice setting
+                                  sitting in a row that is already dense with actions, and
+                                  three more buttons there would compete with Save. */}
+                              <label className={styles.replyToneField}>
+                                <span className={styles.replyToneLabel}>Voice</span>
+                                <select
+                                  className={styles.replyToneSelect}
+                                  value={replyTone}
+                                  onChange={(event) =>
+                                    setReplyTone(
+                                      isAiReplyTone(event.target.value) ? event.target.value : DEFAULT_AI_REPLY_TONE,
+                                    )
+                                  }
+                                  disabled={isReplySaving || isDraftingReply}
+                                  title={AI_REPLY_TONE_LABELS[replyTone].hint}
+                                >
+                                  {AI_REPLY_TONES.map((tone) => (
+                                    <option key={tone} value={tone}>
+                                      {AI_REPLY_TONE_LABELS[tone].label}
+                                    </option>
+                                  ))}
+                                </select>
+                              </label>
+
                               <Button
                                 type="button"
                                 onClick={() => {

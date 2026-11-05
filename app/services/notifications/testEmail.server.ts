@@ -1,6 +1,7 @@
 import { getEmailProvider } from "./provider.server";
 import { buildReviewRequestEmail } from "./templates.server";
 import { emailTemplateService } from "../emailTemplate.server";
+import { buildRatingUrls } from "../email.shared";
 import type { EmailTemplateContent, EmailTemplateType } from "../email.shared";
 import type { SenderIdentity } from "../emailSenderIdentity.shared";
 import type { SharedEmailBranding } from "../emailBranding.shared";
@@ -29,6 +30,10 @@ export interface TestEmailOptions {
   branding?: SharedEmailBranding | null;
 }
 
+/** Sample link, never a real token: no ReviewRequest row exists for it, so following it
+ *  lands on the "link not found" page rather than someone else's review form. */
+const SAMPLE_REVIEW_URL = "https://example.com/r/sample-token";
+
 export async function sendTestReviewRequestEmail(
   to: string,
   storeId: string,
@@ -42,7 +47,11 @@ export async function sendTestReviewRequestEmail(
     customerName: "there",
     productName: "Sample Product",
     storeName,
-    reviewUrl: "https://example.com/r/sample-token",
+    reviewUrl: SAMPLE_REVIEW_URL,
+    // The star row renders in a test send too, so a merchant can tap one and see exactly what
+    // their customer will. Omitted for "reward", whose CTA is a storefront URL with no rating
+    // to carry — the same rule rewards.server.ts and the Email Studio preview both follow.
+    ratingUrls: type === "reward" ? null : buildRatingUrls(SAMPLE_REVIEW_URL),
     customMessage: null,
     branding: options.branding ?? null,
     // Sample-only, matching the sample-token URL's own "never real" convention — a reward

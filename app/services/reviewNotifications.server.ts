@@ -2,6 +2,7 @@ import prisma from "../db.server";
 import { ReviewStatus } from "@prisma/client";
 import { getEmailProvider } from "./notifications/provider.server";
 import { buildNewReviewEmail } from "./notifications/templates.server";
+import { isHeaderSafeAddress } from "./emailSenderIdentity.shared";
 
 // Merchant-facing notification for every NEW customer-submitted review.
 //
@@ -119,10 +120,14 @@ export async function sendNewReviewNotification(params: SendNewReviewNotificatio
       where: { id: params.reviewId, storeId: params.storeId, deletedAt: null },
       select: {
         id: true,
+        productId: true,
         rating: true,
         title: true,
         content: true,
         reviewerName: true,
+        // Becomes the Reply-To, so the merchant's reply reaches the customer directly. Never
+        // rendered into the email body — see the privacy note on replyTo below.
+        reviewerEmail: true,
         verifiedPurchase: true,
         status: true,
         isPublished: true,
@@ -131,7 +136,16 @@ export async function sendNewReviewNotification(params: SendNewReviewNotificatio
         createdAt: true,
         product: { select: { name: true } },
         store: {
-          select: { name: true, newReviewNotifyEnabled: true, newReviewNotifyEmail: true },
+          select: {
+            name: true,
+            newReviewNotifyEnabled: true,
+            newReviewNotifyEmail: true,
+            // Shopify's own customer-facing contact address, synced by
+            // shopContactEmail.server.ts. Used as the notification recipient when the merchant
+            // has not nominated a different inbox, so a store that never opened the setting
+            // still reaches a real, Shopify-designated mailbox.
+            contactEmail: true,
+          },
         },
       },
     });
@@ -140,7 +154,16 @@ export async function sendNewReviewNotification(params: SendNewReviewNotificatio
       return;
     }
 
-    const notifyEmail = review.store.newReviewNotifyEmail?.trim() || null;
+    // RECIPIENT. The merchant's explicitly nominated inbox wins — that is a deliberate
+    // preference and must not be second-guessed. When they never set one, fall back to
+    // Shopify's own customer-facing contact address (synced by shopContactEmail.server.ts),
+    // which is the mailbox Shopify designates for exactly this purpose. Both are re-validated
+    // here, because this is the value that actually becomes a To header.
+    const preferredNotifyEmail = review.store.newReviewNotifyEmail?.trim() || null;
+    const contactNotifyEmail = review.store.contactEmail?.trim() || null;
+    const notifyEmail =
+      (isHeaderSafeAddress(preferredNotifyEmail) ? preferredNotifyEmail : null) ??
+      (isHeaderSafeAddress(contactNotifyEmail) ? contactNotifyEmail : null);
 
     if (!review.store.newReviewNotifyEnabled || !notifyEmail) {
       return;
@@ -151,6 +174,43 @@ export async function sendNewReviewNotification(params: SendNewReviewNotificatio
       params.heldNotificationSentTo.trim().toLowerCase() === notifyEmail.toLowerCase()
     ) {
       return;
+    }
+
+    // REPLY-TO: the reviewer's own address, so the merchant hitting Reply in their mail client
+    // reaches the customer directly rather than Imagyn. This is the whole point of the header.
+    //
+    // Validated through the same isHeaderSafeAddress the sender-identity resolver uses, not a
+    // looser check: a single address, exactly one "@", and no whitespace, quote, comma,
+    // semicolon or angle bracket, so a reviewer-supplied value can never terminate the header
+    // and append a second recipient. A review whose email is missing, malformed, or redacted by
+    // the GDPR webhook simply gets no Reply-To, and the merchant still receives the
+    // notification with its working View and Reply buttons into the admin.
+    //
+    // PRIVACY: this address is a header on an email going to the store that owns the review,
+    // and nowhere else. It is never rendered into the body, never returned to a storefront
+    // response, and cannot cross stores — the review was loaded by (id, storeId) together, so
+    // another merchant's review resolves to nothing above.
+    const reviewerEmail = review.reviewerEmail?.trim() || null;
+    const replyToReviewer = isHeaderSafeAddress(reviewerEmail) ? reviewerEmail : null;
+
+    // ORDER CONTEXT, only where it genuinely exists. There is no orderNumber on Review, so it
+    // is resolved from the ReviewRequest this review answers, matched on the same
+    // (storeId, productId, email) triple getExistingRequestContext already treats as one
+    // customer-and-product pair. Scoped to this store, newest first. A storefront review with
+    // no originating request has no order number and renders none — never an invented one.
+    let orderNumber: string | null = null;
+    if (reviewerEmail) {
+      const originatingRequest = await prisma.reviewRequest.findFirst({
+        where: {
+          storeId: params.storeId,
+          productId: review.productId,
+          email: reviewerEmail,
+          orderNumber: { not: null },
+        },
+        select: { orderNumber: true },
+        orderBy: { createdAt: "desc" },
+      });
+      orderNumber = originatingRequest?.orderNumber?.trim() || null;
     }
 
     const { subject, html, text } = await buildNewReviewEmail({
@@ -169,11 +229,22 @@ export async function sendNewReviewNotification(params: SendNewReviewNotificatio
       verifiedPurchase: review.verifiedPurchase,
       source: SOURCE_LABELS[params.source] ?? null,
       statusLabel: statusLabelFor(review),
+      orderNumber,
+      replyToReviewer: replyToReviewer !== null,
       viewUrl: buildReviewAdminUrl(review.id),
       replyUrl: buildReviewReplyUrl(review.id),
     });
 
-    await getEmailProvider().sendEmail({ to: notifyEmail, subject, html, text });
+    await getEmailProvider().sendEmail({
+      to: notifyEmail,
+      subject,
+      html,
+      text,
+      // Omitted entirely rather than set to a placeholder when the reviewer has no usable
+      // address — a Reply-To pointing at Imagyn would actively mislead the merchant into
+      // thinking they had replied to their customer.
+      ...(replyToReviewer ? { replyTo: replyToReviewer } : {}),
+    });
   } catch (error) {
     console.error("Failed to send new-review notification email:", error);
   }

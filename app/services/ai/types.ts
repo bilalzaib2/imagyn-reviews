@@ -53,9 +53,24 @@ export interface AiBrandSuggestionResult {
 // A merchant-facing draft only — never sent automatically. See aiReplyDraft.server.ts's own
 // comment for why this stays a suggestion the merchant must review/edit/submit through the
 // existing replyToReview action, exactly like every other reply in this app.
+/**
+ * The voice the drafted reply is written in.
+ *
+ * These three exist for parity with the benchmark (Judge.me offers Direct, Elegant and
+ * Friendly), and they are deliberately a closed set rather than a free-text "tone" field: the
+ * value reaches a system prompt, so a free string would be a prompt-injection surface, and
+ * three well-written voices beat an infinite number of badly-specified ones.
+ *
+ * "friendly" is the default and reproduces the prompt this app used before tone existed, so a
+ * merchant who never touches the control gets exactly the drafts they got before.
+ */
+export type AiReplyTone = "friendly" | "direct" | "elegant";
+
 export interface AiReplyDraftRequest {
   productName: string;
   review: AiSummaryReviewInput;
+  /** Omitted falls back to "friendly" — see AiReplyTone. */
+  tone?: AiReplyTone;
   // The merchant's own in-progress draft, if they'd already started typing one before asking
   // for AI help — when present, the model revises/polishes it instead of starting from a
   // blank page, so "Draft with AI" is useful both as a first draft and as a rewrite tool.

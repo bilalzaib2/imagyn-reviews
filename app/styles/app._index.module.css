@@ -60,95 +60,22 @@
   align-items: stretch;
 }
 
-.kpiHero {
-  display: grid;
-  align-content: start;
-  gap: var(--space-1);
-  padding: var(--space-5) var(--space-6);
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-lg);
-  background: var(--color-surface);
-}
-
-.kpiHeroValue {
-  margin: 0;
-  font-size: clamp(2.25rem, 4vw, 2.75rem);
-  font-weight: 600;
-  letter-spacing: -0.03em;
-  font-variant-numeric: tabular-nums;
-}
-
-.kpiHeroSub {
-  margin: 0;
-  color: var(--color-text-muted);
-  font-size: var(--text-xs);
-}
-
-.kpiHeroLabel {
-  margin: var(--space-1) 0 0;
-  color: var(--color-text-muted);
-  font-size: var(--text-xs);
-  font-weight: 500;
-}
-
-.kpiRow {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
-  gap: var(--space-3);
-}
-
-.kpiCard {
-  display: grid;
-  gap: var(--space-1);
-  align-content: center;
-  padding: var(--space-4) var(--space-5);
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-lg);
-  background: var(--color-surface);
-}
-
-/* Real, threshold-based status tint — a tinted surface + colored value, never a border-left
-   rail. This is the pattern every "this number is genuinely good/needs attention" moment on
-   this page uses instead of the old black-rail motif. */
-.kpiTonePositive {
-  background: color-mix(in srgb, var(--color-success) 8%, var(--color-surface));
-  border-color: color-mix(in srgb, var(--color-success) 22%, var(--color-border));
-}
-
-.kpiTonePositive .kpiValue {
-  color: var(--color-success);
-}
-
-.kpiToneAttention {
-  background: color-mix(in srgb, var(--color-warning) 8%, var(--color-surface));
-  border-color: color-mix(in srgb, var(--color-warning) 22%, var(--color-border));
-}
-
-.kpiToneAttention .kpiValue {
-  color: var(--color-warning);
-}
-
-.kpiValue {
-  margin: 0;
-  font-size: clamp(1.5rem, 2.4vw, 1.875rem);
-  font-weight: 600;
-  letter-spacing: -0.02em;
-  font-variant-numeric: tabular-nums;
-}
-
-.kpiLabel {
-  margin: 0;
-  color: var(--color-text-muted);
-  font-size: var(--text-xs);
-  font-weight: 500;
-}
+/* The KPI tile classes that lived here (.kpiHero, .kpiHeroValue/Sub/Label, .kpiRow,
+   .kpiCard, .kpiValue, .kpiLabel and the two tone tints) moved verbatim into
+   components/ui/metric.module.css, behind the shared <Metric>/<MetricRow> primitive —
+   three other stylesheets had grown their own version of the same tile. .reputationRow
+   above still owns this page's two-hero-plus-a-row layout; only the tiles are shared. */
 
 @media (max-width: 860px) {
   .reputationRow {
     grid-template-columns: 1fr 1fr;
   }
 
-  .reputationRow .kpiRow {
+  /* The row of secondary tiles — the third and last child of this grid. Selected by position
+     rather than by class now that the tiles are the shared <MetricRow>: its class lives in
+     another CSS module, so this module cannot name it, and a descendant selector written
+     against the old local .kpiRow silently stopped matching. */
+  .reputationRow > *:nth-child(3) {
     grid-column: 1 / -1;
   }
 }

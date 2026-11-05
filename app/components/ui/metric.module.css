@@ -1,0 +1,133 @@
+/* The house stat tile.
+
+   Extracted from app._index.module.css's .kpiCard / .kpiHero pair, values unchanged, so a
+   screen adopting this looks identical to the dashboard it was taken from. */
+
+.metric {
+  display: grid;
+  gap: var(--space-1);
+  align-content: center;
+  padding: var(--space-4) var(--space-5);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  background: var(--color-surface);
+}
+
+/* A stat that already sits inside a Card. No surface of its own, because nesting a bordered
+   tile in a bordered card draws two borders a few pixels apart. The value size is the one
+   app.management.module.css's .stat used — a touch larger than the card variant's, which it
+   can afford without a border competing with it. */
+.bare {
+  padding: 0;
+  border: 0;
+  background: none;
+  border-radius: 0;
+}
+
+.bare .value {
+  font-size: clamp(1.75rem, 2.6vw, 2.25rem);
+  letter-spacing: var(--tracking-tighter);
+}
+
+/* 14px, not 12px: without a border framing it, the label needs to read as part of the same
+   element as the number rather than as a caption floating under it. */
+.bare .label {
+  font-size: var(--text-sm);
+}
+
+/* The card tones tint a surface. A bare stat has none, so the number carries the whole
+   signal — which is exactly what .statValueSuccess/.statValueWarning/.statValueDanger did. */
+.bare.tonePositive,
+.bare.toneAttention,
+.bare.toneDanger {
+  background: none;
+  border-color: transparent;
+}
+
+/* The one or two headline figures at the top of a screen: more air, a larger number, and
+   content anchored to the top so a hero tile sitting beside a taller neighbour does not float
+   its number into the middle of the card. */
+.hero {
+  align-content: start;
+  padding: var(--space-5) var(--space-6);
+}
+
+.value {
+  margin: 0;
+  /* Clamped rather than fixed: these sit in an auto-fit grid whose columns genuinely change
+     width with the viewport, and a fixed 30px number overflows its tile on a narrow embedded
+     frame. */
+  font-size: clamp(1.5rem, 2.4vw, 1.875rem);
+  font-weight: var(--weight-semibold);
+  letter-spacing: var(--tracking-tight);
+  /* The reason a dashboard's numbers line up down a column instead of drifting with the
+     width of a 1. */
+  font-variant-numeric: tabular-nums;
+}
+
+.hero .value {
+  font-size: clamp(2.25rem, 4vw, 2.75rem);
+  letter-spacing: var(--tracking-tighter);
+}
+
+.sub {
+  margin: 0;
+  color: var(--color-text-muted);
+  font-size: var(--text-xs);
+}
+
+/* Beneath the value, not above it. The number is what the merchant came for; the label is
+   what confirms they read the right one. */
+.label {
+  margin: 0;
+  color: var(--color-text-muted);
+  font-size: var(--text-xs);
+  font-weight: var(--weight-medium);
+}
+
+.hero .label {
+  margin-top: var(--space-1);
+}
+
+/* A tinted surface and a recoloured value — never a coloured border rail. Both tones are
+   derived from the functional status colours rather than being separate hues, so a status
+   tile and a status badge elsewhere on the page agree on what "good" looks like. */
+.tonePositive {
+  background: color-mix(in srgb, var(--color-success) 8%, var(--color-surface));
+  border-color: color-mix(in srgb, var(--color-success) 22%, var(--color-border));
+}
+
+.tonePositive .value {
+  color: var(--color-success);
+}
+
+.toneAttention {
+  background: color-mix(in srgb, var(--color-warning) 8%, var(--color-surface));
+  border-color: color-mix(in srgb, var(--color-warning) 22%, var(--color-border));
+}
+
+.toneAttention .value {
+  color: var(--color-warning);
+}
+
+/* No surface tint for danger, even on the card variant: a tinted red panel on a dashboard
+   reads as an alert the merchant must act on now, and these are counts ("3 failed"), not
+   incidents. The number carries it. */
+.toneDanger .value {
+  color: var(--color-danger);
+}
+
+/* As many tiles as fit at a readable width, then wrap. 140px is the point below which a
+   clamped headline number starts to wrap its own digits. */
+.row {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+  gap: var(--space-3);
+}
+
+/* Borderless stats need more air between them to read as separate figures, since they have
+   no border doing that job. Matches what .statRow used. */
+.rowBare {
+  grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+  gap: var(--space-6);
+}

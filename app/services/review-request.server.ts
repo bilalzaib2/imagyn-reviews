@@ -3,6 +3,7 @@ import prisma from "../db.server";
 import { getEmailProvider } from "./notifications/provider.server";
 import { buildReviewRequestEmail } from "./notifications/templates.server";
 import { emailTemplateService } from "./emailTemplate.server";
+import { buildRatingUrls } from "./email.shared";
 import { buildUnsubscribeUrl, emailSuppressionService } from "./emailSuppression.server";
 import { recordDataAccess } from "./auditLog.server";
 import { resolveSenderIdentity } from "./emailSenderIdentity.server";
@@ -86,6 +87,7 @@ export interface ReviewRequestRecord {
     emailSenderName: string | null;
     emailLogoUrl: string | null;
     emailLogoDarkUrl: string | null;
+    shopBrandLogoUrl: string | null;
   };
   product: { id: string; name: string | null; featuredImage: string | null } | null;
 }
@@ -116,6 +118,9 @@ const REQUEST_INCLUDE = {
       // overridden its logo (emailBranding.shared.ts).
       emailLogoUrl: true,
       emailLogoDarkUrl: true,
+      // Fallback logo when the merchant configured none of their own, so a brand-new install's
+      // emails still carry their real brand mark — see shopBrandLogo.server.ts.
+      shopBrandLogoUrl: true,
     },
   },
   product: { select: { id: true, name: true, featuredImage: true } },
@@ -154,6 +159,7 @@ const mapRequestRecord = (request: {
     emailSenderName: string | null;
     emailLogoUrl: string | null;
     emailLogoDarkUrl: string | null;
+    shopBrandLogoUrl: string | null;
   };
   product: { id: string; name: string | null; featuredImage: string | null } | null;
 }): ReviewRequestRecord => ({
@@ -245,6 +251,11 @@ const buildReviewUrl = (requestToken: string) => {
   return `${appUrl.replace(/\/$/, "")}/r/${requestToken}`;
 };
 
+// Both review-facing sends (the Day-0 request and both reminders) carry the one-tap star row.
+// Built here rather than inside the renderer because reviewUrl is only a review form for these
+// sends — a reward send reuses the same renderer with a storefront URL, and must not get stars.
+const buildReviewRatingUrls = (requestToken: string) => buildRatingUrls(buildReviewUrl(requestToken));
+
 // Bounded retry for a transient send failure (e.g. a momentary Resend/network error) — capped
 // by a fixed constant so a persistently-failing provider can never loop forever. Only "failed"
 // after every attempt is exhausted.
@@ -282,6 +293,7 @@ export const dispatchRequestEmail = async (request: ReviewRequestRecord): Promis
     productName: request.product?.name || "your recent purchase",
     storeName: request.store.name,
     reviewUrl: buildReviewUrl(request.requestToken),
+    ratingUrls: buildReviewRatingUrls(request.requestToken),
     unsubscribeUrl: buildUnsubscribeUrl(request.store.id, request.email),
     customMessage: request.customMessage,
     template,
@@ -330,7 +342,27 @@ export const dispatchRequestEmail = async (request: ReviewRequestRecord): Promis
 
       const updated = await prisma.reviewRequest.update({
         where: { id: request.id },
-        data: { status: "sent", sendAttempts: attempt + 1 },
+        data: {
+          status: "sent",
+          sendAttempts: attempt + 1,
+          // Stamp the Day-0 send time here, which is the only place that knows an email
+          // actually went out.
+          //
+          // Without this, `sentAt` was set ONLY at creation, and only for a request created
+          // with delayDays === 0 (status "sending"). A request created with any delay lands on
+          // "scheduled" with sentAt null, and this function — reached via the scheduler sweep —
+          // moved it to "sent" without ever stamping it. Since runDueReminderSweep requires
+          // `sentAt: { not: null }` and anchors both cutoffs to it, every such request was
+          // permanently ineligible for reminders. That covers every order-triggered request
+          // (Store.autoRequestDelayDays defaults to 7) and every manually scheduled one, i.e.
+          // the whole automated path the Pro reminder sequence exists to serve. Confirmed on a
+          // real database: rows sitting at "sent" and even "opened" all carried sentAt null.
+          //
+          // Conditional rather than unconditional, so a resend never re-anchors the reminder
+          // schedule: `sentAt` means "when the original Day-0 email went out", which is the
+          // contract dispatchReminderEmail's header already documents and the cutoffs rely on.
+          ...(request.sentAt ? {} : { sentAt: new Date() }),
+        },
         include: REQUEST_INCLUDE,
       });
 
@@ -418,6 +450,7 @@ export const dispatchReminderEmail = async (
     productName: request.product?.name || "your recent purchase",
     storeName: request.store.name,
     reviewUrl: buildReviewUrl(request.requestToken),
+    ratingUrls: buildReviewRatingUrls(request.requestToken),
     unsubscribeUrl: buildUnsubscribeUrl(request.store.id, request.email),
     // The original request's per-request custom message (if any) was already delivered on
     // Day 0 — a reminder is its own distinct email and shouldn't repeat it.

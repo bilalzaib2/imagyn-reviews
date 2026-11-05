@@ -22,6 +22,13 @@ export interface NewReviewEmailProps {
   /** Whether a Moderation Rule auto-published this review, held it, or left it for manual
    *  moderation — the merchant's single most useful "do I need to act on this" signal. */
   statusLabel: string;
+  /** The order this review answers, when the review came from a real review request that
+   *  carried one. Null for a storefront review with no originating order — never invented. */
+  orderNumber: string | null;
+  /** Whether a reviewer Reply-To was actually attached to this send. Drives the one line that
+   *  tells the merchant where a reply will land. Never the address itself — the reviewer's
+   *  email belongs in the header, not the body. */
+  replyToReviewer: boolean;
   viewUrl: string;
   replyUrl: string;
 }
@@ -62,12 +69,18 @@ export function NewReviewEmail({
   verifiedPurchase,
   source,
   statusLabel,
+  orderNumber,
+  replyToReviewer,
   viewUrl,
   replyUrl,
 }: NewReviewEmailProps) {
   const body = truncate(content);
 
-  const metaParts = [submittedAt, source].filter(Boolean) as string[];
+  const metaParts = [
+    submittedAt,
+    source,
+    orderNumber ? `Order ${orderNumber}` : null,
+  ].filter(Boolean) as string[];
 
   return (
     <Html lang="en">
@@ -192,6 +205,19 @@ export function NewReviewEmail({
               Reply to review
             </Button>
           </Section>
+
+          {/* Stated plainly, because the behaviour is not obvious from the client UI: the
+              Reply-To on this message is the reviewer's own address. Only rendered when one
+              was actually set — reviewNotifications.server.ts omits the header entirely for a
+              missing or malformed address, and promising a reply route that does not exist
+              would be worse than saying nothing. */}
+          {replyToReviewer ? (
+            <Section style={{ paddingBottom: "32px" }}>
+              <Text style={{ margin: 0, fontSize: "13px", lineHeight: "1.6", color: "#a0a0a0" }}>
+                Replying to this email goes straight to {reviewerName}.
+              </Text>
+            </Section>
+          ) : null}
 
           <Hr style={{ borderColor: "#eeeeee", margin: 0 }} />
 

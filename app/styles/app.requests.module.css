@@ -172,134 +172,20 @@
   min-width: 0;
 }
 
-/* Judge.me-style merchant data table — replaces the old card/list row layout. Sticky header,
-   subtle row separators (no boxed cells), calm hover/selected treatment mirroring the old
-   .requestRow accent-bar-on-select language via an inset box-shadow on the leading cell
-   (a real border-left doesn't render reliably across adjoining <td>s in table layout). */
-.tableWrap {
-  max-height: 40rem;
-  overflow: auto;
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-lg);
-}
+/* The merchant data table that lived here (.tableWrap, .table and its header/body rules,
+   .thCheckbox/.tdCheckbox, .thActions/.tdActions, the nine :nth-child column widths,
+   .tr/.tr:hover and .trSelected with its inset brand rail) is now components/ui/Table.tsx +
+   table.module.css, which this screen and Reviews both render. Column widths moved into this
+   route's own column definitions, where they sit next to the cells they size rather than
+   being counted off by position.
 
-/* table-layout: fixed (not a min-width + horizontal scroll) is what keeps Status and the
-   actions column from disappearing off-screen once the detail panel claims ~35% of the
-   width (see .splitLayout) — the table now adapts to whatever width the list column
-   actually has instead of demanding a minimum and forcing a scrollbar. .tableWrap keeps
-   overflow: auto only as a safety net for genuinely narrow windows. */
-.table {
-  table-layout: fixed;
-  width: 100%;
-  border-collapse: collapse;
-  font-size: var(--text-sm);
-}
+   .thCheckbox is still declared further down, because the Shopify-orders picker in the Send
+   Request modal (.ordersTable) still renders its own table — see that comment for why it was
+   deliberately NOT converted.
 
-.table thead th {
-  position: sticky;
-  top: 0;
-  z-index: 1;
-  padding: var(--space-3);
-  text-align: left;
-  font-size: var(--text-xs);
-  font-weight: 500;
-  letter-spacing: 0.1em;
-  text-transform: uppercase;
-  color: var(--color-text-muted);
-  background: var(--color-surface);
-  border-bottom: 1px solid var(--color-border);
-  white-space: nowrap;
-}
-
-.thCheckbox,
-.tdCheckbox {
-  width: 2.75rem;
-  padding-right: 0;
-}
-
-.thActions,
-.tdActions {
-  width: 2.75rem;
-  text-align: right;
-}
-
-/* Explicit widths on every column so the fixed layout has a stable plan — Customer and Product
-   get the largest, fluid shares; Order/Trigger/Scheduled/Status/Review stay narrow and
-   predictable. Column order: (1) checkbox (2) Customer (3) Email (4) Order (5) Product
-   (6) Trigger (7) Scheduled (8) Status (9) Review (10) actions. */
-.table thead th:nth-child(2) {
-  width: 20%;
-}
-
-.table thead th:nth-child(3) {
-  width: 16%;
-}
-
-.table thead th:nth-child(4) {
-  width: 9%;
-}
-
-.table thead th:nth-child(5) {
-  width: 19%;
-}
-
-.table thead th:nth-child(6) {
-  width: 6rem;
-}
-
-.table thead th:nth-child(7) {
-  width: 11%;
-}
-
-.table thead th:nth-child(8) {
-  width: 6.5rem;
-}
-
-.table thead th:nth-child(9) {
-  width: 6rem;
-}
-
-.table tbody td {
-  padding: var(--space-3);
-  vertical-align: middle;
-  border-bottom: 1px solid color-mix(in srgb, var(--color-text) 6%, transparent);
-  color: var(--color-text);
-}
-
-.table tbody tr:last-child td {
-  border-bottom: none;
-}
-
-.tr {
-  cursor: pointer;
-  transition: background-color var(--transition-base);
-}
-
-.tr:hover td {
-  background-color: color-mix(in srgb, var(--color-text) 2.5%, transparent);
-}
-
-.trSelected td {
-  background-color: color-mix(in srgb, var(--color-text) 4%, transparent);
-}
-
-/* Recolored 2026-09-10 from --color-accent (black) to --color-highlight (IMAGYN's restrained
-   lime accent) for consistency with the identical single-selected-row treatment in
-   app.reviews.module.css's .trSelected — one real, singular, meaningful exception to the
-   no-default-black-rail rule, now using the same real brand accent everywhere it appears. */
-.trSelected td:first-child {
-  box-shadow: inset 3px 0 0 var(--color-highlight);
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .tr {
-    transition: none;
-  }
-}
-
-.tdCustomer {
-  overflow: hidden;
-}
+   The cell-content classes below (.customerName, .tdMuted, .tdOrder, .tdProduct, .tdDate,
+   .ellipsisCell) stayed: what a cell CONTAINS is this screen's business, only the table
+   structure is shared. */
 
 .customerName {
   margin: 0;
@@ -319,14 +205,15 @@
   white-space: nowrap;
 }
 
-.tdProduct {
+/* The shared table clips every cell (table-layout: fixed makes that necessary), so these only
+   need to add the ellipsis that tells the merchant there is more text than fits. Applied to a
+   block-level span inside the cell, which is where the text actually lives. */
+.tdProduct,
+.ellipsisCell {
+  display: block;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-}
-
-.tdStatus {
-  overflow: hidden;
 }
 
 .tdMuted {
@@ -339,19 +226,29 @@
   white-space: nowrap;
 }
 
-/* Bug fix: .colEmail (the actual class on the Email <td> — see app.requests.tsx) previously
-   had no base rule at all, only the @media toggle below that hides it at narrow widths. A
-   long email address in a fixed-width table-layout cell doesn't wrap or get clipped by the
-   browser on its own, so it visually spilled into the Order column next to it. Same
-   ellipsis treatment .customerEmail/.tdProduct already use elsewhere in this same table. */
-.colEmail {
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+/* .colEmail's ellipsis treatment is now .ellipsisCell above, applied by the route's Email
+   column. It was a real bug fix when added (a long address in a fixed-layout cell neither
+   wraps nor clips on its own, so it spilled into the Order column) and that behaviour is
+   preserved; .colOrder/.colDate's muted ink is now .tdMuted / .tdOrder / .tdDate on the spans
+   those columns render.
+
+   .colDate, .colOrder and .thCheckbox are re-declared just below, scoped to that picker. */
+
+/* ---------------------------------------------------------------- Orders-picker columns
+
+   The Shopify-orders picker in the Send Request modal (.ordersTable) still renders its own
+   table and still uses these three. It was deliberately NOT converted to the shared <Table>:
+   it needs a PER-ROW disabled checkbox (an order that already has a request is not
+   selectable) and it keeps its header visible while showing a loading or empty message in the
+   body — neither of which the shared table does, and both of which exist on this one screen.
+   Teaching the primitive about them would make it worse for the two queues that use it. */
+.thCheckbox {
+  width: 2.75rem;
+  padding-right: 0;
 }
 
-/* De-emphasized first (item 9 — "prioritize Customer, Product, Status" at narrow widths);
-   hidden entirely once the table can no longer breathe. See the max-width: 640px block below. */
+/* De-emphasised: in a picker, the order number and date are context for the customer and
+   product, not the thing being chosen. */
 .colOrder,
 .colDate {
   color: var(--color-text-muted);
@@ -717,33 +614,10 @@
     flex: 1 1 8rem;
   }
 
-  /* Email/Order/Trigger/Scheduled are dropped entirely rather than truncated, so
-     Customer/Product/Status/Review — the "who / what they bought / what happened" trio (plus
-     whether a review actually followed) — keep full room. The detail panel still has every
-     dropped field for a row the merchant opens. Freed-up share goes to Customer/Product
-     (fixed layout doesn't redistribute it on its own). */
-  .colEmail,
-  .colOrder,
-  .colTrigger,
-  .colDate {
-    display: none;
-  }
-
-  .table thead th:nth-child(2) {
-    width: 38%;
-  }
-
-  .table thead th:nth-child(5) {
-    width: 36%;
-  }
-
-  .table thead th:nth-child(8) {
-    width: 16%;
-  }
-
-  .table thead th:nth-child(9) {
-    width: 10%;
-  }
+  /* The four dropped columns and the width reallocation moved into the route's own column
+     definitions as `hideOnNarrow` and `widthNarrow`, which the shared <Table> applies to the
+     header and the cells together. Hiding only the cells — which a rule written here can
+     easily do by accident — misaligns every remaining column in a fixed-layout table. */
 
   .detailScheduleGrid {
     gap: var(--space-3);

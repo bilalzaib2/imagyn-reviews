@@ -20,6 +20,7 @@ import { authenticateAdminDeduped } from "../services/auth-dedupe.server";
 import { getOrCreateStore } from "../services/store.server";
 import { ensureDevelopmentStoreFlag, getBillingSnapshot } from "../services/billing/billing.server";
 import { ensureShopContactEmail } from "../services/shopContactEmail.server";
+import { ensureShopBrandLogo } from "../services/shopBrandLogo.server";
 import { FloatingHelp } from "../components/ui/FloatingHelp";
 import styles from "../styles/app.shell.module.css";
 
@@ -40,6 +41,14 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
   // Keeps the merchant's public-facing contact email current so customer replies to review
   // emails reach them rather than Imagyn's shared inbox. Fire-and-forget: it must never delay
   // or break a page load, and the scheduler reads the persisted value, not this call.
+  // Same fire-and-forget posture as the contact-email sync below: both are TTL-cached, both
+  // degrade internally, and neither may delay or break a page load. This one is what gives a
+  // merchant's emails their real logo without them uploading anything — see
+  // shopBrandLogo.server.ts.
+  void ensureShopBrandLogo(admin, store).catch(() => {
+    // ensureShopBrandLogo already degrades internally; this guards the floating promise.
+  });
+
   void ensureShopContactEmail(admin, store).catch(() => {
     // ensureShopContactEmail already degrades internally; this guards the floating promise.
   });

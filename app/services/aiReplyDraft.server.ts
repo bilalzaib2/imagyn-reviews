@@ -1,6 +1,7 @@
 import prisma from "../db.server";
 import { getAiProvider } from "./ai/provider.server";
 import { assertPermission, getStorePermissions } from "./permissions";
+import type { AiReplyTone } from "./ai/types";
 
 export interface ReplyDraftResult {
   draft: string;
@@ -22,6 +23,10 @@ export async function draftReplyForReview(
   storeId: string,
   reviewId: string,
   existingDraft: string | null,
+  // Omitted falls back to the provider's own "friendly" default, which reproduces the prompt
+  // used before tone existed — so an older caller, or a request with no tone on the form,
+  // gets exactly the draft it got before.
+  tone?: AiReplyTone,
 ): Promise<ReplyDraftResult> {
   const review = await prisma.review.findFirst({
     where: { id: reviewId, storeId, deletedAt: null },
@@ -45,6 +50,7 @@ export async function draftReplyForReview(
     productName: review.product.name,
     review: { rating: review.rating, title: review.title, content: review.content },
     existingDraft: existingDraft?.trim() || null,
+    ...(tone ? { tone } : {}),
   });
 
   return { draft: result.draft, provider: provider.name, modelUsed: result.modelUsed };

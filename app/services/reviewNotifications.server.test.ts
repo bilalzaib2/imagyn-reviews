@@ -8,6 +8,9 @@ interface FakeStore {
   name: string;
   newReviewNotifyEnabled: boolean;
   newReviewNotifyEmail: string | null;
+  /** Shopify's own customer-facing contact address, synced by shopContactEmail.server.ts.
+   *  Used as the notification recipient when the merchant nominated no inbox of their own. */
+  contactEmail: string | null;
 }
 
 interface FakeReview {
@@ -17,10 +20,13 @@ interface FakeReview {
   title: string | null;
   content: string;
   reviewerName: string;
+  /** Becomes the Reply-To, so a merchant replying reaches the customer. */
+  reviewerEmail: string | null;
   verifiedPurchase: boolean;
   status: "PENDING" | "APPROVED" | "REJECTED";
   isPublished: boolean;
   moderationStatus: string | null;
+  productId: string;
   productTitle: string | null;
   productName: string | null;
   createdAt: Date;
@@ -29,6 +35,9 @@ interface FakeReview {
 
 let fakeStores: Record<string, FakeStore>;
 let fakeReviews: FakeReview[];
+/** The ReviewRequest the notification resolves an order number from, or null for a storefront
+ *  review with no originating request. */
+let fakeOriginatingRequest: { orderNumber: string | null } | null;
 
 const sendEmail = vi.fn(async () => ({ id: "fake-message-id" }));
 
@@ -61,10 +70,12 @@ vi.mock("../db.server", () => ({
         const store = fakeStores[review.storeId];
         return {
           id: review.id,
+          productId: review.productId,
           rating: review.rating,
           title: review.title,
           content: review.content,
           reviewerName: review.reviewerName,
+          reviewerEmail: review.reviewerEmail,
           verifiedPurchase: review.verifiedPurchase,
           status: review.status,
           isPublished: review.isPublished,
@@ -76,9 +87,16 @@ vi.mock("../db.server", () => ({
             name: store.name,
             newReviewNotifyEnabled: store.newReviewNotifyEnabled,
             newReviewNotifyEmail: store.newReviewNotifyEmail,
+            contactEmail: store.contactEmail,
           },
         };
       }),
+    },
+    reviewRequest: {
+      // Backs the order-number lookup: the notification matches the ReviewRequest this review
+      // answers on the same (storeId, productId, email) triple getExistingRequestContext treats
+      // as one customer-and-product pair.
+      findFirst: vi.fn(async () => fakeOriginatingRequest),
     },
   },
 }));
@@ -96,10 +114,12 @@ function review(overrides: Partial<FakeReview> = {}): FakeReview {
     title: "Exactly what I wanted",
     content: "Arrived in two days and the fit is perfect.",
     reviewerName: "Dana Ruiz",
+    reviewerEmail: "dana@example.com",
     verifiedPurchase: true,
     status: "APPROVED",
     isPublished: true,
     moderationStatus: "auto_approved",
+    productId: "prod_1",
     productTitle: "Linen Shirt",
     productName: "Linen Shirt",
     createdAt: new Date("2026-09-20T14:30:00Z"),
@@ -108,9 +128,9 @@ function review(overrides: Partial<FakeReview> = {}): FakeReview {
   };
 }
 
-function lastSend(): { to: string; subject: string; html: string; text: string } {
+function lastSend(): { to: string; subject: string; html: string; text: string; replyTo?: string } {
   const calls = sendEmail.mock.calls as unknown as Array<
-    [{ to: string; subject: string; html: string; text: string }]
+    [{ to: string; subject: string; html: string; text: string; replyTo?: string }]
   >;
   const last = calls[calls.length - 1];
   if (!last) {
@@ -124,10 +144,21 @@ beforeEach(() => {
   process.env.SHOPIFY_APP_URL = APP_URL;
   sendEmail.mockClear();
   fakeStores = {
-    store_1: { name: "Coastal Threads", newReviewNotifyEnabled: true, newReviewNotifyEmail: "owner@coastal.test" },
-    store_2: { name: "Other Store", newReviewNotifyEnabled: true, newReviewNotifyEmail: "owner@other.test" },
+    store_1: {
+      name: "Coastal Threads",
+      newReviewNotifyEnabled: true,
+      newReviewNotifyEmail: "owner@coastal.test",
+      contactEmail: "hello@coastal.test",
+    },
+    store_2: {
+      name: "Other Store",
+      newReviewNotifyEnabled: true,
+      newReviewNotifyEmail: "owner@other.test",
+      contactEmail: "hello@other.test",
+    },
   };
   fakeReviews = [review()];
+  fakeOriginatingRequest = { orderNumber: "#1042" };
 });
 
 describe("recipient + enable gating", () => {
@@ -146,16 +177,39 @@ describe("recipient + enable gating", () => {
     expect(sendEmail).not.toHaveBeenCalled();
   });
 
-  it("sends nothing when the setting is on but no address is configured", async () => {
+  // CONTRACT CHANGE. This used to assert that no address meant no email. A notification
+  // recipient now falls back to Shopify's own customer-facing contact address, so a merchant
+  // who switched notifications ON is no longer silently given nothing. The "send nothing" case
+  // still exists and is asserted below — it is now "neither address available", not "no
+  // nominated address".
+  it("falls back to Shopify's contact email when no address is nominated", async () => {
     fakeStores.store_1.newReviewNotifyEmail = null;
+
+    await sendNewReviewNotification({ storeId: "store_1", reviewId: "rev_1", source: "storefront" });
+
+    expect(lastSend().to).toBe("hello@coastal.test");
+  });
+
+  it("sends nothing when the setting is on and neither address is configured", async () => {
+    fakeStores.store_1.newReviewNotifyEmail = null;
+    fakeStores.store_1.contactEmail = null;
 
     await sendNewReviewNotification({ storeId: "store_1", reviewId: "rev_1", source: "storefront" });
 
     expect(sendEmail).not.toHaveBeenCalled();
   });
 
-  it("treats a whitespace-only address as unconfigured", async () => {
+  it("treats a whitespace-only nominated address as unconfigured and falls back", async () => {
     fakeStores.store_1.newReviewNotifyEmail = "   ";
+
+    await sendNewReviewNotification({ storeId: "store_1", reviewId: "rev_1", source: "storefront" });
+
+    expect(lastSend().to).toBe("hello@coastal.test");
+  });
+
+  it("treats a whitespace-only address on BOTH fields as no recipient at all", async () => {
+    fakeStores.store_1.newReviewNotifyEmail = "   ";
+    fakeStores.store_1.contactEmail = "   ";
 
     await sendNewReviewNotification({ storeId: "store_1", reviewId: "rev_1", source: "storefront" });
 
@@ -293,9 +347,12 @@ describe("real review data in the email", () => {
   it("never includes the reviewer's email address", async () => {
     await sendNewReviewNotification({ storeId: "store_1", reviewId: "rev_1", source: "storefront" });
 
-    // The query this service runs never selects reviewerEmail at all, so it cannot reach the
-    // template — this asserts that contract from the outside.
+    // The service DOES read reviewerEmail now — it becomes the Reply-To header so a merchant
+    // replying reaches the customer (see the Reply-To block below). The contract this asserts
+    // is the remaining half: that address belongs in the header and must never be rendered
+    // into the body a merchant reads, or forwards.
     expect(lastSend().html).not.toContain("@example.com");
+    expect(lastSend().text).not.toContain("@example.com");
   });
 });
 
@@ -366,5 +423,150 @@ describe("failure isolation", () => {
     await expect(
       sendNewReviewNotification({ storeId: "store_1", reviewId: "rev_1", source: "storefront" }),
     ).resolves.toBeUndefined();
+  });
+});
+
+// ---------------------------------------------------------------------------------------------
+// Judge.me parity: a merchant replying to a new-review notification must reach the CUSTOMER,
+// not Imagyn. That behaviour lives entirely in the Reply-To header, so it is asserted on the
+// exact payload handed to the provider — a correct-looking email with the wrong Reply-To sends
+// every merchant reply into a support inbox instead of to the shopper.
+// ---------------------------------------------------------------------------------------------
+
+describe("Reply-To targets the reviewer", () => {
+  it("sets Reply-To to the reviewer's own address", async () => {
+    await sendNewReviewNotification({ storeId: "store_1", reviewId: "rev_1", source: "storefront" });
+
+    expect(lastSend().replyTo).toBe("dana@example.com");
+  });
+
+  it("never points Reply-To at the merchant, the store contact, or an Imagyn address", async () => {
+    await sendNewReviewNotification({ storeId: "store_1", reviewId: "rev_1", source: "storefront" });
+
+    const { replyTo } = lastSend();
+    expect(replyTo).not.toBe("owner@coastal.test");
+    expect(replyTo).not.toBe("hello@coastal.test");
+    expect(replyTo).not.toMatch(/imagyn/i);
+  });
+
+  it("tells the merchant where a reply will land, naming the reviewer", async () => {
+    await sendNewReviewNotification({ storeId: "store_1", reviewId: "rev_1", source: "storefront" });
+
+    // Asserted on the plain-text body: React Email emits `<!-- -->` markers around every
+    // interpolation in the HTML, so the HTML reads "... straight to <!-- -->Dana Ruiz<!-- -->."
+    expect(lastSend().text).toContain("Replying to this email goes straight to Dana Ruiz");
+  });
+
+  it("makes no reply promise when no Reply-To could be attached", async () => {
+    fakeReviews = [review({ reviewerEmail: null })];
+
+    await sendNewReviewNotification({ storeId: "store_1", reviewId: "rev_1", source: "storefront" });
+
+    expect(lastSend().replyTo).toBeUndefined();
+    expect(lastSend().text).not.toContain("Replying to this email goes straight to");
+  });
+});
+
+describe("recipient falls back to Shopify's customer-facing contact email", () => {
+  it("uses contactEmail when the merchant nominated no inbox of their own", async () => {
+    fakeStores.store_1.newReviewNotifyEmail = null;
+
+    await sendNewReviewNotification({ storeId: "store_1", reviewId: "rev_1", source: "storefront" });
+
+    expect(lastSend().to).toBe("hello@coastal.test");
+  });
+
+  it("still prefers the merchant's explicit preference when both exist", async () => {
+    await sendNewReviewNotification({ storeId: "store_1", reviewId: "rev_1", source: "storefront" });
+
+    expect(lastSend().to).toBe("owner@coastal.test");
+  });
+
+  it("sends nothing when neither address exists", async () => {
+    fakeStores.store_1.newReviewNotifyEmail = null;
+    fakeStores.store_1.contactEmail = null;
+
+    await sendNewReviewNotification({ storeId: "store_1", reviewId: "rev_1", source: "storefront" });
+
+    expect(sendEmail).not.toHaveBeenCalled();
+  });
+
+  it("respects the merchant's off switch even when contactEmail is available", async () => {
+    fakeStores.store_1.newReviewNotifyEnabled = false;
+    fakeStores.store_1.newReviewNotifyEmail = null;
+
+    await sendNewReviewNotification({ storeId: "store_1", reviewId: "rev_1", source: "storefront" });
+
+    expect(sendEmail).not.toHaveBeenCalled();
+  });
+
+  it("never borrows another store's contact email", async () => {
+    fakeStores.store_1.newReviewNotifyEmail = null;
+
+    await sendNewReviewNotification({ storeId: "store_1", reviewId: "rev_1", source: "storefront" });
+
+    expect(lastSend().to).not.toBe("hello@other.test");
+  });
+});
+
+// Reviewer-supplied values reach a mail header, so anything that could terminate the header and
+// append a recipient is rejected outright rather than escaped.
+describe("header injection and invalid addresses", () => {
+  const hostile = [
+    "dana@example.com\nBcc: attacker@evil.test",
+    "dana@example.com\r\nTo: attacker@evil.test",
+    "dana@example.com, attacker@evil.test",
+    "dana@example.com; attacker@evil.test",
+    "<dana@example.com>",
+    "dana@example.com>",
+    "not-an-email",
+    "dana@@example.com",
+    "dana@example",
+    "",
+    "   ",
+  ];
+
+  it.each(hostile)("omits Reply-To entirely for %j", async (value) => {
+    fakeReviews = [review({ reviewerEmail: value })];
+
+    await sendNewReviewNotification({ storeId: "store_1", reviewId: "rev_1", source: "storefront" });
+
+    // Still notified — the merchant keeps the email and its working admin links — but with no
+    // Reply-To rather than a dangerous or misleading one.
+    expect(sendEmail).toHaveBeenCalledTimes(1);
+    expect(lastSend().replyTo).toBeUndefined();
+  });
+
+  it("refuses to send at all when the configured recipient itself is unsafe", async () => {
+    fakeStores.store_1.newReviewNotifyEmail = "owner@coastal.test\nBcc: attacker@evil.test";
+    fakeStores.store_1.contactEmail = null;
+
+    await sendNewReviewNotification({ storeId: "store_1", reviewId: "rev_1", source: "storefront" });
+
+    expect(sendEmail).not.toHaveBeenCalled();
+  });
+});
+
+describe("order context, only where it genuinely exists", () => {
+  it("includes the real order number from the originating review request", async () => {
+    await sendNewReviewNotification({ storeId: "store_1", reviewId: "rev_1", source: "review_request" });
+
+    expect(lastSend().html).toContain("#1042");
+  });
+
+  it("renders no order number for a storefront review with no originating request", async () => {
+    fakeOriginatingRequest = null;
+
+    await sendNewReviewNotification({ storeId: "store_1", reviewId: "rev_1", source: "storefront" });
+
+    expect(lastSend().html).not.toContain("Order ");
+  });
+
+  it("looks up no order at all when the reviewer left no email to match on", async () => {
+    fakeReviews = [review({ reviewerEmail: null })];
+
+    await sendNewReviewNotification({ storeId: "store_1", reviewId: "rev_1", source: "storefront" });
+
+    expect(lastSend().html).not.toContain("Order ");
   });
 });

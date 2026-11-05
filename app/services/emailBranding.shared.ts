@@ -11,13 +11,21 @@
 //
 //   1. logoSource === "custom"  -> the template's own logoUrl/logoDarkUrl.
 //   2. otherwise                -> the store's shared emailLogoUrl/emailLogoDarkUrl.
-//   3. dark palette with no dark asset -> fall back to the light asset.
-//   4. nothing configured       -> null, and the renderer shows the text brand header.
+//   3. still nothing            -> the merchant's Shopify brand logo (shopBrandLogoUrl), so an
+//                                  install that never opened Email Studio is still branded.
+//   4. dark palette with no dark asset -> fall back to the light asset.
+//   5. nothing at all           -> null, and the renderer shows the text brand header.
 import type { EmailTemplateContent } from "./email.shared";
 
 export interface SharedEmailBranding {
   emailLogoUrl: string | null;
   emailLogoDarkUrl: string | null;
+  /** The merchant's own logo as held by Shopify (Settings -> Brand), cached by
+   *  shopBrandLogo.server.ts. A FALLBACK only: it applies when the merchant has configured no
+   *  logo of their own, which is what gives a brand-new install a branded email instead of a
+   *  text-only header. Optional so every existing caller compiles unchanged and simply gets
+   *  today's behaviour. */
+  shopBrandLogoUrl?: string | null;
 }
 
 export interface ResolvedEmailLogo {
@@ -44,8 +52,14 @@ export function resolveEmailLogo(
     return { logoUrl: content.logoUrl, logoDarkUrl: content.logoDarkUrl, inheritsShared: false };
   }
 
+  // Tier 3: the Shopify brand logo, used only when the merchant configured nothing. It is
+  // never consulted for the dark palette on its own — a single shop logo has no dark variant,
+  // and the renderer's own "dark falls back to light" rule already covers that correctly.
+  const sharedLogoUrl = branding?.emailLogoUrl ?? null;
+  const shopFallback = sharedLogoUrl === null ? branding?.shopBrandLogoUrl ?? null : null;
+
   return {
-    logoUrl: branding?.emailLogoUrl ?? null,
+    logoUrl: sharedLogoUrl ?? shopFallback,
     logoDarkUrl: branding?.emailLogoDarkUrl ?? null,
     inheritsShared: true,
   };

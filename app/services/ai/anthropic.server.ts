@@ -148,7 +148,7 @@ export function createAnthropicProvider(): AiProvider {
           model,
           max_tokens: 512,
           temperature: 0.4,
-          system: buildReplyDraftSystemPrompt(),
+          system: buildReplyDraftSystemPrompt(request.tone),
           messages: [{ role: "user", content: buildReplyDraftUserPrompt(request) }],
         }),
       });

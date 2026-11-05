@@ -29,6 +29,7 @@ import {
 import { PersonIcon, SearchIcon } from "@shopify/polaris-icons";
 
 import { Button } from "../components/ui/Button";
+import { Table, type TableColumn } from "../components/ui/Table";
 import { LinkButton } from "../components/ui/LinkButton";
 import { Container } from "../components/ui/Container";
 import { Section } from "../components/ui/Section";
@@ -1536,6 +1537,115 @@ export default function RequestsPage() {
     ];
   };
 
+  // The request queue's columns. Every width is declared because the house table is
+  // table-layout: fixed — these are the same percentages and rem values app.requests.module.css
+  // set with :nth-child selectors, moved here where they sit next to the cells they size
+  // instead of being counted off by position.
+  const requestColumns: TableColumn<ReviewRequestRecord>[] = [
+    {
+      key: "customer",
+      header: "Customer",
+      width: "20%",
+      // Absorbs the space freed when the four hideOnNarrow columns drop out at ≤640px — the
+      // same reallocation app.requests.module.css used to do with :nth-child overrides.
+      widthNarrow: "38%",
+      render: (request) => <p className={styles.customerName}>{request.name ?? "Unnamed customer"}</p>,
+    },
+    {
+      key: "email",
+      header: "Email",
+      width: "16%",
+      hideOnNarrow: true,
+      // Ellipsised rather than hard-clipped: the shared table clips every cell so a long
+      // address cannot spill into Order, but an ellipsis is what tells the merchant there is
+      // more to it. Applied to a block span inside the cell, which is where the text lives.
+      render: (request) => (
+        <span className={`${styles.tdMuted} ${styles.ellipsisCell}`}>{request.email ?? "—"}</span>
+      ),
+    },
+    {
+      key: "order",
+      header: "Order",
+      width: "9%",
+      hideOnNarrow: true,
+      render: (request) => (
+        <span className={styles.tdOrder}>{request.orderNumber ? `#${request.orderNumber}` : "—"}</span>
+      ),
+    },
+    {
+      key: "product",
+      header: "Product",
+      width: "19%",
+      widthNarrow: "36%",
+      render: (request) => <span className={styles.tdProduct}>{request.product?.name ?? "General request"}</span>,
+    },
+    {
+      key: "trigger",
+      header: "Trigger",
+      width: "6rem",
+      hideOnNarrow: true,
+      render: (request) => (
+        <span className={styles.tdMuted}>{request.source === "order" ? "Automatic" : "Manual"}</span>
+      ),
+    },
+    {
+      key: "scheduled",
+      header: "Scheduled",
+      width: "11%",
+      hideOnNarrow: true,
+      render: (request) => <span className={styles.tdDate}>{formatDateTime(request.scheduledFor)}</span>,
+    },
+    {
+      key: "status",
+      header: "Status",
+      width: "6.5rem",
+      widthNarrow: "16%",
+      render: (request) => <RequestStatusBadge status={request.status} />,
+    },
+    {
+      key: "review",
+      header: "Review",
+      width: "6rem",
+      widthNarrow: "10%",
+      render: (request) => <span className={styles.tdMuted}>{request.reviewedAt ? "Reviewed" : "—"}</span>,
+    },
+    {
+      key: "actions",
+      header: "Actions",
+      headerHidden: true,
+      width: "2.75rem",
+      align: "end",
+      // Its own controls: opening this menu must not also open the detail panel behind it.
+      interactive: true,
+      render: (request) => {
+        const rowActionsOpen = rowActionsOpenId === request.id;
+        const customerName = request.name ?? "Unnamed customer";
+
+        return (
+          <Popover
+            active={rowActionsOpen}
+            onClose={() => setRowActionsOpenId(null)}
+            activator={
+              <button
+                type="button"
+                className={styles.rowActionsButton}
+                onClick={() => setRowActionsOpenId(rowActionsOpen ? null : request.id)}
+                disabled={isMutating}
+                aria-label={`Actions for request from ${customerName}`}
+                aria-haspopup="menu"
+                aria-expanded={rowActionsOpen}
+              >
+                &#8226;&#8226;&#8226;
+              </button>
+            }
+          >
+            <ActionList sections={buildActionListSections(request, () => setRowActionsOpenId(null))} />
+          </Popover>
+        );
+      },
+    },
+  ];
+
   const confirmDestructiveAction = () => {
     if (!confirmationState) {
       return;
@@ -1910,108 +2020,23 @@ export default function RequestsPage() {
               ) : (
                 <>
                   <div className={styles.listColumn}>
-                    <div className={styles.tableWrap}>
-                      <table className={styles.table}>
-                        <thead>
-                          <tr>
-                            <th className={styles.thCheckbox}>
-                              <input
-                                type="checkbox"
-                                aria-label="Select all requests on this page"
-                                checked={effectiveRequests.length > 0 && effectiveRequests.every((request) => selectedIds.includes(request.id))}
-                                onChange={(event) => toggleSelectAllOnPage(event.target.checked)}
-                                disabled={isLoading || isMutating || effectiveRequests.length === 0}
-                              />
-                            </th>
-                            <th>Customer</th>
-                            <th className={styles.colEmail}>Email</th>
-                            <th className={styles.colOrder}>Order</th>
-                            <th>Product</th>
-                            <th className={styles.colTrigger}>Trigger</th>
-                            <th className={styles.colDate}>Scheduled</th>
-                            <th>Status</th>
-                            <th className={styles.colReview}>Review</th>
-                            <th className={styles.thActions} aria-label="Actions" />
-                          </tr>
-                        </thead>
-                        <tbody>
-                          {effectiveRequests.map((request) => {
-                            const isSelected = request.id === selectedRequestId;
-                            const isChecked = selectedIds.includes(request.id);
-                            const customerName = request.name ?? "Unnamed customer";
-                            const productName = request.product?.name ?? "General request";
-                            const rowActionsOpen = rowActionsOpenId === request.id;
-                            const isReviewed = Boolean(request.reviewedAt);
-
-                            return (
-                              <tr
-                                key={request.id}
-                                className={`${styles.tr} ${isSelected ? styles.trSelected : ""}`}
-                                onClick={() => setSelectedRequestId(request.id)}
-                                onKeyDown={(event) => {
-                                  if (event.key === "Enter" || event.key === " ") {
-                                    event.preventDefault();
-                                    setSelectedRequestId(request.id);
-                                  }
-                                }}
-                                tabIndex={0}
-                                aria-selected={isSelected}
-                              >
-                                <td className={styles.tdCheckbox} onClick={(event) => event.stopPropagation()}>
-                                  <input
-                                    type="checkbox"
-                                    checked={isChecked}
-                                    aria-label={`Select request for ${customerName}`}
-                                    onChange={(event) => toggleSelection(request.id, event.target.checked)}
-                                  />
-                                </td>
-                                <td className={styles.tdCustomer}>
-                                  <p className={styles.customerName}>{customerName}</p>
-                                </td>
-                                <td className={`${styles.tdMuted} ${styles.colEmail}`}>{request.email ?? "—"}</td>
-                                <td className={`${styles.tdOrder} ${styles.colOrder}`}>
-                                  {request.orderNumber ? `#${request.orderNumber}` : "—"}
-                                </td>
-                                <td className={styles.tdProduct}>{productName}</td>
-                                <td className={`${styles.tdMuted} ${styles.colTrigger}`}>
-                                  {request.source === "order" ? "Automatic" : "Manual"}
-                                </td>
-                                <td className={`${styles.tdDate} ${styles.colDate}`}>{formatDateTime(request.scheduledFor)}</td>
-                                <td className={styles.tdStatus}>
-                                  <RequestStatusBadge status={request.status} />
-                                </td>
-                                <td className={`${styles.tdMuted} ${styles.colReview}`}>
-                                  {isReviewed ? "Reviewed" : "—"}
-                                </td>
-                                <td className={styles.tdActions} onClick={(event) => event.stopPropagation()}>
-                                  <Popover
-                                    active={rowActionsOpen}
-                                    onClose={() => setRowActionsOpenId(null)}
-                                    activator={
-                                      <button
-                                        type="button"
-                                        className={styles.rowActionsButton}
-                                        onClick={() => setRowActionsOpenId(rowActionsOpen ? null : request.id)}
-                                        disabled={isMutating}
-                                        aria-label={`Actions for request from ${customerName}`}
-                                        aria-haspopup="menu"
-                                        aria-expanded={rowActionsOpen}
-                                      >
-                                        &#8226;&#8226;&#8226;
-                                      </button>
-                                    }
-                                  >
-                                    <ActionList
-                                      sections={buildActionListSections(request, () => setRowActionsOpenId(null))}
-                                    />
-                                  </Popover>
-                                </td>
-                              </tr>
-                            );
-                          })}
-                        </tbody>
-                      </table>
-                    </div>
+                    <Table
+                      rows={effectiveRequests}
+                      columns={requestColumns}
+                      getRowKey={(request) => request.id}
+                      ariaLabel="Review requests"
+                      maxHeight="40rem"
+                      activeRowKey={selectedRequestId}
+                      onActivateRow={setSelectedRequestId}
+                      selection={{
+                        selectedKeys: selectedIds,
+                        onToggleRow: toggleSelection,
+                        onToggleAll: toggleSelectAllOnPage,
+                        rowLabel: (request) => `Select request for ${request.name ?? "Unnamed customer"}`,
+                        allLabel: "Select all requests on this page",
+                        disabled: isLoading || isMutating,
+                      }}
+                    />
 
                     <div className={styles.pagination}>
                       <Button

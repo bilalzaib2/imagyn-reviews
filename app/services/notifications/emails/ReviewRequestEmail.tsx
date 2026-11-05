@@ -20,6 +20,8 @@ export interface ReviewRequestEmailProps {
   bodyText: string;
   closingText: string;
   buttonText: string;
+  /** The line above the one-tap star row, already {{variable}}-substituted. */
+  starsPrompt: string;
 
   accentColor: string;
   buttonTextColor: string;
@@ -61,6 +63,17 @@ export interface ReviewRequestEmailProps {
   customHtml?: string | null;
 
   reviewUrl: string;
+  /**
+   * The five star destinations, lowest rating first, built by buildRatingUrls
+   * (email.shared.ts). Absent or empty skips the star row entirely rather than rendering
+   * five dead stars.
+   *
+   * Passed in rather than derived from reviewUrl here, because reviewUrl is not always a
+   * review form: a "reward" send reuses this component with the merchant's storefront URL as
+   * its CTA, where a rating parameter would be meaningless. The caller knows what its URL
+   * means; this component does not.
+   */
+  ratingUrls?: readonly string[] | null;
   // Omitted for the Email Studio preview/test-email paths (sample data) — the footer link
   // only renders when present. See templates.server.tsx's ReviewRequestEmailData.
   unsubscribeUrl?: string;
@@ -144,6 +157,7 @@ export function ReviewRequestEmail({
   bodyText,
   closingText,
   buttonText,
+  starsPrompt,
   accentColor,
   buttonTextColor,
   theme,
@@ -166,6 +180,7 @@ export function ReviewRequestEmail({
   sections,
   customHtml,
   reviewUrl,
+  ratingUrls,
   unsubscribeUrl,
 }: ReviewRequestEmailProps) {
   const palette = PALETTES[theme];
@@ -286,6 +301,78 @@ export function ReviewRequestEmail({
         </table>
       </Section>
     ) : null,
+
+    // One-tap star rating. Every star links to the SAME form; the only thing the rating
+    // carries is which star arrives pre-selected (see email.shared.ts's buildRatingUrl, which
+    // is the single place that property is enforced). Nothing is recorded by tapping one, and
+    // a one-star tap lands on exactly the page a five-star tap does — routing low ratings
+    // anywhere else would be review gating.
+    //
+    // Drawn with the ★ glyph rather than five remote images, which is the deliberate choice:
+    // Apple Mail and Outlook both block remote content by default on first open, and an image
+    // star row degrades to five broken-image icons or to nothing at all. A glyph renders with
+    // images off, in dark mode, and at any zoom.
+    stars:
+      ratingUrls && ratingUrls.length === 5 ? (
+        <Section key="stars" style={{ paddingBottom: gap(28) }}>
+          {starsPrompt.trim() ? (
+            <Text
+              style={{
+                margin: 0,
+                marginBottom: "10px",
+                fontSize: `${BODY_SIZES[bodySize]}px`,
+                lineHeight: "1.6",
+                color: palette.muted,
+                textAlign: buttonAlign,
+              }}
+            >
+              {starsPrompt}
+            </Text>
+          ) : null}
+          {/* A presentation table, not flex or inline-block: Outlook's Word rendering engine
+              honours neither, and a star row that collapses into a vertical stack in Outlook
+              is worse than no star row. Each cell is its own tap target. */}
+          <table
+            role="presentation"
+            cellPadding={0}
+            cellSpacing={0}
+            style={{ margin: buttonAlign === "center" ? "0 auto" : "0" }}
+          >
+            <tbody>
+              <tr>
+                {ratingUrls.map((url, index) => {
+                  const rating = index + 1;
+                  return (
+                    <td key={rating} style={{ padding: "0 3px" }}>
+                      <a
+                        href={url}
+                        // The glyph alone is unreadable to a screen reader and meaningless in
+                        // the plain-text alternative, so each star carries its own real label.
+                        aria-label={`Rate ${rating} out of 5`}
+                        title={`${rating} star${rating === 1 ? "" : "s"}`}
+                        style={{
+                          display: "inline-block",
+                          // 44px is the smallest reliable touch target, and this row exists
+                          // to be tapped on a phone.
+                          minWidth: "44px",
+                          padding: "8px 0",
+                          fontSize: "30px",
+                          lineHeight: "1",
+                          textAlign: "center",
+                          textDecoration: "none",
+                          color: accentColor,
+                        }}
+                      >
+                        ★
+                      </a>
+                    </td>
+                  );
+                })}
+              </tr>
+            </tbody>
+          </table>
+        </Section>
+      ) : null,
 
     button: (
       <Section key="button" style={{ paddingBottom: gap(40), textAlign: buttonAlign }}>

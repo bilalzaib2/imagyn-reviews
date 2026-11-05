@@ -878,6 +878,72 @@ describe("dispatchRequestEmail — suppression", () => {
   });
 });
 
+// The defect: dispatchRequestEmail set status "sent" but never stamped sentAt. sentAt was only
+// ever written at CREATION, and only for a request created with delayDays === 0. A request
+// created with any delay lands on "scheduled" with sentAt null and is dispatched by the
+// scheduler sweep through this function — so it reached "sent" with sentAt still null.
+//
+// runDueReminderSweep requires `sentAt: { not: null }` and anchors both reminder cutoffs to it,
+// so every one of those requests was permanently ineligible for a reminder. That is every
+// order-triggered request (Store.autoRequestDelayDays defaults to 7) plus every manually
+// scheduled one — the entire automated path the Pro reminder sequence is sold to serve.
+//
+// Why no existing test caught it: every reminder test in this file and in
+// reviewRequestScheduler.server.test.ts seeds sentAt by hand, so the sweeps were only ever
+// exercised against rows that already had the value this function failed to write.
+describe("dispatchRequestEmail — stamps sentAt, which the reminder sweep anchors on", () => {
+  it("stamps sentAt when a scheduled request is dispatched by the sweep", async () => {
+    seedRequest({
+      id: "req_1",
+      storeId: "store_1",
+      email: "jordan@example.com",
+      status: "scheduled",
+      sentAt: null,
+    });
+    const request = await reviewRequestService.getRequest("req_1");
+
+    const result = await dispatchRequestEmail(request!);
+
+    expect(result.status).toBe("sent");
+    expect(result.sentAt).toBeInstanceOf(Date);
+    expect(requests.find((r) => r.id === "req_1")?.sentAt).toBeInstanceOf(Date);
+  });
+
+  it("leaves an already-stamped sentAt alone, so a resend never re-anchors the reminder schedule", async () => {
+    const original = new Date("2026-08-01T00:00:00Z");
+    seedRequest({
+      id: "req_1",
+      storeId: "store_1",
+      email: "jordan@example.com",
+      status: "sending",
+      sentAt: original,
+    });
+    const request = await reviewRequestService.getRequest("req_1");
+
+    const result = await dispatchRequestEmail(request!);
+
+    expect(result.sentAt?.getTime()).toBe(original.getTime());
+  });
+
+  it("a request dispatched from 'scheduled' becomes reminder-eligible (sentAt non-null)", async () => {
+    seedRequest({
+      id: "req_1",
+      storeId: "store_1",
+      email: "jordan@example.com",
+      status: "scheduled",
+      sentAt: null,
+    });
+    const request = await reviewRequestService.getRequest("req_1");
+
+    await dispatchRequestEmail(request!);
+
+    // The exact predicate runDueReminderSweep's candidate query applies.
+    const row = requests.find((r) => r.id === "req_1");
+    expect(row?.sentAt).not.toBeNull();
+    expect(row?.sentAt).toBeDefined();
+  });
+});
+
 describe("getExistingRequestContextBulk — Shopify Orders picker eligibility", () => {
   it("matches the single-pair getExistingRequestContext result for the same (email, productId)", async () => {
     seedRequest({ id: "req_1", storeId: "store_1", productId: "product_1", email: "jordan@example.com", status: "scheduled" });

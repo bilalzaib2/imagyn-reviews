@@ -10,6 +10,7 @@ import { Container } from "../components/ui/Container";
 import { ContextualSaveBar } from "../components/ui/ContextualSaveBar";
 import { Section } from "../components/ui/Section";
 import { SettingsBreadcrumb } from "../components/ui/SettingsBreadcrumb";
+import { TemplateGallery } from "../components/email/TemplateGallery";
 import { authenticateAdminDeduped } from "../services/auth-dedupe.server";
 import { getOrCreateStore, updateEmailBrandingLogos, updateEmailSenderName } from "../services/store.server";
 import { getStorePermissions } from "../services/permissions";
@@ -21,6 +22,11 @@ import {
 } from "../services/emailSenderIdentity.shared";
 import { logoForTheme, resolveEmailLogo, type SharedEmailBranding } from "../services/emailBranding.shared";
 import { emailTemplateService } from "../services/emailTemplate.server";
+import {
+  applyEmailTemplatePreset,
+  matchEmailTemplatePreset,
+  type EmailTemplatePresetId,
+} from "../services/emailTemplatePresets";
 import { buildReviewRequestEmail } from "../services/notifications/templates.server";
 import { sendTestReviewRequestEmail } from "../services/notifications/testEmail.server";
 import { getStorageProvider } from "../services/storage/provider.server";
@@ -28,6 +34,7 @@ import { sanitizeEmailHtml, sanitizeSvgMarkup, validateSvgLogo } from "../servic
 import {
   CONTENT_WIDTH_RANGE,
   CORNER_RADIUS_RANGE,
+  DEFAULT_ACCENT_COLOR,
   EMAIL_SECTION_LABELS,
   LOGO_WIDTH_RANGE,
   findUnknownVariables,
@@ -36,6 +43,8 @@ import {
   normalizeEmailSections,
   normalizeEmailTemplateContent,
   sanitizeEmailTemplateContentForPlan,
+  buildRatingUrls,
+  validateEmailStarsPrompt,
   variablesForType,
   type EmailAlign,
   type EmailLogoSource,
@@ -73,6 +82,10 @@ const TEMPLATE_TABS: Array<{ type: EmailTemplateType; label: string }> = [
   { type: "reward", label: "Review Reward" },
 ];
 const isReminderType = (type: EmailTemplateType) => type === "reminder_1" || type === "reminder_final";
+
+/** Preview and test-email sample link. Never a real token — nothing here is persisted and no
+ *  request exists for it, so following it would land on the "link not found" page. */
+const SAMPLE_REVIEW_URL = "https://example.com/r/sample-token";
 
 // A logo renders small (see ReviewRequestEmail.tsx), so there is no reason to accept anything
 // large; keeping this well under reviewMedia.server.ts's 5MB review-photo limit is deliberate.
@@ -155,6 +168,7 @@ const readContentFromForm = (formData: FormData, type: EmailTemplateType): Email
       bodyText: String(formData.get("bodyText") || ""),
       closingText: String(formData.get("closingText") || ""),
       buttonText: String(formData.get("buttonText") || "").trim(),
+      starsPrompt: String(formData.get("starsPrompt") || "").trim(),
 
       accentColor: String(formData.get("accentColor") || "").trim(),
       buttonTextColor: String(formData.get("buttonTextColor") || "").trim(),
@@ -215,6 +229,16 @@ const validateContent = (content: EmailTemplateContent, type: EmailTemplateType)
   }
 
   if (!content.buttonText) errors.push("The review button needs text.");
+
+  // Only when the row is actually on: a merchant who switched the star row off should not be
+  // blocked from saving by copy nobody will ever see.
+  const starsEnabled = content.sections.some((section) => section.id === "stars" && section.enabled);
+  if (starsEnabled) {
+    if (!content.starsPrompt.trim()) errors.push("The star rating row needs a line of text above it.");
+    // Review gating is the app's liability, not the merchant's — see validateEmailStarsPrompt.
+    const gating = validateEmailStarsPrompt(content.starsPrompt);
+    if (gating) errors.push(gating);
+  }
   if (content.replyToEmail && !EMAIL_PATTERN.test(content.replyToEmail)) {
     errors.push("Reply-to must be a valid email address.");
   }
@@ -223,7 +247,15 @@ const validateContent = (content: EmailTemplateContent, type: EmailTemplateType)
   // renderTemplateVariables), so catching it here is what stops "{{frist_name}}" reaching a
   // real customer's inbox.
   const unknown = new Set<string>();
-  for (const field of [content.subject, content.previewText, content.heading, content.bodyText, content.closingText, content.customHtml]) {
+  for (const field of [
+    content.subject,
+    content.previewText,
+    content.heading,
+    content.bodyText,
+    content.closingText,
+    content.starsPrompt,
+    content.customHtml,
+  ]) {
     for (const token of findUnknownVariables(field, type)) unknown.add(token);
   }
   if (unknown.size > 0) {
@@ -259,7 +291,15 @@ export const loader = async ({ request }: LoaderFunctionArgs): Promise<LoaderDat
     // below, which applies the entitlement.
     emailSenderName: store.emailSenderName,
     senderIdentity: resolveSenderIdentity(store, permissions, content.replyToEmail),
-    sharedBranding: { emailLogoUrl: store.emailLogoUrl, emailLogoDarkUrl: store.emailLogoDarkUrl },
+    // shopBrandLogoUrl is included so the preview resolves the SAME logo the real send will —
+    // without it, a merchant with no uploaded logo would see a text header in the preview while
+    // their customers received their Shopify brand mark, which is exactly the kind of drift
+    // emailBranding.shared.ts exists to prevent.
+    sharedBranding: {
+      emailLogoUrl: store.emailLogoUrl,
+      emailLogoDarkUrl: store.emailLogoDarkUrl,
+      shopBrandLogoUrl: store.shopBrandLogoUrl,
+    },
   };
 };
 
@@ -404,7 +444,11 @@ export const action = async ({ request }: ActionFunctionArgs): Promise<ActionDat
         customerName: "Jordan Avery",
         productName: "Sample Product",
         storeName: store.name,
-        reviewUrl: "https://example.com/r/sample-token",
+        reviewUrl: SAMPLE_REVIEW_URL,
+        // Built from the same helper the real send uses, so the preview's star row is the
+        // real one. Omitted for "reward", whose CTA is a storefront URL rather than a review
+        // form — matching rewards.server.ts, which passes no ratingUrls either.
+        ratingUrls: type === "reward" ? null : buildRatingUrls(SAMPLE_REVIEW_URL),
         discountCode: type === "reward" ? "SAMPLE-CODE" : undefined,
         customMessage: null,
         template: previewContent,
@@ -608,6 +652,15 @@ export default function EmailStudioPage() {
     activeType === "review_request" ? "reminder_1" : "review_request",
   );
   const [uploadingSlot, setUploadingSlot] = useState<LogoSlot | null>(null);
+  /** Whether applying a template style keeps the merchant's own button colours. Defaults ON:
+   *  a merchant who has already set an accent has almost always set their real brand colour,
+   *  usually copied across from Brand Studio, and losing it to a typography choice is the one
+   *  genuinely annoying outcome this control exists to prevent. Starts OFF for a template
+   *  still on the shipped charcoal, where there is nothing of theirs to keep and taking the
+   *  style's own colour is the whole point of picking it. */
+  const [preserveColors, setPreserveColors] = useState<boolean>(
+    initialContent.accentColor !== DEFAULT_ACCENT_COLOR,
+  );
 
   const isBusy =
     saveFetcher.state !== "idle" ||
@@ -626,6 +679,23 @@ export default function EmailStudioPage() {
 
   const validationErrors = useMemo(() => validateContent(draft, activeType), [draft, activeType]);
 
+  /** Whether this template's star row is on. Drives both the copy field above and the hint
+   *  under the section list — the row itself is still listed and still toggleable when off. */
+  const starsEnabled = useMemo(
+    () => draft.sections.some((section) => section.id === "stars" && section.enabled),
+    [draft.sections],
+  );
+
+  // Read off the draft, not the saved row, so the gallery's "Current" marker tracks what the
+  // preview is showing rather than what is persisted.
+  const activePresetId = useMemo(() => matchEmailTemplatePreset(draft), [draft]);
+
+  // A draft edit, exactly like typing in a field: the debounced preview below picks it up and
+  // nothing reaches the database until the merchant saves.
+  const applyPreset = (presetId: EmailTemplatePresetId) => {
+    setDraft((current) => applyEmailTemplatePreset(current, presetId, { preserveColors }));
+  };
+
   // Reset local state only when a DIFFERENT template is loaded — switching tabs is a
   // navigation, so the draft must follow it rather than leaking one template's edits into
   // another's editor.
@@ -643,6 +713,9 @@ export default function EmailStudioPage() {
     loadedType.current = activeType;
     setDraft(initialContent);
     setPreviewTheme(initialContent.theme);
+    // Re-derived per template: one may be on the shipped charcoal while another carries the
+    // merchant's brand colour, and the default has to reflect the template being edited.
+    setPreserveColors(initialContent.accentColor !== DEFAULT_ACCENT_COLOR);
   }, [activeType, initialContent]);
 
   const updateField = <K extends keyof EmailTemplateContent>(key: K, value: EmailTemplateContent[K]) => {
@@ -658,6 +731,7 @@ export default function EmailStudioPage() {
     formData.set("bodyText", draft.bodyText);
     formData.set("closingText", draft.closingText);
     formData.set("buttonText", draft.buttonText);
+    formData.set("starsPrompt", draft.starsPrompt);
     formData.set("accentColor", draft.accentColor);
     formData.set("buttonTextColor", draft.buttonTextColor);
     formData.set("theme", draft.theme);
@@ -844,7 +918,10 @@ export default function EmailStudioPage() {
     }));
   };
 
-  const insertVariable = (field: "subject" | "previewText" | "heading" | "bodyText" | "closingText" | "customHtml", token: string) => {
+  const insertVariable = (
+    field: "subject" | "previewText" | "heading" | "bodyText" | "closingText" | "starsPrompt" | "customHtml",
+    token: string,
+  ) => {
     setDraft((current) => ({ ...current, [field]: `${current[field]}${current[field] ? " " : ""}${token}` }));
   };
 
@@ -949,6 +1026,23 @@ export default function EmailStudioPage() {
                   </ul>
                 </Card>
               ) : null}
+
+              {/* First in the column on purpose. A merchant opening Email Studio for the
+                  first time should be choosing between finished-looking emails, not reading
+                  a subject-line field — and a merchant who has already customised theirs
+                  scrolls straight past it. */}
+              <Section
+                title="Template style"
+                description="Pick a visual direction. Your wording stays exactly as it is."
+              >
+                <TemplateGallery
+                  activePresetId={activePresetId}
+                  onApply={applyPreset}
+                  preserveColors={preserveColors}
+                  onPreserveColorsChange={setPreserveColors}
+                  disabled={isBusy}
+                />
+              </Section>
 
               <Section title="Delivery" description="What shows in the inbox before the email is opened.">
                 <div className={styles.fieldGroup}>
@@ -1079,6 +1173,33 @@ export default function EmailStudioPage() {
                       <VariableRow variables={variables} onInsert={(token) => insertVariable("bodyText", token)} disabled={isBusy} />
                     </div>
 
+                    {/* Only offered when the row is actually on, and never for the reward
+                        template, whose CTA is a storefront link with no rating to carry. A
+                        field that cannot affect the email is worse than a missing one. */}
+                    {starsEnabled ? (
+                      <div className={styles.fieldGroup}>
+                        <label className={styles.fieldLabel} htmlFor="starsPrompt">
+                          Star rating line
+                        </label>
+                        <input
+                          id="starsPrompt"
+                          className={styles.textInput}
+                          value={draft.starsPrompt}
+                          onChange={(event) => updateField("starsPrompt", event.target.value)}
+                          disabled={isBusy}
+                        />
+                        <p className={styles.fieldHint}>
+                          Sits above the five tappable stars. Every star opens the same review form with that rating
+                          already selected — asking for a specific rating here is review gating and won&apos;t save.
+                        </p>
+                        <VariableRow
+                          variables={variables}
+                          onInsert={(token) => insertVariable("starsPrompt", token)}
+                          disabled={isBusy}
+                        />
+                      </div>
+                    ) : null}
+
                     <div className={styles.fieldGroup}>
                       <label className={styles.fieldLabel} htmlFor="buttonText">
                         Button text
@@ -1112,6 +1233,11 @@ export default function EmailStudioPage() {
                     <ul className={styles.sectionList}>
                       {draft.sections.map((section, index) => {
                         const required = section.id === "button";
+                        // The reward template's CTA is the merchant's storefront, not a review
+                        // form, so its star row has no rating to carry and the renderer skips
+                        // it unconditionally. Leaving the toggle live would be a control that
+                        // cannot affect the email — worse than not offering it.
+                        const neverSent = section.id === "stars" && activeType === "reward";
                         return (
                           <li key={section.id} className={styles.sectionRow} data-disabled={!section.enabled}>
                             <span className={styles.sectionName}>{EMAIL_SECTION_LABELS[section.id]}</span>
@@ -1137,11 +1263,11 @@ export default function EmailStudioPage() {
                               <label className={styles.checkboxRow}>
                                 <input
                                   type="checkbox"
-                                  checked={section.enabled}
+                                  checked={section.enabled && !neverSent}
                                   onChange={() => toggleSection(section.id)}
-                                  disabled={isBusy || required}
+                                  disabled={isBusy || required || neverSent}
                                 />
-                                <span>{required ? "Always on" : "Show"}</span>
+                                <span>{required ? "Always on" : neverSent ? "Not sent" : "Show"}</span>
                               </label>
                             </div>
                           </li>
@@ -1151,6 +1277,9 @@ export default function EmailStudioPage() {
                     <p className={styles.fieldHint}>
                       The review button can&apos;t be hidden — without it the email has no way to leave a review. The
                       product block only appears when the order actually has product details.
+                      {activeType === "reward"
+                        ? " The star rating row is never sent on this template: its button goes to your store, not to a review form."
+                        : " The star rating row gives the customer five tappable stars; whichever they tap opens the same form with that rating selected."}
                     </p>
                   </Section>
                 </>

@@ -51,8 +51,12 @@ export const PLANS: Record<PlanId, Plan> = {
       { label: "Unlimited reviews" },
       { label: "Unlimited review requests" },
       // Delivered by reviewRequestScheduler.server.ts's sweep for any request that reaches
-      // "scheduled" (today: manually created with a delay). Order-triggered *creation* of that
-      // scheduled request is a separate, external gate — see permissions.ts's STARTER comment.
+      // "scheduled". Order-triggered creation is live too: Shopify's Protected Customer Data
+      // approval was granted 2026-09-08 and ORDER_AUTOMATION_ENABLED (config/features.ts) was
+      // activated 2026-09-09, so a fulfilled order now creates this request automatically on
+      // Free — subject only to the store's own autoRequestEnabled opt-in. The reminder
+      // SEQUENCE that follows it remains Pro-only (permissions.ts's canUseEmailReminders,
+      // re-checked at dispatch time by runDueReminderSweep).
       { label: "Automated initial review-request emails" },
       { label: "Email Studio — customize your review-request email" },
       { label: "Photo reviews" },
@@ -85,6 +89,14 @@ export const PLANS: Record<PlanId, Plan> = {
       { label: "AI review summaries" },
       { label: "Automatic email reminders (3 & 7 days)" },
       { label: "Multiple email templates & reminder emails" },
+      // Both shipped and enforced, and both were missing from this list — a merchant
+      // comparing plans could not see two of the things they would actually be paying for.
+      // Branded sender: permissions.ts's canUseBrandedEmailSender, enforced in
+      // app.email-studio.tsx's save-sender-identity action and again at send time by
+      // emailSenderIdentity.shared.ts. Video Reviews Carousel:
+      // canUseVideoReviewsCarousel, enforced in api.reviews.video-carousel.tsx.
+      { label: "Branded email sender name" },
+      { label: "Video Reviews Carousel widget" },
       { label: "Advanced email styling", comingSoon: true },
       // No differentiated analytics beyond the dashboard every plan already sees.
       { label: "Advanced analytics", comingSoon: true },

@@ -95,6 +95,16 @@ export function createResendEmailProvider(): EmailProvider {
         throw new NotificationProviderError("Resend response did not include a message id.", "resend");
       }
 
+      // One line per accepted send, so a live verification run has real, quotable evidence:
+      // the provider's own message id plus the exact headers submitted. Headers only — no body,
+      // no API key, and no recipient beyond the one already being emailed. The id is what a
+      // delivery-status lookup or a support conversation with Resend is keyed on.
+      console.log(
+        `[resend] accepted id=${data.id} to=${request.to} from="${from}"` +
+          `${request.replyTo ? ` reply-to=${request.replyTo}` : " reply-to=(none)"}` +
+          `${request.tags?.email_type ? ` type=${request.tags.email_type}` : " type=initial"}`,
+      );
+
       return { id: data.id };
     },
   };

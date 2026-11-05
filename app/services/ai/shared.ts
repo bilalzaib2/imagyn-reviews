@@ -4,6 +4,7 @@ import {
   type AiBrandSuggestionResult,
   type AiReplyDraftRequest,
   type AiReplyDraftResult,
+  type AiReplyTone,
   type AiSummaryRequest,
   type AiSummaryResult,
 } from "./types";
@@ -222,17 +223,50 @@ const REPLY_DRAFT_JSON_SHAPE = `Respond with strict JSON only, matching exactly 
   "draft": string  // the suggested merchant reply, ready to edit and publish as-is
 }`;
 
+/**
+ * The voice instruction for each tone.
+ *
+ * Only the voice differs. Every rule that keeps a drafted reply honest — respond to what the
+ * customer actually said, acknowledge a real problem plainly, never invent a fact about the
+ * order or a resolution that was not offered — lives in the shared body below and applies to
+ * all three. A tone changes how the reply reads, never what it is allowed to claim.
+ *
+ * "friendly" reproduces the wording this prompt used before tone existed, so a merchant who
+ * never touches the control gets byte-identical drafts to the ones they got before.
+ */
+const REPLY_TONE_INSTRUCTION: Record<AiReplyTone, string> = {
+  friendly:
+    "Write in a warm, professional, specific tone. If the review is positive, thank the " +
+    "customer for something specific they mentioned rather than a blanket 'thanks for your " +
+    "review'.",
+  direct:
+    "Write plainly and briefly. Lead with the substance — the answer, the fix, or the " +
+    "acknowledgement — and cut every pleasantry that is not carrying information. No " +
+    "exclamation marks. Courteous, never curt.",
+  elegant:
+    "Write in a composed, considered register, the way a long-established boutique would. " +
+    "Full sentences, measured rhythm, no exclamation marks and no slang. Gracious without " +
+    "being effusive or flowery.",
+};
+
 // The merchant always reviews and can edit this before it's ever published — see
 // aiReplyDraft.server.ts's own comment — so the model is told to write a genuinely
 // publishable draft, not a rough outline the merchant has to rewrite from scratch.
-export function buildReplyDraftSystemPrompt(): string {
+export function buildReplyDraftSystemPrompt(tone: AiReplyTone = "friendly"): string {
+  // Indexed defensively rather than trusting the parameter type. The only caller today
+  // validates with isAiReplyTone first, but a Record index on an unrecognised key yields
+  // undefined, and string concatenation turns that into the literal characters "undefined"
+  // sitting in a system prompt — a silent degradation rather than a loud failure, and one
+  // that would only ever be noticed as oddly-worded replies in production.
+  const voice = REPLY_TONE_INSTRUCTION[tone] ?? REPLY_TONE_INSTRUCTION.friendly;
+
   return (
     "You are writing, on behalf of a Shopify merchant, a short public reply to a single " +
-    "customer product review. Write in a warm, professional, specific tone — respond to what " +
-    "the customer actually said, not a generic thank-you. If the review raises a genuine " +
-    "problem, acknowledge it plainly and, if appropriate, invite the customer to reach out for " +
-    "support; never be defensive or dismissive. If the review is positive, thank the customer " +
-    "for something specific they mentioned rather than a blanket 'thanks for your review'. " +
+    "customer product review. " +
+    voice +
+    " Respond to what the customer actually said, not a generic thank-you. If the review " +
+    "raises a genuine problem, acknowledge it plainly and, if appropriate, invite the " +
+    "customer to reach out for support; never be defensive or dismissive. " +
     "Never invent facts about the order, the product, or a resolution that wasn't actually " +
     "offered. Keep it to 1-3 sentences. Sign off with nothing (no name, no company) — the " +
     "merchant adds that themselves if they want to. " +

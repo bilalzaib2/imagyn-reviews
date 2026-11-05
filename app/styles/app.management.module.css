@@ -16,35 +16,10 @@
   font-size: var(--text-sm);
 }
 
-/* A real activity/stat row — same large-numeral, quiet-label language as the Dashboard's
-   own Trust Overview (app._index.module.css's .trustRow/.trustStat), reused here rather than
-   duplicated with different values, so "0 issued · 0 failed" (Rewards, Coupons, Referrals)
-   reads as a real, scannable metric instead of a single flat sentence. Real data only — no
-   new numbers are introduced, only how the same loader values are displayed. */
-.statRow {
-  display: grid;
-  gap: var(--space-6);
-  grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
-}
-
-.stat {
-  display: grid;
-  gap: var(--space-1);
-}
-
-.statValue {
-  margin: 0;
-  font-size: clamp(1.75rem, 2.6vw, 2.25rem);
-  font-weight: 600;
-  letter-spacing: -0.03em;
-  font-variant-numeric: tabular-nums;
-}
-
-.statLabel {
-  margin: 0;
-  color: var(--color-text-muted);
-  font-size: var(--text-sm);
-}
+/* The borderless stat classes that lived here (.statRow, .stat, .statValue, .statLabel, and
+   the three per-state value colours) moved into components/ui/metric.module.css behind the
+   shared <Metric variant="bare"> / <MetricRow variant="bare">, which app.settings.trust and
+   app.settings.rewards — the only two callers — now use. Values carried over unchanged. */
 
 /* A single labeled status row (label + state + description) — e.g. Google/SEO's status
    list. Previously referenced by app.settings.seo.tsx as `styles.fieldGroup` with no
@@ -147,21 +122,6 @@
 .metricPillSuccess {
   background: color-mix(in srgb, var(--color-success) 14%, transparent);
   color: var(--color-success);
-}
-
-/* Real per-state coloring for a stat value (Reward activity's Issued/Pending/Failed/Didn't
-   qualify) — the number itself carries meaning, so it earns a real color instead of every
-   stat reading in the same neutral ink regardless of whether it's good, waiting, or bad. */
-.statValueSuccess {
-  color: var(--color-success);
-}
-
-.statValueWarning {
-  color: var(--color-warning);
-}
-
-.statValueDanger {
-  color: var(--color-danger);
 }
 
 .inlineActions {

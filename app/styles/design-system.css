@@ -39,18 +39,43 @@
   --color-accent: #18181b;
   --color-accent-soft: #ededf0;
 
-  /* IMAGYN's one restrained chartreuse accent — used deliberately for genuine emphasis
-     (a real status, a key metric, an earned badge), never as a default card treatment and
-     never as the primary button color. Muted/olive-leaning on purpose, not a neon highlighter
-     — "restrained," per the brand direction, not "loud." */
-  --color-highlight: #97a819;
-  --color-highlight-strong: #6f7a13;
-  /* The pale tint of the same accent, used as a filled background with --color-text on top
-     (Brand Studio's two "apply my branding" actions). Added by the 2026-09-25 grayscale pass
-     only to stop the exact same value being typed inline in two separate places — the color
-     itself is unchanged, and like --color-highlight it is deliberately NOT grayscale: it is
-     the brand's one accent, not part of the beige surface language that pass removed. */
-  --color-highlight-soft: #eafbb2;
+  /* ---------------------------------------------------------------- Brand green
+     IMAGYN's one restrained accent — used deliberately for genuine emphasis (a real status,
+     a key metric, a filled progress bar, an earned badge), never as a default card treatment
+     and never as the primary button color. The primary button stays charcoal: see
+     --color-accent above.
+
+     2026-11-06: replaced the previous chartreuse family (#97a819 / #6f7a13 / #eafbb2), which
+     read as a highlighter-yellow rather than a brand. #5C9754 is the locked Imagyn green —
+     a muted sage, deliberately desaturated so it reads as considered rather than loud.
+
+     THREE VALUES, THREE JOBS, and they are not interchangeable:
+
+       --color-brand         #5c9754  FILLS and NON-TEXT marks only. Measures 3.49:1 on
+                                      white, which clears WCAG AA's 3:1 bar for UI
+                                      components and graphical objects but NOT the 4.5:1
+                                      bar for body text. Never set this as a text color.
+       --color-brand-strong  #3d6b36  TEXT and icons. 6.26:1 on white, 5.79:1 on the page
+                                      background, and 6.1:1 on the 16%-tint chip background
+                                      that is the only other surface it is used on — so it
+                                      clears AA everywhere it actually appears.
+       --color-brand-soft    #e8f1e6  A pale tint used as a filled background with
+                                      --color-text on top.
+       --color-brand-border  #c3dcbd  A hairline on a brand-tinted surface, where the
+                                      neutral --color-border disappears.
+
+     The --color-highlight* names below are retained as aliases because 19 existing
+     declarations across seven route stylesheets already reference them; they resolve to the
+     same three values, so the brand swap reached every one of those surfaces without
+     touching them. New code should use the --color-brand* names. */
+  --color-brand: #5c9754;
+  --color-brand-strong: #3d6b36;
+  --color-brand-soft: #e8f1e6;
+  --color-brand-border: #c3dcbd;
+
+  --color-highlight: var(--color-brand);
+  --color-highlight-strong: var(--color-brand-strong);
+  --color-highlight-soft: var(--color-brand-soft);
 
   /* Real, distinct functional hues — previously too desaturated/brownish to read as actual
      green/amber/red at a glance. Deliberately UNTOUCHED by the 2026-09-25 grayscale pass: a
@@ -68,9 +93,32 @@
      --color-info's blue (used for non-AI integration/connection states). */
   --color-ai: #7a5cc4;
 
-  --font-sans: Helvetica, Arial, sans-serif;
-  --font-display: Helvetica, Arial, sans-serif;
+  /* ---------------------------------------------------------------- Typography
+     Geist Sans, self-hosted (see the @font-face rules below), with Helvetica as the stated
+     fallback. Geist is a neo-grotesque cut for interfaces: tighter apertures and a taller
+     x-height than Helvetica at small sizes, which is what makes a dense table legible
+     without turning the page into a wall of 13px gray.
 
+     Helvetica is a deliberate second choice rather than system-ui: it is metrically close
+     enough to Geist that a swap mid-load does not reflow the page noticeably, and it is
+     present on every Mac and Windows machine a merchant will open this app on. The stack
+     degrades all the way down, so a font 404 costs polish and nothing else. */
+  --font-sans: "Geist Sans", Helvetica, Arial, sans-serif;
+  --font-display: "Geist Sans", Helvetica, Arial, sans-serif;
+  /* Order numbers, discount codes, API tokens, {{variables}} — anything the merchant reads
+     character by character and must not mistake an l for a 1 in. */
+  --font-mono: "Geist Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
+
+  /* The type ladder. Every step is used; nothing between them is. A page that needs a size
+     not on this list almost always needs a different weight or color instead.
+       xs    12px  meta, table column headers, badge labels
+       sm    14px  secondary text, help text, table cells
+       base  16px  body copy
+       lg    18px  section titles
+       xl    20px  card titles
+       2xl   24px  page titles on a dense screen
+       3xl   32px  page titles, the single largest size in the admin
+       4xl   40px  reserved for one number on a screen (a headline metric), never for prose */
   --text-xs: 0.75rem;
   --text-sm: 0.875rem;
   --text-base: 1rem;
@@ -78,6 +126,28 @@
   --text-xl: 1.25rem;
   --text-2xl: 1.5rem;
   --text-3xl: 2rem;
+  --text-4xl: 2.5rem;
+
+  /* Four weights, and only four. Geist ships a variable axis, so these are exact rather
+     than synthesised. 500 exists because a 14px table header at 600 shouts; 400 vs 500 is
+     the whole difference between a row of data and a row of headings. */
+  --weight-regular: 400;
+  --weight-medium: 500;
+  --weight-semibold: 600;
+  --weight-bold: 700;
+
+  /* Optical tracking. Large type at default tracking looks loose; small type at negative
+     tracking looks cramped. These are the two values to reach for, applied by size, never
+     by taste. */
+  --tracking-tight: -0.02em;
+  --tracking-tighter: -0.03em;
+  /* All-caps eyebrows and column headers only — caps need air that lowercase does not. */
+  --tracking-caps: 0.06em;
+
+  --leading-tight: 1.2;
+  --leading-snug: 1.35;
+  --leading-normal: 1.5;
+  --leading-relaxed: 1.65;
 
   --space-1: 0.25rem;
   --space-2: 0.5rem;
@@ -117,6 +187,33 @@
      page background is a light gray (not white), and its default font is Inter. */
   --p-color-bg: #ffffff;
   --p-font-family-sans: var(--font-sans);
+}
+
+/* Geist Sans, self-hosted from the `geist` npm package. scripts/copy-fonts.mjs copies the
+   two variable woff2 files into public/fonts/ at prebuild and predev time — that directory
+   is generated, not authored, and gitignored, exactly like public/appearance-preview/.
+   Self-hosted rather than loaded from a CDN for three reasons: this is an embedded admin
+   app where every extra connection is felt, a third-party font request leaks every
+   merchant's page view to that CDN, and a font that cannot fail to load is one less thing
+   between a merchant and their reviews.
+
+   One variable file per style covers 400-700 in a single request. `font-display: swap`
+   means Helvetica renders immediately and is replaced when Geist arrives, so a missing
+   file costs polish and never a blank page. */
+@font-face {
+  font-family: "Geist Sans";
+  src: url("/fonts/Geist-Variable.woff2") format("woff2-variations");
+  font-weight: 100 900;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: "Geist Sans";
+  src: url("/fonts/Geist-Italic.woff2") format("woff2-variations");
+  font-weight: 100 900;
+  font-style: italic;
+  font-display: swap;
 }
 
 * {

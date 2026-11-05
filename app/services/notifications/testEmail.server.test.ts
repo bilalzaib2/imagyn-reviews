@@ -16,6 +16,22 @@ vi.mock("./provider.server", () => ({
   getEmailProvider: () => ({ name: "fake", sendEmail }),
 }));
 
+// The two tests below that pass no `draft` make testEmail.server.ts fall through to the store's
+// SAVED template, which is a real Prisma read (emailTemplate.findFirst). Unmocked, that opened a
+// genuine database connection: the suite passed on a machine with a populated local Postgres and
+// failed anywhere without one — which is exactly how CI found it. Nothing in this file is about
+// persistence, so the store's saved template is stubbed with the same defaults
+// getDefaultEmailTemplateContent returns, keeping all five tests true unit tests and removing
+// the hidden environmental dependency rather than provisioning a database to satisfy it.
+vi.mock("../emailTemplate.server", () => ({
+  emailTemplateService: {
+    getActiveContent: vi.fn(async (_storeId: string, type = "review_request") => {
+      const { getDefaultEmailTemplateContent } = await import("../email.shared");
+      return getDefaultEmailTemplateContent(type as never);
+    }),
+  },
+}));
+
 import { sendTestReviewRequestEmail } from "./testEmail.server";
 import { getDefaultEmailTemplateContent } from "../email.shared";
 

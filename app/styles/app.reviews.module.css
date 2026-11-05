@@ -199,10 +199,10 @@
 }
 
 /* No min-height here on purpose — .listColumn is a grid container with a single auto-sized
-   row, so any min-height on it forces that row (and its stretch-by-default child,
-   .tableWrap) to fill the extra space even when the real table content is much shorter,
-   leaving a tall blank rectangle above the pagination. Let it size to its actual content;
-   .tableWrap's own max-height + overflow already caps it on the tall end. */
+   row, so any min-height on it forces that row (and its stretch-by-default child, the shared
+   <Table>'s wrapper) to fill the extra space even when the real table content is much
+   shorter, leaving a tall blank rectangle above the pagination. Let it size to its actual
+   content; the maxHeight passed to <Table> already caps it on the tall end. */
 .listColumn {
   display: grid;
 }
@@ -240,98 +240,15 @@
   width: 100%;
 }
 
-/* Real merchant data table — same convention as app.requests.module.css's .tableWrap/.table
-   (a merchant using both pages should feel one product, not two different list languages).
-   Sticky header, subtle row separators, calm hover/selected treatment via an inset box-shadow
-   on the leading cell — replaces the old flex "review card" row, which spent ~176px of
-   vertical height per review (2-line title + 2-line preview + generous padding) on content
-   already available in full the moment a row is selected, in the detail panel to the right. */
-.tableWrap {
-  max-height: 40rem;
-  overflow: auto;
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-lg);
-}
+/* The merchant data table that lived here (.tableWrap, .table and its header/body rules,
+   .thCheckbox/.tdCheckbox, the three column widths, .tr/.tr:hover and .trSelected with its
+   inset brand rail) is now components/ui/Table.tsx + table.module.css, which this screen and
+   Requests both render. Values carried over unchanged; the column widths moved into this
+   route's own column definitions, where they sit next to the cells they size.
 
-.table {
-  table-layout: fixed;
-  width: 100%;
-  border-collapse: collapse;
-  font-size: var(--text-sm);
-}
-
-.table thead th {
-  position: sticky;
-  top: 0;
-  z-index: 1;
-  padding: var(--space-3);
-  text-align: left;
-  font-size: var(--text-xs);
-  font-weight: 500;
-  letter-spacing: 0.1em;
-  text-transform: uppercase;
-  color: var(--color-text-muted);
-  background: var(--color-surface);
-  border-bottom: 1px solid var(--color-border);
-  white-space: nowrap;
-}
-
-.thCheckbox,
-.tdCheckbox {
-  width: 2.75rem;
-  padding-right: 0;
-}
-
-.colRating {
-  width: 5.5rem;
-}
-
-.colStatus {
-  width: 8rem;
-}
-
-.colDate {
-  width: 5.5rem;
-}
-
-.table tbody td {
-  padding: var(--space-3);
-  vertical-align: middle;
-  border-bottom: 1px solid color-mix(in srgb, var(--color-text) 6%, transparent);
-  color: var(--color-text);
-}
-
-.table tbody tr:last-child td {
-  border-bottom: none;
-}
-
-.tr {
-  cursor: pointer;
-  transition: background-color var(--transition-base);
-}
-
-.tr:hover td {
-  background-color: color-mix(in srgb, var(--color-text) 2.5%, transparent);
-}
-
-.trSelected td {
-  background-color: color-mix(in srgb, var(--color-text) 4%, transparent);
-}
-
-/* One real, singular exception to the "no default black rail" rule (see
-   design-system.css's 2026-09-10 note): exactly one row can ever be selected at a time, and
-   marking it is a genuinely meaningful, momentary state — not a default card treatment. Uses
-   the restrained IMAGYN highlight accent rather than black, so even this one exception reads
-   as an intentional brand moment, not a leftover monochrome habit. */
-.trSelected td:first-child {
-  box-shadow: inset 3px 0 0 var(--color-highlight);
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .tr {
-    transition: none;
-  }
-}
+   The cell-content classes below (.rating, .reviewTitle, .reviewMetaLine, .meta*, .dateCell)
+   stayed: what a cell CONTAINS is this screen's business, only the table structure is
+   shared. */
 
 /* Warm amber, not near-black — a rating is a color-coded signal everywhere else on the web
    (Google, Yelp, App Store); rendering it in the brand's structural black flattened a real,
@@ -342,10 +259,6 @@
   gap: 0.2rem;
   color: var(--color-warning);
   white-space: nowrap;
-}
-
-.tdReview {
-  overflow: hidden;
 }
 
 /* Title truncates to one line, not two — the full text is one click away in the detail
@@ -435,12 +348,10 @@
   color: var(--color-success);
 }
 
-.tdStatus,
-.tdRating {
-  overflow: hidden;
-}
-
-.tdDate {
+/* The date column's own ink. Cell structure (width, clipping, alignment) belongs to the
+   shared <Table>; what a cell's text looks like belongs to the screen, so this stays here
+   rather than becoming a table-level option. */
+.dateCell {
   color: var(--color-text-muted);
   white-space: nowrap;
 }
@@ -1014,4 +925,41 @@
    safe and keeps Toast fully functional while removing the phantom blank space. */
 .toastFrame :global(.Polaris-Frame) {
   display: contents;
+}
+
+/* ---------------------------------------------------------------- AI reply voice
+
+   Sits in .replyActions, the row that already holds Save / Draft with AI / Cancel. Styled as
+   a quiet inline control rather than a full field: it is a modifier on the button beside it,
+   not a form input of its own, and giving it a block label and a full-width box would make it
+   read as the more important of the two. */
+.replyToneField {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  /* No auto margin: .replyActions is justify-content: flex-end, where an auto margin on the
+     last child absorbs the free space and pushes everything else to the LEFT — the opposite
+     of what it looks like it does. The row is already right-aligned, so the control simply
+     sits next to the button it modifies. */
+}
+
+.replyToneLabel {
+  font-size: var(--text-xs);
+  color: var(--color-text-muted);
+  white-space: nowrap;
+}
+
+.replyToneSelect {
+  font-size: var(--text-xs);
+  color: var(--color-text);
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  padding: var(--space-1) var(--space-2);
+  cursor: pointer;
+}
+
+.replyToneSelect:disabled {
+  cursor: not-allowed;
+  opacity: 0.5;
 }

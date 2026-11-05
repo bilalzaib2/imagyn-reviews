@@ -7,6 +7,7 @@ import { Button } from "../components/ui/Button";
 import { Section } from "../components/ui/Section";
 import { StatusBadge } from "../components/ui/StatusBadge";
 import { PillarStatusIcon } from "../components/ui/PillarStatusIcon";
+import { Metric, MetricRow } from "../components/ui/Metric";
 import { authenticateAdminDeduped } from "../services/auth-dedupe.server";
 import { getOrCreateStore } from "../services/store.server";
 import {
@@ -130,18 +131,14 @@ export default function SettingsTrustPage() {
         </div>
 
         <p className={styles.settingsGroupLabel}>Trust score</p>
-        <div className={styles.statRow}>
-          <div className={styles.stat}>
-            <p className={styles.statValue}>{trust.verifiedReviewCount}</p>
-            <p className={styles.statLabel}>Verified reviews</p>
-          </div>
-          <div className={styles.stat}>
-            <p className={styles.statValue}>
-              {trust.verifiedReviewCount > 0 ? trust.verifiedAverageRating.toFixed(1) : "—"}
-            </p>
-            <p className={styles.statLabel}>Verified average rating</p>
-          </div>
-        </div>
+        <MetricRow variant="bare">
+          <Metric variant="bare" value={trust.verifiedReviewCount} label="Verified reviews" />
+          <Metric
+            variant="bare"
+            value={trust.verifiedReviewCount > 0 ? trust.verifiedAverageRating.toFixed(1) : "—"}
+            label="Verified average rating"
+          />
+        </MetricRow>
 
         <p className={styles.settingsGroupLabel}>Certification requirements</p>
         <div className={styles.cardList}>

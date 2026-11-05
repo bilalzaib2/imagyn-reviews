@@ -336,6 +336,17 @@ export async function setShopContactEmail(id: string, contactEmail: string | nul
   });
 }
 
+// Companion of setShopContactEmail above, for the Shopify brand logo (see
+// shopBrandLogo.server.ts). Writes null deliberately: a merchant who removed their Shopify logo
+// must stop having the stale one rendered, and the timestamp has to advance either way or every
+// page load re-queries Shopify.
+export async function setShopBrandLogo(id: string, shopBrandLogoUrl: string | null, syncedAt: Date = new Date()) {
+  return prisma.store.update({
+    where: { id },
+    data: { shopBrandLogoUrl, shopBrandLogoSyncedAt: syncedAt },
+  });
+}
+
 export async function setDevelopmentStoreFlag(id: string, isDevelopmentStore: boolean) {
   return prisma.store.update({
     where: {

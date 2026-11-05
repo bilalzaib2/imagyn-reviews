@@ -11,6 +11,7 @@ import {
   resolveSenderIdentity,
   sanitizeSenderName,
 } from "./emailSenderIdentity.server";
+import { getPermissions } from "./permissions";
 
 const PRO = { canUseBrandedEmailSender: true };
 const FREE = { canUseBrandedEmailSender: false };
@@ -62,6 +63,37 @@ describe("entitlement", () => {
 
     expect(identity.displayName).toBe("gracestoreofficial");
     expect(identity.brandedNameBlockedReason).toBe("not-configured");
+  });
+});
+
+// The blind spot that let the entitlement regression ship. Every test above builds its own
+// PRO/FREE literal, so the resolver was only ever exercised against a HYPOTHETICAL Pro — it
+// passed happily for months while the real `growth` plan table granted
+// canUseBrandedEmailSender: false, leaving the feature unreachable for every paying merchant.
+// These two tests feed the resolver the REAL plan tables, so the resolver and billing can
+// never silently disagree again.
+describe("entitlement, wired to the real plan tables", () => {
+  it("a real Pro (growth) store gets its brand name", () => {
+    const identity = resolveSenderIdentity(store("Grace Store"), getPermissions("growth"));
+
+    expect(identity.displayName).toBe("Grace Store");
+    expect(identity.brandedNameActive).toBe(true);
+  });
+
+  it("a real Free (starter) store does not", () => {
+    const identity = resolveSenderIdentity(store("Grace Store"), getPermissions("starter"));
+
+    expect(identity.displayName).toBe("gracestoreofficial");
+    expect(identity.brandedNameActive).toBe(false);
+    expect(identity.brandedNameBlockedReason).toBe("not-entitled");
+  });
+
+  // A trialing Pro store carries plan "growth" with planStatus "trialing" (see
+  // billing.server.ts's getStorePlanId, which reads plan and never status), so a trial
+  // resolves to the full Pro table — the feature must work during the trial, not only after
+  // the first charge.
+  it("a Pro store mid-trial resolves to the same Pro entitlement", () => {
+    expect(getPermissions("growth").canUseBrandedEmailSender).toBe(true);
   });
 });
 

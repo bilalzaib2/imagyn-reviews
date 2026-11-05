@@ -23,6 +23,16 @@ export interface ReviewRequestEmailData {
   // ReviewRequestEmail.tsx, since the component only ever renders "a button + a copy-paste
   // fallback link," which is equally correct for either destination.
   reviewUrl: string;
+  /**
+   * The five one-tap star destinations for this send, lowest rating first — build them with
+   * buildRatingUrls(reviewUrl) from email.shared.ts.
+   *
+   * Opt-in per caller rather than derived from reviewUrl here, because reviewUrl is not
+   * always a review form. A "reward" send reuses this same renderer with the merchant's
+   * storefront URL, where a rating parameter would be meaningless; rewards.server.ts
+   * therefore does not pass this, and the star row is skipped.
+   */
+  ratingUrls?: readonly string[] | null;
   // Per-request override (set on an individual review request, not the template) — takes
   // priority over the template's own default body text, same precedence this had before Email
   // Studio existed.
@@ -101,6 +111,7 @@ export async function buildReviewRequestEmail(data: ReviewRequestEmailData): Pro
   const heading = resolve(content.heading);
   const bodyText = data.customMessage || resolve(content.bodyText);
   const closingText = resolve(content.closingText);
+  const starsPrompt = resolve(content.starsPrompt);
   // Falls back to the subject, which is what this app showed as the inbox snippet before
   // previewText was a separate field.
   const previewText = resolve(content.previewText).trim() || subject;
@@ -119,6 +130,7 @@ export async function buildReviewRequestEmail(data: ReviewRequestEmailData): Pro
       bodyText={bodyText}
       closingText={closingText}
       buttonText={content.buttonText}
+      starsPrompt={starsPrompt}
       accentColor={content.accentColor}
       buttonTextColor={content.buttonTextColor}
       theme={content.theme}
@@ -141,6 +153,7 @@ export async function buildReviewRequestEmail(data: ReviewRequestEmailData): Pro
       sections={content.sections}
       customHtml={customHtml}
       reviewUrl={data.reviewUrl}
+      ratingUrls={data.ratingUrls ?? null}
       unsubscribeUrl={data.unsubscribeUrl}
     />
   );

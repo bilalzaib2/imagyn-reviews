@@ -58,7 +58,15 @@ export type EmailAlign = "left" | "center";
  *  Deliberately NOT included here: the link fallback, the unsubscribe line and the
  *  "Powered by" line. Those are compliance/deliverability furniture, always rendered last in
  *  a fixed order, and are not the merchant's to reorder — see ReviewRequestEmail.tsx. */
-export type EmailSectionId = "logo" | "storeName" | "heading" | "body" | "product" | "button" | "closing";
+export type EmailSectionId =
+  | "logo"
+  | "storeName"
+  | "heading"
+  | "body"
+  | "product"
+  | "stars"
+  | "button"
+  | "closing";
 
 export interface EmailSection {
   id: EmailSectionId;
@@ -73,6 +81,13 @@ export const DEFAULT_EMAIL_SECTIONS: readonly EmailSection[] = [
   { id: "heading", enabled: true },
   { id: "body", enabled: true },
   { id: "product", enabled: true },
+  // One-tap star rating, directly above the CTA.
+  //
+  // On by default — but "default" here means a store with NO saved template, which is every
+  // new install. A store that has already saved a template keeps the email it had: see
+  // SECTIONS_ADDED_AFTER_LAUNCH below, which is what stops this list from silently changing
+  // the shape of a live email. Reversible either way in Email Studio.
+  { id: "stars", enabled: true },
   { id: "button", enabled: true },
   { id: "closing", enabled: true },
 ];
@@ -90,9 +105,34 @@ export const EMAIL_SECTION_LABELS: Record<EmailSectionId, string> = {
   heading: "Heading",
   body: "Message",
   product: "Product",
+  stars: "Star rating row",
   button: "Review button",
   closing: "Closing",
 };
+
+/**
+ * Sections added to this contract after merchants were already saving templates.
+ *
+ * THE RULE, and the reason this set exists at all:
+ *
+ *   A section in here is back-filled **disabled** when it is absent from an explicitly saved
+ *   section list, even though DEFAULT_EMAIL_SECTIONS has it on.
+ *
+ * Those two facts are not in conflict — they are the whole design:
+ *
+ *   - A store with **no saved template** renders DEFAULT_EMAIL_SECTIONS directly (see
+ *     getDefaultEmailTemplateContent, which does not route through normalizeEmailSections).
+ *     That is every new install, and it gets the new block switched on.
+ *   - A store **with a saved template** from before the section existed has an explicit list
+ *     that lacks it. Back-filling that list as *enabled* would change the shape of an email
+ *     the merchant has already reviewed, approved and watched go out — without them touching
+ *     anything. A new block appearing in a live customer email is not an upgrade a merchant
+ *     asked for, so the answer is off, visible in Email Studio, and theirs to turn on.
+ *
+ * A section only ever belongs in here once; it is a migration record, not a feature flag.
+ * Nothing reads it at send time.
+ */
+export const SECTIONS_ADDED_AFTER_LAUNCH: readonly EmailSectionId[] = ["stars"];
 
 /** Repairs any section list into a valid one: drops unknown ids, de-duplicates, appends
  *  sections the saved row predates (in canonical position), and force-enables the required
@@ -116,13 +156,65 @@ export function normalizeEmailSections(input: unknown): EmailSection[] {
     });
   }
 
+  // A section listed in SECTIONS_ADDED_AFTER_LAUNCH is back-filled OFF rather than at its
+  // canonical default, because an input that names other sections but not this one is a
+  // template saved before the section existed — and that merchant's live email must not change
+  // shape on its own.
+  //
+  // `hadExplicitList` is the distinction that makes this safe: an empty or malformed input is
+  // not "a saved row predating the section", it is no row at all, so it gets the full shipped
+  // defaults exactly as a new install does.
+  const hadExplicitList = result.length > 0;
+
   for (const fallback of DEFAULT_EMAIL_SECTIONS) {
-    if (!seen.has(fallback.id)) {
-      result.push({ ...fallback });
+    if (seen.has(fallback.id)) continue;
+
+    const isLateAddition = SECTIONS_ADDED_AFTER_LAUNCH.includes(fallback.id);
+    const section: EmailSection = {
+      ...fallback,
+      enabled: hadExplicitList && isLateAddition ? false : fallback.enabled,
+    };
+
+    if (isLateAddition) {
+      // Placed where it belongs rather than appended. Appending put the star row after the
+      // closing sign-off for every existing merchant — harmless while it is off, and visibly
+      // wrong the moment one of them switches it on, which is precisely the case this whole
+      // back-fill exists to serve. Inserting it before its canonical neighbour (the review
+      // button) is what makes "turn it on" produce the composition the preview and the
+      // template gallery both show.
+      //
+      // Scoped to late additions on purpose: for every other section, "append what the input
+      // did not mention" is long-standing behaviour on malformed input, and changing where
+      // those land would reorder a merchant's email to fix nothing.
+      insertBeforeCanonicalNeighbour(result, section);
+    } else {
+      result.push(section);
     }
   }
 
   return result;
+}
+
+/**
+ * Inserts a back-filled section immediately before whichever section follows it in
+ * DEFAULT_EMAIL_SECTIONS, falling back to the end of the list when none of them is present.
+ *
+ * Mutates `result` in place — it is a local array inside normalizeEmailSections and never
+ * escapes before this runs.
+ */
+function insertBeforeCanonicalNeighbour(result: EmailSection[], section: EmailSection): void {
+  const canonicalIndex = DEFAULT_EMAIL_SECTIONS.findIndex((entry) => entry.id === section.id);
+  const successors = DEFAULT_EMAIL_SECTIONS.slice(canonicalIndex + 1).map((entry) => entry.id);
+
+  for (const successorId of successors) {
+    const at = result.findIndex((entry) => entry.id === successorId);
+    if (at !== -1) {
+      result.splice(at, 0, section);
+      return;
+    }
+  }
+
+  result.push(section);
 }
 
 // ---------------------------------------------------------------- Content
@@ -141,6 +233,14 @@ export interface EmailTemplateContent {
   closingText: string;
   /** Text on the review CTA button. Does not support variables — kept short and literal. */
   buttonText: string;
+  /** The line above the one-tap star row ("stars" section). Supports {{variables}}.
+   *
+   *  Must stay neutral about what rating to give. The star row links all five ratings to the
+   *  same form with nothing conditional on the choice — see ReviewRequestEmail.tsx — and copy
+   *  that nudged toward five stars would turn an honest shortcut into review gating, which is
+   *  both a Shopify App Store violation and an FTC problem. validateEmailStarsPrompt below is
+   *  what stops a merchant writing that copy. */
+  starsPrompt: string;
 
   /** Hex colour for the CTA button (its background when filled, its border/label when
    *  outline). */
@@ -294,7 +394,10 @@ export function getDefaultEmailTemplateContent(type: EmailTemplateType = "review
   if (type === "reward") {
     return {
       ...BASE_PRESENTATION,
-      sections,
+      // The one template whose section list differs from the canonical default: its CTA points
+      // at the storefront, not a review form, so a star row here would have no rating to carry.
+      // Disabled rather than left on as a toggle that does nothing.
+      sections: sections.map((section) => (section.id === "stars" ? { ...section, enabled: false } : section)),
       subject: "A thank-you from {{store_name}}",
       previewText: "Your discount code is inside.",
       heading: "Thank you for your review",
@@ -302,6 +405,7 @@ export function getDefaultEmailTemplateContent(type: EmailTemplateType = "review
         "Hi {{customer_name}},\n\nThanks for taking the time to share your thoughts on {{product_name}} — it genuinely helps other shoppers decide, and it helps us get better.\n\nHere's a discount code for your next order, with our thanks: {{discount_code}}",
       closingText: "Thanks again,\n{{store_name}}",
       buttonText: "Shop now",
+      starsPrompt: "",
     };
   }
 
@@ -316,6 +420,7 @@ export function getDefaultEmailTemplateContent(type: EmailTemplateType = "review
         "Hi {{customer_name}},\n\nWe reached out recently about your {{product_name}}, and we know inboxes get busy.\n\nIf you've had a chance to try it, we'd still love to hear how you're finding it. Honest feedback is the most useful kind — whatever your experience has been.",
       closingText: "Thanks for being our customer,\n{{store_name}}",
       buttonText: "Write a review",
+      starsPrompt: "How many stars would you give it?",
     };
   }
 
@@ -330,6 +435,7 @@ export function getDefaultEmailTemplateContent(type: EmailTemplateType = "review
         "Hi {{customer_name}},\n\nThis is the last time we'll ask about your {{product_name}} — we don't want to clutter your inbox.\n\nIf you'd like to share how it went, the link below is always open. If not, that's completely fine, and we appreciate your order either way.",
       closingText: "All the best,\n{{store_name}}",
       buttonText: "Share your experience",
+      starsPrompt: "How many stars would you give it?",
     };
   }
 
@@ -343,6 +449,7 @@ export function getDefaultEmailTemplateContent(type: EmailTemplateType = "review
       "Hi {{customer_name}},\n\nThank you for shopping with {{store_name}}. We hope you're enjoying your {{product_name}}.\n\nWhen you have a moment, we'd love to hear about your experience. Your honest feedback helps us improve, and it helps other shoppers decide with confidence.",
     closingText: "Thanks for being our customer,\n{{store_name}}",
     buttonText: "Write a review",
+    starsPrompt: "How many stars would you give it?",
   };
 }
 
@@ -354,7 +461,28 @@ export function mergeEmailTemplateContent(
   partial: Partial<EmailTemplateContent>,
   type: EmailTemplateType = "review_request",
 ): EmailTemplateContent {
-  const merged = { ...getDefaultEmailTemplateContent(type), ...partial };
+  const defaults = getDefaultEmailTemplateContent(type);
+
+  // The one place that knows it is reading a SAVED row rather than building a fresh default —
+  // emailTemplate.server.ts's parseContent is its only production caller. That distinction is
+  // what protects an existing merchant's live email from gaining a new block on its own.
+  //
+  // normalizeEmailSections already handles the common case (a saved list that names other
+  // sections but not a late addition). This handles the older one: a row saved before the
+  // `sections` field existed at all has no list to inspect, and merging the defaults in would
+  // hand normalize a list that already contains the late addition, enabled. Substituting the
+  // pre-late-addition list makes such a row look like exactly what it is — a template saved
+  // before `stars` existed — so it is back-filled off like every other saved row.
+  //
+  // An empty partial is not a saved row. It is no row at all, and gets the full shipped
+  // defaults, which is what a new install renders.
+  const isSavedRow = Object.keys(partial).length > 0;
+  const sections =
+    Array.isArray(partial.sections) || !isSavedRow
+      ? (partial.sections ?? defaults.sections)
+      : defaults.sections.filter((section) => !SECTIONS_ADDED_AFTER_LAUNCH.includes(section.id));
+
+  const merged = { ...defaults, ...partial, sections };
   return normalizeEmailTemplateContent(merged, type);
 }
 
@@ -394,6 +522,7 @@ export function normalizeEmailTemplateContent(
     bodyText: typeof content.bodyText === "string" ? content.bodyText : defaults.bodyText,
     closingText: typeof content.closingText === "string" ? content.closingText : defaults.closingText,
     buttonText: typeof content.buttonText === "string" ? content.buttonText : defaults.buttonText,
+    starsPrompt: typeof content.starsPrompt === "string" ? content.starsPrompt : defaults.starsPrompt,
 
     accentColor: pickColor(content.accentColor, defaults.accentColor),
     buttonTextColor: pickColor(content.buttonTextColor, defaults.buttonTextColor),
@@ -458,6 +587,7 @@ export function sanitizeEmailTemplateContentForPlan(
     bodyText: content.bodyText,
     closingText: content.closingText,
     buttonText: content.buttonText,
+    starsPrompt: content.starsPrompt,
 
     accentColor: content.accentColor,
     buttonTextColor: content.buttonTextColor,
@@ -575,6 +705,100 @@ export function stripUnresolvedVariables(text: string): string {
   // Also collapses a space or a dangling ": " left in front of the removed token, so the
   // degraded sentence reads as a clean truncation rather than obviously broken punctuation.
   return text.replace(/\s*:?\s*\{\{\s*[a-zA-Z0-9_]+\s*\}\}/g, "").trimEnd();
+}
+
+// ---------------------------------------------------------------- One-tap star rating
+
+/** The ratings the email's star row offers, lowest first — the order they are rendered in. */
+export const EMAIL_STAR_RATINGS: readonly number[] = [1, 2, 3, 4, 5];
+
+/** The query parameter the star links carry, read by the review landing page (r.$token.tsx)
+ *  to pre-select the rating the customer already chose in their inbox. */
+export const RATING_QUERY_PARAM = "r";
+
+/**
+ * Builds the destination for one star in the email's rating row.
+ *
+ * Every rating goes to the SAME form — the only difference is which star arrives
+ * pre-selected. Nothing is recorded by following one of these links, nothing is conditional
+ * on the number, and a one-star tap lands on exactly the page a five-star tap does.
+ *
+ * That is not an implementation detail, it is the whole legal shape of the feature: routing
+ * low ratings somewhere else (a "tell us privately" form, a support inbox) is review gating,
+ * which violates the Shopify App Store requirements and the FTC's rules on review
+ * suppression. Keeping URL construction in one shared function is what makes that property
+ * checkable in one place instead of trusted across a renderer and three callers.
+ */
+export function buildRatingUrl(reviewUrl: string, rating: number): string {
+  const rounded = Math.round(rating);
+  if (!EMAIL_STAR_RATINGS.includes(rounded)) {
+    throw new Error(`Rating must be one of ${EMAIL_STAR_RATINGS.join(", ")} — received ${rating}`);
+  }
+
+  // Appended textually rather than via `new URL`, because this runs on a URL built from
+  // SHOPIFY_APP_URL and a token and must not throw on a trailing-slash or relative-looking
+  // value in a misconfigured environment. The parameter name and value are both fixed
+  // constants here, so there is nothing to encode.
+  const separator = reviewUrl.includes("?") ? "&" : "?";
+  return `${reviewUrl}${separator}${RATING_QUERY_PARAM}=${rounded}`;
+}
+
+/** Builds all five star destinations for one send, lowest rating first. */
+export function buildRatingUrls(reviewUrl: string): string[] {
+  return EMAIL_STAR_RATINGS.map((rating) => buildRatingUrl(reviewUrl, rating));
+}
+
+/**
+ * Parses the rating a star link carried, returning null for anything that is not one of the
+ * five offered values.
+ *
+ * Deliberately strict and deliberately silent: this reaches a public, unauthenticated page
+ * from a link anyone can edit, so "?r=0", "?r=11", "?r=<script>" and "?r=5;DROP" must all
+ * degrade to "no pre-selection" rather than to an error page a customer cannot get past.
+ */
+export function parseRatingParam(value: string | null | undefined): number | null {
+  if (typeof value !== "string") return null;
+  // Trimmed first: whitespace around an otherwise valid rating is a copy-paste artefact, not
+  // an attack, and refusing it would discard a choice the customer really made.
+  const trimmed = value.trim();
+  // Digits only — Number() would happily accept "5e0", "0x5" and "+5".
+  if (!/^[1-9][0-9]*$/.test(trimmed)) return null;
+  const parsed = Number.parseInt(trimmed, 10);
+  return EMAIL_STAR_RATINGS.includes(parsed) ? parsed : null;
+}
+
+/** Phrases that turn the honest star row into review gating. */
+const GATING_PHRASES: readonly RegExp[] = [
+  /\bfive[\s-]?stars?\b/i,
+  /\b5[\s-]?stars?\b/i,
+  /\bpositive review\b/i,
+  /\bgood review\b/i,
+  /\bgreat review\b/i,
+  /\bonly if you\b/i,
+];
+
+/**
+ * Rejects star-row copy that steers the customer toward a particular rating.
+ *
+ * Called at the save boundary (app.email-studio.tsx) alongside findUnknownVariables. The
+ * star row is the one place in the email where a single sentence can convert a neutral
+ * shortcut into a solicitation for a specific score — "Loved it? Leave us 5 stars!" above
+ * five clickable stars is textbook review gating, and the app is the party that gets
+ * delisted for it, not the merchant.
+ *
+ * Deliberately a small, specific list rather than sentiment analysis: it catches the phrasing
+ * a merchant actually reaches for, it is explainable in the error message, and it cannot
+ * silently reject innocent copy. It is a guard rail, not a compliance guarantee.
+ */
+export function validateEmailStarsPrompt(prompt: string): string | null {
+  const matched = GATING_PHRASES.find((pattern) => pattern.test(prompt));
+  if (!matched) return null;
+
+  return (
+    "The star rating line can't ask for a particular rating — asking for 5 stars or a positive " +
+    "review is review gating, which breaks Shopify's App Store rules and FTC guidance. Ask for " +
+    "an honest rating instead."
+  );
 }
 
 // A greeting says "Hi Sarah", not "Hi Sarah Connor" — same extraction the email template used

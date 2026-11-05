@@ -12,6 +12,7 @@ import { PageHeader } from "../components/ui/PageHeader";
 import { Banner } from "../components/ui/Banner";
 import { EmptyState } from "../components/ui/EmptyState";
 import { StatusBadge } from "../components/ui/StatusBadge";
+import { Metric, MetricRow, type MetricTone } from "../components/ui/Metric";
 import { AppReviewPrompt } from "../components/ui/AppReviewPrompt";
 import { StarRating } from "../components/reviews/StarRating";
 import { PillarStatusIcon } from "../components/ui/PillarStatusIcon";
@@ -136,19 +137,13 @@ const RATING_VALUES = [5, 4, 3, 2, 1] as const;
 // Real, threshold-based status reads for a genuine percentage already on hand — never a
 // fabricated trend or comparison. "Good" and "needs attention" cutoffs are the same honest
 // bar a merchant would judge the number by themselves, just made visually explicit.
-type KpiTone = "positive" | "attention" | "neutral";
-
-function toneForShare(percent: number, goodAt: number, lowAt: number): KpiTone {
+// MetricTone rather than a local union: the tile is now the shared <Metric> primitive, and
+// re-declaring its tone names here is how the two would drift apart.
+function toneForShare(percent: number, goodAt: number, lowAt: number): MetricTone {
   if (percent >= goodAt) return "positive";
   if (percent < lowAt) return "attention";
   return "neutral";
 }
-
-const KPI_TONE_CLASS: Record<KpiTone, string> = {
-  positive: "kpiTonePositive",
-  attention: "kpiToneAttention",
-  neutral: "",
-};
 
 // Real, existing ReviewStatus values only — a color cue on top of the text label already
 // shown, never a replacement for it.
@@ -256,34 +251,31 @@ export default function Index() {
             itself — never an invented trend or period-over-period comparison this app has no
             historical snapshots to honestly support. */}
         <div className={`${styles.reputationRow} ${styles.reveal}`} style={revealStyle(0)}>
-          <div className={styles.kpiHero}>
-            <p className={styles.kpiHeroValue}>{stats.publishedReviews > 0 ? stats.averageRating.toFixed(1) : "—"}</p>
-            {stats.publishedReviews > 0 ? (
-              <StarRating value={stats.averageRating} size={16} />
-            ) : (
-              <p className={styles.kpiHeroSub}>No published reviews yet</p>
-            )}
-            <p className={styles.kpiHeroLabel}>Average rating</p>
-          </div>
-          <div className={styles.kpiHero}>
-            <p className={styles.kpiHeroValue}>{stats.totalReviews}</p>
-            <p className={styles.kpiHeroSub}>{stats.publishedReviews} published</p>
-            <p className={styles.kpiHeroLabel}>Total reviews</p>
-          </div>
-          <div className={styles.kpiRow}>
-            <div className={[styles.kpiCard, styles[KPI_TONE_CLASS[verifiedTone]]].filter(Boolean).join(" ")}>
-              <p className={styles.kpiValue}>{verifiedPercent}%</p>
-              <p className={styles.kpiLabel}>Verified share</p>
-            </div>
-            <div className={[styles.kpiCard, styles[KPI_TONE_CLASS[completionTone]]].filter(Boolean).join(" ")}>
-              <p className={styles.kpiValue}>{completionPercent}%</p>
-              <p className={styles.kpiLabel}>Request completion</p>
-            </div>
-            <div className={styles.kpiCard}>
-              <p className={styles.kpiValue}>{stats.autoPublishedToday}</p>
-              <p className={styles.kpiLabel}>Auto-published today</p>
-            </div>
-          </div>
+          <Metric
+            size="hero"
+            value={stats.publishedReviews > 0 ? stats.averageRating.toFixed(1) : "—"}
+            sub={
+              stats.publishedReviews > 0 ? (
+                <StarRating value={stats.averageRating} size={16} />
+              ) : (
+                "No published reviews yet"
+              )
+            }
+            label="Average rating"
+          />
+          <Metric
+            size="hero"
+            value={stats.totalReviews}
+            sub={`${stats.publishedReviews} published`}
+            label="Total reviews"
+          />
+          <MetricRow>
+            {/* Tone comes from a real threshold the merchant could apply themselves (see
+                toneForShare), never from a wish to draw the eye. */}
+            <Metric tone={verifiedTone} value={`${verifiedPercent}%`} label="Verified share" />
+            <Metric tone={completionTone} value={`${completionPercent}%`} label="Request completion" />
+            <Metric value={stats.autoPublishedToday} label="Auto-published today" />
+          </MetricRow>
         </div>
 
         {incompleteSetupItems.length > 0 ? (

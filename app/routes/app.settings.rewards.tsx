@@ -6,6 +6,7 @@ import { Checkbox, Frame, Select, TextField, Toast } from "@shopify/polaris";
 import { Button } from "../components/ui/Button";
 import { ContextualSaveBar } from "../components/ui/ContextualSaveBar";
 import { Section } from "../components/ui/Section";
+import { Metric, MetricRow } from "../components/ui/Metric";
 import { authenticateAdminDeduped } from "../services/auth-dedupe.server";
 import { getOrCreateStore } from "../services/store.server";
 import { getRewardSettings, getRewardStats, updateRewardSettings, type RewardSettings } from "../services/rewards.server";
@@ -194,24 +195,16 @@ export default function SettingsRewardsPage() {
 
       <Section title="Reward activity" description="A real, live count of every review this store has evaluated for a reward.">
         <div className={styles.card}>
-          <div className={styles.statRow}>
-            <div className={styles.stat}>
-              <p className={`${styles.statValue} ${styles.statValueSuccess}`}>{stats.issued}</p>
-              <p className={styles.statLabel}>Issued</p>
-            </div>
-            <div className={styles.stat}>
-              <p className={`${styles.statValue} ${styles.statValueWarning}`}>{stats.pending}</p>
-              <p className={styles.statLabel}>Pending</p>
-            </div>
-            <div className={styles.stat}>
-              <p className={`${styles.statValue} ${styles.statValueDanger}`}>{stats.failed}</p>
-              <p className={styles.statLabel}>Failed</p>
-            </div>
-            <div className={styles.stat}>
-              <p className={styles.statValue}>{stats.ineligible}</p>
-              <p className={styles.statLabel}>Didn&apos;t qualify</p>
-            </div>
-          </div>
+          {/* Tone on three of the four, from what the number genuinely means: issued is the
+              good outcome, pending is waiting, failed needs looking at. "Didn't qualify" is
+              neutral on purpose — a review that did not meet the reward conditions is a normal
+              outcome, not a problem. */}
+          <MetricRow variant="bare">
+            <Metric variant="bare" tone="positive" value={stats.issued} label="Issued" />
+            <Metric variant="bare" tone="attention" value={stats.pending} label="Pending" />
+            <Metric variant="bare" tone="danger" value={stats.failed} label="Failed" />
+            <Metric variant="bare" value={stats.ineligible} label="Didn't qualify" />
+          </MetricRow>
         </div>
       </Section>
 

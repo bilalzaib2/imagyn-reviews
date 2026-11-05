@@ -144,19 +144,27 @@ const GROWTH: Permissions = {
   canUseCustomBranding: true,
   canUseBrandStudio: true,
   canUseMultipleWidgetThemes: true,
+  // Belongs to Pro, not to the retired Scale tier. This was granted only on SCALE when the
+  // feature shipped, which left it unreachable for every real paying merchant: Pro inherited
+  // `false` from STARTER, while SCALE is no longer purchasable and "owner" is internal — so
+  // the one plan the Email Studio UI advertises it to was the one plan that never received
+  // it. Any new Pro capability belongs in THIS block; SCALE inherits from here, so adding it
+  // to SCALE instead silently ships a feature nobody can buy.
+  canUseBrandedEmailSender: true,
   hasPrioritySupport: true,
 };
 
 const SCALE: Permissions = {
   ...GROWTH,
   // canUseVideoReviews is already true via GROWTH/STARTER (shipped, not Scale-exclusive) —
-  // redundant here, kept only for readability. None of the four below it have any
-  // enforcement point in the codebase yet — entitlement is true so Scale stores get them
-  // automatically the day each ships; plans.ts marks all four "Coming soon" on every
-  // pricing surface until then.
+  // redundant here, kept only for readability. canUseBrandedEmailSender is deliberately NOT
+  // listed here: it is a Pro capability and now comes through GROWTH above, so a legacy Scale
+  // subscriber still receives it by inheritance. None of the five below have any enforcement
+  // point in the codebase yet — entitlement is true so Scale stores get them automatically
+  // the day each ships; plans.ts marks all of them "Coming soon" on every pricing surface
+  // until then.
   canUseVideoReviews: true,
   canUseWhiteLabel: true,
-  canUseBrandedEmailSender: true,
   canUseCustomEmailDomain: true,
   canUseSMTP: true,
   canUseAPI: true,
