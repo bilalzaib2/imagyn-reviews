@@ -460,77 +460,142 @@ Ranked by what I would actually worry about.
 
 ---
 
-## 9a. RESUME POINT — read this first
+## 9a. SESSION OF 2026-11-06 (second) — completed work
 
-**Session of 2026-11-06 (second), stopped at the Anthropic usage limit during state recovery.**
-Nothing was changed in that session. The tree and HEAD are exactly as §1 and §4 describe.
+Five commits, all pushed. Gates green after each one. **No migration, no database write, no
+deployment.**
 
-A new mission was issued ("FULL PRODUCT COMPLETION NIGHT SHIFT") with three parts: the full
-product completion brief, a **Review Management page redesign** to match Judge.me, and a
-**design direction update** (intelligent green gradients, stronger editorial typography, no
-AI-design clichés). The usage limit was reached before any of it could be implemented.
+```
+f650364  style: readable headings, one typeface, and green used deliberately
+68b7ea0  feat(reviews): workspace navigation, and drop the repeated eyebrow label
+d9c7334  feat(reviews): full-width review table, detail moves to a drawer
+6278e8c  feat(coupons): surface issued codes, and confirm the irreversible action
+09db694  fix: rewards must never depend on a review's star rating
+a2435ad  docs: resume point after reaching the usage limit during state recovery
+```
 
-### What that session actually completed
+**Tests: 1,762 passing across 90 files** (from 1,714 / 89). Typecheck, lint, production build
+and `prisma validate` all clean.
 
-1. **Verified every claim in this handover against the repository.** All accurate: HEAD
-   `f34e50d`, branch `main`, in sync with `origin/main`, 4 session commits, **1,714 tests
-   passing across 89 files**, typecheck / lint / build clean, three deliberately untracked
-   paths, database untouched.
-2. **Inventoried the existing Coupons and Rewards implementation** (below), so the next
-   session does not rebuild what is already there.
+### The compliance defect — read this one first
 
-### Existing Coupons / Rewards capability — do NOT rebuild
+**Review Rewards gated issuance on a minimum star rating.** A merchant could set "4" and only
+4- and 5-star reviews earned a discount.
 
-More exists than the new brief assumes. Audit before implementing:
+That is paying for positive reviews. It is prohibited by the FTC's rule on consumer reviews
+and testimonials (16 CFR Part 465, in force since 2024) and breaches Shopify's App Store
+requirements on review integrity — and **the liability falls on the app, not the merchant.**
+Imagyn is what gets delisted.
 
-| File | Lines | What it already provides |
+Found by researching the benchmark rather than by reading our own code: Judge.me removed
+rating-based coupon rules from its own product for exactly this reason and says so in their
+help centre. We had kept ours.
+
+The condition is **gone**, not relaxed. `evaluateEligibility` does not read a rating at all,
+`getRewardSettings` no longer selects the column, `RewardSettings` no longer carries the
+field, and the merchant-facing control is replaced by a Banner explaining why. Every remaining
+condition is about the review's *form* — verified purchase, photo, video — never its opinion,
+which is the distinction the FTC rule draws.
+
+`Store.rewardMinRating` is retired in place rather than dropped (a column needs a migration;
+a stored value is now inert) and carries a `///` doc comment saying so. Two tests that asserted
+the old behaviour are **inverted** rather than deleted, so the rule cannot quietly return.
+
+### Judge.me coupon research — findings
+
+Sources: Judge.me help centre articles on generated coupon codes and custom discount codes.
+
+| Judge.me | Imagyn | Verdict |
 |---|---|---|
-| `app/services/coupons.server.ts` | 461 | `couponsService` — campaign CRUD, activation/pause, per-customer code issuance, revocation |
-| `app/services/rewards.server.ts` | 418 | `getRewardSettings`, `updateRewardSettings`, `evaluateEligibility`, `evaluateAndIssueReward`, `getRewardStats` |
-| `app/services/shopifyDiscount.server.ts` | 235 | **Real Shopify mutations**: `createShopifyDiscount` (`discountCodeBasicCreate`), `deactivateShopifyDiscount`, `activateShopifyDiscount`, `getShopifyDiscountUsageCount` |
-| `app/routes/app.settings.coupons.tsx` | 420 | Campaign UI |
-| `app/routes/app.settings.rewards.tsx` | 226 | Reward settings UI (already uses the house `Metric`) |
-| Tests | 41 | `coupons.server.test.ts` (21), `rewards.server.test.ts` (20) |
+| One coupon per review; adding media later does not upgrade it | `Reward.reviewId` is `@unique` | **Matches** |
+| Minimum order value / minimum item quantity | `Coupon.minimumOrderAmount` | Matches for coupons |
+| Usage limit, expiry | `usageLimit`, `endsAt` | **Imagyn ahead** (no expiry found in Judge.me's docs) |
+| Coupons are a paid-plan feature | Free in Imagyn | Deliberate differentiator |
+| **Cannot vary by star rating** (removed for Shopify policy) | We did | **Fixed, see above** |
+| **30-minute delay** after a review, so the customer can add media first | Issues immediately on approval | **REAL GAP** — and it bites: a `requirePhoto` condition is evaluated at approval, so a customer who adds a photo two minutes later gets nothing |
+| **Tiered rewards by content** — text gets X, photo gets Y, video gets Z | Single value; photo/video are *gates*, not tiers | **REAL GAP** — needs two columns |
+| Eligibility: any / verified buyer / verified buyer of the reviewed product / came via a review request | `requireVerified` only | **GAP** |
+| Combines with product or shipping discounts | Not set | **GAP** |
+| Static code, or a list of single-use codes, instead of generated | Not supported | Gap, lower value |
+| Free shipping as a reward type | Not supported | **Not a Judge.me coupon feature either** — the one source claiming it describes a third-party loyalty app |
 
-Schema already models `Coupon`, `CouponRedemption` and `Reward`, including `discountType`
-(percentage / fixed_amount), `eligibility` (all / new_customers), `minimumOrderAmount`,
-`startsAt` / `endsAt`, `usageLimit`, `perCustomerLimit`, and real `shopifyDiscountId` /
-`discountCode` fields that are documented as never being set speculatively before Shopify
-confirms.
+**The coupon integration itself was already sound** — this is the thing not to rebuild.
+`shopifyDiscount.server.ts` already calls the real `discountCodeBasicCreate`,
+`discountCodeDeactivate`, `discountCodeActivate` and `asyncUsageCount`, and `Reward`/`Coupon`/
+`CouponRedemption` already model discount type, eligibility, minimum order, dates and limits.
+The gap was UX and reporting.
 
-**So the coupon gap is most likely UX, campaign-level reporting and end-to-end verification —
-not the core Shopify integration.** Confirm that by reading those five files before writing
-anything.
+### What was built
+
+**Coupons.** `listRedemptions` had existed and been tested all along and the page never called
+it, so a merchant could issue a personalised code and then had no record of who received one or
+whether Shopify accepted it. Each campaign now shows its issued codes — customer, code, status,
+date — in the shared `Table`, collapsed behind a `<details>` so a campaign with 200 codes does
+not bury the others. "End" is now confirmed: it deactivates the real Shopify discount with no
+path back, and sat one click from Pause, which *is* reversible. Errors render as Banners (with
+`role="alert"`) rather than muted grey paragraphs.
+
+**Review Management, full-width.** It was a two-column grid — a ~62% list beside a permanently
+mounted ~38% detail panel — so the table gave up a third of the admin's width even while the
+merchant was only scanning. The list is now full width and the detail is a right-hand drawer.
+
+Six columns instead of four: Customer (with the verified-buyer indicator beside the person
+rather than buried in the review text), Rating, Review, Product, Status, Date. The review cell
+gained a two-line clamped body preview, which the old layout had no room for at all. Customer
+and Product carry `hideOnNarrow`; Rating, Review and Status always survive.
+
+The drawer has three ways out — scrim, always-visible close, Escape — because an overlay with
+one is an overlay a merchant gets stuck in. The scrim is a real `<button>` with an accessible
+name. On a phone, selecting a review no longer hides the list: it used to have to, because the
+panel was a flowing column.
+
+**Workspace navigation.** Reviews and Review Requests now carry a shared tab row — real
+anchors (App Bridge owns navigation in an embedded app; a `<Link>` never updates the URL),
+active state derived from the pathname. Styled as an underline on a hairline, not pills, which
+read as a filter rather than navigation.
+
+**Typography and green.** 49 `text-transform: uppercase` rules had accumulated — 12px,
+0.1–0.16em tracking, muted grey, above every card. 20 selectors across 18 stylesheets are
+retypeset to real readable labels; uppercase survives only on badges and table column headers,
+where it has a purpose. The repeated "Imagyn Reviews" eyebrow above every page title is gone
+from seven routes and from `PageHeader`'s default.
+
+Typeface: **Geist Sans alone**, with the reasoning for rejecting Montserrat, Inter, Manrope and
+Helvetica Neue written up in the design-system doc §3.1a, plus the one-token path to
+display-only Montserrat if you want it. Page title is now 700 at -0.035em; section headings are
+a real 18px/600 heading.
+
+Green: **one gradient, in one place** — `Metric`'s hero variant on the Dashboard, 5%→1.5% over
+white, and a tone always wins over it. Where green is and is not allowed is written down
+(§3.1c).
+
+### Blocked, and why — all documented rather than worked around
+
+1. **Every remaining parity gap needs a migration.** Store settings are real columns, not a
+   JSON blob, so tiered rewards, the 30-minute delay, richer eligibility, star-only reviews,
+   a third reminder and anonymous reviews each need `ALTER TABLE`. Per `CLAUDE.md` that is
+   explicit approval, every time. Designed, not written.
+2. **`shop.brand.colors` is unverified.** `app/services/ai/types.ts` carries a comment claiming
+   Shopify's Admin API exposes no brand colour — but we successfully query `shop.brand.logo`, so
+   that comment is at least partly wrong and the Storefront API definitely has `BrandColors`.
+   The Shopify MCP connector **disconnected mid-session** and the docs pages 404 to WebFetch, so
+   this could not be settled. It gates the "use merchant brand colours" half of both the Email
+   Studio and Brand Studio default-branding briefs. Verify it first next session.
+3. **No UI has been seen rendered.** Still the top risk. §5 of the brief asks for Chrome
+   inspection against a development store; not available from here.
+4. **Product Q&A, Spam, Archive, Product-vs-Store review categories have no data model.**
+   Deliberately absent from the new navigation rather than shipped as dead tabs.
+5. **CI workflow still unpushable** without `workflow` scope (§7.1).
 
 ### The exact next task
 
-**Research Judge.me's coupon and reward workflow** (mission §1 and §3A), then audit the five
-files above against it. Only then implement.
+**Verify whether `shop.brand.colors` exists in the Admin API** (reconnect the Shopify MCP, or
+introspect against the development store). It unblocks the largest remaining brief — automatic
+brand colours for Email Studio §2A and Brand Studio §4A — and is a five-minute check.
 
-After that, in the mission's own priority order: coupons → Email Studio default branding →
-Brand Studio defaults → dashboard visual QA → Review Management redesign → parity gaps.
-
-### Known constraints for the next session
-
-- **The two screenshots were not attached** to the mission message (our current Review
-  Management page, and Judge.me's). Sections 1–9 of that brief describe the target layout in
-  enough detail to build from, but the comparison is written, not visual. Ask for them again
-  if a pixel-level match matters.
-- **The Review Management redesign replaces a layout that works.** `app.reviews.tsx` is the
-  most complex screen in the app (optimistic updates, bulk actions, keyboard navigation, the
-  shared `Table`). The brief asks to drop the permanent right-hand detail panel for a
-  full-width table with a drawer or modal. Treat it as its own commit, and keep the existing
-  regression tests green rather than rewriting them to fit.
-- **Three new screens the brief asks for do not exist yet:** Customer Questions / Product Q&A
-  (no model at all — audit §4.3), Spam and Archive review categories (no such statuses;
-  `ReviewStatus` is PENDING / APPROVED / REJECTED only). Each needs a migration, so each needs
-  explicit approval. Do not assume they are UI-only.
-- **Store Reviews vs Product Reviews** as separate categories also has no model behind it —
-  every `Review` currently belongs to a product.
-- The design direction update asks for green gradients and a typography reconsideration
-  (Montserrat / Geist / Inter / Manrope / Helvetica Neue). Geist Sans is currently installed,
-  self-hosted and working; changing the typeface is a deliberate design decision, not a
-  cleanup, so decide it before touching `design-system.css`.
+If it does not exist, go straight to **requesting approval for one migration** covering the
+tiered-reward columns and the reward delay, which are the two highest-value coupon gaps the
+research found.
 
 ## 10. Next steps, in the order I would take them
 
