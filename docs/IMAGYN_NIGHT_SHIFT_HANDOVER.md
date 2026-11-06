@@ -815,3 +815,43 @@ counted tabs, debounced search, an answer modal and hide/restore, plus the third
 Still unbuilt on top of the new model: the Q&A product widget, store FAQs, and the Q&A
 notification email. Remaining approved-scope-free migrations are 3–6 in the gap matrix, plus
 `Review.archivedAt` for an Archive view.
+
+---
+
+## 14. Archive, and the placeholder audit — 2026-11-07
+
+### 14.1 Archive (`8c36d09`)
+
+Third approved migration, same safeguards: backup taken, **verified by restoring it** into a
+disposable database, migration generated with `--create-only` and read before applying,
+rollback SQL recorded, row counts identical afterwards (3 stores, 34 reviews, 12 products,
+10 requests, 0 questions). Local only.
+
+`Review.archivedAt` is additive and nullable. Archive is a **second axis**, not another status
+— see the table in the gap matrix §6. The decisions worth not re-litigating:
+
+- Archiving writes **no** moderation fields. It is not a verdict, so `status`, `hiddenReason`
+  and `hiddenAt` are untouched and restoring returns the exact state the review left with.
+- Restoring **recomputes `isPublished` from the status each review kept**, so a rejected
+  review cannot be promoted onto the storefront by being restored. Bulk restore groups by
+  status for the same reason rather than issuing one blanket update.
+- The silent risk is the **reads**, not the writes. A storefront query or statistic that forgot
+  `archivedAt` would keep showing and counting an archived review and never throw, so the
+  scope is spelled once as `LIVE_REVIEW` and a test asserts no public read is still scoped on
+  `deletedAt` alone.
+
+29 unit tests, plus 15 end-to-end checks against the real database inside a rolled-back
+transaction (34 reviews before and after, 0 archived before and after).
+
+### 14.2 Placeholder-control audit
+
+No fake buttons, no dead links, no live-looking placeholder toggles anywhere in the merchant
+UI. The only "Coming soon" copy is on genuinely disabled controls. Locked in by
+`app/routes/noPlaceholderControls.test.ts`, proven non-vacuous.
+
+### 14.3 State
+
+**1,888 tests across 96 files.** Typecheck, lint and production build clean. **14 commits
+local and unpushed** — pushing deploys, and that is not approved.
+
+Still never seen rendered: everything built on 2026-11-07.

@@ -32,13 +32,13 @@ session's browser work except the three defects actually observed.
 | Feature | Judge.me | Imagyn | Status | Gap / action |
 |---|---|---|---|---|
 | Workspace tabs | Reviews · Review requests · Customer questions | All three | **Built, unverified** | Closed `2c818e3` |
-| Category tabs | All · Pending · Product · Store · Spam · Archive, each with counts | All · Pending · Approved · Rejected, now with counts (`4167973`) | Partial | Product-vs-store, spam and archive need schema |
+| Category tabs | All · Pending · Product · Store · Spam · Archive, each with counts | All · Pending · Approved · Rejected · **Archive**, all counted | Partial | Only Product-vs-Store and a Spam view remain |
 | Filters | Status · Source · Rating · Type · Sentiment · Topics · Tags · date | Status · rating · product · date · verified | Partial | Source, type, sentiment, topics, tags missing |
 | Review table | Not observable (0 reviews) | 6 columns, full width, container-responsive | Built, unverified | Compare once Judge.me has data |
 | Detail view | Not observed | Drawer < 64rem, second column ≥ 64rem (`20c9aaa`) | Built, unverified | Never seen rendered |
 | Bulk publish | Checkbox select → "Publish reviews" (help centre) | `bulkApprove` | Built, unverified | Behaviour matches |
 | Bulk hide | Select → "Hide reviews" → **reason required** (help centre) | `bulkReject` + required reason | **Built, unverified** | Closed `5f3d4fc` |
-| Archive | Per-review, three-dot menu; own tab | Missing | Missing | Needs schema |
+| Archive | Per-review, three-dot menu; own tab | Own view, single + bulk, restore | **Built, unverified** | Closed `8c36d09`; Imagyn also has **bulk** archive, which Judge.me's docs do not describe |
 | Spam | **Not a status** — a hide *reason*, surfaced as a tab | `hiddenReason` stores it; no tab yet | Partial | The data exists; the Spam view is now just a filter |
 | Reply to review | Yes, with email notification | Yes, with AI drafting | Built, unverified | Imagyn ahead (AI drafting, tone) |
 | Search / sort / pagination | Yes | Yes, server-side cursor | Built, unverified | — |
@@ -117,8 +117,42 @@ Properties worth keeping true:
   by selecting two reviews instead of one.
 - Questions use the same vocabulary, so there is one list to maintain.
 
-Still open: an **Archive** view needs one more nullable column (`archivedAt`). Judge.me treats
-archive as hide-plus-move-to-a-tab. Not started — outside the approved scope.
+**Archive followed in `8c36d09`**, approved separately. `Review.archivedAt`, additive and
+nullable. It is deliberately a second axis rather than another status:
+
+| | Hide | Archive |
+|---|---|---|
+| What it means | a moderation verdict | filing something away |
+| Stays in the working queue | yes, wearing its reason | no — its own view |
+| On the storefront | no | no |
+| Counted in statistics | as a rejected review | not at all |
+| Writes `status` / `hiddenReason` | yes | **never** |
+| Reversible | approve | restore |
+
+Because archiving writes no moderation fields, a review can be hidden *and* archived, and
+restoring returns the exact state it left with. Restore recomputes `isPublished` from the
+status each review kept, so a rejected review cannot be promoted onto the storefront by being
+restored — and bulk restore groups by status for the same reason rather than issuing one
+blanket update.
+
+The silent risk was the reads, not the writes: any storefront query or statistic that forgot
+`archivedAt` would keep showing and counting an archived review without throwing. The scope is
+therefore spelled once as `LIVE_REVIEW` and applied across the twelve public APPROVED reads
+plus product stats, store stats and customer history, with a test asserting no public read is
+still scoped on `deletedAt` alone.
+
+## 6a. Placeholder-control audit — 2026-11-07
+
+Every merchant route and component was scanned for controls that look functional and are not:
+`href="#"`, no-op handlers on enabled controls, and "Coming soon" labels on things a merchant
+can still click.
+
+**Result: none.** The only "Coming soon" copy in the app sits on genuinely disabled controls —
+Settings → Requests puts its unavailable trigger types in a disabled `Select` with help text
+naming what each is waiting on (Shopify webhook approval), and the import sources branch on an
+`available` flag. That is the right pattern and it is now enforced by
+`app/routes/noPlaceholderControls.test.ts`, verified non-vacuous by planting a dead link, a
+no-op button and an unguarded label and confirming all three rules fire.
 
 ## 7. Analytics
 
@@ -157,4 +191,7 @@ applied to the local development database only, and ship with rollback SQL besid
 backup was taken first and all 34 reviews, 3 stores, 12 products and 10 requests were confirmed
 intact afterwards.
 
-Remaining: 3, 4, 5, 6, plus `Review.archivedAt` for the Archive view. None started.
+| 7 | ~~`Review.archivedAt`~~ | **DONE** `8c36d09` | — |
+
+Remaining: 3 (product vs store reviews), 4 (segmented request scheduling), 5 (coupon tiering,
+combinations, eligibility) and 6 (multiple request templates). None started.
