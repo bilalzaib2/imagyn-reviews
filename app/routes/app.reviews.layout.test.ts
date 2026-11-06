@@ -302,3 +302,50 @@ describe("one navigation, not two", () => {
     expect(readFileSync("app/styles/shared.module.css", "utf8")).not.toMatch(/\.workflowTab/);
   });
 });
+
+describe("one heading, and counts on the status tabs", () => {
+  it("does not head the only table on the page a second time", () => {
+    // The admin showed "Reviews" + subtitle, then "Review management", then a count line.
+    // Judge.me heads the same screen once.
+    expect(ROUTE).not.toContain('<Section title="Review management">');
+  });
+
+  it("lets a section render without a title at all", () => {
+    const SECTION = readFileSync("app/components/ui/Section.tsx", "utf8");
+    expect(SECTION).toMatch(/title\?: string/);
+    // ...and renders no empty header bar when there is neither title nor actions.
+    expect(SECTION).toMatch(/title \|\| actions \?/);
+  });
+
+  it("prints a count beside every status tab", () => {
+    expect(ROUTE).toMatch(/styles\.statusSegmentCount[\s\S]{0,120}statusCountFor\(option\.value\)/);
+  });
+
+  it("reads the All count from the total, not from a status key", () => {
+    expect(ROUTE).toMatch(/status === "" \? statusCounts\.all/);
+  });
+
+  it("loads the counts in the same round trip as the summaries", () => {
+    // A second sequential await here would add a query's latency to every page load.
+    expect(ROUTE).toMatch(/Promise\.all\(\[\s*getAiSummariesForProducts[\s\S]{0,200}getStoreReviewStatusCounts/);
+  });
+
+  it("still returns counts when the loader falls into its error branch", () => {
+    // The component indexes into statusCounts unconditionally; omitting it here would throw
+    // on the very page that is already reporting a failure.
+    const errorBranch = ROUTE.slice(ROUTE.indexOf("} catch (error) {"));
+    expect(errorBranch).toMatch(/statusCounts: \{ all: 0/);
+  });
+
+  it("keeps the tab counts from being filtered by the tab you are on", () => {
+    const SERVICE = readFileSync("app/services/review.server.ts", "utf8");
+    expect(SERVICE).toMatch(/\.\.\.options, status: undefined/);
+  });
+
+  it("builds the count filter from the same helper as the list", () => {
+    const SERVICE = readFileSync("app/services/review.server.ts", "utf8");
+    // Two hand-written where clauses would drift; one helper cannot.
+    expect(SERVICE).toMatch(/function buildReviewWhere/);
+    expect(SERVICE.match(/buildReviewWhere\(/g)!.length).toBeGreaterThanOrEqual(3);
+  });
+});

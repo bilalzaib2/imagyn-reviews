@@ -104,6 +104,19 @@
   box-shadow: var(--shadow-sm);
 }
 
+/* The count beside a tab's label. Tabular figures so the segments do not resize as the
+   numbers change under moderation, which would otherwise shift the row on every approval. */
+.statusSegmentCount {
+  margin-left: var(--space-2);
+  font-variant-numeric: tabular-nums;
+  font-weight: var(--weight-regular);
+  color: var(--color-text-muted);
+}
+
+.statusSegmentActive .statusSegmentCount {
+  color: var(--color-text);
+}
+
 /* The Rating/Product/Date/Verified/Sort fields, consolidated behind a single "Filters"
    button's Popover instead of a permanent second toolbar row — same fields, same handlers,
    just not always taking up vertical space. */

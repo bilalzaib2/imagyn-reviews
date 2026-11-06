@@ -171,13 +171,15 @@ export async function recalculateProductStats(productId: string) {
   });
 }
 
-async function queryReviews(
+/** The filter clause behind both the review list and its per-status counts.
+ *
+ *  Extracted so the two cannot drift: a count that applied a different set of filters from
+ *  the table it labels would be worse than no count at all. */
+function buildReviewWhere(
   baseWhere: Prisma.ReviewWhereInput,
   options: ReviewQueryOptions = {},
-): Promise<ReviewQueryResult> {
-  const limit = options.limit ?? 20;
-
-  const where: Prisma.ReviewWhereInput = {
+): Prisma.ReviewWhereInput {
+  return {
     ...baseWhere,
     deletedAt: null,
     ...(options.status ? { status: options.status } : {}),
@@ -202,6 +204,14 @@ async function queryReviews(
       : {}),
     ...(options.product ? { product: { name: { contains: options.product } } } : {}),
   };
+}
+
+async function queryReviews(
+  baseWhere: Prisma.ReviewWhereInput,
+  options: ReviewQueryOptions = {},
+): Promise<ReviewQueryResult> {
+  const limit = options.limit ?? 20;
+  const where = buildReviewWhere(baseWhere, options);
 
   const orderBy: Prisma.ReviewOrderByWithRelationInput[] =
     options.sort === "helpful"
@@ -232,6 +242,52 @@ async function queryReviews(
 
 export async function getStoreReviews(storeId: string, options: ReviewQueryOptions = {}) {
   return queryReviews({ storeId }, options);
+}
+
+/** How many reviews sit behind each status tab, for the counts beside their labels. */
+export interface ReviewStatusCounts {
+  all: number;
+  [ReviewStatus.PENDING]: number;
+  [ReviewStatus.APPROVED]: number;
+  [ReviewStatus.REJECTED]: number;
+}
+
+/** Per-status counts for the Reviews screen's status tabs.
+ *
+ *  `status` is deliberately dropped from the options: a tab's count answers "how many will I
+ *  see if I click this", so filtering it by the tab that happens to be selected would make
+ *  every tab but the active one read zero. Every OTHER filter is kept, so searching narrows
+ *  the counts in step with the table — which is the only way the two stay honest together.
+ *
+ *  One grouped query, not four counts. */
+export async function getStoreReviewStatusCounts(
+  storeId: string,
+  options: ReviewQueryOptions = {},
+): Promise<ReviewStatusCounts> {
+  const where = buildReviewWhere({ storeId }, { ...options, status: undefined });
+
+  const grouped = await prisma.review.groupBy({
+    by: ["status"],
+    where,
+    _count: { _all: true },
+  });
+
+  const counts: ReviewStatusCounts = {
+    all: 0,
+    [ReviewStatus.PENDING]: 0,
+    [ReviewStatus.APPROVED]: 0,
+    [ReviewStatus.REJECTED]: 0,
+  };
+
+  for (const row of grouped) {
+    const total = row._count._all;
+    counts.all += total;
+    if (row.status === ReviewStatus.PENDING) counts[ReviewStatus.PENDING] = total;
+    else if (row.status === ReviewStatus.APPROVED) counts[ReviewStatus.APPROVED] = total;
+    else if (row.status === ReviewStatus.REJECTED) counts[ReviewStatus.REJECTED] = total;
+  }
+
+  return counts;
 }
 
 // Accepts either a single product id (every pre-existing caller) or an array — the array form

@@ -36,6 +36,7 @@ import {
   deleteReview,
   getStoreReview,
   getStoreReviews,
+  getStoreReviewStatusCounts,
   rejectReview,
   replyToReview,
   type ReviewWithProduct,
@@ -166,10 +167,23 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
     }
 
     const productIds = Array.from(new Set(reviews.map((review) => review.productId)));
-    const aiSummaries = await getAiSummariesForProducts(productIds);
+    // One grouped query beside the summaries, so the status tabs can carry counts without a
+    // second round trip. Shares the list's own filters — see getStoreReviewStatusCounts.
+    const [aiSummaries, statusCounts] = await Promise.all([
+      getAiSummariesForProducts(productIds),
+      getStoreReviewStatusCounts(store.id, {
+        search,
+        rating,
+        product,
+        dateFrom,
+        dateTo,
+        verifiedPurchase: verifiedPurchase || undefined,
+      }),
+    ]);
 
     return {
       reviews,
+      statusCounts,
       focusReviewId,
       focusReplyEditor: Boolean(focusReviewId) && wantsReplyEditor,
       nextCursor: result.nextCursor,
@@ -189,6 +203,7 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
   } catch (error) {
     return {
       reviews: [] as ReviewWithProduct[],
+      statusCounts: { all: 0, PENDING: 0, APPROVED: 0, REJECTED: 0 },
       focusReviewId: "",
       focusReplyEditor: false,
       nextCursor: null,
@@ -498,7 +513,11 @@ export default function ReviewsPage() {
   const pageFetcherEpochRef = useRef<string | null>(null);
   const activeData =
     pageFetcher.data && pageFetcherEpochRef.current === filterKey ? pageFetcher.data : loaderData;
-  const { reviews, nextCursor, hasMore, totalCount, aiSummaries, error } = activeData;
+  const { reviews, nextCursor, hasMore, totalCount, aiSummaries, statusCounts, error } = activeData;
+
+  /** The count for one status tab; "" is the All tab. */
+  const statusCountFor = (status: string) =>
+    status === "" ? statusCounts.all : (statusCounts[status as keyof typeof statusCounts] ?? 0);
 
   const isLoading = navigation.state !== "idle" || pageFetcher.state !== "idle";
   const isMutating = mutationFetcher.state !== "idle";
@@ -1192,6 +1211,13 @@ export default function ReviewsPage() {
                   onClick={() => updateQuery({ status: option.value || undefined })}
                 >
                   {option.label}
+                  {/* The count sits beside the label the way Judge.me's category tabs carry
+                      theirs, so a merchant sees the size of the pending queue without
+                      clicking into it. Rendered even at zero: here "0" is a fact the query
+                      returned, not an unknown. */}
+                  <span className={styles.statusSegmentCount}>
+                    {formatCount(statusCountFor(option.value))}
+                  </span>
                 </button>
               ))}
             </div>
@@ -1307,7 +1333,10 @@ export default function ReviewsPage() {
         {mutationError ? <p className={styles.feedbackError}>{mutationError}</p> : null}
         {isLoading ? <p className={styles.feedbackMuted}>Refreshing review results...</p> : null}
 
-        <Section title="Review management">
+        {/* No section title: the page is already headed "Reviews", and a second heading
+            over the only table on it told the merchant nothing. Judge.me heads this screen
+            once for the same reason. */}
+        <Section>
           <div className={styles.resultsBar}>
             {selectedIds.length > 0 ? (
               <div className={styles.bulkBar}>
