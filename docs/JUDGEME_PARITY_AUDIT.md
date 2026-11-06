@@ -438,3 +438,54 @@ during collection (email and submission form), and a coupon widget in Customer A
 in plain language, and a chevron to a detail view. A merchant reads their whole coupon
 configuration as sentences without opening anything. It is a far better fit for Imagyn's
 settings-heavy screens than the current wall of form fields.
+
+### 11.9 Email templates — the full inventory
+
+`Settings → Email templates` (`/settings/review_collection/emails`). Two global actions sit in
+the page header, separate from any one template: **Edit sender settings** and **Edit template
+styling**. Styling and sender are configured once; each template then carries only its content.
+
+| Group | Template | Default | Paid |
+|---|---|---|---|
+| Review request and reminder | Store Review Fallback | On, "Smart styling" | — |
+| | Smart Email Template | On, "Smart styling" | — |
+| Post-review notifications | Review confirmation | On | — |
+| | Reply notification | On | — |
+| | Media reminder — chases a review left without a photo or video | Off | ★ |
+| | Q&A notification | On | ★ |
+| Discounts and rewards | Coupon | Off | ★ |
+| | Coupon reminder — chases a coupon the customer has not used | Off | ★ |
+| | Referrals | Off | ★ |
+| | Referral reminder | Off | ★ |
+
+Three things Imagyn does not have:
+
+1. **Request templates are a list, not a singleton.** A `Create ⌄` button makes more of them.
+   Imagyn has exactly one review-request template.
+2. **Media reminder** and **Coupon reminder** are second-touch automations. The coupon reminder
+   in particular chases unredeemed discounts, which converts directly to revenue.
+3. **"Smart styling"** is the named default styling mode, applied before a merchant configures
+   anything.
+
+### 11.10 Branding — smaller than expected, and beatable
+
+`Settings → Branding` (`/settings/branding`) is a short page:
+
+- **Color → Primary color**, a swatch plus hex field, defaulting to Judge.me's own teal
+  `#108474`, with `Reset to default`. One value drives "the star color, buttons, links and link
+  buttons on all widgets and emails".
+- **Rating icon** (★ paid), a select defaulting to `Star (Default)`, with a live 3.5-star preview
+  rendered in the primary colour directly beneath the control.
+- **Store logo**, which is only a cross-link: "Update your logo in Email styling settings".
+- **Judge.me trust marks** (★ paid) — `Show Powered by Judge.me in emails` and
+  `Show 'Verified Checkmark' in widgets`, both on and locked on the free plan.
+
+**The finding that matters: Judge.me does not derive branding from Shopify.** The default is its
+own teal, not the merchant's brand colour, and the logo lives in email styling rather than being
+fetched. Imagyn's planned automatic brand identity (§2A/§4A — pull logo, store name and colours
+from Shopify on install) would therefore put Imagyn **ahead of** the benchmark, not level with
+it. It is a differentiator, not catch-up work, and should be prioritised accordingly.
+
+The second lesson is restraint: brand configuration is *one colour and one icon*, applied
+globally to every widget and email, with the preview beside the control. Imagyn's Brand Studio
+should not grow beyond what a merchant will actually set.
