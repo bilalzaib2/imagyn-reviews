@@ -52,7 +52,7 @@ import {
   type AiReplyTone,
 } from "../services/ai/replyTone.shared";
 import { syncProductStructuredData } from "../services/structuredData/sync.server";
-import { ReviewStatus } from "../services/review.shared";
+import { REVIEW_HIDE_REASONS, ReviewStatus, reviewHideReasonLabel, type ReviewHideReasonId } from "../services/review.shared";
 import { IMPORT_SOURCES, type ImportSource } from "../services/importers/types";
 import { importReviews, type ImportResult } from "../services/reviewImportExport.server";
 import { getOrCreateStore } from "../services/store.server";
@@ -272,8 +272,15 @@ export const action = async ({ request }: ActionFunctionArgs): Promise<ActionDat
         return { ok: false, error: "Missing review id." };
       }
 
+      // Only read when hiding. parseReviewHideReason in the service rejects anything that is
+      // not an offered id, so a hand-crafted POST cannot write arbitrary text into the
+      // moderation record.
+      const hideReason = formData.get("hideReason");
+
       const review =
-        intent === "approve" ? await approveReview(store.id, reviewId) : await rejectReview(store.id, reviewId);
+        intent === "approve"
+          ? await approveReview(store.id, reviewId)
+          : await rejectReview(store.id, reviewId, hideReason);
       // Status just changed, which is the one thing the public review summary/JSON-LD
       // depends on — always resync, regardless of direction (approve adds a review to the
       // public set, reject removes one that may have been approved before).
@@ -365,6 +372,7 @@ export const action = async ({ request }: ActionFunctionArgs): Promise<ActionDat
         store.id,
         ids,
         intent === "bulkApprove" ? ReviewStatus.APPROVED : ReviewStatus.REJECTED,
+        formData.get("hideReason"),
       );
       void Promise.all(result.affectedProductIds.map((productId) => syncProductStructuredData(admin, productId)));
       return {
@@ -591,6 +599,11 @@ export default function ReviewsPage() {
   const importFileInputRef = useRef<HTMLInputElement>(null);
 
   const [optimisticStatus, setOptimisticStatus] = useState<Record<string, ReviewStatus>>({});
+  /** Which hide the reason prompt is open for, or null when it is closed. */
+  const [hidePrompt, setHidePrompt] = useState<{ kind: "single"; reviewId: string } | { kind: "bulk" } | null>(null);
+  /** The reason currently selected in that prompt. Defaults to the commonest one so the
+   *  usual case is one click, while still being an explicit choice the merchant can see. */
+  const [hideReason, setHideReason] = useState<ReviewHideReasonId>(REVIEW_HIDE_REASONS[0].id);
   const [optimisticDeleted, setOptimisticDeleted] = useState<Record<string, true>>({});
   const [optimisticReply, setOptimisticReply] = useState<Partial<Record<string, string | null>>>({});
   const [optimisticRepliedAt, setOptimisticRepliedAt] = useState<Partial<Record<string, Date | null>>>({});
@@ -790,9 +803,40 @@ export default function ReviewsPage() {
   };
 
   const applySingleStatus = (reviewId: string, status: ReviewStatus) => {
+    // Hiding always asks why first. Approving does not: restoring a review to the storefront
+    // needs no justification, and a prompt there would only train merchants to dismiss it.
+    if (status === ReviewStatus.REJECTED) {
+      setHidePrompt({ kind: "single", reviewId });
+      return;
+    }
+
     setMutationError(null);
     setOptimisticStatus((prev) => ({ ...prev, [reviewId]: status }));
-    submitMutation({ _intent: status === ReviewStatus.APPROVED ? "approve" : "reject", reviewId });
+    submitMutation({ _intent: "approve", reviewId });
+  };
+
+  /** Carries out the hide the prompt was opened for, with the reason the merchant chose. */
+  const confirmHide = () => {
+    if (!hidePrompt) return;
+
+    setMutationError(null);
+
+    if (hidePrompt.kind === "single") {
+      setOptimisticStatus((prev) => ({ ...prev, [hidePrompt.reviewId]: ReviewStatus.REJECTED }));
+      submitMutation({ _intent: "reject", reviewId: hidePrompt.reviewId, hideReason });
+    } else {
+      setOptimisticStatus((prev) => {
+        const next = { ...prev };
+        selectedIds.forEach((id) => {
+          next[id] = ReviewStatus.REJECTED;
+        });
+        return next;
+      });
+      submitMutation({ _intent: "bulkReject", reviewIds: selectedIds, hideReason });
+      setSelectedIds([]);
+    }
+
+    setHidePrompt(null);
   };
 
   const applySingleDelete = (reviewId: string) => {
@@ -886,6 +930,12 @@ export default function ReviewsPage() {
 
   const applyBulkAction = (intent: "bulkApprove" | "bulkReject" | "bulkDelete") => {
     if (selectedIds.length === 0) {
+      return;
+    }
+
+    // A reason is not something a merchant can skip by selecting several reviews at once.
+    if (intent === "bulkReject") {
+      setHidePrompt({ kind: "bulk" });
       return;
     }
 
@@ -1550,6 +1600,18 @@ export default function ReviewsPage() {
                             <span className={styles.detailMetaValue}>{selectedReview.moderationReason}</span>
                           </div>
                         ) : null}
+                        {/* Why a person hid it, which is a different fact from the
+                            "Moderation" row above — that one records how the automated rules
+                            first classified it. */}
+                        {selectedReview.hiddenReason ? (
+                          <div className={styles.detailMetaRow}>
+                            <span className={styles.detailMetaLabel}>Hidden</span>
+                            <span className={styles.detailMetaValue}>
+                              {reviewHideReasonLabel(selectedReview.hiddenReason) ?? selectedReview.hiddenReason}
+                              {selectedReview.hiddenAt ? ` · ${formatShortDate(selectedReview.hiddenAt)}` : ""}
+                            </span>
+                          </div>
+                        ) : null}
                         {selectedReview.importSource ? (
                           <div className={styles.detailMetaRow}>
                             <span className={styles.detailMetaLabel}>Source</span>
@@ -1900,6 +1962,45 @@ export default function ReviewsPage() {
         </Section>
       </div>
       </Container>
+
+      {/* Hiding a review records why. A fixed list rather than free text, because this is an
+          accountability record: it has to be aggregatable and auditable, and "spam lol" is
+          neither. See REVIEW_HIDE_REASONS. */}
+      <Modal
+        open={hidePrompt !== null}
+        onClose={() => setHidePrompt(null)}
+        title={
+          hidePrompt?.kind === "bulk"
+            ? `Hide ${formatCount(selectedIds.length)} review${selectedIds.length === 1 ? "" : "s"}`
+            : "Hide review"
+        }
+        primaryAction={{ content: "Hide review", onAction: confirmHide, destructive: true }}
+        secondaryActions={[{ content: "Cancel", onAction: () => setHidePrompt(null) }]}
+      >
+        <Modal.Section>
+          <div className={styles.fieldGroup}>
+            <label className={styles.filterLabel} htmlFor="hide-reason">
+              Reason for hiding
+            </label>
+            <select
+              id="hide-reason"
+              className={styles.filterSelect}
+              value={hideReason}
+              onChange={(event) => setHideReason(event.target.value as ReviewHideReasonId)}
+            >
+              {REVIEW_HIDE_REASONS.map((reason) => (
+                <option key={reason.id} value={reason.id}>
+                  {reason.label}
+                </option>
+              ))}
+            </select>
+            <p className={styles.feedbackMuted}>
+              Recorded with the review for your own records. It is never shown to customers or on
+              your storefront.
+            </p>
+          </div>
+        </Modal.Section>
+      </Modal>
 
       <Modal
         open={isImportModalOpen}

@@ -313,6 +313,7 @@ model Store {
   productGroups       ProductGroup[]
 
   reviewSubmissionThrottles ReviewSubmissionThrottle[]
+  questions                 Question[]
 }
 
 model Product {
@@ -356,6 +357,7 @@ model Product {
   reviews        Review[]
   reviewRequests ReviewRequest[]
   widgets        Widget[]
+  questions      Question[]
   aiSummary      ProductAiSummary?
 
   @@index([productGroupId])
@@ -383,6 +385,53 @@ model ProductGroup {
   products Product[]
 
   @@index([storeId])
+}
+
+/// Product and store questions asked by shoppers, answered by the merchant.
+///
+/// Scope is deliberately small, matching what the benchmark actually ships: a question has an
+/// asker, a body, an optional answer and a published state. Everything else (FAQ widgets,
+/// store FAQs) reads from this one table.
+model Question {
+  id      String @id @default(cuid())
+  storeId String
+  store   Store  @relation(fields: [storeId], references: [id], onDelete: Cascade)
+
+  /// Nullable: a question can be about the store rather than one product, which is also how
+  /// a question survives its product being removed from the catalogue mid-conversation.
+  productId    String?
+  product      Product? @relation(fields: [productId], references: [id], onDelete: SetNull)
+  /// Denormalised at write time, exactly as Review.productTitle is, so a question still names
+  /// its product after the product row is gone.
+  productTitle String?
+
+  askerName  String
+  askerEmail String?
+  body       String
+
+  /// One answer per question, from the merchant. answeredAt is the notification trigger.
+  answer     String?
+  answeredAt DateTime?
+
+  status       QuestionStatus @default(PENDING)
+  /// Same contract as Review.hiddenReason — an id from REVIEW_HIDE_REASONS, never free text.
+  hiddenReason String?
+  hiddenAt     DateTime?
+
+  /// Soft delete, matching Review. Every query in question.server.ts filters on it.
+  deletedAt DateTime?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([storeId, deletedAt, createdAt])
+  @@index([storeId, status])
+  @@index([productId, deletedAt])
+}
+
+enum QuestionStatus {
+  PENDING
+  PUBLISHED
+  REJECTED
 }
 
 enum ReviewStatus {
@@ -428,6 +477,22 @@ model Review {
   // originally get its first status," not "what is its status now."
   moderationStatus String?
   moderationReason String?
+
+  /// Why a MERCHANT hid this review, and when. Deliberately separate from
+  /// moderationStatus/moderationReason above: those are written once by the automated
+  /// Moderation Rules pipeline and never updated, so they answer "how did this review first
+  /// get its status". These answer "why did a person hide it", which is a different question
+  /// and a different point in time.
+  ///
+  /// Recorded because hiding a review without a stated reason is a consumer-protection
+  /// exposure for the app, not just the merchant — the same class of risk as the
+  /// rating-gated rewards removed in rewards.server.ts. Judge.me requires a reason from a
+  /// fixed list for exactly this reason.
+  ///
+  /// Values are the ids in REVIEW_HIDE_REASONS (app/services/review.shared.ts), never free
+  /// text, so they stay aggregatable and translatable. Both clear when a review is restored.
+  hiddenReason String?
+  hiddenAt     DateTime?
 
   // The imported review's stable ID on its source platform (Judge.me's export calls this
   // `metaobject_handle` — a UUID-based handle, not a plain integer, but stable and unique per

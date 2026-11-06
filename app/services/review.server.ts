@@ -4,13 +4,14 @@ import type { Prisma } from "@prisma/client";
 import { ReviewMediaType } from "@prisma/client";
 import prisma from "../db.server";
 import { maybeAutoRegenerateAiSummary, maybeAutoRegenerateStoreAiSummary } from "./aiSummary.server";
-import { HelpfulVoteValue, ReviewStatus } from "./review.shared";
+import { HelpfulVoteValue, parseReviewHideReason, ReviewStatus, type ReviewHideReasonId } from "./review.shared";
 import { getStorePermissions, PermissionError } from "./permissions";
 import { getStoreById } from "./store.server";
 import { evaluateAndIssueReward } from "./rewards.server";
 import { notifyReviewCreatedFlowTrigger } from "./shopifyFlowTrigger.server";
 
 export { HelpfulVoteValue, ReviewStatus };
+export type { ReviewHideReasonId };
 
 const RATING_MIN = 1;
 const RATING_MAX = 5;
@@ -856,10 +857,23 @@ export async function deleteReview(storeId: string, id: string) {
   return review;
 }
 
+/** The hiddenReason/hiddenAt pair for a moderation transition, in both directions.
+ *
+ *  Rejecting stores the chosen reason (null when none was given — the column records what the
+ *  merchant actually picked, and must not invent "other" on their behalf). Approving clears
+ *  the pair, because a restored review is not a hidden one. */
+function hideDecision(status: typeof ReviewStatus.APPROVED | typeof ReviewStatus.REJECTED, reason: unknown) {
+  if (status !== ReviewStatus.REJECTED) {
+    return { hiddenReason: null, hiddenAt: null };
+  }
+  return { hiddenReason: parseReviewHideReason(reason), hiddenAt: new Date() };
+}
+
 async function setReviewStatus(
   storeId: string,
   id: string,
   status: typeof ReviewStatus.APPROVED | typeof ReviewStatus.REJECTED,
+  hideReason?: unknown,
 ) {
   const existing = await requireReview(storeId, id);
 
@@ -885,7 +899,14 @@ async function setReviewStatus(
 
   const review = await prisma.review.update({
     where: { id },
-    data: { status, isPublished: status === ReviewStatus.APPROVED },
+    data: {
+      status,
+      isPublished: status === ReviewStatus.APPROVED,
+      // Hiding records WHY and WHEN; restoring clears both. A stale reason left on a
+      // restored review would misreport it as hidden everywhere the column is read, and the
+      // Spam view is a filter over exactly this column.
+      ...hideDecision(status, hideReason),
+    },
     include: reviewInclude,
   });
 
@@ -964,8 +985,10 @@ export async function approveReview(storeId: string, id: string) {
   return setReviewStatus(storeId, id, ReviewStatus.APPROVED);
 }
 
-export async function rejectReview(storeId: string, id: string) {
-  return setReviewStatus(storeId, id, ReviewStatus.REJECTED);
+/** Hides a review. `hideReason` is one of REVIEW_HIDE_REASONS' ids; anything else is stored
+ *  as no reason rather than being coerced. */
+export async function rejectReview(storeId: string, id: string, hideReason?: unknown) {
+  return setReviewStatus(storeId, id, ReviewStatus.REJECTED, hideReason);
 }
 
 export async function replyToReview(storeId: string, id: string, reply: string) {
@@ -1007,6 +1030,7 @@ export async function bulkModerateReviews(
   storeId: string,
   ids: string[],
   status: typeof ReviewStatus.APPROVED | typeof ReviewStatus.REJECTED,
+  hideReason?: unknown,
 ): Promise<BulkReviewMutationResult> {
   if (ids.length === 0) {
     return { count: 0, affectedProductIds: [] };
@@ -1047,7 +1071,9 @@ export async function bulkModerateReviews(
 
   const result = await prisma.review.updateMany({
     where: { id: { in: ownedIds }, deletedAt: null },
-    data: { status, isPublished: status === ReviewStatus.APPROVED },
+    // Same record as a single moderation — a reason must not be something a merchant can
+    // skip simply by selecting several reviews instead of one.
+    data: { status, isPublished: status === ReviewStatus.APPROVED, ...hideDecision(status, hideReason) },
   });
 
   await Promise.all(affectedProductIds.map((productId) => recalculateProductStats(productId)));

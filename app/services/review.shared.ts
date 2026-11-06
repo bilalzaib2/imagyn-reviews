@@ -6,6 +6,58 @@ export const ReviewStatus = {
 
 export type ReviewStatus = (typeof ReviewStatus)[keyof typeof ReviewStatus];
 
+/**
+ * Why a merchant hid a review.
+ *
+ * A fixed list, not free text. Three reasons:
+ *
+ *   - It is a consumer-protection expectation that a hidden review has a stated,
+ *     categorisable reason. Free text cannot be aggregated, audited or translated, and in
+ *     practice collects "" and "spam lol".
+ *   - The storefront must never show these. They are an internal moderation record.
+ *   - The Spam view is simply a filter over this column, so the ids have to be stable.
+ *
+ * Ids are stored; labels are presentation and may be reworded freely. Taken from the
+ * categories the benchmark uses, which are themselves drawn from the platform policies both
+ * apps answer to.
+ */
+export const REVIEW_HIDE_REASONS = [
+  { id: "spam", label: "Spam" },
+  { id: "fake", label: "Fake or not a genuine customer" },
+  { id: "duplicate", label: "Duplicate review" },
+  { id: "unrelated", label: "Unrelated to the product" },
+  { id: "offensive", label: "Offensive or inappropriate" },
+  { id: "personal_data", label: "Contains personal information" },
+  { id: "other", label: "Other" },
+] as const;
+
+export type ReviewHideReasonId = (typeof REVIEW_HIDE_REASONS)[number]["id"];
+
+const HIDE_REASON_IDS: ReadonlySet<string> = new Set(REVIEW_HIDE_REASONS.map((reason) => reason.id));
+
+/** True when `value` is one of the fixed reason ids. */
+export function isReviewHideReason(value: unknown): value is ReviewHideReasonId {
+  return typeof value === "string" && HIDE_REASON_IDS.has(value);
+}
+
+/**
+ * Narrows arbitrary input to a storable reason id.
+ *
+ * Returns null for anything unrecognised rather than throwing or inventing "other": a reason
+ * the app did not offer is not a reason the merchant chose, and silently recording it as
+ * "Other" would put words in their mouth in a record that exists for accountability.
+ */
+export function parseReviewHideReason(value: unknown): ReviewHideReasonId | null {
+  if (typeof value !== "string") return null;
+  const trimmed = value.trim();
+  return isReviewHideReason(trimmed) ? trimmed : null;
+}
+
+/** The merchant-facing label for a stored id, or null if the id is not one we offer. */
+export function reviewHideReasonLabel(id: unknown): string | null {
+  return REVIEW_HIDE_REASONS.find((reason) => reason.id === id)?.label ?? null;
+}
+
 export const HelpfulVoteValue = {
   HELPFUL: "HELPFUL",
   NOT_HELPFUL: "NOT_HELPFUL",
