@@ -489,3 +489,50 @@ it. It is a differentiator, not catch-up work, and should be prioritised accordi
 The second lesson is restraint: brand configuration is *one colour and one icon*, applied
 globally to every widget and email, with the preview beside the control. Imagyn's Brand Studio
 should not grow beyond what a merchant will actually set.
+
+### 11.11 Request scheduling — segmented by order origin
+
+`Settings → Request scheduling` (`/settings/review_collection/schedule_reminders`). Not one
+global delay: **three independent schedules**, each a summary row showing Trigger / Timing /
+Reminders with a chevron to its detail.
+
+| Schedule | Trigger | Timing | Reminders |
+|---|---|---|---|
+| Domestic orders — labelled from the store's own country, "Orders from Pakistan" | After fulfilled | Send request after 14 days | No reminders |
+| International orders | After fulfilled | Send request after 14 days | No reminders |
+| Point of sale (POS) orders | After fulfilled | Send request after 7 days | No reminders |
+
+Plus `+ Add custom timing for a product` (★ paid), i.e. per-product overrides.
+
+The segmentation is the substance. Domestic and international shipping times differ by weeks, so
+a single global delay sends either too early abroad or too late at home. POS defaults shorter (7
+days) because the customer already has the item. Imagyn has one global delay and no notion of
+order origin — a real gap, and one needing a migration.
+
+### 11.12 Widgets — a per-theme gallery of ~22
+
+`Settings → Widgets` (`/settings/reviews/widgets`). Two framing details first:
+
+- A **theme selector** in the page header (`Dawn (live) ⌄`) — widget configuration is per theme.
+- A live setup warning: *"App embeds missing from live theme — this is required for all widgets
+  to show correctly"*, with an `Enable app embed ↗` action. `Install` is disabled on the cards
+  until it is resolved, so the gallery reflects real theme state rather than listing everything
+  as available.
+
+Each widget is a card with an **illustrated preview thumbnail**, name, optional `Installed`
+badge, one-line description, and `Install ↗` / `Customize` / `Manage` actions.
+
+The inventory (★ = paid): Review Widget · Star Rating Badge · Write a Review (installed) ·
+Cards Carousel · Testimonials Carousel · Videos Carousel · Pop-up Reviews ★ ·
+AI Reviews Summary ★ · Product FAQs ★ · Review Snippets · Questions and Answers ★ ·
+Store FAQs ★ · Happy Customers widget ★ · Reviews Grid ★ · Floating Reviews Tab ★ ·
+Judge.me Medals · Verified Reviews Counter · All Reviews Counter ★ · UGC Instagram Shopping ·
+Customer accounts widgets · Judge.me Trust Badge · (further cards below the fold).
+
+Three of these are AI-authored surfaces — **AI Reviews Summary**, **Product FAQs** and **Store
+FAQs** ("AI-generated and merchant-authored"). Imagyn already has AI summaries, so this is the
+one area where the benchmark is not ahead.
+
+Patterns worth adopting regardless of widget count: the illustrated preview card rather than a
+text list, the per-theme selector, and the setup banner that disables actions it knows cannot
+yet work.
