@@ -753,3 +753,65 @@ Research is well ahead of implementation now. In order:
 2. Audit Imagyn's bulk operations against it.
 3. The gaps needing a migration — Q&A, scheduling segments, coupon tiering, spam/archive — each
    still needs explicit approval before a schema change.
+
+---
+
+## 13. Migrations of 2026-11-07 — hide reasons and Q&A
+
+Both were explicitly approved. Local development database only; Railway untouched.
+
+### 13.1 Safeguards, as carried out
+
+1. **Backup taken** with `pg_dump` before any schema change.
+2. **Backup verified by restoring it** into a disposable database and comparing row counts —
+   zero errors, exact match. The scratch database was then dropped. A dump that has never been
+   restored is not a backup.
+3. **Migration generated with `--create-only` and read before applying.** It is purely
+   additive: one new enum, two nullable columns on `Review`, one new table with its own
+   indexes and foreign keys. No `DROP`, no altered existing column, no `NOT NULL` backfill.
+4. **Rollback SQL recorded** beside it at
+   `prisma/migrations/20261106204257_add_hide_reasons_and_questions/rollback.sql`. Prisma has
+   no down-migrations, so it is written by hand.
+5. **Row counts compared before and after**: 3 stores, 34 reviews, 12 products, 10 requests,
+   1 session, 1 coupon, 1 review media, 2 audit logs — all identical.
+
+### 13.2 What was built on them
+
+`5f3d4fc` — hide reasons. `Review.hiddenReason` + `hiddenAt`, a fixed reason vocabulary in
+`review.shared.ts`, capture on single and bulk hide, clearing on restore, a modal that asks
+before the hide is submitted, and the reason surfaced in the detail panel.
+
+`2c818e3` — Q&A. `question.server.ts`, `question.shared.ts`, `/app/questions` with three
+counted tabs, debounced search, an answer modal and hide/restore, plus the third workspace tab.
+
+### 13.3 Verification
+
+- **1,853 tests across 94 files**, typecheck, lint and production build all clean.
+- **59 new unit tests** covering the reason vocabulary, hiding, restoring, bulk behaviour, Q&A
+  creation, answering, moderation, tenant isolation and the edges.
+- **13 end-to-end checks against the real local database**, run inside a transaction that
+  deliberately rolls back — 0 question rows before and after. These exercised the actual
+  columns rather than mocks: a question stays off the storefront while unanswered, answering
+  publishes and stamps it, hiding removes it and records why, restoring clears it, another
+  store cannot resolve the id, and the review hide columns round-trip.
+- **Still not browser-verified.** Nothing from this session has been seen rendered. Production
+  runs the old build and must not be redeployed.
+
+### 13.4 Decisions worth not re-litigating
+
+- `moderationReason` was **not** reused. It is written once at creation by the automated
+  pipeline and never updated, so it answers a different question from "why did a human hide
+  this". Overloading it would have destroyed that meaning.
+- Reasons are **ids, not free text** — aggregatable, auditable, translatable, and not a vector
+  for arbitrary strings from a hand-crafted POST.
+- **Answering a question publishes it.** A merchant who has written a public answer has already
+  decided it is fit to show; a second button only produces answered-but-invisible questions.
+- **Editing an answer preserves `answeredAt`**, so fixing a typo cannot re-notify the customer.
+- The storefront read returns **published AND answered** questions only, and never selects
+  `askerEmail`.
+
+### 13.5 Next
+
+Still unbuilt on top of the new model: the Q&A product widget, store FAQs, and the Q&A
+notification email. Remaining approved-scope-free migrations are 3–6 in the gap matrix, plus
+`Review.archivedAt` for an Archive view.

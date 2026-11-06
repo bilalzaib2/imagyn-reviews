@@ -31,15 +31,15 @@ session's browser work except the three defects actually observed.
 
 | Feature | Judge.me | Imagyn | Status | Gap / action |
 |---|---|---|---|---|
-| Workspace tabs | Reviews · Review requests · Customer questions | Reviews · Review Requests | Partial | Q&A tab absent until the model exists |
+| Workspace tabs | Reviews · Review requests · Customer questions | All three | **Built, unverified** | Closed `2c818e3` |
 | Category tabs | All · Pending · Product · Store · Spam · Archive, each with counts | All · Pending · Approved · Rejected, now with counts (`4167973`) | Partial | Product-vs-store, spam and archive need schema |
 | Filters | Status · Source · Rating · Type · Sentiment · Topics · Tags · date | Status · rating · product · date · verified | Partial | Source, type, sentiment, topics, tags missing |
 | Review table | Not observable (0 reviews) | 6 columns, full width, container-responsive | Built, unverified | Compare once Judge.me has data |
 | Detail view | Not observed | Drawer < 64rem, second column ≥ 64rem (`20c9aaa`) | Built, unverified | Never seen rendered |
 | Bulk publish | Checkbox select → "Publish reviews" (help centre) | `bulkApprove` | Built, unverified | Behaviour matches |
-| Bulk hide | Select → "Hide reviews" → **reason required** (help centre) | `bulkReject`, **no reason captured** | Partial | See §6 — compliance-relevant |
+| Bulk hide | Select → "Hide reviews" → **reason required** (help centre) | `bulkReject` + required reason | **Built, unverified** | Closed `5f3d4fc` |
 | Archive | Per-review, three-dot menu; own tab | Missing | Missing | Needs schema |
-| Spam | **Not a status** — a hide *reason*, surfaced as a tab | Missing | Missing | Cheaper than assumed: a reason field, not a new status |
+| Spam | **Not a status** — a hide *reason*, surfaced as a tab | `hiddenReason` stores it; no tab yet | Partial | The data exists; the Spam view is now just a filter |
 | Reply to review | Yes, with email notification | Yes, with AI drafting | Built, unverified | Imagyn ahead (AI drafting, tone) |
 | Search / sort / pagination | Yes | Yes, server-side cursor | Built, unverified | — |
 
@@ -62,7 +62,7 @@ session's browser work except the three defects actually observed.
 | Review confirmation | On by default | Yes | Built, unverified | — |
 | Reply notification | On by default | Yes | Built, unverified | — |
 | Media reminder | Paid, off | Missing | Missing | Chases text-only reviews for photos |
-| Q&A notification | Paid, on | N/A | N/A | Depends on Q&A |
+| Q&A notification | Paid, on | Missing | Missing | Model now exists; email not wired |
 | Coupon email | Paid | Yes | Built, unverified | — |
 | **Coupon reminder** | Paid — chases unredeemed coupons | Missing | Missing | Direct revenue impact |
 | Referral emails | Paid | Yes (Referral models) | Built, unverified | — |
@@ -78,7 +78,7 @@ session's browser work except the three defects actually observed.
 | White-label | Paid | Plan-gated | Built, unverified | — |
 | Widgets | ~22, per-theme gallery, app-embed gating | `Widget` model, widgets + add-to-theme routes | Partial | Count and gallery UX both behind |
 | AI reviews summary | Paid widget | Yes | Built, unverified | Level |
-| Product / store FAQs | Paid widgets | Missing | Missing | Depends on Q&A |
+| Product / store FAQs | Paid widgets | Missing | Missing | `getPublicQuestions` is the read side; no widget yet |
 
 ## 5. Coupons and rewards
 
@@ -96,21 +96,29 @@ session's browser work except the three defects actually observed.
 | Rating-gated rewards | **Absent** (compliance) | **Removed** (`09db694`) | Verified | Both compliant |
 | Issued-code visibility | Not observed | Yes (`6278e8c`) | Built, unverified | — |
 
-## 6. Compliance — the highest-priority gap
+## 6. Compliance — CLOSED 2026-11-07
 
-Judge.me **requires a reason** when hiding or archiving a review, chosen from a fixed list
-(Fake, Duplicated review, Spam, Unrelated to the product, …), stating this is "to align with
-review transparency policies and consumer protection laws".
+Judge.me **requires a reason** when hiding or archiving a review, chosen from a fixed list,
+stating this is "to align with review transparency policies and consumer protection laws".
+Imagyn recorded nothing.
 
-Imagyn's merchant can reject a review and **no reason is recorded anywhere**.
+**Closed in `5f3d4fc`.** `Review.hiddenReason` and `Review.hiddenAt` are new, additive and
+nullable. They are deliberately separate from `moderationStatus`/`moderationReason`, which the
+automated pipeline writes once and never updates: those answer "how did this review first get
+its status", the new pair answers "why did a person hide it".
 
-`Review.moderationReason` cannot be reused: it is documented as set once at creation by the
-Moderation Rules pipeline and never updated, so it answers "how did this review first get its
-status", not "why did a human hide it". Overloading it would destroy that meaning.
+Properties worth keeping true:
 
-**Required:** a new nullable column pair on `Review` (e.g. `hiddenReason`, `hiddenAt`), captured
-on manual reject and bulk hide, shown in the detail panel and exported. This is the same class
-of risk as the rating-gated rewards defect fixed in `09db694`, where liability falls on the app.
+- Reasons are **ids from a fixed list**, never free text, so the record stays aggregatable,
+  auditable and translatable — and a hand-crafted POST cannot write arbitrary strings into it.
+- **Restoring clears both.** A stale reason would misreport a live review as hidden everywhere
+  the column is read, including any Spam view built over it.
+- **Bulk hide keeps the same record** a single hide keeps, so a merchant cannot skip the reason
+  by selecting two reviews instead of one.
+- Questions use the same vocabulary, so there is one list to maintain.
+
+Still open: an **Archive** view needs one more nullable column (`archivedAt`). Judge.me treats
+archive as hide-plus-move-to-a-tab. Not started — outside the approved scope.
 
 ## 7. Analytics
 
@@ -136,12 +144,17 @@ Every item below is schema work. Nothing here will be started without explicit a
 
 | # | Migration | Unblocks | Priority |
 |---|---|---|---|
-| 1 | `Review.hiddenReason` + `hiddenAt` | Moderation reasons, Spam tab, Archive tab | **Compliance — highest** |
-| 2 | `Question` model (+ answer fields) | Customer questions tab, Q&A widget, FAQs, Q&A email | High — most visible hole |
+| 1 | ~~`Review.hiddenReason` + `hiddenAt`~~ | **DONE** `5f3d4fc` | — |
+| 2 | ~~`Question` model~~ | **DONE** `5f3d4fc` / `2c818e3`. Still to build on it: Q&A widget, FAQs, notification email | — |
 | 3 | `Review.isStoreReview` (or nullable `productId`) | Product vs Store review tabs | Medium |
 | 4 | Request schedule segments | Domestic / international / POS timing | Medium |
 | 5 | Coupon tiering + combinations + eligibility | Coupon parity | Medium |
 | 6 | Multiple request email templates | Template list | Low |
 
-Items 1 and 2 are the ones worth doing first: one is a compliance exposure, the other is the
-largest visible gap in the product.
+Items 1 and 2 were approved and are done. Both migrations are additive and nullable, were
+applied to the local development database only, and ship with rollback SQL beside them
+(`prisma/migrations/20261106204257_add_hide_reasons_and_questions/rollback.sql`). A verified
+backup was taken first and all 34 reviews, 3 stores, 12 products and 10 requests were confirmed
+intact afterwards.
+
+Remaining: 3, 4, 5, 6, plus `Review.archivedAt` for the Archive view. None started.
