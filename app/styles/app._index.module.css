@@ -543,6 +543,22 @@
   border-bottom: none;
 }
 
+/* The star rating beside each activity row.
+
+   This class was referenced by app._index.tsx and never defined anywhere, so it resolved to
+   `undefined` and the div rendered as class="undefined" — an unstyled flex child that could
+   shrink and let the stars wrap mid-row. A silent bug: no build, lint or test catches a
+   missing CSS-module key.
+
+   flex-none because the rating is fixed-width content that must never be the thing that
+   gives way when a long product name arrives; .activityContent has min-width: 0 and absorbs
+   the pressure instead. */
+.activityRating {
+  flex: none;
+  display: flex;
+  align-items: center;
+}
+
 .activityContent {
   display: grid;
   gap: var(--space-1);

@@ -29,9 +29,24 @@ export interface AiSummaryResult {
 export interface AiBrandSuggestionRequest {
   shopName: string;
   // A brand colour already known to the app, given as context so the AI complements it
-  // rather than suggesting something unrelated. Shopify's Admin API exposes no brand colour
-  // (no `Shop.brand` field, no brand query — both confirmed against the schema), so this is
-  // populated from the merchant's own already-configured Imagyn accent colour.
+  // rather than suggesting something unrelated. Populated from the merchant's own
+  // already-configured Imagyn accent colour.
+  //
+  // CORRECTION 2026-11-06. This comment used to assert that "Shopify's Admin API exposes no
+  // brand colour (no `Shop.brand` field, no brand query — both confirmed against the
+  // schema)". That is wrong on the first count and unproven on the second:
+  //
+  //   `Shop.brand` DOES exist in the Admin API — shopBrandLogo.server.ts queries
+  //   `shop { brand { logo { image { url } } } }` against it in production and it works.
+  //
+  //   Whether Admin's Brand type carries `colors` is UNVERIFIED. The Storefront API's Brand
+  //   definitely does (primary/secondary BrandColorGroup). An attempt to settle it for Admin
+  //   failed from the dev environment: the Shopify MCP connector was disconnected and
+  //   shopify.dev's object pages 404 to a plain fetch.
+  //
+  // Settle it by introspecting `Brand` against a development store before building on either
+  // answer — it gates automatic brand colours for Email Studio and Brand Studio. Do not
+  // assume from this comment in either direction.
   detectedColor: string | null;
   // Read from the merchant's live storefront (storePalette.server.ts) — the only universally
   // available source for what their store actually looks like, and the thing that lets a
