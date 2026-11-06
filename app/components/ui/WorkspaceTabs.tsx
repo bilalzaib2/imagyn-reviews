@@ -14,12 +14,13 @@
 // this context never updates the URL at all. See app.tsx's own note and the product cell in
 // app.products.tsx, which hit exactly this.
 //
-// WHAT IS NOT HERE
+// EVERY TAB GOES SOMEWHERE REAL
 //
-// A "Customer Questions" tab. Product Q&A has no data model in this app — no table, no
-// service, nothing behind it — so a tab would navigate to a page that cannot exist. A tab that
-// looks like the other two and does nothing is worse than its absence, so it is left out until
-// the model exists rather than shipped disabled or as a "coming soon".
+// Customer Questions was left out of this set until 2026-11-07 because Product Q&A had no data
+// model — no table, no service, nothing behind it — and a tab that looks like the others and
+// navigates nowhere is worse than its absence. It was added only once the Question model,
+// question.server.ts and /app/questions existed. Hold any future tab to the same rule rather
+// than shipping it disabled or as a "coming soon".
 import type { ReactNode } from "react";
 
 import styles from "./workspace-tabs.module.css";

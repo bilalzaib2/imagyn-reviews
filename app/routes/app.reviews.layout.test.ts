@@ -7,7 +7,7 @@
 // quietly gives the table a third of its width back.
 //
 // These assert against the real source files, which is the only place that contract lives.
-import { readFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 
 const ROUTE = readFileSync("app/routes/app.reviews.tsx", "utf8");
@@ -168,9 +168,10 @@ describe("workspace navigation", () => {
   const TABS = readFileSync("app/components/ui/reviewWorkspaceTabs.ts", "utf8");
   const REQUESTS = readFileSync("app/routes/app.requests.tsx", "utf8");
 
-  it("links Reviews and Review Requests, from one shared tab set", () => {
+  it("links Reviews, Review Requests and Customer Questions, from one shared tab set", () => {
     expect(TABS).toContain('to: "/app/reviews"');
     expect(TABS).toContain('to: "/app/requests"');
+    expect(TABS).toContain('to: "/app/questions"');
   });
 
   it("renders the same navigation on both pages in the workspace", () => {
@@ -180,18 +181,28 @@ describe("workspace navigation", () => {
     }
   });
 
-  // Product Q&A has no table, no service and no route. A tab that looks like the other two
-  // and navigates nowhere is worse than its absence, so it must stay out until the model
-  // exists — not ship disabled or as a "coming soon".
-  it("does not offer a Customer Questions tab while Q&A has no data model", () => {
-    // Checked against the tab DATA, not the whole file — the module's own comment explains
-    // the omission by name, and a blunt text scan would match that explanation.
+  // The rule this used to enforce — no tab without a model behind it — still stands. It is
+  // now enforced the other way round: the Customer Questions tab is allowed precisely
+  // because the model, the service and the route all exist. If any of them is deleted, this
+  // fails and the tab must come back out.
+  it("offers a Customer Questions tab only because something stands behind it", () => {
     const labels = [...TABS.matchAll(/label: "([^"]+)"/g)].map((match) => match[1]);
     const routes = [...TABS.matchAll(/to: "([^"]+)"/g)].map((match) => match[1]);
 
-    expect(labels).toEqual(["Reviews", "Review Requests"]);
-    expect(routes).toEqual(["/app/reviews", "/app/requests"]);
-    expect(labels.some((label) => /question/i.test(label))).toBe(false);
+    expect(labels).toEqual(["Reviews", "Review Requests", "Customer Questions"]);
+    expect(routes).toEqual(["/app/reviews", "/app/requests", "/app/questions"]);
+
+    // The route, the service and the model the tab depends on.
+    expect(existsSync("app/routes/app.questions.tsx")).toBe(true);
+    expect(existsSync("app/services/question.server.ts")).toBe(true);
+    expect(readFileSync("prisma/schema.prisma", "utf8")).toMatch(/^model Question \{/m);
+  });
+
+  it("every tab points at a route file that exists", () => {
+    const routes = [...TABS.matchAll(/to: "\/app\/([^"]+)"/g)].map((match) => match[1]);
+    for (const route of routes) {
+      expect(existsSync(`app/routes/app.${route}.tsx`), `no route file for /app/${route}`).toBe(true);
+    }
   });
 
   it("uses real anchors, because App Bridge owns navigation in an embedded app", () => {
