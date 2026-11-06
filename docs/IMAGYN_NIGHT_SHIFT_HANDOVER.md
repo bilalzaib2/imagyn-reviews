@@ -675,3 +675,81 @@ research found.
 | Deliverability findings | `docs/EMAIL_DELIVERABILITY_FINDINGS.md` |
 | Resend setup | `docs/RESEND_SENDER_SETUP.md` |
 | Previous handover | `docs/IMAGYN_REVIEWS_SESSION_HANDOVER.md` §13 |
+
+---
+
+## 12. SESSION OF 2026-11-07 — browser access, and what it immediately found
+
+### 12.1 The blocker that is gone
+
+**Judge.me is installed on the `verveonline` development store and can be opened and read.**
+Every previous session recorded competitor research as "documentation only" and UI verification
+as unavailable. Both are now possible. The store's handle for Judge.me is `judgeme` — the Apps
+list and Shopify's own Sidekick both reported it as not installed, which is why earlier sessions
+concluded it was absent. Do not trust those two sources; open
+`/store/verveonline/apps/judgeme` directly.
+
+`verveonline` is confirmed **Basic · Development store** (Settings → Plan), so sample data may be
+created there. It is not Grace Store and not a live merchant.
+
+### 12.2 What first-hand research produced
+
+`docs/JUDGEME_PARITY_AUDIT.md` §11, in eight new subsections: navigation, the Review Management
+screen, typography calibration, the full 21-section Settings IA, the dashboard, plan
+presentation, the complete coupon configuration model, the ten email templates, branding,
+request scheduling, the ~22-widget gallery, customer questions and analytics.
+
+Three findings that change plans rather than confirm them:
+
+1. **Judge.me does not derive branding from Shopify.** Its default is its own teal `#108474`.
+   Imagyn's planned automatic brand identity (§2A/§4A) is therefore a *lead*, not catch-up.
+2. **Coupons are entirely paid** on Judge.me — a direct data point for the Free/Pro split.
+3. **Request scheduling is segmented** into domestic / international / POS, each with its own
+   trigger, delay and reminders. Imagyn has one global delay. This is a genuine gap.
+
+### 12.3 Three defects found by opening our own page
+
+None was caught by the 1,765 tests passing at the time.
+
+| Defect | Fix |
+|---|---|
+| Two stacked tab rows on Reviews and Requests — `WorkspaceTabs` was added without removing the older `.workflowTabs` nav | both legacy navs and their dead CSS removed (`20c9aaa`) |
+| The detail drawer overlaid the right half of the table, hiding Product, Status and Date, and its scrim made the table inert | above 64rem the detail is a real second grid column with no scrim; the table is a **query container** so it sheds columns on its own width (`20c9aaa`) |
+| Column headers rendered uppercase | sentence case (`20c9aaa`) |
+
+Then `4167973`: counts on every status tab, from one grouped query sharing the list's filters via
+a new `buildReviewWhere` helper; and the page stopped heading itself three times.
+
+### 12.4 Verification status — read this before claiming anything
+
+- **Judge.me's UI**: browser-verified, except anything needing data. Its store has 0 reviews, so
+  its populated review table, row actions, bulk operations and filter behaviour are
+  **unverified**.
+- **Imagyn's UI**: the *pre-session* build is browser-verified (that is how the three defects
+  were found). **Nothing committed this session has been seen rendered.** Production runs the
+  old build and must not be redeployed.
+- **Interactions inside our own app's iframe could not be driven.** Clicks reached Judge.me's
+  iframe but not ours, so no Imagyn control may be reported as working or broken on that basis.
+
+### 12.5 Deployment — changed understanding
+
+**Railway auto-deploys from `main`.** `WorkspaceTabs` exists only in commit `68b7ea0`, pushed
+last session and never manually deployed, yet it renders in production. Every push this week was
+therefore a production deploy, against the standing rule.
+
+**Standing instruction from the user, 2026-11-07: do not push to `main`.** Commit locally only.
+Deployment will be reviewed and approved separately once the app is complete and verified.
+
+Six commits sit **local and unpushed** at the time of writing: `20c9aaa`, `12438ae`, `731a0f4`,
+`2651aee`, `fcc7fba`, `d638de4`, `4167973`.
+
+### 12.6 Exact next task
+
+Research is well ahead of implementation now. In order:
+
+1. **Import sample reviews into Judge.me** on the dev store (authorised) to see its populated
+   table, row actions, bulk operations and filters — the largest remaining unknown, and the
+   direct input to "Complete Review Management UX and bulk operations".
+2. Audit Imagyn's bulk operations against it.
+3. The gaps needing a migration — Q&A, scheduling segments, coupon tiering, spam/archive — each
+   still needs explicit approval before a schema change.
