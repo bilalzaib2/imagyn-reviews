@@ -466,6 +466,9 @@ Five commits, all pushed. Gates green after each one. **No migration, no databas
 deployment.**
 
 ```
+7209252  docs: record the tenant-isolation audit, and flag one latent hazard
+a23b62b  fix: define a CSS class that silently rendered as class="undefined"
+7e98688  docs: record this session's work in the night-shift handover
 f650364  style: readable headings, one typeface, and green used deliberately
 68b7ea0  feat(reviews): workspace navigation, and drop the repeated eyebrow label
 d9c7334  feat(reviews): full-width review table, detail moves to a drawer
@@ -474,8 +477,53 @@ d9c7334  feat(reviews): full-width review table, detail moves to a drawer
 a2435ad  docs: resume point after reaching the usage limit during state recovery
 ```
 
-**Tests: 1,762 passing across 90 files** (from 1,714 / 89). Typecheck, lint, production build
+**Tests: 1,765 passing across 91 files** (from 1,714 / 89). Typecheck, lint, production build
 and `prisma validate` all clean.
+
+### Security audit — tenant isolation VERIFIED
+
+Audited every Prisma read and write keyed on a bare record id with no `storeId` in the filter:
+the classic cross-tenant leak. **67 call sites match the pattern, and all 67 are safe.**
+
+The codebase uses **verify-then-act** throughout — a `storeId`-scoped read establishes
+ownership, then the mutation runs on the id that read returned.
+`widget.server.ts`'s `findOwnedWidgetOrThrow` is the model, and it goes further than required
+by throwing the same generic "not found" a genuinely missing id would, so a cross-tenant
+attempt cannot distinguish "doesn't exist" from "exists, but isn't yours".
+`appearance.setActive`, `deleteReviewMedia` (scoped through the parent review, since
+`ReviewMedia` has no `storeId` of its own) and `setProductGroup` (which validates **both** the
+product and the group) all follow it. `emailTemplate.server.ts` needs no guard because it acts
+on `existing.id` from a scoped `findFirst`, which is stronger.
+
+**One latent hazard, documented not changed.** `product.server.ts`'s `getProduct(id)` reads
+with no scoping. Currently safe — its only caller derives the id from a Review the route had
+already loaded store-scoped, and writes through the caller's own `AdminApiContext`. But a
+future caller passing a raw client-supplied id would read across tenants, so it now carries a
+doc comment saying so and pointing at the scoped `getProductForStore` beside it.
+
+### A silent bug class, closed
+
+`app._index.tsx` referenced `styles.activityRating`, which was never defined. It resolved to
+`undefined`, so every row of the Dashboard's recent-activity list rendered an unstyled flex
+child that could let the star rating wrap mid-row.
+
+A missing CSS-module key fails **nowhere**: TypeScript types the module as an index signature
+so it compiles, Vite resolves it to `undefined`, React renders `class="undefined"`. Not the
+build, not the linter, not a unit test, not a render test.
+
+This was the **third** instance in one session (`styles.visuallyHidden` on Requests would have
+rendered the Actions column header visibly; `styles.fieldGroup` on SEO settings left every
+status row with no spacing). `app/styles/cssModuleContract.test.ts` now checks every
+`styles.x` reference in every route and component against the stylesheet its alias imports.
+It costs ~180ms, asserts it found >30 files so a glob change cannot make it vacuous, and was
+verified by reintroducing the bug and watching it fail with the right message.
+
+### No fake controls
+
+Checked for placeholder `href="#"`/`to=""` (none) and for "coming soon" labels that are
+actually clickable. The "Coming soon" trigger options on Settings → Requests sit on a `Select`
+that is genuinely `disabled`, and the widget/import "Coming soon" tags label genuinely
+unavailable sources. This acceptance criterion holds.
 
 ### The compliance defect — read this one first
 
