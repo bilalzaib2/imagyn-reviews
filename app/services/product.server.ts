@@ -348,6 +348,25 @@ export async function getProductsPage(storeId: string, options: ProductQueryOpti
   };
 }
 
+/**
+ * Reads a product by id with NO store scoping.
+ *
+ * Use getProductForStore below instead, unless the id you are passing was itself derived from
+ * a row you already fetched store-scoped.
+ *
+ * Audited 2026-11-06 and currently safe: the only caller is
+ * structuredData/sync.server.ts's syncProductStructuredData, whose productId always comes
+ * from a Review that the calling route had already loaded under the merchant's own storeId
+ * (see app.reviews.tsx and app.reviews_.$id.edit.tsx). That function additionally writes
+ * through the caller's own authenticated AdminApiContext, so a foreign id could not reach
+ * another store's data even if one leaked in.
+ *
+ * It stays unscoped because that caller legitimately has no storeId in hand, but it is a
+ * latent hazard: a future caller passing a raw, client-supplied id would read across tenants
+ * with nothing to stop it. Every other service in this codebase uses verify-then-act and
+ * returns a generic "not found" so a cross-tenant attempt cannot distinguish "missing" from
+ * "not yours" — match that, not this.
+ */
 export async function getProduct(id: string) {
   return prisma.product.findUnique({
     where: {
