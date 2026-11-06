@@ -243,13 +243,24 @@ model Store {
   productSyncError      String?
 
   // Review Rewards (see app/services/rewards.server.ts) — conditions checked once a review
-  // is approved: rewardMinRating/rewardRequireVerified/rewardRequirePhoto/rewardRequireVideo
-  // are all evaluated against attributes the Review row already has, nothing new is inferred.
+  // is approved: rewardRequireVerified/rewardRequirePhoto/rewardRequireVideo are all
+  // evaluated against attributes the Review row already has, nothing new is inferred.
   // valueType/value describe the Shopify discount created on issuance ("percentage" values
   // are a whole-number percent, "fixed_amount" values are the store's currency amount).
   rewardsEnabled        Boolean @default(false)
   rewardValueType       String  @default("percentage")
   rewardValue           Float   @default(10)
+  /// RETIRED 2026-11-06 — never read. Do not reintroduce.
+  ///
+  /// This gated rewards on a minimum star rating, which is paying for positive reviews:
+  /// prohibited by the FTC's rule on consumer reviews (16 CFR Part 465) and by Shopify's App
+  /// Store review-integrity requirements. The liability falls on the app, not the merchant.
+  /// Judge.me removed the equivalent rule from its own product for the same reason.
+  ///
+  /// The column is kept rather than dropped because removing it needs a migration and a
+  /// stored value is now inert — rewards.server.ts does not select it, and
+  /// evaluateEligibility never reads a review's rating at all. Dropping it is safe whenever a
+  /// migration is being made for another reason.
   rewardMinRating       Int     @default(4)
   rewardRequireVerified Boolean @default(true)
   rewardRequirePhoto    Boolean @default(false)

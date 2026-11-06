@@ -26,11 +26,35 @@ export interface RewardSettings {
   enabled: boolean;
   valueType: "percentage" | "fixed_amount";
   value: number;
-  minRating: number;
   requireVerified: boolean;
   requirePhoto: boolean;
   requireVideo: boolean;
 }
+
+/**
+ * WHY THERE IS NO `minRating` HERE ANY MORE (2026-11-06)
+ *
+ * This contract used to carry a minimum star rating, and evaluateEligibility enforced it: a
+ * merchant could set "4" and only 4- and 5-star reviews would earn a discount.
+ *
+ * That is paying for positive reviews. It is prohibited by the FTC's rule on consumer reviews
+ * and testimonials (16 CFR Part 465, in force since 2024), which bars compensation
+ * conditioned on a review expressing a particular sentiment, and it breaches Shopify's App
+ * Store requirements on review integrity. The benchmark reached the same conclusion
+ * independently — Judge.me removed rating-based coupon rules from its own product "to comply
+ * with Shopify's review policy".
+ *
+ * The risk lands on the APP, not the merchant: Imagyn is the party that gets delisted. So the
+ * rule is not "warn the merchant" or "default it to 1", it is that the condition does not
+ * exist. Rating is not read anywhere in the eligibility path.
+ *
+ * The `Store.rewardMinRating` column is deliberately NOT dropped. Removing it needs a
+ * migration, the value is now simply never read, and a stored "4" from before this change is
+ * inert. See the note on that field in schema.prisma.
+ *
+ * Every other condition below is about the review's FORM (verified purchase, photo, video),
+ * never its sentiment, which is exactly the distinction the FTC rule draws.
+ */
 
 export async function getRewardSettings(storeId: string): Promise<RewardSettings> {
   const store = await prisma.store.findUniqueOrThrow({
@@ -39,7 +63,6 @@ export async function getRewardSettings(storeId: string): Promise<RewardSettings
       rewardsEnabled: true,
       rewardValueType: true,
       rewardValue: true,
-      rewardMinRating: true,
       rewardRequireVerified: true,
       rewardRequirePhoto: true,
       rewardRequireVideo: true,
@@ -50,7 +73,6 @@ export async function getRewardSettings(storeId: string): Promise<RewardSettings
     enabled: store.rewardsEnabled,
     valueType: store.rewardValueType === "fixed_amount" ? "fixed_amount" : "percentage",
     value: store.rewardValue,
-    minRating: store.rewardMinRating,
     requireVerified: store.rewardRequireVerified,
     requirePhoto: store.rewardRequirePhoto,
     requireVideo: store.rewardRequireVideo,
@@ -64,7 +86,6 @@ export async function updateRewardSettings(storeId: string, data: RewardSettings
       rewardsEnabled: data.enabled,
       rewardValueType: data.valueType,
       rewardValue: data.value,
-      rewardMinRating: data.minRating,
       rewardRequireVerified: data.requireVerified,
       rewardRequirePhoto: data.requirePhoto,
       rewardRequireVideo: data.requireVideo,
@@ -88,15 +109,16 @@ export interface EligibilityResult {
 // Pure function — every condition here is a real, already-tracked Review attribute (see
 // prisma/schema.prisma's Review model). No condition is ever invented: photo/video presence
 // comes from the real ReviewMedia relation, not a guess.
+//
+// Every condition is about the review's FORM, never its sentiment. The review's rating is
+// deliberately not read at all — see the note on RewardSettings above for why that is a legal
+// requirement rather than a preference.
 export function evaluateEligibility(review: RewardEligibilityInput, settings: RewardSettings): EligibilityResult {
   if (!settings.enabled) {
     return { eligible: false, reason: "Review Rewards are turned off." };
   }
   if (review.status !== "APPROVED") {
     return { eligible: false, reason: "Review is not approved." };
-  }
-  if (review.rating < settings.minRating) {
-    return { eligible: false, reason: `Rating ${review.rating} is below the required minimum (${settings.minRating}).` };
   }
   if (settings.requireVerified && !review.verifiedPurchase) {
     return { eligible: false, reason: "Not a verified purchase." };

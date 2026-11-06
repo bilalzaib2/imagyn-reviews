@@ -188,7 +188,6 @@ function baseSettings() {
     enabled: true,
     valueType: "percentage" as const,
     value: 10,
-    minRating: 4,
     requireVerified: true,
     requirePhoto: false,
     requireVideo: false,
@@ -213,13 +212,44 @@ describe("evaluateEligibility", () => {
     expect(result.reason).toMatch(/not approved/i);
   });
 
-  it("is ineligible when the rating is below the configured minimum", () => {
+  // CONTRACT CHANGE (2026-11-06). This used to assert the opposite: that a 3-star review was
+  // ineligible because a merchant had set a minimum rating of 4.
+  //
+  // Rewarding only highly-rated reviews is paying for positive reviews. It is prohibited by
+  // the FTC's rule on consumer reviews (16 CFR Part 465) and by Shopify's App Store review
+  // integrity requirements, and the liability sits with the APP. The benchmark reached the
+  // same conclusion: Judge.me removed rating-based coupon rules from its own product to
+  // comply with Shopify's policy.
+  //
+  // So the condition does not exist any more, and this is the test that keeps it from coming
+  // back — every rating must reach the same verdict on otherwise-identical input.
+  it.each([1, 2, 3, 4, 5])("is eligible at %i stars — rating must never affect a reward", (rating) => {
     const result = evaluateEligibility(
-      { status: "APPROVED", rating: 3, verifiedPurchase: true, hasPhoto: false, hasVideo: false },
+      { status: "APPROVED", rating, verifiedPurchase: true, hasPhoto: false, hasVideo: false },
       baseSettings(),
     );
+    expect(result.eligible).toBe(true);
+    expect(result.reason).toBeNull();
+  });
+
+  it("gives a one-star review exactly the same verdict as a five-star one", () => {
+    const settings = baseSettings();
+    const base = { status: "APPROVED" as const, verifiedPurchase: true, hasPhoto: false, hasVideo: false };
+
+    expect(evaluateEligibility({ ...base, rating: 1 }, settings)).toEqual(
+      evaluateEligibility({ ...base, rating: 5 }, settings),
+    );
+  });
+
+  // The form-vs-sentiment distinction the FTC rule draws: a condition about what the review
+  // CONTAINS is fine, a condition about what it SAYS is not.
+  it("still refuses a one-star review that fails a condition about the review's form", () => {
+    const result = evaluateEligibility(
+      { status: "APPROVED", rating: 1, verifiedPurchase: true, hasPhoto: false, hasVideo: false },
+      { ...baseSettings(), requirePhoto: true },
+    );
     expect(result.eligible).toBe(false);
-    expect(result.reason).toMatch(/below the required minimum/i);
+    expect(result.reason).toMatch(/photo/i);
   });
 
   it("is ineligible when verified purchase is required but missing", () => {
@@ -276,7 +306,6 @@ describe("getRewardSettings / updateRewardSettings", () => {
       enabled: true,
       valueType: "fixed_amount",
       value: 5,
-      minRating: 5,
       requireVerified: false,
       requirePhoto: true,
       requireVideo: true,
@@ -287,7 +316,6 @@ describe("getRewardSettings / updateRewardSettings", () => {
       enabled: true,
       valueType: "fixed_amount",
       value: 5,
-      minRating: 5,
       requireVerified: false,
       requirePhoto: true,
       requireVideo: true,
@@ -347,11 +375,24 @@ describe("evaluateAndIssueReward", () => {
   });
 
   it("never calls Shopify and records 'ineligible' when the review doesn't meet the conditions", async () => {
-    await evaluateAndIssueReward({ ...eligibleReview, reviewId: "review_2", rating: 2 });
+    // A condition about the review's FORM — this store requires a verified purchase, and this
+    // review is not one. (This used to use a low rating, which is no longer a condition at all.)
+    await evaluateAndIssueReward({ ...eligibleReview, reviewId: "review_2", verifiedPurchase: false });
 
     expect(graphqlMock).not.toHaveBeenCalled();
     const reward = rewards.find((r) => r.reviewId === "review_2");
     expect(reward?.status).toBe("ineligible");
+  });
+
+  // The end-to-end counterpart to the eligibility tests above: a two-star review must reach
+  // Shopify and get a real discount, exactly like a five-star one.
+  it("issues a real discount for a two-star review", async () => {
+    await evaluateAndIssueReward({ ...eligibleReview, reviewId: "review_low", rating: 2 });
+
+    expect(graphqlMock).toHaveBeenCalledTimes(1);
+    const reward = rewards.find((r) => r.reviewId === "review_low");
+    expect(reward?.status).toBe("issued");
+    expect(reward?.discountCode).toMatch(/^THANKS-/);
   });
 
   it("never issues a second reward for the same review — duplicate prevention", async () => {

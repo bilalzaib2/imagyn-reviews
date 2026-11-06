@@ -4,6 +4,7 @@ import type { ActionFunctionArgs, HeadersFunction, LoaderFunctionArgs } from "re
 import { boundary } from "@shopify/shopify-app-react-router/server";
 import { Checkbox, Frame, Select, TextField, Toast } from "@shopify/polaris";
 import { Button } from "../components/ui/Button";
+import { Banner } from "../components/ui/Banner";
 import { ContextualSaveBar } from "../components/ui/ContextualSaveBar";
 import { Section } from "../components/ui/Section";
 import { Metric, MetricRow } from "../components/ui/Metric";
@@ -45,11 +46,6 @@ export const action = async ({ request }: ActionFunctionArgs): Promise<ActionDat
     return { ok: false, error: "Reward value must be a positive number." };
   }
 
-  const minRating = Number(formData.get("minRating") || "4");
-  if (!Number.isInteger(minRating) || minRating < 1 || minRating > 5) {
-    return { ok: false, error: "Minimum rating must be a whole number between 1 and 5." };
-  }
-
   const valueType = formData.get("valueType") === "fixed_amount" ? "fixed_amount" : "percentage";
   if (valueType === "percentage" && value > 100) {
     return { ok: false, error: "A percentage reward can't exceed 100%." };
@@ -60,7 +56,6 @@ export const action = async ({ request }: ActionFunctionArgs): Promise<ActionDat
       enabled: formData.get("enabled") === "true",
       valueType,
       value,
-      minRating,
       requireVerified: formData.get("requireVerified") === "true",
       requirePhoto: formData.get("requirePhoto") === "true",
       requireVideo: formData.get("requireVideo") === "true",
@@ -70,14 +65,6 @@ export const action = async ({ request }: ActionFunctionArgs): Promise<ActionDat
     return { ok: false, error: error instanceof Error ? error.message : "Unable to save Review Rewards settings." };
   }
 };
-
-const MIN_RATING_OPTIONS = [
-  { label: "5 stars only", value: "5" },
-  { label: "4 stars and up", value: "4" },
-  { label: "3 stars and up", value: "3" },
-  { label: "2 stars and up", value: "2" },
-  { label: "1 star and up", value: "1" },
-];
 
 const VALUE_TYPE_OPTIONS = [
   { label: "Percentage off", value: "percentage" },
@@ -93,7 +80,6 @@ export default function SettingsRewardsPage() {
   const [enabled, setEnabled] = useState(settings.enabled);
   const [valueType, setValueType] = useState(settings.valueType);
   const [value, setValue] = useState(String(settings.value));
-  const [minRating, setMinRating] = useState(String(settings.minRating));
   const [requireVerified, setRequireVerified] = useState(settings.requireVerified);
   const [requirePhoto, setRequirePhoto] = useState(settings.requirePhoto);
   const [requireVideo, setRequireVideo] = useState(settings.requireVideo);
@@ -113,7 +99,6 @@ export default function SettingsRewardsPage() {
     formData.set("enabled", String(enabled));
     formData.set("valueType", valueType);
     formData.set("value", value);
-    formData.set("minRating", minRating);
     formData.set("requireVerified", String(requireVerified));
     formData.set("requirePhoto", String(requirePhoto));
     formData.set("requireVideo", String(requireVideo));
@@ -124,7 +109,6 @@ export default function SettingsRewardsPage() {
     enabled !== settings.enabled ||
     valueType !== settings.valueType ||
     value !== String(settings.value) ||
-    minRating !== String(settings.minRating) ||
     requireVerified !== settings.requireVerified ||
     requirePhoto !== settings.requirePhoto ||
     requireVideo !== settings.requireVideo;
@@ -133,7 +117,6 @@ export default function SettingsRewardsPage() {
     setEnabled(settings.enabled);
     setValueType(settings.valueType);
     setValue(String(settings.value));
-    setMinRating(String(settings.minRating));
     setRequireVerified(settings.requireVerified);
     setRequirePhoto(settings.requirePhoto);
     setRequireVideo(settings.requireVideo);
@@ -175,10 +158,25 @@ export default function SettingsRewardsPage() {
             />
 
             <p className={styles.settingsGroupLabel}>Conditions — a review must meet all of these</p>
-            <Select label="Minimum rating" options={MIN_RATING_OPTIONS} value={minRating} onChange={setMinRating} />
             <Checkbox label="Must be a verified purchase" checked={requireVerified} onChange={setRequireVerified} />
             <Checkbox label="Must include a photo" checked={requirePhoto} onChange={setRequirePhoto} />
             <Checkbox label="Must include a video" checked={requireVideo} onChange={setRequireVideo} />
+
+            {/* States the omission rather than leaving a merchant hunting for a control that
+                used to be here. The honest reason, in their terms — not "unavailable". */}
+            <Banner
+              tone="info"
+              title="Rewards can't depend on the star rating"
+              description={
+                <>
+                  Every approved review that meets the conditions above earns the same reward, whatever its rating.
+                  Paying more for positive reviews is prohibited by the FTC&apos;s rules on consumer reviews and by
+                  Shopify&apos;s App Store requirements, so Imagyn doesn&apos;t offer a minimum-rating condition. The
+                  conditions above are all about a review&apos;s <em>form</em> — verified purchase, photo, video —
+                  never its opinion.
+                </>
+              }
+            />
 
             <p className={styles.mutedText}>
               A discount code is created only once per review, the moment it&apos;s approved and meets every condition
