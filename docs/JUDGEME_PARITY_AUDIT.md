@@ -401,3 +401,40 @@ surfaced constantly but unobtrusively, in the chrome rather than as interstitial
 Three defects in Imagyn's own Review Management were found by opening it in the same session,
 none of which 1,765 passing tests had caught — see commit `20c9aaa`. Reading source is not a
 substitute for opening the page.
+
+### 11.8 Coupons — the full configuration model, browser-verified
+
+Judge.me's entire coupon surface is **paid-only**: every block carries the teal star that marks a
+premium feature, and on the Free plan the controls render disabled. That is a direct data point
+for the Free/Pro split — Judge.me treats review coupons as a paid feature in full.
+
+The settings, as the product actually presents them:
+
+| Block | Setting | Value shown |
+|---|---|---|
+| Coupon settings | How to generate coupons | `Automatically by Judge.me` (a select — so other modes exist, incl. loyalty-app integration) |
+| | Coupon code | prefix `THANKYOU` + auto suffix `-ABC123`, "We'll add a unique identifier for each new coupon code" |
+| | Campaign description | free text, "may be used in the coupon email" |
+| | Customize coupon email | opens its own editor |
+| Show coupon promo when collecting reviews | Show coupon in smart review request emails | recommended, with the warning "Some regions do not allow coupons to be sent in review request emails" |
+| | Show coupon widget in Customer Accounts | sub-page |
+| | Customize coupon banner text | sub-page |
+| Review reward | Review type and discount | `Same discount for all reviews` / `10% for any review` — confirms per-review-type tiering |
+| Reward conditions | Who can receive coupons | `Only verified buyers` |
+| Requirement and eligibility | Requirement | `No minimum requirement` (minimum order value) |
+| | Eligibility | reviewer-only · once per customer · reusable · one-time purchases and first subscription order |
+| | Combinations | `No combinations` |
+| | Validity | `Expires after 30 days` |
+
+**No rating condition appears anywhere in this surface.** That is consistent with Judge.me having
+removed rating-gated rewards for review-integrity compliance, and with Imagyn's own removal of
+`rewardMinRating` (see `app/services/rewards.server.ts`).
+
+**Confirmed Imagyn gaps**, each needing a migration and therefore explicit approval:
+tiering by review type, discount combinations, subscription-order scope, coupon promo shown
+during collection (email and submission form), and a coupon widget in Customer Accounts.
+
+**The pattern worth stealing.** Every setting is a summary row — label, the current value written
+in plain language, and a chevron to a detail view. A merchant reads their whole coupon
+configuration as sentences without opening anything. It is a far better fit for Imagyn's
+settings-heavy screens than the current wall of form fields.
