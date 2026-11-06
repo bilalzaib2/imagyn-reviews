@@ -191,9 +191,17 @@
    instead of shrinking (exactly what happened with 360px+300px on a narrower admin
    viewport). minmax(0, …) lets a column compress arbitrarily far first; the row/panel
    content underneath already truncates via its own overflow rules. */
+/* REDESIGNED 2026-11-06 — full width.
+
+   This was a two-column grid: a ~62% review list beside a permanently mounted ~38% detail
+   panel. That cost the table more than a third of the admin's width at all times, including
+   while the merchant was only scanning, so the review column truncated most titles and the
+   columns needed for triage (customer, date) could not be afforded at all.
+
+   The list is now full width and the detail opens as a drawer — see .detailPanel. */
 .splitLayout {
   display: grid;
-  grid-template-columns: minmax(0, 0.62fr) minmax(240px, 0.38fr);
+  grid-template-columns: minmax(0, 1fr);
   gap: var(--space-6);
   align-items: start;
 }
@@ -220,21 +228,6 @@
 
 .skeletonTitle,
 .skeletonParagraph,
-.skeletonBlock {
-  composes: skeletonShimmer from "./shared.module.css";
-  border-radius: var(--radius-sm);
-}
-
-.skeletonTitle {
-  height: 1.1rem;
-  width: 40%;
-}
-
-.skeletonParagraph {
-  height: 0.8rem;
-  width: 90%;
-}
-
 .skeletonBlock {
   height: 6rem;
   width: 100%;
@@ -288,21 +281,6 @@
   font-size: var(--text-xs);
 }
 
-/* flex: none — the customer name is never the thing that should shrink; it's short and a
-   merchant needs the whole name. .metaProduct absorbs whatever space is left and does the
-   actual truncating (product names are the long, variable one). */
-.metaCustomer {
-  flex: none;
-  max-width: 10rem;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.metaSeparator {
-  flex: none;
-}
-
 /* A quiet trust signal, not a status pill — same restrained treatment as the storefront
    widget's own .imagyn-review-card__verified (checkmark + label, no background/border), so a
    merchant scanning this table sees the same "verified" language a shopper does. */
@@ -310,14 +288,6 @@
   flex: none;
   color: var(--color-success);
   font-weight: 500;
-}
-
-.metaProduct {
-  flex: 1 1 0%;
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
 }
 
 /* Compact, icon-only signals — only ever rendered for a row that actually has that real
@@ -417,42 +387,79 @@
    the list's own taller scroll height) so the panel reads as a compact, calm secondary
    surface rather than visually competing with the list for space. flex (not grid) is what
    makes a bounded-height child with its own overflow actually work reliably here. */
+/* A right-hand drawer, not a column.
+
+   Fixed to the viewport rather than flowing in the grid: in an embedded Shopify app the
+   iframe IS the viewport, so a fixed drawer sits correctly inside the admin's content area.
+   It owns its own scroll and borrows no height from the list, which is what lets the table
+   underneath stay full width while a review is open. */
 .detailPanel {
+  position: fixed;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 420;
+  width: min(30rem, 100%);
   display: flex;
   flex-direction: column;
   gap: var(--space-3);
-  padding: var(--space-4) var(--space-5);
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-lg);
-  background: linear-gradient(180deg, var(--color-surface) 0%, color-mix(in srgb, var(--color-text) 1.5%, var(--color-surface)) 100%);
-  box-shadow: var(--shadow-sm);
-  position: sticky;
-  top: var(--space-5);
-  max-height: 32rem;
+  padding: var(--space-5);
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  border-left: 1px solid var(--color-border);
+  background: var(--color-surface);
+  /* Leftward: the drawer's edge is on its left, and --shadow-lg is a downward card shadow
+     that reads wrong on a full-height panel. */
+  box-shadow: -8px 0 24px rgba(24, 24, 27, 0.08);
   animation: reviewDetailReveal 220ms cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+/* Dims the table behind the drawer and gives a click target to dismiss it. A real <button>,
+   so it is keyboard-reachable and announced rather than a div with an onClick. */
+.detailScrim {
+  position: fixed;
+  inset: 0;
+  z-index: 410;
+  border: none;
+  padding: 0;
+  cursor: pointer;
+  background: rgba(24, 24, 27, 0.28);
+  animation: reviewScrimReveal 220ms ease-out both;
+}
+
+@keyframes reviewScrimReveal {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
 }
 
 @keyframes reviewDetailReveal {
   from {
     opacity: 0;
-    transform: translateY(4px);
+    transform: translateX(12px);
   }
   to {
     opacity: 1;
-    transform: translateY(0);
+    transform: translateX(0);
   }
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .detailPanel {
+  .detailPanel,
+  .detailScrim {
     animation: none;
   }
 }
 
-/* Hidden by default (desktop/tablet never need a "back" affordance — the list stays visible
-   alongside the panel). Only shown at the same breakpoint .splitLayoutDetailActive kicks in. */
+/* The drawer's close control. Was mobile-only, when the panel was a permanent column that
+   never needed dismissing on desktop; a drawer always does, at every width. */
 .mobileBackButton {
-  display: none;
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
   align-self: flex-start;
   border: none;
   background: transparent;
@@ -609,12 +616,6 @@
   align-items: center;
   gap: 0.25rem;
   color: var(--color-warning);
-}
-
-.detailText {
-  margin: 0;
-  color: var(--color-text-muted);
-  line-height: 1.7;
 }
 
 .detailSection {
@@ -826,10 +827,8 @@
     grid-template-columns: 1fr;
   }
 
-  .detailPanel {
-    margin-top: var(--space-2);
-    position: static;
-  }
+  /* Nothing needed for the detail here: it is a fixed drawer and already spans the full
+     width below 30rem of its own accord (width: min(30rem, 100%)). */
 }
 
 /* Real mobile treatment, not a squeezed sidebar: below 640px, selecting a review drills down
@@ -837,13 +836,11 @@
    .splitLayoutDetailActive is only added to the DOM once a review is actually selected (see
    app.reviews.tsx), so browsing the list itself is completely unaffected. */
 @media (max-width: 640px) {
-  .splitLayoutDetailActive .listColumn {
-    display: none;
-  }
-
-  .splitLayoutDetailActive .detailPanel {
-    max-height: none;
-  }
+  /* The list is no longer hidden when a review is selected. It used to be: the panel was a
+     flowing column, so on a phone the only way to show it was to drill away from the list
+     entirely. A drawer overlays instead — the merchant keeps their place in the table, and
+     dismissing the scrim returns them to exactly the row they were on. .detailPanel's own
+     max-height is gone too, since the drawer is viewport-height by construction. */
 
   .mobileBackButton {
     display: inline-flex;
@@ -962,4 +959,46 @@
 .replyToneSelect:disabled {
   cursor: not-allowed;
   opacity: 0.5;
+}
+
+/* ---------------------------------------------------------------- Full-width table cells
+
+   Added with the 2026-11-06 redesign: the table now owns the whole admin width, so it can
+   afford the columns a merchant actually triages on. These are the cell-content styles for
+   them — structure (width, clipping, alignment) belongs to the shared <Table>. */
+
+/* Customer name above its verification indicator. Stacked rather than inline so a long name
+   never pushes the "Verified" marker out of the cell — the marker is the row's most important
+   trust signal and must not be the thing that gets clipped. */
+.customerCell {
+  display: grid;
+  gap: 0.1rem;
+  min-width: 0;
+}
+
+/* A two-line preview of the review body. The narrow layout had no room for the body at all,
+   so a merchant had to open every review to find out what it said. Two lines is enough to
+   triage on and short enough to keep rows scannable; the full text is in the drawer.
+
+   -webkit-line-clamp is unprefixed-equivalent in every browser Shopify Admin supports, and
+   degrades to a normally-wrapping paragraph anywhere it is not, which is harmless. */
+.reviewPreview {
+  margin: 0.15rem 0 0;
+  font-size: var(--text-xs);
+  line-height: var(--leading-snug);
+  color: var(--color-text-muted);
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+/* Clips a long product name or customer name to its column instead of letting it spill into
+   the next one — the shared table already hides overflow, this adds the ellipsis that tells
+   the merchant there is more. */
+.ellipsisCell {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }

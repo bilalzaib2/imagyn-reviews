@@ -928,6 +928,24 @@ export default function ReviewsPage() {
   // the only column whose content varies in length, and it is the one a merchant reads.
   const reviewColumns: TableColumn<(typeof effectiveReviews)[number]>[] = [
     {
+      key: "customer",
+      header: "Customer",
+      width: "16%",
+      hideOnNarrow: true,
+      render: (review) => (
+        <span className={styles.customerCell}>
+          <span className={styles.ellipsisCell}>{review.reviewerName}</span>
+          {/* The verification indicator belongs next to the person, not buried in the review
+              text — it is the single most important trust signal on the row. */}
+          {review.verifiedPurchase ? (
+            <span className={styles.metaVerified} title="Verified buyer">
+              ✓ Verified
+            </span>
+          ) : null}
+        </span>
+      ),
+    },
+    {
       key: "rating",
       header: "Rating",
       width: "5.5rem",
@@ -941,9 +959,6 @@ export default function ReviewsPage() {
       key: "review",
       header: "Review",
       render: (review) => {
-        const customerName = review.reviewerName;
-        const productName = review.productTitle ?? review.product?.name ?? "Unassigned product";
-
         return (
           <>
             {review.title ? (
@@ -951,17 +966,10 @@ export default function ReviewsPage() {
             ) : (
               <p className={`${styles.reviewTitle} ${styles.reviewTitleEmpty}`}>No title provided</p>
             )}
+            {/* A truncated preview of the body, which the narrow layout had no room for at
+                all. The full text is one click away in the drawer. */}
+            {review.content ? <p className={styles.reviewPreview}>{review.content}</p> : null}
             <p className={styles.reviewMetaLine}>
-              <span className={styles.metaCustomer}>{customerName}</span>
-              {review.verifiedPurchase ? (
-                <span className={styles.metaVerified} title="Verified buyer">
-                  ✓ Verified
-                </span>
-              ) : null}
-              <span className={styles.metaSeparator} aria-hidden="true">
-                ·
-              </span>
-              <span className={styles.metaProduct}>{productName}</span>
               {review.featured || review.media.length > 0 || review.reply ? (
                 <span className={styles.metaSignals}>
                   {review.featured ? (
@@ -991,6 +999,17 @@ export default function ReviewsPage() {
       },
     },
     {
+      key: "product",
+      header: "Product",
+      width: "18%",
+      hideOnNarrow: true,
+      render: (review) => (
+        <span className={styles.ellipsisCell}>
+          {review.productTitle ?? review.product?.name ?? "Unassigned product"}
+        </span>
+      ),
+    },
+    {
       key: "status",
       header: "Status",
       width: "8rem",
@@ -1003,6 +1022,19 @@ export default function ReviewsPage() {
       render: (review) => <span className={styles.dateCell}>{formatShortDate(review.createdAt)}</span>,
     },
   ];
+
+  // Escape closes the detail drawer. Bound to the document rather than the drawer, because
+  // focus is usually still on the table row the merchant arrowed to, not inside the drawer.
+  useEffect(() => {
+    if (!selectedReviewId) return;
+
+    const onKeyDown = (event: globalThis.KeyboardEvent) => {
+      if (event.key === "Escape") setSelectedReviewId(null);
+    };
+
+    document.addEventListener("keydown", onKeyDown);
+    return () => document.removeEventListener("keydown", onKeyDown);
+  }, [selectedReviewId]);
 
   const onListKeyDown = (event: KeyboardEvent<HTMLDivElement>) => {
     if (effectiveReviews.length === 0) {
@@ -1312,11 +1344,10 @@ export default function ReviewsPage() {
             )}
           </div>
 
-          {/* .splitLayoutDetailActive only changes anything at narrow (mobile) widths — see
-              its own rule in app.reviews.module.css — where it drills down to a full-width
-              detail view instead of squeezing list+panel into one column. Desktop/tablet are
-              unaffected (the class has no rule outside that media query). */}
-          <div className={`${styles.splitLayout} ${selectedReviewId ? styles.splitLayoutDetailActive : ""}`}>
+          {/* Full width. The review detail is a drawer (see .detailPanel), so this is a
+              single-column grid at every width and the table never gives up space to a panel
+              that may not be open. */}
+          <div className={styles.splitLayout}>
             {isLoading ? (
               <>
                 <div className={styles.listColumn}>
@@ -1326,13 +1357,7 @@ export default function ReviewsPage() {
                     ))}
                   </div>
                 </div>
-                <aside className={styles.detailPanel} aria-hidden="true">
-                  <div className={styles.skeletonTitle} />
-                  <div className={styles.skeletonParagraph} />
-                  <div className={styles.skeletonParagraph} />
-                  <div className={styles.skeletonBlock} />
-                  <div className={styles.skeletonBlock} />
-                </aside>
+
               </>
             ) : error ? (
               <div className={styles.errorState} role="alert">
@@ -1359,12 +1384,7 @@ export default function ReviewsPage() {
                     Clear filters
                   </Button>
                 </div>
-                <aside className={styles.detailPanel}>
-                  <h2 className={styles.detailTitle}>Select a review</h2>
-                  <p className={styles.detailText}>
-                    Full review details, moderation actions, and merchant reply appear once a review is selected.
-                  </p>
-                </aside>
+
               </>
             ) : (
               <>
@@ -1392,20 +1412,36 @@ export default function ReviewsPage() {
                 </div>
 
                 {selectedReview ? (
-                  // key={selectedReview.id} forces a real remount on every selection change —
-                  // the only way a CSS mount animation (.detailPanel's own fade-in) replays
-                  // per-review instead of only once for the panel's own lifetime.
-                  <aside key={selectedReview.id} className={styles.detailPanel} aria-label="Review details">
-                    {/* Mobile-only (hidden by default — see .mobileBackButton's own rule) —
-                        the drill-down escape hatch back to the list on narrow widths, where
-                        .splitLayoutDetailActive hides the list column entirely. */}
+                  <>
+                    {/* Dismisses the drawer and dims the table behind it. A real button rather
+                        than a div with an onClick, so it is keyboard-reachable; its label is
+                        what a screen reader announces for the click target. */}
                     <button
                       type="button"
-                      className={styles.mobileBackButton}
+                      className={styles.detailScrim}
+                      aria-label="Close review details"
                       onClick={() => setSelectedReviewId(null)}
+                    />
+                    {/* key={selectedReview.id} forces a real remount on every selection change
+                        — the only way the drawer's CSS mount animation replays per-review
+                        instead of only once for the drawer's own lifetime. */}
+                    <aside
+                      key={selectedReview.id}
+                      className={styles.detailPanel}
+                      aria-label="Review details"
+                      role="dialog"
+                      aria-modal="false"
                     >
-                      &larr; Back to reviews
-                    </button>
+                      {/* The drawer's close control, at every width. It used to be mobile-only,
+                          when the panel was a permanent column that never needed dismissing on
+                          desktop. Escape closes it too — see the key handler on the page. */}
+                      <button
+                        type="button"
+                        className={styles.mobileBackButton}
+                        onClick={() => setSelectedReviewId(null)}
+                      >
+                        &larr; Close
+                      </button>
                     <div className={styles.detailHeader}>
                       <div className={styles.detailStatusRow}>
                         <ReviewStatusBadge status={selectedReview.status} />
@@ -1803,7 +1839,8 @@ export default function ReviewsPage() {
                         />
                       </Popover>
                     </div>
-                  </aside>
+                    </aside>
+                  </>
                 ) : null}
               </>
             )}
