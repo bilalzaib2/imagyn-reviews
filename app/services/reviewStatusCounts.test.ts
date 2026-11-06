@@ -8,12 +8,16 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { ReviewStatus } from "./review.shared";
 
 const groupBy = vi.fn();
+const count = vi.fn();
 
 vi.mock("../db.server", () => ({
   default: {
     review: {
       get groupBy() {
         return groupBy;
+      },
+      get count() {
+        return count;
       },
     },
   },
@@ -26,7 +30,9 @@ const lastWhere = () => groupBy.mock.calls[0][0].where;
 
 beforeEach(() => {
   groupBy.mockReset();
+  count.mockReset();
   groupBy.mockResolvedValue([]);
+  count.mockResolvedValue(0);
 });
 
 describe("the numbers", () => {
@@ -58,12 +64,33 @@ describe("the numbers", () => {
 
   it("returns all zeros for a store with no reviews", async () => {
     const counts = await getStoreReviewStatusCounts("store_1");
-    expect(counts).toEqual({ all: 0, [ReviewStatus.PENDING]: 0, [ReviewStatus.APPROVED]: 0, [ReviewStatus.REJECTED]: 0 });
+    expect(counts).toEqual({
+      all: 0,
+      archived: 0,
+      [ReviewStatus.PENDING]: 0,
+      [ReviewStatus.APPROVED]: 0,
+      [ReviewStatus.REJECTED]: 0,
+    });
   });
 
-  it("asks the database once, not once per status", async () => {
+  it("groups the statuses in one query rather than counting each separately", async () => {
+    // Four statuses must not mean four round trips. The Archive needs a second query of its
+    // own because it sits on the opposite side of the archivedAt filter, not alongside the
+    // statuses — that is one query per scope, which is the floor.
     await getStoreReviewStatusCounts("store_1");
     expect(groupBy).toHaveBeenCalledTimes(1);
+    expect(count).toHaveBeenCalledTimes(1);
+  });
+
+  it("returns the archive total alongside the statuses", async () => {
+    count.mockResolvedValue(4);
+    const counts = await getStoreReviewStatusCounts("store_1");
+    expect(counts.archived).toBe(4);
+  });
+
+  it("counts only the working queue in the status totals", async () => {
+    await getStoreReviewStatusCounts("store_1");
+    expect(lastWhere().archivedAt).toBeNull();
   });
 });
 

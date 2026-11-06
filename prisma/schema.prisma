@@ -494,6 +494,19 @@ model Review {
   hiddenReason String?
   hiddenAt     DateTime?
 
+  /// Archived — out of the working queue, off the storefront, out of every statistic, but
+  /// fully intact.
+  ///
+  /// Distinct from hiding on purpose. Hiding is a moderation verdict: the review stays in the
+  /// main list wearing its reason, because the merchant may well revisit it. Archiving is
+  /// filing: the merchant is finished with it and wants it out of the way. A review can be
+  /// both, and archiving preserves `status`, `hiddenReason` and `hiddenAt` untouched, so
+  /// restoring puts back exactly the moderation state it left with.
+  ///
+  /// Distinct from deletedAt too: deletion is a soft delete nothing but an audit reads again,
+  /// archiving is reversible from the UI.
+  archivedAt DateTime?
+
   // The imported review's stable ID on its source platform (Judge.me's export calls this
   // `metaobject_handle` — a UUID-based handle, not a plain integer, but stable and unique per
   // review) — see reviewImportExport.server.ts's isDuplicate. Nullable: customer-submitted
@@ -536,6 +549,7 @@ model Review {
   @@unique([storeId, importSource, externalId])
   @@index([deletedAt, createdAt])
   @@index([storeId, deletedAt, createdAt])
+  @@index([storeId, archivedAt])
   @@index([productId, deletedAt])
   @@index([status])
   @@index([rating])

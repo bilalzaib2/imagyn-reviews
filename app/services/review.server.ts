@@ -41,6 +41,8 @@ export interface ReviewQueryOptions {
   dateFrom?: string;
   dateTo?: string;
   verifiedPurchase?: boolean;
+  /** true = the Archive view, false/undefined = the working queue. */
+  archived?: boolean;
   cursor?: string;
   limit?: number;
   // Admin moderation sort only — a plain DB-level ORDER BY, distinct from the storefront's
@@ -132,6 +134,21 @@ function validateReviewInput(input: { rating: number; content: string; reviewerN
 // cross-tenant id must produce the exact same "not found" outcome a genuinely-missing id
 // would, so a caller can never distinguish "doesn't exist" from "isn't yours". Same
 // ownership-check convention widget.server.ts/appearance.server.ts already use.
+/**
+ * The rows a review is allowed to count toward anywhere public: not soft-deleted, and not
+ * archived.
+ *
+ * Spelled once and spread, rather than written out at each of the twenty-odd query sites,
+ * because the failure mode is silent and permanent — a public read that forgets `archivedAt`
+ * keeps showing an archived review on the storefront, and a statistic that forgets it keeps
+ * counting one. Neither throws, and neither looks wrong in a diff.
+ *
+ * Deliberately NOT used by: requireReview and the bulk lookups (they must be able to resolve
+ * an archived review in order to restore it), and buildReviewWhere (the merchant's own list
+ * chooses its archive scope explicitly).
+ */
+const LIVE_REVIEW = { deletedAt: null, archivedAt: null } as const;
+
 async function requireReview(storeId: string, id: string) {
   const existing = await prisma.review.findFirst({ where: { id, storeId, deletedAt: null } });
 
@@ -144,14 +161,14 @@ async function requireReview(storeId: string, id: string) {
 
 export async function recalculateProductStats(productId: string) {
   const [totalReviews, aggregate, ratingGroups] = await Promise.all([
-    prisma.review.count({ where: { productId, deletedAt: null } }),
+    prisma.review.count({ where: { productId, ...LIVE_REVIEW } }),
     prisma.review.aggregate({
-      where: { productId, deletedAt: null },
+      where: { productId, ...LIVE_REVIEW },
       _avg: { rating: true },
     }),
     prisma.review.groupBy({
       by: ["rating"],
-      where: { productId, deletedAt: null },
+      where: { productId, ...LIVE_REVIEW },
       _count: { rating: true },
     }),
   ]);
@@ -183,6 +200,9 @@ function buildReviewWhere(
   return {
     ...baseWhere,
     deletedAt: null,
+    // The Archive is a separate view, not a filter the main list blends in: archived reviews
+    // are out of the working queue by default and shown only when explicitly asked for.
+    archivedAt: options.archived ? { not: null } : null,
     ...(options.status ? { status: options.status } : {}),
     ...(options.rating != null ? { rating: options.rating } : {}),
     ...(options.verifiedPurchase != null ? { verifiedPurchase: options.verifiedPurchase } : {}),
@@ -248,6 +268,9 @@ export async function getStoreReviews(storeId: string, options: ReviewQueryOptio
 /** How many reviews sit behind each status tab, for the counts beside their labels. */
 export interface ReviewStatusCounts {
   all: number;
+  /** Reviews in the Archive view. Counted separately because archived rows are excluded from
+   *  every other figure here — `all` is the size of the working queue, not of the table. */
+  archived: number;
   [ReviewStatus.PENDING]: number;
   [ReviewStatus.APPROVED]: number;
   [ReviewStatus.REJECTED]: number;
@@ -267,14 +290,15 @@ export async function getStoreReviewStatusCounts(
 ): Promise<ReviewStatusCounts> {
   const where = buildReviewWhere({ storeId }, { ...options, status: undefined });
 
-  const grouped = await prisma.review.groupBy({
-    by: ["status"],
-    where,
-    _count: { _all: true },
-  });
+  const [grouped, archived] = await Promise.all([
+    prisma.review.groupBy({ by: ["status"], where, _count: { _all: true } }),
+    // Same filters, opposite archive scope.
+    prisma.review.count({ where: buildReviewWhere({ storeId }, { ...options, status: undefined, archived: true }) }),
+  ]);
 
   const counts: ReviewStatusCounts = {
     all: 0,
+    archived,
     [ReviewStatus.PENDING]: 0,
     [ReviewStatus.APPROVED]: 0,
     [ReviewStatus.REJECTED]: 0,
@@ -329,7 +353,7 @@ export interface FeaturedReview {
 // none of those photo reviews happened to be marked featured. Each backfill stage only runs
 // when actually needed, and explicitly excludes ids already chosen so nothing is duplicated.
 export async function getFeaturedReviews(storeId: string, limit = 12): Promise<FeaturedReview[]> {
-  const baseWhere = { storeId, deletedAt: null, status: ReviewStatus.APPROVED } as const;
+  const baseWhere = { storeId, ...LIVE_REVIEW, status: ReviewStatus.APPROVED } as const;
 
   const featured = await prisma.review.findMany({
     where: { ...baseWhere, featured: true },
@@ -480,18 +504,18 @@ export async function getStoreReviewStats(storeId: string, options: { recentLimi
     verifiedReviews,
     ratingGroups,
   ] = await Promise.all([
-    prisma.review.count({ where: { storeId, deletedAt: null } }),
+    prisma.review.count({ where: { storeId, ...LIVE_REVIEW } }),
     prisma.review.groupBy({
       by: ["status"],
-      where: { storeId, deletedAt: null },
+      where: { storeId, ...LIVE_REVIEW },
       _count: { status: true },
     }),
     prisma.review.aggregate({
-      where: { storeId, deletedAt: null, status: ReviewStatus.APPROVED },
+      where: { storeId, ...LIVE_REVIEW, status: ReviewStatus.APPROVED },
       _avg: { rating: true },
     }),
     prisma.review.findMany({
-      where: { storeId, deletedAt: null },
+      where: { storeId, ...LIVE_REVIEW },
       include: reviewInclude,
       orderBy: [{ createdAt: "desc" }, { id: "desc" }],
       take: recentLimit,
@@ -499,20 +523,20 @@ export async function getStoreReviewStats(storeId: string, options: { recentLimi
     // "Today" set once, at creation, by moderationRules.server.ts's evaluateReview — a
     // review can only ever be auto-published at the moment it's submitted.
     prisma.review.count({
-      where: { storeId, deletedAt: null, moderationStatus: "auto_approved", createdAt: { gte: startOfToday } },
+      where: { storeId, ...LIVE_REVIEW, moderationStatus: "auto_approved", createdAt: { gte: startOfToday } },
     }),
     // Still-pending reviews a Moderation Rule held — distinct from pendingReviews below,
     // which also includes ordinary manually-created/imported reviews Moderation Rules
     // never touched.
     prisma.review.count({
-      where: { storeId, deletedAt: null, moderationStatus: "held", status: ReviewStatus.PENDING },
+      where: { storeId, ...LIVE_REVIEW, moderationStatus: "held", status: ReviewStatus.PENDING },
     }),
     prisma.review.count({
-      where: { storeId, deletedAt: null, status: ReviewStatus.APPROVED, verifiedPurchase: true },
+      where: { storeId, ...LIVE_REVIEW, status: ReviewStatus.APPROVED, verifiedPurchase: true },
     }),
     prisma.review.groupBy({
       by: ["rating"],
-      where: { storeId, deletedAt: null, status: ReviewStatus.APPROVED },
+      where: { storeId, ...LIVE_REVIEW, status: ReviewStatus.APPROVED },
       _count: { rating: true },
     }),
   ]);
@@ -560,7 +584,7 @@ export interface CustomerReviewStats {
 // Case-insensitive: a review's reviewerEmail is merchant/customer-submitted free text, not
 // guaranteed to match Shopify's own stored casing for the same address.
 export async function getCustomerReviewStatsByEmail(storeId: string, email: string): Promise<CustomerReviewStats> {
-  const where = { storeId, deletedAt: null, reviewerEmail: { equals: email, mode: "insensitive" as const } };
+  const where = { storeId, ...LIVE_REVIEW, reviewerEmail: { equals: email, mode: "insensitive" as const } };
 
   const [reviewCount, aggregate, mostRecent] = await Promise.all([
     prisma.review.count({ where }),
@@ -599,14 +623,14 @@ export async function getPublicReviewSummary(productId: string | string[]): Prom
   const productWhere = Array.isArray(productId) ? { productId: { in: productId } } : { productId };
 
   const [totalReviews, aggregate, ratingGroups] = await Promise.all([
-    prisma.review.count({ where: { ...productWhere, deletedAt: null, status: ReviewStatus.APPROVED } }),
+    prisma.review.count({ where: { ...productWhere, ...LIVE_REVIEW, status: ReviewStatus.APPROVED } }),
     prisma.review.aggregate({
-      where: { ...productWhere, deletedAt: null, status: ReviewStatus.APPROVED },
+      where: { ...productWhere, ...LIVE_REVIEW, status: ReviewStatus.APPROVED },
       _avg: { rating: true },
     }),
     prisma.review.groupBy({
       by: ["rating"],
-      where: { ...productWhere, deletedAt: null, status: ReviewStatus.APPROVED },
+      where: { ...productWhere, ...LIVE_REVIEW, status: ReviewStatus.APPROVED },
       _count: { rating: true },
     }),
   ]);
@@ -633,14 +657,14 @@ export async function getPublicReviewSummary(productId: string | string[]): Prom
 // exists in the schema, and none is introduced here).
 export async function getPublicStoreReviewSummary(storeId: string): Promise<PublicReviewSummary> {
   const [totalReviews, aggregate, ratingGroups] = await Promise.all([
-    prisma.review.count({ where: { storeId, deletedAt: null, status: ReviewStatus.APPROVED } }),
+    prisma.review.count({ where: { storeId, ...LIVE_REVIEW, status: ReviewStatus.APPROVED } }),
     prisma.review.aggregate({
-      where: { storeId, deletedAt: null, status: ReviewStatus.APPROVED },
+      where: { storeId, ...LIVE_REVIEW, status: ReviewStatus.APPROVED },
       _avg: { rating: true },
     }),
     prisma.review.groupBy({
       by: ["rating"],
-      where: { storeId, deletedAt: null, status: ReviewStatus.APPROVED },
+      where: { storeId, ...LIVE_REVIEW, status: ReviewStatus.APPROVED },
       _count: { rating: true },
     }),
   ]);
@@ -673,7 +697,7 @@ export async function getPublicReviewSummaryBatch(
 
   const groups = await prisma.review.groupBy({
     by: ["productId"],
-    where: { productId: { in: productIds }, deletedAt: null, status: ReviewStatus.APPROVED },
+    where: { productId: { in: productIds }, ...LIVE_REVIEW, status: ReviewStatus.APPROVED },
     _avg: { rating: true },
     _count: { rating: true },
   });
@@ -991,6 +1015,45 @@ export async function rejectReview(storeId: string, id: string, hideReason?: unk
   return setReviewStatus(storeId, id, ReviewStatus.REJECTED, hideReason);
 }
 
+/**
+ * Files a review away: out of the working queue, off the storefront, out of every statistic.
+ *
+ * Deliberately does NOT touch status, hiddenReason or hiddenAt. Archiving is not a moderation
+ * verdict — it is the merchant saying they are finished with this one — so the moderation
+ * history it arrived with is exactly what it leaves with, and restoring puts that state back
+ * untouched. isPublished is forced false because an archived review must not render, and it
+ * is recomputed from status on restore.
+ */
+export async function archiveReview(storeId: string, id: string) {
+  const existing = await requireReview(storeId, id);
+
+  const review = await prisma.review.update({
+    where: { id: existing.id },
+    data: { archivedAt: new Date(), isPublished: false },
+    include: reviewInclude,
+  });
+
+  // The review just left the public set, so the product's totals are now wrong.
+  await recalculateProductStats(existing.productId);
+
+  return review;
+}
+
+/** Brings an archived review back, with the moderation state it was archived in. */
+export async function unarchiveReview(storeId: string, id: string) {
+  const existing = await requireReview(storeId, id);
+
+  const review = await prisma.review.update({
+    where: { id: existing.id },
+    data: { archivedAt: null, isPublished: existing.status === ReviewStatus.APPROVED },
+    include: reviewInclude,
+  });
+
+  await recalculateProductStats(existing.productId);
+
+  return review;
+}
+
 export async function replyToReview(storeId: string, id: string, reply: string) {
   await requireReview(storeId, id);
 
@@ -1086,6 +1149,66 @@ export async function bulkModerateReviews(
   return { count: result.count, affectedProductIds };
 }
 
+/**
+ * Archives or restores many reviews at once.
+ *
+ * Scoped by storeId in the same query that resolves which ids exist, exactly as
+ * bulkModerateReviews is: a cross-tenant id is silently excluded rather than throwing, so a
+ * bulk action can never touch or even reveal another store's reviews.
+ *
+ * Restoring recomputes isPublished per review from the status each one kept while archived,
+ * which is why this reads `status` and cannot be a single blanket updateMany.
+ */
+export async function bulkSetReviewArchived(
+  storeId: string,
+  ids: string[],
+  archived: boolean,
+): Promise<BulkReviewMutationResult> {
+  if (ids.length === 0) {
+    return { count: 0, affectedProductIds: [] };
+  }
+
+  const owned = await prisma.review.findMany({
+    where: { id: { in: ids }, storeId, deletedAt: null },
+    select: { id: true, productId: true, status: true },
+  });
+
+  if (owned.length === 0) {
+    return { count: 0, affectedProductIds: [] };
+  }
+
+  const affectedProductIds = Array.from(new Set(owned.map((review) => review.productId)));
+
+  if (archived) {
+    // Uniform: everything being archived becomes unpublished, whatever its status.
+    const result = await prisma.review.updateMany({
+      where: { id: { in: owned.map((review) => review.id) }, deletedAt: null },
+      data: { archivedAt: new Date(), isPublished: false },
+    });
+
+    await Promise.all(affectedProductIds.map((productId) => recalculateProductStats(productId)));
+    return { count: result.count, affectedProductIds };
+  }
+
+  // Restoring: only the previously-approved ones go back on the storefront, so this groups by
+  // status rather than updating every row the same way.
+  const approvedIds = owned.filter((r) => r.status === ReviewStatus.APPROVED).map((r) => r.id);
+  const otherIds = owned.filter((r) => r.status !== ReviewStatus.APPROVED).map((r) => r.id);
+
+  const [approvedResult, otherResult] = await Promise.all([
+    approvedIds.length
+      ? prisma.review.updateMany({ where: { id: { in: approvedIds } }, data: { archivedAt: null, isPublished: true } })
+      : Promise.resolve({ count: 0 }),
+    otherIds.length
+      ? prisma.review.updateMany({ where: { id: { in: otherIds } }, data: { archivedAt: null, isPublished: false } })
+      : Promise.resolve({ count: 0 }),
+  ]);
+
+  await Promise.all(affectedProductIds.map((productId) => recalculateProductStats(productId)));
+
+  return { count: approvedResult.count + otherResult.count, affectedProductIds };
+}
+
 export async function bulkDeleteReviews(storeId: string, ids: string[]): Promise<BulkReviewMutationResult> {
   if (ids.length === 0) {
     return { count: 0, affectedProductIds: [] };
@@ -1149,7 +1272,7 @@ export async function castHelpfulVote(
     const review = await tx.review.findFirst({
       // storeId inside the same query as the visibility rules, not a second check afterwards —
       // a review belonging to another store is indistinguishable from one that doesn't exist.
-      where: { id: reviewId, storeId, deletedAt: null, status: ReviewStatus.APPROVED },
+      where: { id: reviewId, storeId, ...LIVE_REVIEW, status: ReviewStatus.APPROVED },
       select: { id: true },
     });
 

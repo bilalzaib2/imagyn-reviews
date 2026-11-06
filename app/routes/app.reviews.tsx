@@ -37,6 +37,9 @@ import {
   getStoreReview,
   getStoreReviews,
   getStoreReviewStatusCounts,
+  archiveReview,
+  unarchiveReview,
+  bulkSetReviewArchived,
   rejectReview,
   replyToReview,
   type ReviewWithProduct,
@@ -81,11 +84,14 @@ const STATUS_VALUES: string[] = Object.values(ReviewStatus);
 
 // Drives the compact status segmented control in the toolbar (replaces a <select>) — "" means
 // "All", matching how the loader already treats a missing/empty status param.
-const STATUS_FILTER_OPTIONS: Array<{ label: string; value: string }> = [
+// Four statuses plus the Archive. Archive is not a status — an archived review keeps whatever
+// status it had — so it is marked and handled as a separate axis rather than another value.
+const STATUS_FILTER_OPTIONS: Array<{ label: string; value: string; archive?: true }> = [
   { label: "All", value: "" },
   { label: "Pending", value: ReviewStatus.PENDING },
   { label: "Approved", value: ReviewStatus.APPROVED },
   { label: "Rejected", value: ReviewStatus.REJECTED },
+  { label: "Archive", value: "", archive: true },
 ];
 
 // How many photo thumbnails the detail panel shows before collapsing the rest behind a
@@ -112,6 +118,9 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
   const dateFrom = url.searchParams.get("dateFrom") || undefined;
   const dateTo = url.searchParams.get("dateTo") || undefined;
   const verifiedPurchase = url.searchParams.get("verifiedPurchase") === "true";
+  // The Archive is its own view rather than another status: archived reviews keep whatever
+  // status they were archived with, so the two axes are independent.
+  const archived = url.searchParams.get("archived") === "1";
   // Only ever the cursor for the CURRENT page — the client derives page number and
   // Previous-button behavior from its own `history` URL param (an accumulated stack of every
   // cursor visited), which the loader never needs to see: it only has to run the query for
@@ -139,6 +148,7 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
       cursor,
       limit: REVIEWS_PAGE_SIZE,
       sort: sortParam,
+      archived,
     });
 
     // Batched, not per-review — bounded by this page's own REVIEWS_PAGE_SIZE-review limit,
@@ -198,12 +208,13 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
       dateFrom: dateFrom ?? "",
       dateTo: dateTo ?? "",
       verifiedPurchase,
+      archived,
       sort: sortParam,
     };
   } catch (error) {
     return {
       reviews: [] as ReviewWithProduct[],
-      statusCounts: { all: 0, PENDING: 0, APPROVED: 0, REJECTED: 0 },
+      statusCounts: { all: 0, archived: 0, PENDING: 0, APPROVED: 0, REJECTED: 0 },
       focusReviewId: "",
       focusReplyEditor: false,
       nextCursor: null,
@@ -218,6 +229,7 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
       dateFrom: dateFrom ?? "",
       dateTo: dateTo ?? "",
       verifiedPurchase,
+      archived,
       sort: sortParam,
     };
   }
@@ -350,6 +362,35 @@ export const action = async ({ request }: ActionFunctionArgs): Promise<ActionDat
 
       await deleteReviewMedia(store.id, mediaId);
       return { ok: true, intent, message: "Photo deleted." };
+    }
+
+    if (intent === "archive" || intent === "unarchive") {
+      const reviewId = String(formData.get("reviewId") || "");
+      if (!reviewId) return { ok: false, error: "Missing review id." };
+
+      const review =
+        intent === "archive" ? await archiveReview(store.id, reviewId) : await unarchiveReview(store.id, reviewId);
+      // Archiving removes a review from the public set and restoring can put it back, so the
+      // structured data for its product is stale either way.
+      void syncProductStructuredData(admin, review.productId);
+      return { ok: true, intent, message: intent === "archive" ? "Review archived." : "Review restored." };
+    }
+
+    if (intent === "bulkArchive" || intent === "bulkUnarchive") {
+      const ids = formData
+        .getAll("reviewIds")
+        .map((entry) => String(entry))
+        .filter(Boolean);
+
+      if (ids.length === 0) return { ok: false, error: "No reviews selected." };
+
+      const result = await bulkSetReviewArchived(store.id, ids, intent === "bulkArchive");
+      void Promise.all(result.affectedProductIds.map((productId) => syncProductStructuredData(admin, productId)));
+      return {
+        ok: true,
+        intent,
+        message: intent === "bulkArchive" ? "Selected reviews archived." : "Selected reviews restored.",
+      };
     }
 
     if (intent === "bulkApprove" || intent === "bulkReject" || intent === "bulkDelete") {
@@ -522,6 +563,8 @@ export default function ReviewsPage() {
   const activeData =
     pageFetcher.data && pageFetcherEpochRef.current === filterKey ? pageFetcher.data : loaderData;
   const { reviews, nextCursor, hasMore, totalCount, aiSummaries, statusCounts, error } = activeData;
+
+  const isArchiveView = activeData.archived;
 
   /** The count for one status tab; "" is the All tab. */
   const statusCountFor = (status: string) =>
@@ -928,7 +971,9 @@ export default function ReviewsPage() {
     importFetcher.submit(formData, { method: "post" });
   };
 
-  const applyBulkAction = (intent: "bulkApprove" | "bulkReject" | "bulkDelete") => {
+  const applyBulkAction = (
+    intent: "bulkApprove" | "bulkReject" | "bulkDelete" | "bulkArchive" | "bulkUnarchive",
+  ) => {
     if (selectedIds.length === 0) {
       return;
     }
@@ -941,7 +986,10 @@ export default function ReviewsPage() {
 
     setMutationError(null);
 
-    if (intent === "bulkDelete") {
+    // Archiving and restoring do not change a review's status — they move it between the
+    // working queue and the Archive, so it leaves whichever of the two is on screen. Treated
+    // like a removal from this view, not like a moderation verdict.
+    if (intent === "bulkDelete" || intent === "bulkArchive" || intent === "bulkUnarchive") {
       setOptimisticDeleted((prev) => {
         const next = { ...prev };
         selectedIds.forEach((id) => {
@@ -1252,13 +1300,24 @@ export default function ReviewsPage() {
 
           <div className={styles.toolbarControls}>
             <div className={styles.statusSegments} role="group" aria-label="Filter by status">
-              {STATUS_FILTER_OPTIONS.map((option) => (
+              {STATUS_FILTER_OPTIONS.map((option) => {
+                // Selecting Archive clears any status filter, and selecting a status leaves
+                // the Archive — the two views are mutually exclusive by construction.
+                const isActive = option.archive ? isArchiveView : !isArchiveView && initialStatus === option.value;
+
+                return (
                 <button
-                  key={option.value || "all"}
+                  key={option.archive ? "archive" : option.value || "all"}
                   type="button"
-                  className={`${styles.statusSegment} ${initialStatus === option.value ? styles.statusSegmentActive : ""}`}
-                  aria-pressed={initialStatus === option.value}
-                  onClick={() => updateQuery({ status: option.value || undefined })}
+                  className={`${styles.statusSegment} ${isActive ? styles.statusSegmentActive : ""}`}
+                  aria-pressed={isActive}
+                  onClick={() =>
+                    updateQuery(
+                      option.archive
+                        ? { archived: "1", status: undefined }
+                        : { status: option.value || undefined, archived: undefined },
+                    )
+                  }
                 >
                   {option.label}
                   {/* The count sits beside the label the way Judge.me's category tabs carry
@@ -1266,10 +1325,11 @@ export default function ReviewsPage() {
                       clicking into it. Rendered even at zero: here "0" is a fact the query
                       returned, not an unknown. */}
                   <span className={styles.statusSegmentCount}>
-                    {formatCount(statusCountFor(option.value))}
+                    {formatCount(option.archive ? statusCounts.archived : statusCountFor(option.value))}
                   </span>
                 </button>
-              ))}
+                );
+              })}
             </div>
 
             <Popover
@@ -1405,6 +1465,15 @@ export default function ReviewsPage() {
                 >
                   Reject
                 </Button>
+                {isArchiveView ? (
+                  <Button type="button" onClick={() => applyBulkAction("bulkUnarchive")} disabled={isMutating}>
+                    Restore
+                  </Button>
+                ) : (
+                  <Button type="button" onClick={() => applyBulkAction("bulkArchive")} disabled={isMutating}>
+                    Archive
+                  </Button>
+                )}
                 <Button type="button" onClick={() => applyBulkAction("bulkDelete")} disabled={isMutating}>
                   Delete
                 </Button>
@@ -1885,6 +1954,22 @@ export default function ReviewsPage() {
                             Reject
                           </Button>
                         ) : null}
+                        {/* Archiving is filing, not moderation, so it sits beside the verdict
+                            buttons rather than among them — and in the Archive view the only
+                            thing this control can usefully do is undo itself. */}
+                        <Button
+                          type="button"
+                          variant="secondary"
+                          onClick={() =>
+                            submitMutation({
+                              _intent: selectedReview.archivedAt ? "unarchive" : "archive",
+                              reviewId: selectedReview.id,
+                            })
+                          }
+                          disabled={isMutating}
+                        >
+                          {selectedReview.archivedAt ? "Restore" : "Archive"}
+                        </Button>
                       </div>
                       <Popover
                         active={actionsMenuOpen}
