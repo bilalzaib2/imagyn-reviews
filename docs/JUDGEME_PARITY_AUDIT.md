@@ -377,7 +377,13 @@ Settings is a two-pane layout: a persistent, **searchable** left nav (`Ctrl + Sh
 a content pane, with a `Request improvements` button pinned under the nav.
 
 Sections with no Imagyn counterpart at all: **Bundles**, **Collection flow**, **Optimize
-collection**, **Product groups**, **Referrals**, **Language**.
+collection**, **Language**.
+
+(Corrected: Product groups and Referrals *do* exist in Imagyn —
+`app/routes/app.settings.productGroups.tsx` and `app.settings.referrals.tsx`, with
+`ProductGroup`, `Referral`, `ReferralConversion` and `ReferralProgram` models behind them. An
+earlier draft of this section listed both as missing, from reading Judge.me's nav rather than
+our own routes.)
 
 ### 11.5 Dashboard
 
