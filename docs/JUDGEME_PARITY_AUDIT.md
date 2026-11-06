@@ -536,3 +536,40 @@ one area where the benchmark is not ahead.
 Patterns worth adopting regardless of widget count: the illustrated preview card rather than a
 text list, the per-theme selector, and the setup banner that disables actions it knows cannot
 yet work.
+
+### 11.13 Customer questions — a small, well-bounded feature
+
+`Reviews → Customer questions` (`/dashboards/questions`). Paid (★).
+
+- Header actions: `Manage widget`, `Manage store FAQs`, `Import` (disabled with none to import),
+  `Export`.
+- Three category tabs: `All questions (0)`, `With answers`, `Without answers`, with search and
+  filter icons right-aligned.
+- Empty state: illustration, "View all your questions here", and a single `Import questions`
+  action.
+
+The whole feature is narrower than its absence from Imagyn suggests. A question has a product, an
+asker, a body, an optional answer, and a published state; the moderation view is "answered or
+not"; and the surfaces are a product-page widget plus a store FAQ page. Judge.me also notifies
+the asker by email when the merchant replies (the `Q&A notification` template in §11.9).
+
+For Imagyn this is a `Question` model, one moderation screen with three tabs, a storefront
+widget, and one transactional email. It needs a migration, so it needs explicit approval, but it
+is the cheapest way to close the most visible hole in the workspace tab bar.
+
+### 11.14 Analytics — tiles that drive the chart
+
+`Analytics` (`/analytics`). Two tabs: **Reviews and requests** and **Revenue**.
+
+- Section header `Review collection`, with a `Last 12 months` range control and `Export report`.
+- Four metric tiles — `Review collection rate`, `Reviews collected`, `Average rating`,
+  `Requests sent` — which are **selectors, not decorations**: the selected tile is outlined and
+  the single chart below plots that metric. One chart, four views.
+- Honest empty state: "Not enough data in this period. Please check later or try a longer range."
+- A dismissible banner asking the merchant to pick a store category, so Judge.me can "compare
+  your review collection with similar stores" — peer benchmarking, announced as upcoming.
+
+Two things to take: the **tile-as-chart-selector** pattern, which gives four metrics the space of
+one chart and avoids a wall of decorative sparklines; and a **Revenue** tab, i.e. attributing
+store revenue to reviews, which Imagyn does not attempt. `Review collection rate` (requests sent
+→ reviews received) is also a more useful headline number than a raw review count.
