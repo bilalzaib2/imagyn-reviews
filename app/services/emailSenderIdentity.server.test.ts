@@ -11,6 +11,7 @@ import {
   resolveSenderIdentity,
   sanitizeSenderName,
 } from "./emailSenderIdentity.server";
+import { resolveSenderIdentityWith } from "./emailSenderIdentity.shared";
 import { getPermissions } from "./permissions";
 
 const PRO = { canUseBrandedEmailSender: true };
@@ -517,5 +518,62 @@ describe("Shopify contact email as the default Reply-To", () => {
 
     expect(a.replyTo).toBe("a@a.test");
     expect(b.replyTo).toBe("b@b.test");
+  });
+});
+
+// Reply-To is a mail header built from merchant-supplied values. Email Studio validates an
+// address on save, but validation at one caller is not validation at the point the header is
+// assembled — which is here, and is where the Shopify-sourced address has always been
+// re-checked. These pin the same rule for the template-supplied address.
+describe("the template Reply-To is re-validated where the header is built", () => {
+  const store = {
+    name: "Verve Outdoor",
+    shopDomain: "verve.myshopify.com",
+    emailSenderName: null,
+    replyToEmail: null,
+    replyToVerifiedAt: null,
+    contactEmail: null,
+  };
+  const free = { canUseBrandedEmailSender: false };
+  const platform = "reviews@notifications.imagyn.co";
+
+  it("accepts an ordinary address", () => {
+    const identity = resolveSenderIdentityWith(store, free, "owner@verve.test", platform);
+    expect(identity.replyTo).toBe("owner@verve.test");
+    expect(identity.replyToSource).toBe("template");
+  });
+
+  it.each([
+    ["a second address smuggled in", "owner@verve.test, evil@attacker.test"],
+    ["a CRLF header injection", "owner@verve.test\r\nBcc: evil@attacker.test"],
+    ["angle brackets", "<owner@verve.test>"],
+    ["two @ signs", "owner@verve@attacker.test"],
+    ["a bare word", "owner"],
+    ["whitespace only", "   "],
+    ["a domain with no dot", "owner@localhost"],
+  ])("drops %s and falls back rather than building that header", (_label, value) => {
+    const identity = resolveSenderIdentityWith(store, free, value, platform);
+    expect(identity.replyTo).toBe(platform);
+    expect(identity.replyTo).not.toContain("attacker");
+  });
+
+  it("still prefers a verified store address over the template one", () => {
+    const identity = resolveSenderIdentityWith(
+      { ...store, replyToEmail: "verified@verve.test", replyToVerifiedAt: new Date() },
+      free,
+      "template@verve.test",
+      platform,
+    );
+    expect(identity.replyTo).toBe("verified@verve.test");
+  });
+
+  it("falls back to the Shopify contact address when the template one is unusable", () => {
+    const identity = resolveSenderIdentityWith(
+      { ...store, contactEmail: "shop@verve.test" },
+      free,
+      "not an address",
+      platform,
+    );
+    expect(identity.replyTo).toBe("shop@verve.test");
   });
 });

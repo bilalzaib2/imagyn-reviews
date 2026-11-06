@@ -202,7 +202,12 @@ export function resolveSenderIdentityWith(
   // nowhere; falling back here keeps them landing exactly where they landed before this change.
   const verifiedStoreReplyTo =
     store.replyToVerifiedAt && store.replyToEmail?.trim() ? store.replyToEmail.trim() : null;
-  const templateReplyTo = replyTo?.trim() || null;
+  // Re-validated for the same reason the Shopify address below is: this is the value that
+  // actually becomes a header. Email Studio already rejects a malformed address on save, but
+  // that is one caller's validation of one path, and the header is built here. An address
+  // that cannot be a safe header is dropped rather than repaired — the fallbacks below are
+  // all real, reachable inboxes, so dropping it loses nothing.
+  const templateReplyTo = isHeaderSafeAddress(replyTo) ? replyTo!.trim() : null;
 
   // Shopify's shop.contactEmail — the address Shopify itself designates for customers to reach
   // the shop owner. It sits BELOW the two deliberate merchant choices and ABOVE the platform
