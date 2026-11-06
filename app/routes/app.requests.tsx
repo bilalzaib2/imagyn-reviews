@@ -1,7 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { ChangeEvent } from "react";
 import {
-  Link as RemixLink,
   useFetcher,
   useLoaderData,
   useLocation,
@@ -41,7 +40,6 @@ import {
 } from "../services/review-request.server";
 import { importReviewRequestsFromCsv, type CsvRequestImportResult } from "../services/reviewRequestCsvImport.server";
 import shellStyles from "../styles/app.shell.module.css";
-import sharedStyles from "../styles/shared.module.css";
 import styles from "../styles/app.requests.module.css";
 
 type CustomerOption = { name: string | null; email: string | null };
@@ -1822,18 +1820,6 @@ export default function RequestsPage() {
             currentPath={location.pathname}
             search={location.search}
           />
-
-          {/* Requests and Reviews are one workflow (collecting + moderating feedback) split
-              across two focused pages — no longer both in primary nav (see app.tsx), so this
-              is how a merchant moves between them. */}
-          <nav className={sharedStyles.workflowTabs} aria-label="Review workflow">
-            <RemixLink to="/app/reviews" className={sharedStyles.workflowTab}>
-              Reviews
-            </RemixLink>
-            <RemixLink to="/app/requests" className={`${sharedStyles.workflowTab} ${sharedStyles.workflowTabActive}`} aria-current="page">
-              Requests
-            </RemixLink>
-          </nav>
 
           {!canUseEmailReminders ? (
             <div className={styles.upgradeBanner}>

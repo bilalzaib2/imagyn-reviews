@@ -66,7 +66,6 @@ import {
 } from "../services/cursorPagination.shared";
 import styles from "../styles/app.reviews.module.css";
 import shellStyles from "../styles/app.shell.module.css";
-import sharedStyles from "../styles/shared.module.css";
 
 type ActionData = {
   ok: boolean;
@@ -1170,18 +1169,6 @@ export default function ReviewsPage() {
           />
 
 
-        {/* Requests and Reviews are one workflow (collecting + moderating feedback) split
-            across two focused pages — no longer both in primary nav (see app.tsx), so this
-            is how a merchant moves between them. */}
-        <nav className={sharedStyles.workflowTabs} aria-label="Review workflow">
-          <RemixLink to="/app/reviews" className={`${sharedStyles.workflowTab} ${sharedStyles.workflowTabActive}`} aria-current="page">
-            Reviews
-          </RemixLink>
-          <RemixLink to="/app/requests" className={sharedStyles.workflowTab}>
-            Requests
-          </RemixLink>
-        </nav>
-
         <div className={styles.toolbar}>
           <label className={styles.searchField}>
             <input
@@ -1355,10 +1342,13 @@ export default function ReviewsPage() {
             )}
           </div>
 
-          {/* Full width. The review detail is a drawer (see .detailPanel), so this is a
-              single-column grid at every width and the table never gives up space to a panel
-              that may not be open. */}
-          <div className={styles.splitLayout}>
+          {/* Single column while nothing is selected, so the table never gives up space to a
+              panel that is not open. With a review selected the detail takes a real second
+              column on a wide screen and reverts to a drawer below that — see
+              .splitLayoutWithDetail for why. */}
+          <div
+            className={`${styles.splitLayout} ${selectedReview ? styles.splitLayoutWithDetail : ""}`}
+          >
             {isLoading ? (
               <>
                 <div className={styles.listColumn}>

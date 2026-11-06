@@ -8,6 +8,11 @@
    migration path is recorded in docs/IMAGYN_DASHBOARD_DESIGN_SYSTEM.md. */
 
 .wrap {
+  /* A query container, so the table responds to the width it actually has rather than to
+     the width of the window. The two differ exactly when it matters: open the review detail
+     beside the table and the table loses ~26rem while the viewport never changes, so a
+     viewport media query leaves every column in place and simply truncates them all. */
+  container-type: inline-size;
   border: 1px solid var(--color-border);
   border-radius: var(--radius-lg);
   background: var(--color-surface);
@@ -33,11 +38,13 @@
   z-index: 1;
   padding: var(--space-3);
   text-align: left;
-  font-size: var(--text-xs);
+  /* Sentence case, not uppercase. A column header is read, not decorated: uppercase at
+     12px with 0.06em tracking is measurably slower to scan and was the single most
+     repeated complaint about the old admin. Judge.me, Shopify Admin and Linear all set
+     table headers in ordinary sentence case for the same reason. */
+  font-size: var(--text-sm);
   font-weight: var(--weight-medium);
-  letter-spacing: var(--tracking-caps);
-  text-transform: uppercase;
-  color: var(--color-text-muted);
+  color: var(--color-text);
   background: var(--color-surface);
   border-bottom: 1px solid var(--color-border);
   white-space: nowrap;
@@ -187,6 +194,19 @@
    column longer than every body row, and a fixed-layout table then misaligns every remaining
    column — the bug that is easy to introduce when each screen writes this rule itself. */
 @media (max-width: 640px) {
+  .table thead th {
+    width: var(--table-col-width-narrow, var(--table-col-width));
+  }
+
+  .hideOnNarrow {
+    display: none;
+  }
+}
+
+/* The same rule keyed to the table's own width. Both are kept: the media query still covers
+   a genuinely narrow viewport on a browser without container query support, and applying
+   display: none twice costs nothing. */
+@container (max-width: 640px) {
   .table thead th {
     width: var(--table-col-width-narrow, var(--table-col-width));
   }

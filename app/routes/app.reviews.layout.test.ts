@@ -37,9 +37,14 @@ describe("the table is full width", () => {
   });
 });
 
+// The base rules, at the start of a line — `.splitLayoutWithDetail .detailPanel` contains
+// the substring ".detailPanel {" too, and an unanchored match would pick up whichever of the
+// two appears first in the file rather than the one under test.
+const baseRule = (name: string) => CSS.match(new RegExp(`^\\.${name} \\{[^}]*\\}`, "m"));
+
 describe("the detail is a dismissible drawer", () => {
   it("is fixed to the viewport, not flowing in the grid", () => {
-    const rule = CSS.match(/\.detailPanel \{[^}]*\}/);
+    const rule = baseRule("detailPanel");
     expect(rule).not.toBeNull();
     expect(rule![0]).toContain("position: fixed");
     // Previously sticky with a 32rem cap, which is what made it borrow height from the list.
@@ -48,8 +53,8 @@ describe("the detail is a dismissible drawer", () => {
   });
 
   it("sits above its own scrim", () => {
-    const panel = CSS.match(/\.detailPanel \{[^}]*\}/)![0];
-    const scrim = CSS.match(/\.detailScrim \{[^}]*\}/);
+    const panel = baseRule("detailPanel")![0];
+    const scrim = baseRule("detailScrim");
     expect(scrim).not.toBeNull();
 
     const z = (rule: string) => Number(rule.match(/z-index:\s*(\d+)/)![1]);
@@ -228,5 +233,72 @@ describe("the repeated eyebrow label is gone", () => {
   // The Settings breadcrumb is a real eyebrow — it says where you are — and must survive.
   it("keeps the Settings breadcrumb, which carries actual context", () => {
     expect(readFileSync("app/components/ui/SettingsBreadcrumb.tsx", "utf8")).toContain("shellStyles.eyebrow");
+  });
+});
+
+describe("on a wide screen the detail shares the row instead of covering the table", () => {
+  // The defect this fixes, seen in the real embedded admin: as a fixed drawer the panel
+  // covered the right half of the table, hiding Product, Status and Date — three of the six
+  // columns, and the ones a merchant actually moderates on.
+  const wide = CSS.slice(CSS.indexOf("@media (min-width: 64rem)"));
+
+  it("gives the panel a real second column only when a review is selected", () => {
+    expect(CSS).toMatch(/\.splitLayoutWithDetail \{[^}]*grid-template-columns: minmax\(0, 1fr\) 26rem/);
+    // The base layout must stay single column, or the empty column is back.
+    expect(baseRule("splitLayout")![0]).toContain("grid-template-columns: minmax(0, 1fr)");
+  });
+
+  it("applies the modifier only while a review is open", () => {
+    expect(ROUTE).toMatch(/selectedReview \? styles\.splitLayoutWithDetail : ""/);
+  });
+
+  it("stops overlaying, so the table keeps its own width", () => {
+    const panel = wide.match(/\.splitLayoutWithDetail \.detailPanel \{[^}]*\}/);
+    expect(panel).not.toBeNull();
+    expect(panel![0]).toContain("position: sticky");
+  });
+
+  it("drops the scrim, so the table stays usable while the panel is open", () => {
+    // With a scrim the merchant must close one review before opening the next; Judge.me
+    // lets them move straight down the queue.
+    expect(wide).toMatch(/\.splitLayoutWithDetail \.detailScrim \{[^}]*display: none/);
+  });
+
+  it("lets the table shed columns on its own width, not the window's", () => {
+    // A viewport media query cannot see that the table just lost 26rem to the panel, so the
+    // columns would stay put and every one of them would truncate instead.
+    const TABLE_CSS = readFileSync("app/components/ui/table.module.css", "utf8");
+    expect(TABLE_CSS).toMatch(/\.wrap \{[^}]*container-type: inline-size/);
+    expect(TABLE_CSS).toMatch(/@container \(max-width: 640px\)[\s\S]{0,200}\.hideOnNarrow \{\s*display: none/);
+  });
+});
+
+describe("column headers are readable", () => {
+  // "I DO NOT want tiny uppercase, letter-spaced headings everywhere" — and a column header
+  // is read far more often than any other label on the screen.
+  it("sets table headers in sentence case, not uppercase", () => {
+    const TABLE_CSS = readFileSync("app/components/ui/table.module.css", "utf8");
+    const header = TABLE_CSS.match(/\.table thead th \{[^}]*\}/);
+    expect(header).not.toBeNull();
+    expect(header![0]).not.toContain("text-transform: uppercase");
+    expect(header![0]).not.toContain("letter-spacing: var(--tracking-caps)");
+  });
+});
+
+describe("one navigation, not two", () => {
+  // Both pages rendered WorkspaceTabs AND the older .workflowTabs nav, so the real admin
+  // showed two stacked tab rows — "Reviews | Review Requests" directly above
+  // "Reviews | Requests". Caught in the browser, not by any test.
+  it.each(["app/routes/app.reviews.tsx", "app/routes/app.requests.tsx"])(
+    "%s renders no second tab row",
+    (path) => {
+      const source = readFileSync(path, "utf8");
+      expect(source).not.toMatch(/workflowTabs/);
+      expect(source).toContain("<WorkspaceTabs");
+    },
+  );
+
+  it("drops the dead stylesheet rules with it", () => {
+    expect(readFileSync("app/styles/shared.module.css", "utf8")).not.toMatch(/\.workflowTab/);
   });
 });

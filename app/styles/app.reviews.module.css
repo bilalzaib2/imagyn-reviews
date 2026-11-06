@@ -205,6 +205,46 @@
   align-items: start;
 }
 
+/* WHY THE DETAIL STOPS BEING AN OVERLAY ON A WIDE SCREEN
+   ------------------------------------------------------
+   As a fixed drawer the detail covered the right half of the table, so Product, Status and
+   Date — three of the six columns, and the ones a merchant moderates on — were hidden behind
+   the very panel they were meant to inform. Its scrim also made the table inert, forcing
+   open -> act -> close -> open for every review in the queue.
+
+   Above this breakpoint there is room for both, so the panel becomes an ordinary second grid
+   column: no scrim, the table stays live, and the merchant can click straight to the next
+   row. Below it there is not, so the drawer and its scrim are kept exactly as they were.
+
+   The table sheds its two expendable columns on its own — it is a query container now, so
+   losing ~26rem to this panel triggers the same rule a narrow phone does (see
+   table.module.css). */
+@media (min-width: 64rem) {
+  .splitLayoutWithDetail {
+    grid-template-columns: minmax(0, 1fr) 26rem;
+  }
+
+  .splitLayoutWithDetail .detailPanel {
+    position: sticky;
+    /* Clears the sticky page header rather than touching the viewport edge. */
+    top: var(--space-4);
+    right: auto;
+    bottom: auto;
+    z-index: 1;
+    width: auto;
+    max-height: calc(100vh - var(--space-10));
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-lg);
+    box-shadow: none;
+    animation: none;
+  }
+
+  /* Nothing to dismiss and nothing to dim: the table is usable while the panel is open. */
+  .splitLayoutWithDetail .detailScrim {
+    display: none;
+  }
+}
+
 /* No min-height here on purpose — .listColumn is a grid container with a single auto-sized
    row, so any min-height on it forces that row (and its stretch-by-default child, the shared
    <Table>'s wrapper) to fill the extra space even when the real table content is much
