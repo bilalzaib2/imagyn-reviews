@@ -95,6 +95,9 @@ session's browser work except the three defects actually observed.
 | Coupon promo during collection | In request emails + submission form | Missing | Missing | Needs schema |
 | Rating-gated rewards | **Absent** (compliance) | **Removed** (`09db694`) | Verified | Both compliant |
 | Issued-code visibility | Not observed | Yes (`6278e8c`) | Built, unverified | — |
+| Revoke an issued code | Not documented | Yes — deactivates the real Shopify discount | **Built, unverified** | Closed `31031ed`; service existed with no caller |
+| Real redemption count | `asyncUsageCount` | Yes — asks Shopify directly | **Built, unverified** | Closed `31031ed`; reports failure rather than "0 uses" |
+| Edit a campaign after creation | Yes | **No** | **Missing** | `updateCoupon` exists but has no edit form |
 
 ## 6. Compliance — CLOSED 2026-11-07
 
@@ -153,6 +156,33 @@ naming what each is waiting on (Shopify webhook approval), and the import source
 `available` flag. That is the right pattern and it is now enforced by
 `app/routes/noPlaceholderControls.test.ts`, verified non-vacuous by planting a dead link, a
 no-op button and an unguarded label and confirming all three rules fire.
+
+## 6b. Coupons and email — verification pass, 2026-11-07
+
+**Three coupon service methods had no caller anywhere in the UI.** `coupons.server.ts` was
+complete, tenant-scoped, Shopify-integrated and tested, and a merchant still could not reach
+`revokeRedemption`, `checkRedemptionUsage` or `updateCoupon`. A service with no caller is not a
+feature, and no service-level suite notices. Revoke and usage-check are now wired
+(`31031ed`); `updateCoupon` needs an edit form and remains open. A contract test now asserts
+every method is reachable and **names the ones that are not**, so the next such gap is visible
+rather than silent.
+
+**No reward is conditional on rating** — re-confirmed, and now guarded structurally as well as
+behaviourally: `evaluateEligibility` must not read `review.rating`, no `minRating` may survive
+in the code, and the retired schema column must keep its 16 CFR Part 465 warning.
+
+**Email delivery is verified for real**, not by preview or mocks. Four emails were accepted by
+Resend with message ids, to the authorized test inbox only, covering `review_request`,
+`reminder` and `reward`. Confirmed live: the From header resolves to the merchant-scoped
+address `Verve Outdoor <requests+verveoutdoor.com@notifications.imagyn.co>`, and Reply-To is
+carried through. Precedence is verified store address → template address → Shopify
+`shop.contactEmail` → platform fallback.
+
+One defect fixed on the way (`31031ed` follow-up): the template Reply-To went into the mail
+header after a plain trim, while the Shopify-sourced address beside it was re-validated with
+the reasoning written down — "this is the value that actually becomes a header". Not
+exploitable, because Email Studio rejects a malformed address on save, but that is one
+caller's validation of one path. Both now go through `isHeaderSafeAddress`.
 
 ## 7. Analytics
 

@@ -855,3 +855,59 @@ UI. The only "Coming soon" copy is on genuinely disabled controls. Locked in by
 local and unpushed** — pushing deploys, and that is not approved.
 
 Still never seen rendered: everything built on 2026-11-07.
+
+---
+
+## 15. Coupons and email verification — 2026-11-07
+
+### 15.1 The pattern worth remembering
+
+The most useful finding of this pass was not a bug in any function. It was that **three
+complete, tested service methods had no caller**. `revokeRedemption`, `checkRedemptionUsage`
+and `updateCoupon` all worked; none was reachable from the UI. Service-level tests pass
+happily in that situation, which is exactly why "the service exists" is not evidence a feature
+works.
+
+`app/routes/app.settings.coupons.contract.test.ts` now asserts reachability for every method
+on `couponsService` and names the unreachable ones in a failing-visible list. Worth copying
+for other services.
+
+### 15.2 Coupons
+
+Wired (`31031ed`): **Revoke**, which deactivates the real Shopify discount behind an issued
+code, and **Check usage**, which asks Shopify's `asyncUsageCount` whether the code was used.
+When Shopify does not answer, that is reported as a failure — "0 uses" is a claim about the
+merchant's revenue and must not be fabricated. Controls appear only when actionable.
+
+**Still open:** a campaign cannot be edited after creation. `updateCoupon` and its read helper
+`getCoupon` are implemented; they need an edit form, not another intent.
+
+### 15.3 Rewards compliance
+
+Re-confirmed and now guarded structurally: `evaluateEligibility` never reads `review.rating`,
+no `minRating` survives in code, and the retired column keeps its warning. The behavioural
+tests already proved all five ratings reach the same verdict.
+
+### 15.4 Email — verified by real delivery
+
+Four emails sent to the authorized test inbox (`bilal.zaib@outlook.com`) and accepted by
+Resend with message ids, across `review_request`, `reminder` and `reward`.
+
+Confirmed live:
+- From resolves to the merchant-scoped address, e.g.
+  `Verve Outdoor <requests+verveoutdoor.com@notifications.imagyn.co>`.
+- The merchant-scoped From applies on **every** plan; only the custom display-name override is
+  Pro. On Free the store's real name is used — correct, not an entitlement leak.
+- Reply-To precedence: verified store address → template address → Shopify `shop.contactEmail`
+  → platform fallback.
+
+**Defect found and fixed:** the template Reply-To reached the mail header after only a trim,
+while the Shopify address beside it was re-validated at the same point. Both now go through
+`isHeaderSafeAddress`; an unusable address is dropped rather than repaired.
+
+**Caveat:** acceptance by Resend is not inbox placement. Deliverability (DMARC still `p=none`,
+zero domain reputation) is unchanged and remains the open risk recorded in §7.
+
+### 15.5 State
+
+**1,918 tests across 97 files.** Typecheck, lint, build clean. **17 commits local, unpushed.**
