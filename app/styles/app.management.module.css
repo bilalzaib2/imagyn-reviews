@@ -225,3 +225,38 @@
     transition: none;
   }
 }
+
+/* ---------------------------------------------------------------- Coupon redemptions
+
+   Collapsed by default: a campaign that has issued two hundred codes should not push every
+   other campaign off the screen, and the count in the summary is the number a merchant
+   actually scans for. <details> rather than a custom disclosure so it is keyboard- and
+   screen-reader-operable with no JavaScript at all. */
+.redemptionDetails {
+  margin-top: var(--space-3);
+}
+
+.redemptionSummary {
+  cursor: pointer;
+  font-size: var(--text-sm);
+  font-weight: var(--weight-medium);
+  color: var(--color-text-muted);
+  padding: var(--space-2) 0;
+  list-style-position: inside;
+}
+
+.redemptionSummary:hover {
+  color: var(--color-text);
+}
+
+.redemptionDetails[open] .redemptionSummary {
+  margin-bottom: var(--space-2);
+}
+
+/* A long customer email must not push the Code column off a fixed-layout table. */
+.ellipsisCell {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}

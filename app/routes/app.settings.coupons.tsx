@@ -7,6 +7,8 @@ import { Button } from "../components/ui/Button";
 import { Section } from "../components/ui/Section";
 import { StatusBadge, type StatusBadgeTone } from "../components/ui/StatusBadge";
 import { EmptyState } from "../components/ui/EmptyState";
+import { Banner } from "../components/ui/Banner";
+import { Table, type TableColumn } from "../components/ui/Table";
 import { authenticateAdminDeduped } from "../services/auth-dedupe.server";
 import { getOrCreateStore } from "../services/store.server";
 import {
@@ -16,6 +18,7 @@ import {
   type CouponDiscountType,
   type CouponEligibility,
   type CouponStatus,
+  type RedemptionRecord,
 } from "../services/coupons.server";
 import styles from "../styles/app.management.module.css";
 
@@ -25,6 +28,10 @@ import styles from "../styles/app.management.module.css";
 // shopifyDiscount.server.ts). No decorative toggle: every control here reads/writes a real row.
 type LoaderData = {
   coupons: CouponRecord[];
+  /** Issued personalised codes, grouped by campaign. The service has always been able to
+   *  return these; the page simply never asked, so a merchant could issue a code and then had
+   *  no way to see who had received one. */
+  redemptionsByCoupon: Record<string, RedemptionRecord[]>;
   storeDomain: string;
 };
 
@@ -39,7 +46,20 @@ export const loader = async ({ request }: LoaderFunctionArgs): Promise<LoaderDat
   const store = await getOrCreateStore(session.shop);
   const coupons = await couponsService.listCoupons(store.id);
 
-  return { coupons, storeDomain: store.domain || session.shop };
+  // One query per campaign, in parallel, and only for campaigns that have actually issued
+  // something — issuedCount is already on the record, so a store with twenty draft campaigns
+  // makes no extra queries at all.
+  const withIssued = coupons.filter((coupon) => coupon.issuedCount > 0);
+  const redemptionLists = await Promise.all(
+    withIssued.map((coupon) => couponsService.listRedemptions(store.id, coupon.id)),
+  );
+
+  const redemptionsByCoupon: Record<string, RedemptionRecord[]> = {};
+  withIssued.forEach((coupon, index) => {
+    redemptionsByCoupon[coupon.id] = redemptionLists[index];
+  });
+
+  return { coupons, redemptionsByCoupon, storeDomain: store.domain || session.shop };
 };
 
 export const action = async ({ request }: ActionFunctionArgs): Promise<ActionData> => {
@@ -172,7 +192,57 @@ function discountAdminUrl(storeDomain: string, shopifyDiscountId: string): strin
   return `https://${storeDomain}/admin/discounts/${numericId}`;
 }
 
-function CouponRow({ coupon, storeDomain }: { coupon: CouponRecord; storeDomain: string }) {
+const REDEMPTION_STATUS_TONE: Record<RedemptionRecord["status"], StatusBadgeTone> = {
+  issued: "success",
+  failed: "danger",
+  // A merchant deliberately pulling a code back is not a failure, so it is not red.
+  revoked: "neutral",
+};
+
+const dateFormatter = new Intl.DateTimeFormat("en", { month: "short", day: "numeric", year: "numeric" });
+
+const REDEMPTION_COLUMNS: TableColumn<RedemptionRecord>[] = [
+  {
+    key: "customerEmail",
+    header: "Customer",
+    width: "38%",
+    render: (row) => <span className={styles.ellipsisCell}>{row.customerEmail}</span>,
+  },
+  {
+    key: "code",
+    header: "Code",
+    width: "28%",
+    // A real code or an em-dash. Never a placeholder: CouponRedemption.discountCode is only
+    // ever set once Shopify's own mutation returned one.
+    render: (row) => (row.discountCode ? <code>{row.discountCode}</code> : "—"),
+  },
+  {
+    key: "status",
+    header: "Status",
+    width: "18%",
+    render: (row) => (
+      <StatusBadge tone={REDEMPTION_STATUS_TONE[row.status]}>{row.status}</StatusBadge>
+    ),
+  },
+  {
+    key: "createdAt",
+    header: "Issued",
+    width: "16%",
+    align: "end",
+    numeric: true,
+    render: (row) => dateFormatter.format(new Date(row.createdAt)),
+  },
+];
+
+function CouponRow({
+  coupon,
+  storeDomain,
+  redemptions,
+}: {
+  coupon: CouponRecord;
+  storeDomain: string;
+  redemptions: RedemptionRecord[];
+}) {
   const statusFetcher = useFetcher<ActionData>();
   const issueFetcher = useFetcher<ActionData>();
   const [email, setEmail] = useState("");
@@ -231,7 +301,22 @@ function CouponRow({ coupon, storeDomain }: { coupon: CouponRecord; storeDomain:
             </Button>
           ) : null}
           {coupon.status !== "ended" ? (
-            <Button type="button" variant="ghost" onClick={() => setStatus("ended")} disabled={statusFetcher.state !== "idle"}>
+            // Confirmed, because ending is the one irreversible action here: it deactivates
+            // the real Shopify discount and there is no path back to active. Pause is the
+            // reversible one, and is deliberately left unconfirmed.
+            <Button
+              type="button"
+              variant="ghost"
+              onClick={() => {
+                const message =
+                  `End "${coupon.name}"?\n\n` +
+                  "This deactivates the discount in Shopify and can't be undone — the campaign can't be " +
+                  "reactivated afterwards. Any codes already issued from it stop working.\n\n" +
+                  "To stop it temporarily instead, use Pause.";
+                if (window.confirm(message)) setStatus("ended");
+              }}
+              disabled={statusFetcher.state !== "idle"}
+            >
               End
             </Button>
           ) : null}
@@ -239,7 +324,7 @@ function CouponRow({ coupon, storeDomain }: { coupon: CouponRecord; storeDomain:
       </div>
 
       {statusFetcher.data && !statusFetcher.data.ok ? (
-        <p className={styles.mutedText}>{statusFetcher.data.error}</p>
+        <Banner tone="critical" description={statusFetcher.data.error} />
       ) : null}
 
       {coupon.discountCode && coupon.shopifyDiscountId ? (
@@ -274,14 +359,37 @@ function CouponRow({ coupon, storeDomain }: { coupon: CouponRecord; storeDomain:
           </Button>
         </div>
       ) : null}
-      {issueFetcher.data && !issueFetcher.data.ok ? <p className={styles.mutedText}>{issueFetcher.data.error}</p> : null}
-      {issueFetcher.data?.ok && issueFetcher.data.message ? <p className={styles.mutedText}>{issueFetcher.data.message}</p> : null}
+      {issueFetcher.data && !issueFetcher.data.ok ? (
+        <Banner tone="critical" description={issueFetcher.data.error} />
+      ) : null}
+      {issueFetcher.data?.ok && issueFetcher.data.message ? (
+        <Banner tone="success" description={issueFetcher.data.message} />
+      ) : null}
+
+      {/* Issued codes. The service could always return these; the page never asked, so a
+          merchant could issue a personalised code and then had no record of who received one,
+          whether it worked, or whether it had been used. */}
+      {redemptions.length > 0 ? (
+        <details className={styles.redemptionDetails}>
+          <summary className={styles.redemptionSummary}>
+            {redemptions.length} issued code{redemptions.length === 1 ? "" : "s"}
+          </summary>
+          <Table
+            rows={redemptions}
+            columns={REDEMPTION_COLUMNS}
+            getRowKey={(row) => row.id}
+            ariaLabel={`Codes issued for ${coupon.name}`}
+            density="compact"
+            maxHeight="18rem"
+          />
+        </details>
+      ) : null}
     </div>
   );
 }
 
 export default function SettingsCouponsPage() {
-  const { coupons, storeDomain } = useLoaderData<typeof loader>();
+  const { coupons, redemptionsByCoupon, storeDomain } = useLoaderData<typeof loader>();
   const createFetcher = useFetcher<ActionData>();
   const isCreating = createFetcher.state !== "idle";
   const [toast, setToast] = useState<{ content: string; error?: boolean } | null>(null);
@@ -396,7 +504,12 @@ export default function SettingsCouponsPage() {
         ) : (
           <div className={styles.cardList}>
             {coupons.map((coupon) => (
-              <CouponRow key={coupon.id} coupon={coupon} storeDomain={storeDomain} />
+              <CouponRow
+                key={coupon.id}
+                coupon={coupon}
+                storeDomain={storeDomain}
+                redemptions={redemptionsByCoupon[coupon.id] ?? []}
+              />
             ))}
           </div>
         )}
