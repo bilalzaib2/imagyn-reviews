@@ -1,6 +1,7 @@
 // Exercises rewards.server.ts's real eligibility logic and the duplicate-prevention/
 // persistence flow around it — no real database, no real Shopify API call (unauthenticated.admin
 // and the email provider are both mocked).
+import { readFileSync } from "node:fs";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 interface FakeReward {
@@ -634,5 +635,48 @@ describe("getRewardStats", () => {
 
     const stats = await getRewardStats("store_1");
     expect(stats).toEqual({ issued: 2, pending: 0, failed: 0, ineligible: 1 });
+  });
+});
+
+// A structural guard, not a behavioural one. The behavioural tests above prove every rating
+// reaches the same verdict today; this proves the condition cannot be reintroduced without
+// someone deliberately deleting an assertion that explains why it must not be.
+describe("rating can never gate a reward", () => {
+  const SOURCE = readFileSync("app/services/rewards.server.ts", "utf8");
+
+  it("evaluateEligibility does not read the rating at all", () => {
+    const start = SOURCE.indexOf("export function evaluateEligibility(");
+    const body = SOURCE.slice(start, SOURCE.indexOf("\n}", start));
+    // The parameter type may mention rating; the function body must never branch on it.
+    expect(body).not.toMatch(/review\.rating/);
+  });
+
+  it("no minimum-rating setting survives in the code itself", () => {
+    // Compensation conditioned on review sentiment is prohibited by the FTC's rule on
+    // consumer reviews (16 CFR Part 465) and by Shopify's App Store review-integrity
+    // requirements, and the liability lands on the app rather than the merchant.
+    //
+    // Comments are stripped first: this file's own header explains at length why minRating
+    // was removed, and that explanation is the opposite of a breach.
+    const code = SOURCE.split("\n")
+      .filter((line) => {
+        const trimmed = line.trim();
+        return trimmed && !trimmed.startsWith("//") && !trimmed.startsWith("*") && !trimmed.startsWith("/*");
+      })
+      .join("\n");
+
+    expect(code).not.toMatch(/minRating/);
+  });
+
+  it("the retired column still carries its do-not-reintroduce warning", () => {
+    // Kept rather than dropped (removing it needs a migration), so the warning is the only
+    // thing standing between it and someone wiring it back up.
+    const SCHEMA = readFileSync("prisma/schema.prisma", "utf8");
+    if (!SCHEMA.includes("rewardMinRating")) return;
+
+    const at = SCHEMA.indexOf("rewardMinRating");
+    const preamble = SCHEMA.slice(Math.max(0, at - 1200), at);
+    expect(preamble).toMatch(/16 CFR Part 465/);
+    expect(preamble).toMatch(/review-integrity/);
   });
 });

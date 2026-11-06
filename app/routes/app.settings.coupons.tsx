@@ -155,6 +155,42 @@ export const action = async ({ request }: ActionFunctionArgs): Promise<ActionDat
       return { ok: true, message: `Code ${redemption.discountCode} issued to ${email}.` };
     }
 
+    // Revoking deactivates the real Shopify discount behind the issued code, so a code sent
+    // to the wrong customer can actually be taken back. The service was already complete and
+    // tested; until now nothing in the UI called it, which meant a merchant's only recourse
+    // was to go and find the discount in the Shopify admin themselves.
+    if (intent === "revokeRedemption") {
+      const redemptionId = String(formData.get("redemptionId") || "");
+      if (!redemptionId) {
+        return { ok: false, error: "Missing redemption." };
+      }
+
+      const revoked = await couponsService.revokeRedemption(store.id, store.domain || session.shop, redemptionId);
+      return { ok: true, message: `Code ${revoked.discountCode ?? ""} revoked.`.replace("  ", " ") };
+    }
+
+    // Asks Shopify how many times the code has actually been used at checkout, rather than
+    // inferring it from anything we store. Read-only.
+    if (intent === "checkUsage") {
+      const code = String(formData.get("discountCode") || "").trim();
+      if (!code) {
+        return { ok: false, error: "This redemption has no code to check yet." };
+      }
+
+      const used = await couponsService.checkRedemptionUsage(store.domain || session.shop, code);
+
+      if (used === null) {
+        // Shopify could not answer. Saying "0 uses" here would be a fabricated fact about a
+        // merchant's revenue, so the failure is reported as a failure.
+        return { ok: false, error: `Shopify did not return a usage count for ${code}. Try again shortly.` };
+      }
+
+      return {
+        ok: true,
+        message: used === 0 ? `${code} has not been used yet.` : `${code} has been used ${used} time${used === 1 ? "" : "s"}.`,
+      };
+    }
+
     return { ok: false, error: "Unknown action." };
   } catch (error) {
     if (error instanceof CouponNotEligibleError) {
@@ -201,17 +237,24 @@ const REDEMPTION_STATUS_TONE: Record<RedemptionRecord["status"], StatusBadgeTone
 
 const dateFormatter = new Intl.DateTimeFormat("en", { month: "short", day: "numeric", year: "numeric" });
 
-const REDEMPTION_COLUMNS: TableColumn<RedemptionRecord>[] = [
+/** Built per coupon row rather than once at module scope, so the action cells can reach the
+ *  fetcher that submits them. */
+function redemptionColumns(
+  onRevoke: (redemptionId: string) => void,
+  onCheckUsage: (discountCode: string) => void,
+  busy: boolean,
+): TableColumn<RedemptionRecord>[] {
+  return [
   {
     key: "customerEmail",
     header: "Customer",
-    width: "38%",
+    width: "30%",
     render: (row) => <span className={styles.ellipsisCell}>{row.customerEmail}</span>,
   },
   {
     key: "code",
     header: "Code",
-    width: "28%",
+    width: "24%",
     // A real code or an em-dash. Never a placeholder: CouponRedemption.discountCode is only
     // ever set once Shopify's own mutation returned one.
     render: (row) => (row.discountCode ? <code>{row.discountCode}</code> : "—"),
@@ -219,7 +262,7 @@ const REDEMPTION_COLUMNS: TableColumn<RedemptionRecord>[] = [
   {
     key: "status",
     header: "Status",
-    width: "18%",
+    width: "14%",
     render: (row) => (
       <StatusBadge tone={REDEMPTION_STATUS_TONE[row.status]}>{row.status}</StatusBadge>
     ),
@@ -227,12 +270,35 @@ const REDEMPTION_COLUMNS: TableColumn<RedemptionRecord>[] = [
   {
     key: "createdAt",
     header: "Issued",
-    width: "16%",
+    width: "13%",
     align: "end",
     numeric: true,
     render: (row) => dateFormatter.format(new Date(row.createdAt)),
   },
-];
+  {
+    key: "actions",
+    header: "Actions",
+    width: "11rem",
+    headerHidden: true,
+    interactive: true,
+    render: (row) => (
+      <div className={styles.redemptionActions}>
+        {/* Only a code Shopify actually minted can be looked up or withdrawn. */}
+        {row.discountCode ? (
+          <Button type="button" variant="ghost" disabled={busy} onClick={() => onCheckUsage(row.discountCode!)}>
+            Check usage
+          </Button>
+        ) : null}
+        {row.status === "issued" ? (
+          <Button type="button" variant="ghost" disabled={busy} onClick={() => onRevoke(row.id)}>
+            Revoke
+          </Button>
+        ) : null}
+      </div>
+    ),
+  },
+  ];
+}
 
 function CouponRow({
   coupon,
@@ -245,6 +311,9 @@ function CouponRow({
 }) {
   const statusFetcher = useFetcher<ActionData>();
   const issueFetcher = useFetcher<ActionData>();
+  /** Revoking a code and checking its real usage at Shopify. Its own fetcher so neither
+   *  clobbers the issue form's result message. */
+  const redemptionFetcher = useFetcher<ActionData>();
   const [email, setEmail] = useState("");
   const [copied, setCopied] = useState(false);
 
@@ -323,6 +392,14 @@ function CouponRow({
         </div>
       </div>
 
+      {/* Revoke and usage-check report through their own banner — a usage count is the
+          answer to a question the merchant just asked, so it must not be swallowed. */}
+      {redemptionFetcher.data && !redemptionFetcher.data.ok ? (
+        <Banner tone="critical" description={redemptionFetcher.data.error} />
+      ) : null}
+      {redemptionFetcher.data?.ok && redemptionFetcher.data.message ? (
+        <Banner tone="info" description={redemptionFetcher.data.message} />
+      ) : null}
       {statusFetcher.data && !statusFetcher.data.ok ? (
         <Banner tone="critical" description={statusFetcher.data.error} />
       ) : null}
@@ -376,7 +453,11 @@ function CouponRow({
           </summary>
           <Table
             rows={redemptions}
-            columns={REDEMPTION_COLUMNS}
+            columns={redemptionColumns(
+              (redemptionId) => redemptionFetcher.submit({ intent: "revokeRedemption", redemptionId }, { method: "post" }),
+              (discountCode) => redemptionFetcher.submit({ intent: "checkUsage", discountCode }, { method: "post" }),
+              redemptionFetcher.state !== "idle",
+            )}
             getRowKey={(row) => row.id}
             ariaLabel={`Codes issued for ${coupon.name}`}
             density="compact"

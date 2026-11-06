@@ -258,3 +258,12 @@
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+
+/* Per-redemption actions — checking a code's real usage at Shopify, and withdrawing it.
+   Wraps rather than overflowing, because the column is narrow by design. */
+.redemptionActions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: var(--space-2);
+}
