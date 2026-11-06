@@ -141,10 +141,9 @@
 }
 
 .filterLabel {
-  font-size: var(--text-xs);
-  letter-spacing: 0.16em;
-  text-transform: uppercase;
+  font-size: var(--text-sm);
   color: var(--color-text-muted);
+  font-weight: var(--weight-medium);
 }
 
 .filterInput,
@@ -560,10 +559,8 @@
   align-items: center;
   gap: 0.4rem;
   margin: 0;
-  font-size: var(--text-xs);
-  font-weight: 600;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
+  font-size: var(--text-sm);
+  font-weight: var(--weight-medium);
   color: var(--color-ai);
 }
 
@@ -816,10 +813,9 @@
 
 .detailLabel {
   margin: 0;
-  font-size: var(--text-xs);
-  letter-spacing: 0.16em;
-  text-transform: uppercase;
+  font-size: var(--text-sm);
   color: var(--color-text-muted);
+  font-weight: var(--weight-medium);
 }
 
 @media (max-width: 900px) {

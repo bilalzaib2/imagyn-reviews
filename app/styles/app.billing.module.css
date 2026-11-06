@@ -124,10 +124,9 @@
 
 .trialNote {
   margin: 0;
-  font-size: var(--text-xs);
-  letter-spacing: 0.04em;
-  text-transform: uppercase;
+  font-size: var(--text-sm);
   color: var(--color-text-muted);
+  font-weight: var(--weight-medium);
 }
 
 .featureList {

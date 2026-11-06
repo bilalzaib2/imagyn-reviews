@@ -27,10 +27,9 @@
 }
 
 .fieldLabel {
-  font-size: var(--text-xs);
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
+  font-size: var(--text-sm);
   color: var(--color-text-muted);
+  font-weight: var(--weight-medium);
 }
 
 .textInput,
@@ -159,10 +158,9 @@
 
 .proEyebrow {
   margin: 0 0 var(--space-2);
-  font-size: var(--text-xs);
-  letter-spacing: 0.12em;
-  text-transform: uppercase;
+  font-size: var(--text-sm);
   color: var(--color-text-muted);
+  font-weight: var(--weight-medium);
 }
 
 .proList {
@@ -191,10 +189,9 @@
 
 .previewLabel {
   margin: 0;
-  font-size: var(--text-xs);
-  letter-spacing: 0.12em;
-  text-transform: uppercase;
+  font-size: var(--text-sm);
   color: var(--color-text-muted);
+  font-weight: var(--weight-medium);
 }
 
 .previewToggle {

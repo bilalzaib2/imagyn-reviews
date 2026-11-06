@@ -46,10 +46,35 @@
 
 /* The one or two headline figures at the top of a screen: more air, a larger number, and
    content anchored to the top so a hero tile sitting beside a taller neighbour does not float
-   its number into the middle of the card. */
+   its number into the middle of the card.
+
+   The brand gradient lives HERE and nowhere else in the admin. That is the whole point — it
+   marks the two numbers that define a store's reputation (its average rating and its review
+   count), and it only reads as emphasis because no other surface competes with it. A gradient
+   applied to every card is wallpaper.
+
+   It is deliberately faint: 5% to 1.5% of --color-brand over the normal white surface, on a
+   165° axis so the tint gathers at the top-left where the number sits and clears by the
+   label. Charcoal text on the darkest point of it still measures 16.9:1. */
 .hero {
   align-content: start;
   padding: var(--space-5) var(--space-6);
+  background:
+    linear-gradient(
+      165deg,
+      color-mix(in srgb, var(--color-brand) 5%, var(--color-surface)) 0%,
+      color-mix(in srgb, var(--color-brand) 1.5%, var(--color-surface)) 55%,
+      var(--color-surface) 100%
+    );
+  border-color: color-mix(in srgb, var(--color-brand) 18%, var(--color-border));
+}
+
+/* A tone is a fact and must win over the brand treatment: a hero tile that is genuinely in
+   an "attention" state has to read as that state, not as a branded highlight. */
+.hero.tonePositive,
+.hero.toneAttention,
+.hero.toneDanger {
+  background: none;
 }
 
 .value {

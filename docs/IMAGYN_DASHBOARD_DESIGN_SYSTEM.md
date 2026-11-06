@@ -145,6 +145,84 @@ Email templates are the one exception and keep plain Helvetica/Georgia stacks �
 do not reliably load webfonts, so offering Geist there would silently fall back anyway. See
 `ReviewRequestEmail.tsx`'s `FONT_STACKS`.
 
+### 3.1a Why one typeface and not a display pairing (decided 2026-11-06)
+
+Five candidates were considered: **Montserrat, Geist Sans, Inter, Manrope, Helvetica Neue.**
+The decision is **Geist Sans alone, with a stronger weight and size hierarchy** — not a
+display face layered over a text face.
+
+| Candidate | Verdict |
+|---|---|
+| **Montserrat** | A geometric *display* face from urban signage. Genuinely handsome at 40px. Wrong as a body face for this product: its wide letterforms eat horizontal space in exactly the dense tables that dominate these screens, and its geometric `a`/`g`/`o` lose differentiation at the 13–14px a table cell runs at. |
+| **Inter** | Purpose-built for UI, excellent at small sizes — and the default SaaS typeface. Shopify's own Polaris already uses it, so adopting it is the one choice guaranteed to give Imagyn no typographic identity at all: the app would read as untouched Shopify Admin. |
+| **Geist Sans** | A neo-grotesque designed for interfaces. Taller x-height and tighter apertures than Helvetica, real tabular figures, a variable weight axis to 900. Distinctive without being decorative. Already installed and self-hosted. |
+| **Manrope** | Characterful and pleasant at display sizes, weaker than Geist or Inter in the 12–14px band that most of this interface lives in. |
+| **Helvetica Neue** | Not reliably present on Windows (Arial substitutes), no variable axis, no tabular figures by default. Fine as a *fallback*, which is exactly what it is. |
+
+**Why no second face.** Three reasons, in order of weight:
+
+1. **The references do not use one.** Linear and Stripe — both named in the brief — each run a
+   single face and get their editorial quality from confident weight and size contrast, not
+   from a display/text pairing.
+2. **Geist already goes to 900.** "Bold, clean, editorial headings" is available from the
+   variable axis that is already loading. A second webfont buys nothing the first one cannot
+   do, and costs another file, another swap window inside the iframe, and a second preload.
+3. **Mixing genres reads as accidental.** A geometric display face over a neo-grotesque text
+   face is a real pairing, but a hard one; done without a type designer's eye it looks like
+   two fonts that failed to load consistently rather than a deliberate pairing.
+
+What changed instead: the page title went from 600 to **700** at **-0.035em**, and section
+headings are a real 18px/600 heading rather than metadata. That is where the "confident"
+quality was missing — not in the choice of face.
+
+**If you want Montserrat anyway**, the defensible version is display-only: Montserrat for
+`.title` and the hero metric number, Geist everywhere else, both self-hosted. That is one
+token change (`--font-display`) plus a second `@font-face` and a second preload — it is
+deliberately *possible*, since `--font-display` already exists as a separate token from
+`--font-sans` and nothing reads one where it means the other.
+
+### 3.1b The uppercase pass (2026-11-06)
+
+This codebase had grown **49** `text-transform: uppercase` rules. Most were the same pattern:
+12px, `letter-spacing: 0.1–0.16em`, muted grey — a tiny uppercase label above a card or beside
+a value. Repeated at that density it stops being emphasis and becomes noise, and it is
+actively hard to read.
+
+**20 selectors were retypeset** to real, readable labels across 18 stylesheets:
+
+- **Section labels** (`settingsGroupLabel`, `groupLabel`, `sidebarGroupLabel`,
+  `inspectorGroupLabel`, `aiSummaryGroupLabel`, `modalSectionLabel`, `introEyebrow`) →
+  14px / 600 / normal tracking / **full-strength ink**. These are headings now.
+- **Field and meta labels** (`detailLabel`, `detailMetaLabel`, `detailEyebrow`, `statLabel`,
+  `fieldLabel`, `filterLabel`, `previewLabel`, `aiSummaryLabel`, `aiSummaryPreviewLabel`,
+  `attentionLabel`, `proEyebrow`, `eyebrow`, `trialNote`) → 14px / 500 / normal tracking /
+  muted. Still secondary, now legible.
+
+**Uppercase is kept in exactly two places,** because in both it has a clear purpose:
+
+1. **Badges and tags** — `statusBadge`, `autoApprovedBadge`, `lockedTag`, `currentTag`,
+   `installBadge` and the rest. One or two words, in a pill, where caps aid scanning.
+2. **Table column headers** — `.table thead th` and the three local table variants.
+   Conventional, compact, and they label a column rather than introduce a section.
+
+### 3.1c Where green is allowed
+
+The brief asks for intelligent green, not green everywhere. The rule in force:
+
+- **One gradient, in one place.** `Metric`'s `hero` variant — the two numbers that define a
+  store's reputation on the Dashboard. 5% → 1.5% of `--color-brand` over white on a 165° axis,
+  so the tint gathers where the number sits and clears by the label. Charcoal on its darkest
+  point still measures 16.9:1. It reads as emphasis *because* nothing else competes; a
+  gradient on every card is wallpaper.
+- **A tone always wins over it.** A hero tile in a genuine `attention` or `danger` state drops
+  the gradient entirely — a fact must never be overpainted by a brand treatment.
+- **Active navigation.** The `WorkspaceTabs` active underline is a 2px `--color-brand` rule.
+  A rule, not a label, so the fills-only contrast value is the correct one there.
+- **Selected and earned states** — the brand-soft tint behind a `Current` tag, a `brand` badge
+  for a Featured review, the selected-row rail in a table.
+- **Nowhere else.** Not on primary buttons (those are charcoal, §2.3), not as a default card
+  treatment, not behind section headings.
+
 ### 3.2 The ladder
 
 | Token | Size | Use |

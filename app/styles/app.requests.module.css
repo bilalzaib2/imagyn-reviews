@@ -88,10 +88,9 @@
 }
 
 .filterLabel {
-  font-size: var(--text-xs);
-  letter-spacing: 0.16em;
-  text-transform: uppercase;
+  font-size: var(--text-sm);
   color: var(--color-text-muted);
+  font-weight: var(--weight-medium);
 }
 
 .filterSelect {
@@ -378,9 +377,8 @@
 .detailEyebrow {
   margin: 0;
   color: var(--color-text-muted);
-  font-size: var(--text-xs);
-  letter-spacing: 0.2em;
-  text-transform: uppercase;
+  font-size: var(--text-sm);
+  font-weight: var(--weight-medium);
 }
 
 .detailTitle {
@@ -432,10 +430,9 @@
 
 .detailLabel {
   margin: 0;
-  font-size: var(--text-xs);
-  letter-spacing: 0.16em;
-  text-transform: uppercase;
+  font-size: var(--text-sm);
   color: var(--color-text-muted);
+  font-weight: var(--weight-medium);
 }
 
 .detailValue {
@@ -533,10 +530,9 @@
    from the section above. */
 .modalSectionLabel {
   margin: var(--space-2) 0 calc(-1 * var(--space-2));
-  font-size: var(--text-xs);
-  letter-spacing: 0.16em;
-  text-transform: uppercase;
-  color: var(--color-text-muted);
+  font-size: var(--text-sm);
+  color: var(--color-text);
+  font-weight: var(--weight-semibold);
 }
 
 .modalSectionLabel:first-child {

@@ -97,10 +97,9 @@
 }
 
 .statLabel {
-  font-size: var(--text-xs);
-  letter-spacing: 0.16em;
-  text-transform: uppercase;
+  font-size: var(--text-sm);
   color: var(--color-text-muted);
+  font-weight: var(--weight-medium);
 }
 
 .statValue {
@@ -246,10 +245,9 @@
 }
 
 .aiSummaryGroupLabel {
-  font-size: var(--text-xs);
-  letter-spacing: 0.16em;
-  text-transform: uppercase;
-  color: var(--color-text-muted);
+  font-size: var(--text-sm);
+  color: var(--color-text);
+  font-weight: var(--weight-semibold);
 }
 
 .aiSummaryList {
@@ -284,9 +282,7 @@
 }
 
 .aiSummaryMetaItem dt {
-  font-size: var(--text-xs);
-  letter-spacing: 0.16em;
-  text-transform: uppercase;
+  font-size: var(--text-sm);
   color: var(--color-text-muted);
 }
 

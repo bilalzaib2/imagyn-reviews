@@ -10,11 +10,15 @@
   gap: var(--space-4);
 }
 
+/* A section heading reads as a heading, not as metadata. --text-lg (18px) at 600 with the
+   full-strength ink it inherits, rather than the 12px uppercase letterspaced grey that this
+   codebase had grown in 20 other places (see the 2026-11-06 typography pass). */
 .title {
   margin: 0;
   font-size: var(--text-lg);
-  font-weight: 600;
-  letter-spacing: -0.02em;
+  font-weight: var(--weight-semibold);
+  letter-spacing: var(--tracking-tight);
+  line-height: var(--leading-snug);
 }
 
 .description {
