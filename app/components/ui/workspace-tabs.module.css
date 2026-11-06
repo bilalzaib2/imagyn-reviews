@@ -1,0 +1,99 @@
+/* Workspace navigation — a single hairline with the active section underlined.
+
+   Deliberately NOT pill-shaped buttons or a segmented control. Both read as a filter applied
+   to one page; this is navigation between two pages, and the underline-on-a-rule pattern is
+   what Shopify Admin, Stripe and Linear all use to say so. It also costs almost no vertical
+   space, which matters on an operational screen where the table is the point. */
+
+.tabs {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: var(--space-4);
+  border-bottom: 1px solid var(--color-border);
+}
+
+.list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  gap: var(--space-5);
+}
+
+/* Real label sizing, not a 12px uppercase micro-label: these are the primary way a merchant
+   moves around this workspace, so they read as navigation rather than as metadata. */
+.tab {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-3) 0;
+  font-size: var(--text-sm);
+  font-weight: var(--weight-medium);
+  color: var(--color-text-muted);
+  /* Transparent until active, so the label never shifts by 2px when it becomes current. */
+  border-bottom: 2px solid transparent;
+  /* Pulls the border down onto the nav's own hairline rather than sitting above it. */
+  margin-bottom: -1px;
+  transition: color var(--transition-base), border-color var(--transition-base);
+}
+
+.tab:hover {
+  color: var(--color-text);
+  border-bottom-color: var(--color-border-strong);
+}
+
+/* The brand green, as the marker for the current section. One of the few places a non-text
+   brand colour genuinely belongs: it is a 2px rule, not a label, so --color-brand's
+   fills-only contrast is the right value here. The label itself goes to full-strength ink,
+   which is what actually carries the state. */
+.tabActive {
+  color: var(--color-text);
+  font-weight: var(--weight-semibold);
+  border-bottom-color: var(--color-brand);
+}
+
+.tabActive:hover {
+  border-bottom-color: var(--color-brand);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .tab {
+    transition: none;
+  }
+}
+
+/* A live count beside the label. Tabular figures so the tab does not change width as the
+   number ticks between 9 and 10. */
+.count {
+  font-size: var(--text-xs);
+  font-weight: var(--weight-medium);
+  font-variant-numeric: tabular-nums;
+  color: var(--color-text-muted);
+  background: var(--color-surface-muted);
+  border-radius: var(--radius-full);
+  padding: 0.05rem var(--space-2);
+}
+
+.tabActive .count {
+  color: var(--color-brand-strong);
+  background: var(--color-brand-soft);
+}
+
+.actions {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding-bottom: var(--space-2);
+}
+
+@media (max-width: 640px) {
+  .tabs {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .list {
+    gap: var(--space-4);
+  }
+}

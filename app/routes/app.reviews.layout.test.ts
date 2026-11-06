@@ -158,3 +158,75 @@ describe("nothing was lost to the redesign", () => {
     expect(ROUTE).not.toMatch(/<table\s+className=\{styles\.table\}/);
   });
 });
+
+describe("workspace navigation", () => {
+  const TABS = readFileSync("app/components/ui/reviewWorkspaceTabs.ts", "utf8");
+  const REQUESTS = readFileSync("app/routes/app.requests.tsx", "utf8");
+
+  it("links Reviews and Review Requests, from one shared tab set", () => {
+    expect(TABS).toContain('to: "/app/reviews"');
+    expect(TABS).toContain('to: "/app/requests"');
+  });
+
+  it("renders the same navigation on both pages in the workspace", () => {
+    for (const source of [ROUTE, REQUESTS]) {
+      expect(source).toContain("REVIEW_WORKSPACE_TABS");
+      expect(source).toContain("<WorkspaceTabs");
+    }
+  });
+
+  // Product Q&A has no table, no service and no route. A tab that looks like the other two
+  // and navigates nowhere is worse than its absence, so it must stay out until the model
+  // exists — not ship disabled or as a "coming soon".
+  it("does not offer a Customer Questions tab while Q&A has no data model", () => {
+    // Checked against the tab DATA, not the whole file — the module's own comment explains
+    // the omission by name, and a blunt text scan would match that explanation.
+    const labels = [...TABS.matchAll(/label: "([^"]+)"/g)].map((match) => match[1]);
+    const routes = [...TABS.matchAll(/to: "([^"]+)"/g)].map((match) => match[1]);
+
+    expect(labels).toEqual(["Reviews", "Review Requests"]);
+    expect(routes).toEqual(["/app/reviews", "/app/requests"]);
+    expect(labels.some((label) => /question/i.test(label))).toBe(false);
+  });
+
+  it("uses real anchors, because App Bridge owns navigation in an embedded app", () => {
+    const NAV = readFileSync("app/components/ui/WorkspaceTabs.tsx", "utf8");
+    expect(NAV).toMatch(/<a\s/);
+    // A react-router <Link> preventDefaults the click and never updates the embedded URL.
+    expect(NAV).not.toMatch(/from "react-router"/);
+  });
+
+  it("derives the active tab from the pathname, not from local state", () => {
+    const NAV = readFileSync("app/components/ui/WorkspaceTabs.tsx", "utf8");
+    expect(NAV).toContain("currentPath");
+    expect(NAV).not.toMatch(/useState/);
+  });
+});
+
+describe("the repeated eyebrow label is gone", () => {
+  // "Imagyn Reviews" was printed above the title of every page inside the app — information
+  // the merchant already has from the Shopify Admin chrome around the iframe, repeated on
+  // every screen, costing a line of vertical space each time.
+  it.each([
+    "app/routes/app.reviews.tsx",
+    "app/routes/app.requests.tsx",
+    "app/routes/app.analytics.tsx",
+    "app/routes/app.settings.tsx",
+    "app/routes/app.reviews_.new.tsx",
+    "app/routes/app.reviews_.$id.edit.tsx",
+    "app/routes/app.products_.$id.tsx",
+  ])("%s no longer prints it", (path) => {
+    expect(readFileSync(path, "utf8")).not.toContain("Imagyn Reviews</p>");
+  });
+
+  it("PageHeader renders no eyebrow unless a caller passes a real one", () => {
+    const HEADER = readFileSync("app/components/ui/PageHeader.tsx", "utf8");
+    expect(HEADER).not.toContain('eyebrow ?? "Imagyn Reviews"');
+    expect(HEADER).toMatch(/\{eyebrow \? <p/);
+  });
+
+  // The Settings breadcrumb is a real eyebrow — it says where you are — and must survive.
+  it("keeps the Settings breadcrumb, which carries actual context", () => {
+    expect(readFileSync("app/components/ui/SettingsBreadcrumb.tsx", "utf8")).toContain("shellStyles.eyebrow");
+  });
+});

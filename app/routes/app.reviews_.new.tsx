@@ -122,7 +122,6 @@ export default function NewReviewPage() {
       <div className={`${shellStyles.page} ${styles.page} ${shellStyles.reveal}`}>
         <header className={`${shellStyles.header} ${styles.header}`}>
           <div className={shellStyles.headerContent}>
-            <p className={`${shellStyles.eyebrow} ${styles.eyebrow}`}>Imagyn Reviews</p>
             <h1 className={`${shellStyles.title} ${styles.title}`}>New Review</h1>
             <p className={`${shellStyles.subtitle} ${styles.subtitle}`}>
               Add a review directly to a product.

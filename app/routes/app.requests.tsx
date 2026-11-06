@@ -4,6 +4,7 @@ import {
   Link as RemixLink,
   useFetcher,
   useLoaderData,
+  useLocation,
   useNavigation,
   useRevalidator,
   useRouteError,
@@ -15,6 +16,8 @@ import { PersonIcon, SearchIcon } from "@shopify/polaris-icons";
 
 import { Button } from "../components/ui/Button";
 import { Table, type TableColumn } from "../components/ui/Table";
+import { WorkspaceTabs } from "../components/ui/WorkspaceTabs";
+import { REVIEW_WORKSPACE_TABS } from "../components/ui/reviewWorkspaceTabs";
 import { StatusBadge, type StatusBadgeTone } from "../components/ui/StatusBadge";
 import { LinkButton } from "../components/ui/LinkButton";
 import { Container } from "../components/ui/Container";
@@ -1055,6 +1058,7 @@ function ShopifyOrdersPicker({
 
 export default function RequestsPage() {
   const initialData = useLoaderData<typeof loader>();
+  const location = useLocation();
   const navigation = useNavigation();
   const revalidator = useRevalidator();
   const fetcher = useFetcher<ActionData>();
@@ -1795,7 +1799,6 @@ export default function RequestsPage() {
       <div className={`${shellStyles.page} ${shellStyles.reveal}`}>
           <header className={`${shellStyles.header} ${styles.header}`}>
             <div className={shellStyles.headerContent}>
-              <p className={shellStyles.eyebrow}>Imagyn Reviews</p>
               <h1 className={shellStyles.title}>Requests</h1>
               <p className={shellStyles.subtitle}>
                 Premium review request scheduling with clean merchant workflows and future-ready delivery architecture.
@@ -1811,6 +1814,14 @@ export default function RequestsPage() {
               </Button>
             </div>
           </header>
+
+          {/* The same workspace navigation the Reviews page renders, from the same shared
+              tab set, so the two cannot drift into showing different sections. */}
+          <WorkspaceTabs
+            tabs={REVIEW_WORKSPACE_TABS}
+            currentPath={location.pathname}
+            search={location.search}
+          />
 
           {/* Requests and Reviews are one workflow (collecting + moderating feedback) split
               across two focused pages — no longer both in primary nav (see app.tsx), so this

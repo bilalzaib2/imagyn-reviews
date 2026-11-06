@@ -16,6 +16,8 @@ import { ActionList, Frame, Modal, Popover, TextField, Toast } from "@shopify/po
 
 import { Button } from "../components/ui/Button";
 import { Table, type TableColumn } from "../components/ui/Table";
+import { WorkspaceTabs } from "../components/ui/WorkspaceTabs";
+import { REVIEW_WORKSPACE_TABS } from "../components/ui/reviewWorkspaceTabs";
 import { Container } from "../components/ui/Container";
 import { LinkButton } from "../components/ui/LinkButton";
 import { Section } from "../components/ui/Section";
@@ -1105,7 +1107,6 @@ export default function ReviewsPage() {
       <div className={`${shellStyles.page} ${shellStyles.reveal}`}>
         <header className={`${shellStyles.header} ${styles.header}`}>
           <div className={shellStyles.headerContent}>
-            <p className={shellStyles.eyebrow}>Imagyn Reviews</p>
             <h1 className={shellStyles.title}>Reviews</h1>
             <p className={shellStyles.subtitle}>
               Moderate feedback with live workflow actions and bulk operations.
@@ -1158,6 +1159,16 @@ export default function ReviewsPage() {
             </LinkButton>
           </div>
         </header>
+
+          {/* Real navigation between the two sections of this workspace — see
+              WorkspaceTabs for why these are anchors and why there is no Customer Questions
+              tab yet. */}
+          <WorkspaceTabs
+            tabs={REVIEW_WORKSPACE_TABS}
+            currentPath={location.pathname}
+            search={location.search}
+          />
+
 
         {/* Requests and Reviews are one workflow (collecting + moderating feedback) split
             across two focused pages — no longer both in primary nav (see app.tsx), so this

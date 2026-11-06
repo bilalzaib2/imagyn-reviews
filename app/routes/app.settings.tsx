@@ -117,7 +117,6 @@ export default function SettingsWorkspace() {
       <div className={`${shellStyles.page} ${shellStyles.reveal}`}>
         <header className={shellStyles.header}>
           <div className={shellStyles.headerContent}>
-            <p className={shellStyles.eyebrow}>Imagyn Reviews</p>
             <h1 className={shellStyles.title}>Settings</h1>
             <p className={shellStyles.subtitle}>
               Everything that configures how Imagyn Reviews collects, displays, and rewards reviews for your store.

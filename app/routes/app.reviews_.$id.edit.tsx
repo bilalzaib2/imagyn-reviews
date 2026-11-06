@@ -141,7 +141,6 @@ export default function EditReviewPage() {
       <div className={`${shellStyles.page} ${styles.page} ${shellStyles.reveal}`}>
         <header className={`${shellStyles.header} ${styles.header}`}>
           <div className={shellStyles.headerContent}>
-            <p className={`${shellStyles.eyebrow} ${styles.eyebrow}`}>Imagyn Reviews</p>
             <h1 className={`${shellStyles.title} ${styles.title}`}>Edit Review</h1>
             <p className={`${shellStyles.subtitle} ${styles.subtitle}`}>
               Update the review details below.

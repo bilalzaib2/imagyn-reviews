@@ -233,7 +233,6 @@ export default function ProductDetailPage() {
       <div className={`${shellStyles.page} ${shellStyles.reveal}`}>
         <header className={`${shellStyles.header} ${styles.header}`}>
           <div className={shellStyles.headerContent}>
-            <p className={shellStyles.eyebrow}>Imagyn Reviews</p>
             <h1 className={shellStyles.title}>
               {product ? product.name : "Product"}
             </h1>
