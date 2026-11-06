@@ -311,3 +311,93 @@ reaching feature count at the cost of reliability or tenant isolation.
    untouched either way.
 
 Recommended next step is Stage 0, which both blockers sit inside.
+
+---
+
+## 11. First-hand UI research — 2026-11-07
+
+Everything above §10 was read from Judge.me's public documentation. This section is different:
+Judge.me is installed on the `verveonline` development store and was **opened and inspected
+directly** in the Shopify admin. This is the first time the real product UI has been seen.
+
+**Evidence quality.** Layout, navigation, labels, controls and empty states are browser-verified.
+The store has **0 reviews in Judge.me**, so no populated table, row actions, detail view, bulk
+operations or filter behaviour could be observed — those remain **unverified** and must not be
+assumed from the documentation.
+
+### 11.1 Navigation
+
+Primary nav is four items: **Reviews · Analytics · Settings · Resources**. There is no separate
+"Dashboard" item — the dashboard is what the app root shows.
+
+The Reviews area has its own workspace tabs: **Reviews · Review requests · Customer questions**.
+This is the three-tab structure the Review Management brief asked for. Imagyn has the first two;
+Customer questions has no data model in Imagyn at all.
+
+### 11.2 Review Management — the benchmark screen
+
+Four stacked bands, roughly 190px in total before any data:
+
+1. **Workspace tabs** — Reviews / Review requests / Customer questions, each with a small icon.
+2. **Page header** — `Reviews` as the only title, with inline live-state pills beside it
+   (`Sentiment analysis: On` with a working toggle, `Auto-publish: On`) and right-aligned
+   actions: `Import`, `Publish and moderate`, `Edit product review groups`, `Export ⌄`.
+3. **Category tabs with counts** — `All Reviews (0)`, `Pending (0)`, `Product Reviews (0)`,
+   `Store Reviews (0)`, `Spam (0)`, `Archive`, plus a search icon and a sort icon right-aligned.
+4. **Filter row** — `Status`, `Source`, `Rating`, `Type`, `Sentiment`, `Topics`, `Tags`,
+   `All time`. Eight dropdowns on one line.
+
+Notable: **one** H1 and no section sub-heading above the table. Imagyn printed `Reviews`, a
+subtitle, and then a second `Review management` heading plus a count line — three headings for
+one table.
+
+### 11.3 Typography — calibration
+
+Judge.me uses **no uppercase anywhere** in the Reviews screen: not the tabs, not the filters, not
+the table headers. The single exception is the Settings sidebar, which uses uppercase only for
+**group labels** (`REVIEW COLLECTION`, `REVIEW DISPLAY`, `DISCOUNT AND REWARDS`, `INTEGRATIONS`,
+`GENERAL`).
+
+That is the rule worth copying: uppercase is for navigation group labels, never for table
+headers, card eyebrows or section labels.
+
+### 11.4 Settings IA — the full feature map
+
+21 sections in five groups. This is the competitive feature map.
+
+| Group | Sections |
+|---|---|
+| Review collection | Import reviews · Request reviews · Request scheduling · Email templates · Product management · Bundles · Collection flow · Optimize collection · Publishing and moderation |
+| Review display | Widgets · Product groups · Social sharing · Google, SEO and AI |
+| Discount and rewards | Coupons · Referrals |
+| Integrations | Integrations |
+| General | Plan · Branding · Language · Admin notifications · Advanced |
+
+Settings is a two-pane layout: a persistent, **searchable** left nav (`Ctrl + Shift + F`) beside
+a content pane, with a `Request improvements` button pinned under the nav.
+
+Sections with no Imagyn counterpart at all: **Bundles**, **Collection flow**, **Optimize
+collection**, **Product groups**, **Referrals**, **Language**.
+
+### 11.5 Dashboard
+
+Setup guide first (`0 of 2 tasks complete`, with `Enable Judge.me on your store` and
+`Enable Reviews Widget`), then a metric row — Reviews, Average rating, Requests sent,
+**Revenue from Judge.me**, and **Trust scores** (Transparency, Authenticity) — with a
+`Last 30 days` range control and `View analytics`. Below that a Status row: Tasks, Widgets
+(`Embed disabled`), Requests (`Requests enabled`).
+
+Metric labels carry dotted underlines, i.e. each has an explanatory tooltip.
+
+`Revenue from Judge.me` and the `Trust scores` pair have no Imagyn equivalent.
+
+### 11.6 Plan presentation
+
+The header shows `Free plan · 15-day free trial →` as a persistent pill. Judge.me's paid tier is
+surfaced constantly but unobtrusively, in the chrome rather than as interstitials.
+
+### 11.7 What this changed immediately
+
+Three defects in Imagyn's own Review Management were found by opening it in the same session,
+none of which 1,765 passing tests had caught — see commit `20c9aaa`. Reading source is not a
+substitute for opening the page.
