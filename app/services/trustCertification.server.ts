@@ -1,6 +1,6 @@
 import type { AdminApiContext } from "@shopify/shopify-app-react-router/server";
 import prisma from "../db.server";
-import { ReviewStatus } from "./review.shared";
+import { LIVE_REVIEW, ReviewStatus } from "./review.shared";
 import { MIN_VERIFIED_REVIEWS, REVIEW_PRACTICES_THRESHOLD } from "./trustCertification.presentation";
 
 // IMAGYN Trust Certification — see the TrustCertification model's own header comment in
@@ -527,7 +527,7 @@ export async function refreshTrustCertification(
 ): Promise<TrustCertificationSnapshot> {
   const [verifiedReviews, orderGatewayNames, shopCreatedAt, policies] = await Promise.all([
     prisma.review.findMany({
-      where: { storeId, deletedAt: null, verifiedPurchase: true },
+      where: { storeId, ...LIVE_REVIEW, verifiedPurchase: true },
       select: { status: true, rating: true },
     }),
     fetchRecentOrderGatewayNames(admin),

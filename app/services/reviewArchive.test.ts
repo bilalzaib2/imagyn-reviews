@@ -265,7 +265,28 @@ describe("archived reviews are invisible everywhere public", () => {
   const SERVICE = readFileSync("app/services/review.server.ts", "utf8");
 
   it("defines one shared scope rather than repeating the filter", () => {
-    expect(SERVICE).toMatch(/const LIVE_REVIEW = \{ deletedAt: null, archivedAt: null \}/);
+    // It lives in review.shared.ts, not here: five other services build their own review
+    // queries and importing review.server.ts from aiSummary.server.ts (which review.server
+    // itself imports) would form a cycle.
+    const SHARED = readFileSync("app/services/review.shared.ts", "utf8");
+    expect(SHARED).toMatch(/export const LIVE_REVIEW = \{ deletedAt: null, archivedAt: null \}/);
+    expect(SERVICE).toMatch(/import \{[^}]*LIVE_REVIEW[^}]*\} from "\.\/review\.shared"/);
+  });
+
+  it.each([
+    ["app/services/publicDiscovery.server.ts", "the public review network"],
+    ["app/services/aiSummary.server.ts", "AI summaries shown to shoppers"],
+    ["app/services/trustCertification.server.ts", "the public trust badge"],
+    ["app/services/achievements.server.ts", "merchant achievements"],
+    ["app/services/analytics.server.ts", "merchant analytics"],
+    ["app/services/reviewMedia.server.ts", "storefront media galleries"],
+  ])("%s excludes archived reviews from %s", (file) => {
+    // Each of these builds its own where clauses and shares none with review.server.ts, so
+    // each had to be scoped separately. publicDiscovery was genuinely leaking archived
+    // reviews to a consumer-facing network until 2026-11-08.
+    const source = readFileSync(file, "utf8");
+    expect(source).toMatch(/LIVE_REVIEW|archivedAt: null/);
+    expect(source).not.toContain("deletedAt: null, status: ReviewStatus.APPROVED");
   });
 
   it("leaves no public APPROVED read scoped on deletedAt alone", () => {

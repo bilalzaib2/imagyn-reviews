@@ -8,7 +8,7 @@
 // recomputed — its earnedAt never changes, and it's never un-earned if the underlying metric
 // later dips (the achievement genuinely happened at that point in time).
 import prisma from "../db.server";
-import { ReviewStatus } from "./review.shared";
+import { LIVE_REVIEW, ReviewStatus } from "./review.shared";
 import { ACHIEVEMENT_DEFINITIONS, type AchievementDefinition, type AchievementStatus } from "./achievements.shared";
 
 const MIN_APPROVED_FOR_TRUST = 20;
@@ -87,7 +87,7 @@ async function evaluateVerifiedVoices(
   const definitions = definitionsByFamily("verified_voices");
 
   const verifiedApprovedCount = await prisma.review.count({
-    where: { storeId, deletedAt: null, status: ReviewStatus.APPROVED, verifiedPurchase: true },
+    where: { storeId, ...LIVE_REVIEW, status: ReviewStatus.APPROVED, verifiedPurchase: true },
   });
 
   const results: AchievementStatus[] = [];
@@ -102,7 +102,7 @@ async function evaluateVerifiedVoices(
         earnedAt = existing.get(definition.key)!.earnedAt;
       } else {
         const nthReview = await prisma.review.findFirst({
-          where: { storeId, deletedAt: null, status: ReviewStatus.APPROVED, verifiedPurchase: true },
+          where: { storeId, ...LIVE_REVIEW, status: ReviewStatus.APPROVED, verifiedPurchase: true },
           orderBy: [{ createdAt: "asc" }, { id: "asc" }],
           skip: target - 1,
           select: { createdAt: true },
@@ -138,7 +138,7 @@ async function evaluatePeakMonth(
   const [definition] = definitionsByFamily("peak_month");
 
   const reviews = await prisma.review.findMany({
-    where: { storeId, deletedAt: null, status: ReviewStatus.APPROVED },
+    where: { storeId, ...LIVE_REVIEW, status: ReviewStatus.APPROVED },
     select: { createdAt: true },
   });
 
@@ -196,8 +196,8 @@ async function evaluateTrust(storeId: string, existing: Map<string, { earnedAt: 
   const definitions = definitionsByFamily("trust");
 
   const [approvedCount, verifiedApprovedCount] = await Promise.all([
-    prisma.review.count({ where: { storeId, deletedAt: null, status: ReviewStatus.APPROVED } }),
-    prisma.review.count({ where: { storeId, deletedAt: null, status: ReviewStatus.APPROVED, verifiedPurchase: true } }),
+    prisma.review.count({ where: { storeId, ...LIVE_REVIEW, status: ReviewStatus.APPROVED } }),
+    prisma.review.count({ where: { storeId, ...LIVE_REVIEW, status: ReviewStatus.APPROVED, verifiedPurchase: true } }),
   ]);
 
   const hasSample = approvedCount >= MIN_APPROVED_FOR_TRUST;
@@ -246,7 +246,7 @@ async function evaluateTopStores(
   const definitions = definitionsByFamily("top_stores");
 
   const [myApprovedCount, totalStores] = await Promise.all([
-    prisma.review.count({ where: { storeId, deletedAt: null, status: ReviewStatus.APPROVED } }),
+    prisma.review.count({ where: { storeId, ...LIVE_REVIEW, status: ReviewStatus.APPROVED } }),
     prisma.store.count(),
   ]);
 
@@ -256,7 +256,7 @@ async function evaluateTopStores(
   if (hasEnoughStores) {
     const higherStores = await prisma.review.groupBy({
       by: ["storeId"],
-      where: { deletedAt: null, status: ReviewStatus.APPROVED },
+      where: { ...LIVE_REVIEW, status: ReviewStatus.APPROVED },
       _count: { id: true },
       having: { id: { _count: { gt: myApprovedCount } } },
     });
@@ -307,7 +307,7 @@ async function evaluateTrending(storeId: string): Promise<AchievementStatus[]> {
 
   const [currentCount, previousCount] = await Promise.all([
     prisma.review.count({
-      where: { storeId, deletedAt: null, status: ReviewStatus.APPROVED, createdAt: { gte: currentMonthStart } },
+      where: { storeId, ...LIVE_REVIEW, status: ReviewStatus.APPROVED, createdAt: { gte: currentMonthStart } },
     }),
     prisma.review.count({
       where: {

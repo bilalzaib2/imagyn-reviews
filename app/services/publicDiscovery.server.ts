@@ -12,8 +12,9 @@ import { ReviewStatus } from "./review.shared";
 // Three rules hold everywhere in this file, and nothing here should be changed without
 // re-reading them:
 //
-//  1. ONLY published customer content. Every query filters `status: APPROVED` and
-//     `deletedAt: null`. There is no parameter anywhere in this module that can widen that.
+//  1. ONLY published customer content. Every query filters `status: APPROVED`,
+//     `deletedAt: null` and `archivedAt: null`. There is no parameter anywhere in this
+//     module that can widen that.
 //  2. EXPLICIT field allow-lists. Every `select` names its fields; none uses `include` or
 //     spreads a Prisma row into a response. Adding a column to the schema can therefore never
 //     silently publish it.
@@ -61,6 +62,12 @@ const PUBLIC_STORE = {
 // discovery without anyone having to maintain a blocklist.
 const DISCOVERABLE_REVIEW = {
   deletedAt: null,
+  // Archived reviews are out of the merchant's own working queue, off their storefront and
+  // out of every statistic (see LIVE_REVIEW in review.server.ts). Publishing one to a
+  // consumer-facing network the merchant does not even administer would be the loudest
+  // possible version of the same mistake, so the exclusion is repeated here rather than
+  // assumed — this file builds its own where clauses and shares none with review.server.ts.
+  archivedAt: null,
   status: ReviewStatus.APPROVED,
   store: PUBLIC_STORE,
 } satisfies Prisma.ReviewWhereInput;

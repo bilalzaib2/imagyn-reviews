@@ -10,7 +10,7 @@
 // (ReviewRequest.sentAt/reviewedAt/source/delayDays, ProductAiSummary) but never
 // aggregated into a metric anywhere until now.
 import prisma from "../db.server";
-import { ReviewStatus } from "./review.shared";
+import { LIVE_REVIEW, ReviewStatus } from "./review.shared";
 import type { AnalyticsDateRange } from "./analytics.shared";
 
 // null = no lower bound (all-time). UTC-anchored (not local-time setHours) so this stays
@@ -66,7 +66,7 @@ export interface ReviewAnalytics {
 export async function getReviewAnalytics(storeId: string, range: AnalyticsDateRange): Promise<ReviewAnalytics> {
   const start = rangeStart(range);
   const createdAtFilter = start ? { gte: start } : undefined;
-  const baseWhere = { storeId, deletedAt: null, ...(createdAtFilter ? { createdAt: createdAtFilter } : {}) };
+  const baseWhere = { storeId, ...LIVE_REVIEW, ...(createdAtFilter ? { createdAt: createdAtFilter } : {}) };
 
   const [totalReviews, statusGroups, approvedAggregate, ratingGroups, createdDates] = await Promise.all([
     prisma.review.count({ where: baseWhere }),

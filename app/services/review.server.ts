@@ -4,7 +4,7 @@ import type { Prisma } from "@prisma/client";
 import { ReviewMediaType } from "@prisma/client";
 import prisma from "../db.server";
 import { maybeAutoRegenerateAiSummary, maybeAutoRegenerateStoreAiSummary } from "./aiSummary.server";
-import { HelpfulVoteValue, parseReviewHideReason, ReviewStatus, type ReviewHideReasonId } from "./review.shared";
+import { HelpfulVoteValue, LIVE_REVIEW, parseReviewHideReason, ReviewStatus, type ReviewHideReasonId } from "./review.shared";
 import { getStorePermissions, PermissionError } from "./permissions";
 import { getStoreById } from "./store.server";
 import { evaluateAndIssueReward } from "./rewards.server";
@@ -134,20 +134,6 @@ function validateReviewInput(input: { rating: number; content: string; reviewerN
 // cross-tenant id must produce the exact same "not found" outcome a genuinely-missing id
 // would, so a caller can never distinguish "doesn't exist" from "isn't yours". Same
 // ownership-check convention widget.server.ts/appearance.server.ts already use.
-/**
- * The rows a review is allowed to count toward anywhere public: not soft-deleted, and not
- * archived.
- *
- * Spelled once and spread, rather than written out at each of the twenty-odd query sites,
- * because the failure mode is silent and permanent — a public read that forgets `archivedAt`
- * keeps showing an archived review on the storefront, and a statistic that forgets it keeps
- * counting one. Neither throws, and neither looks wrong in a diff.
- *
- * Deliberately NOT used by: requireReview and the bulk lookups (they must be able to resolve
- * an archived review in order to restore it), and buildReviewWhere (the merchant's own list
- * chooses its archive scope explicitly).
- */
-const LIVE_REVIEW = { deletedAt: null, archivedAt: null } as const;
 
 async function requireReview(storeId: string, id: string) {
   const existing = await prisma.review.findFirst({ where: { id, storeId, deletedAt: null } });

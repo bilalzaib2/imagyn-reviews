@@ -1,6 +1,6 @@
 import prisma from "../db.server";
 import { getAiProvider } from "./ai/provider.server";
-import { ReviewStatus } from "./review.shared";
+import { LIVE_REVIEW, ReviewStatus } from "./review.shared";
 import { assertPermission, getStorePermissions, PermissionError } from "./permissions";
 
 export interface ProductAiSummaryRecord {
@@ -100,7 +100,7 @@ export async function getAiSummariesForProducts(
 }
 
 async function getApprovedReviewCount(productId: string): Promise<number> {
-  return prisma.review.count({ where: { productId, deletedAt: null, status: ReviewStatus.APPROVED } });
+  return prisma.review.count({ where: { productId, ...LIVE_REVIEW, status: ReviewStatus.APPROVED } });
 }
 
 // The actual generation path. Callers: the admin's explicit "Regenerate AI Summary"
@@ -126,7 +126,7 @@ export async function regenerateAiSummary(storeId: string, productId: string): P
   assertPermission(permissions, "canUseAI", "AI review summaries require the Pro plan.", "growth");
 
   const reviews = await prisma.review.findMany({
-    where: { productId, deletedAt: null, status: ReviewStatus.APPROVED },
+    where: { productId, ...LIVE_REVIEW, status: ReviewStatus.APPROVED },
     select: { rating: true, title: true, content: true },
     orderBy: { createdAt: "desc" },
     take: MAX_REVIEWS_PER_SUMMARY,
@@ -266,7 +266,7 @@ export async function getStoreAiSummary(storeId: string): Promise<StoreAiSummary
 }
 
 async function getApprovedReviewCountForStore(storeId: string): Promise<number> {
-  return prisma.review.count({ where: { storeId, deletedAt: null, status: ReviewStatus.APPROVED } });
+  return prisma.review.count({ where: { storeId, ...LIVE_REVIEW, status: ReviewStatus.APPROVED } });
 }
 
 // The actual generation path for a store-wide summary. Callers: the admin's explicit
@@ -283,7 +283,7 @@ export async function regenerateStoreAiSummary(storeId: string): Promise<StoreAi
   assertPermission(permissions, "canUseAI", "AI review summaries require the Pro plan.", "growth");
 
   const reviews = await prisma.review.findMany({
-    where: { storeId, deletedAt: null, status: ReviewStatus.APPROVED },
+    where: { storeId, ...LIVE_REVIEW, status: ReviewStatus.APPROVED },
     select: { rating: true, title: true, content: true },
     orderBy: { createdAt: "desc" },
     take: MAX_REVIEWS_PER_STORE_SUMMARY,

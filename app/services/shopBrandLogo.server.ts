@@ -37,27 +37,34 @@ import { setShopBrandLogo } from "./store.server";
  *  TTL — both are merchant-editable Shopify settings with the same staleness profile. */
 export const SHOP_BRAND_LOGO_TTL_MS = 24 * 60 * 60 * 1000;
 
-// shop.brand is Shopify's own Branding settings. `logo` is the primary mark; `squareLogo` is
-// the fallback, because a store that set only a square avatar still has a usable mark and a
-// square logo renders perfectly well at the small size an email header uses.
-const SHOP_BRAND_LOGO_QUERY = `#graphql
-  query ShopBrandLogo {
-    shop {
-      brand {
-        logo {
-          image {
-            url
-          }
-        }
-        squareLogo {
-          image {
-            url
-          }
-        }
-      }
-    }
-  }
-`;
+// WHY THERE IS NO QUERY HERE ANY MORE — VERIFIED 2026-11-08
+//
+// This module used to send `{ shop { brand { logo { image { url } } ... } } }` to the ADMIN
+// GraphQL API. That field does not exist there.
+//
+//   Admin API      shopify.dev/docs/api/admin-graphql/latest/objects/Shop  — no `brand` field
+//                  (both halves of the field list read; `brand` would sort near the top).
+//   Storefront API shopify.dev/docs/api/storefront/latest/objects/Shop     — HAS `brand`,
+//                  "The shop's branding configuration", typed Brand (logo, squareLogo,
+//                  colors, coverImage).
+//
+// So every call errored and returned null, for every merchant, since the feature shipped on
+// 2026-11-05 — and null is exactly what "this merchant has no logo" looks like, so nothing
+// ever surfaced it. It also meant a doomed GraphQL round trip on every single app load, since
+// app.tsx calls this fire-and-forget on each request.
+//
+// WHAT WOULD RE-ENABLE IT
+//
+// The Storefront API, reached with a storefront access token (Admin's
+// `storefrontAccessTokenCreate`) plus unauthenticated read scopes. That is a new scope, which
+// forces every existing merchant to re-authorize — an owner decision, not a quiet change. Or
+// the Admin `CheckoutBranding` object, which needs `read_checkout_branding_settings` AND a
+// Plus or Development store plan, so it cannot serve ordinary merchants.
+//
+// Until one of those is chosen, tier 3 of the logo chain below is simply unavailable, and the
+// honest behaviour is to say so once rather than to keep asking Shopify a question it has no
+// field to answer. The merchant-facing experience is unchanged in practice: tiers 1, 2 and 4
+// are what has actually been serving every store all along.
 
 /**
  * Validates a URL for use as an email `<img src>`.
@@ -84,60 +91,20 @@ export function isUsableLogoUrl(value: string | null | undefined): value is stri
   return parsed.protocol === "https:" && !/["'<>\s]/.test(trimmed);
 }
 
-interface ShopBrandLogoResponse {
-  data?: {
-    shop?: {
-      brand?: {
-        logo?: { image?: { url?: string | null } | null } | null;
-        squareLogo?: { image?: { url?: string | null } | null } | null;
-      } | null;
-    } | null;
-  } | null;
-  /** Present when the field does not exist on this API version at all, which is a different
-   *  outcome from a merchant simply not having set a logo. */
-  errors?: Array<{ message?: string }> | null;
+/**
+ * Always null: Shopify's Admin API has no `shop.brand` field to read (see the note above).
+ *
+ * Kept as the single named seam for this capability rather than deleted, so that if the
+ * Storefront path is ever authorized there is one obvious place to implement it and one
+ * obvious place already covered by tests. `admin` stays in the signature for the same reason.
+ */
+// eslint-disable-next-line @typescript-eslint/no-unused-vars -- the seam is deliberate, see above
+export async function fetchShopBrandLogo(_admin: AdminApiContext): Promise<string | null> {
+  return null;
 }
 
-/** Reads the shop's brand logo from the Admin API. Returns null on anything unusable. */
-export async function fetchShopBrandLogo(admin: AdminApiContext): Promise<string | null> {
-  const response = await admin.graphql(SHOP_BRAND_LOGO_QUERY);
-  const body = (await response.json()) as ShopBrandLogoResponse;
-
-  // THREE OUTCOMES, ONLY ONE OF WHICH IS "the merchant has no logo"
-  //
-  // `shop.brand` is documented on Shopify's STOREFRONT API. Whether the Admin API exposes it
-  // is, as of 2026-11-08, unverified against a live shop — every attempt so far has been
-  // blocked (the Admin token on hand was expired, and the docs search found Brand only under
-  // Storefront). If the field does not exist on Admin, this query returns a GraphQL error and
-  // every call quietly yields null, which is indistinguishable from a merchant who simply
-  // never set a brand logo. The feature would then appear to work and never do anything.
-  //
-  // So the two cases are separated and logged. The first real install answers the question
-  // definitively, in one grep, instead of it staying open for another session.
-  if (body.errors?.length) {
-    console.warn(
-      `[shop-brand-logo] Shopify returned an error for shop.brand — the field may not exist on ` +
-        `the Admin API: ${body.errors.map((entry) => entry?.message ?? "unknown").join("; ")}`,
-    );
-    return null;
-  }
-
-  if (!body.data?.shop?.brand) {
-    console.warn(
-      "[shop-brand-logo] shop.brand resolved to null on the Admin API. Either this shop has no " +
-        "brand settings, or the field is unavailable here and the Storefront API is required.",
-    );
-    return null;
-  }
-
-  const primary = body.data?.shop?.brand?.logo?.image?.url ?? null;
-  if (isUsableLogoUrl(primary)) {
-    return primary.trim();
-  }
-
-  const square = body.data?.shop?.brand?.squareLogo?.image?.url ?? null;
-  return isUsableLogoUrl(square) ? square.trim() : null;
-}
+/** Whether a Shopify-sourced brand logo can be read at all on the current scopes. */
+export const SHOP_BRAND_LOGO_AVAILABLE = false;
 
 /**
  * Ensures the store's cached brand logo is present and fresh, returning the usable value.
@@ -152,6 +119,13 @@ export async function ensureShopBrandLogo(
   store: { id: string; shopBrandLogoUrl: string | null; shopBrandLogoSyncedAt: Date | null },
   now: Date = new Date(),
 ): Promise<string | null> {
+  // Nothing to sync from while the source is unavailable. Returning the stored value keeps
+  // any logo a previous version cached, and skips both the network call and the write — this
+  // runs on every app load, so "do nothing" has to actually do nothing.
+  if (!SHOP_BRAND_LOGO_AVAILABLE) {
+    return isUsableLogoUrl(store.shopBrandLogoUrl) ? store.shopBrandLogoUrl : null;
+  }
+
   const isFresh =
     store.shopBrandLogoSyncedAt !== null &&
     now.getTime() - store.shopBrandLogoSyncedAt.getTime() < SHOP_BRAND_LOGO_TTL_MS;

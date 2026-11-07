@@ -1,7 +1,7 @@
 import type { AdminApiContext } from "@shopify/shopify-app-react-router/server";
 import { ReviewMediaType } from "@prisma/client";
 import prisma from "../db.server";
-import { ReviewStatus } from "./review.shared";
+import { LIVE_REVIEW, ReviewStatus } from "./review.shared";
 import { getStorageProvider } from "./storage/provider.server";
 import type { StorageContext } from "./storage/types";
 import { getStorePermissions } from "./permissions";
@@ -416,7 +416,7 @@ export interface ProductGalleryItem extends UploadedReviewMedia {
 export async function getProductMediaGallery(productId: string, limit = 24): Promise<ProductGalleryItem[]> {
   return prisma.reviewMedia.findMany({
     where: {
-      review: { productId, deletedAt: null, status: ReviewStatus.APPROVED },
+      review: { productId, ...LIVE_REVIEW, status: ReviewStatus.APPROVED },
     },
     orderBy: { createdAt: "desc" },
     take: limit,
@@ -432,7 +432,7 @@ export async function getProductMediaGallery(productId: string, limit = 24): Pro
 export async function getVerifiedStoreMediaGallery(storeId: string, limit = 12): Promise<ProductGalleryItem[]> {
   return prisma.reviewMedia.findMany({
     where: {
-      review: { storeId, deletedAt: null, status: ReviewStatus.APPROVED, verifiedPurchase: true },
+      review: { storeId, ...LIVE_REVIEW, status: ReviewStatus.APPROVED, verifiedPurchase: true },
     },
     orderBy: { createdAt: "desc" },
     take: limit,

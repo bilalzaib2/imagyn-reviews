@@ -58,6 +58,16 @@ export function reviewHideReasonLabel(id: unknown): string | null {
   return REVIEW_HIDE_REASONS.find((reason) => reason.id === id)?.label ?? null;
 }
 
+/**
+ * The rows a review may count toward anywhere public: not soft-deleted, not archived.
+ *
+ * Lives here, in the import-free shared module, because five separate services build their
+ * own review queries and a cycle would form if they each reached into review.server.ts. The
+ * failure it prevents is silent in every one of them — a public read or a statistic that
+ * forgets `archivedAt` keeps showing and counting an archived review, and nothing throws.
+ */
+export const LIVE_REVIEW = { deletedAt: null, archivedAt: null } as const;
+
 export const HelpfulVoteValue = {
   HELPFUL: "HELPFUL",
   NOT_HELPFUL: "NOT_HELPFUL",

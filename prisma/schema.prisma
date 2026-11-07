@@ -224,7 +224,10 @@ model Store {
   // widgets, the merchant dashboard and every private API keep working unchanged. It only
   // narrows what the public network is allowed to read. Development stores remain excluded
   // independently of this flag, so a dev store cannot become public by enabling it.
-  publicNetworkEnabled Boolean @default(true)
+  /// Defaults to FALSE as of 2026-11-08, by owner decision: public review-network sharing
+  /// requires an explicit merchant opt-in. A store that has never made a choice is not
+  /// sharing. See the migration for why existing rows were reset too.
+  publicNetworkEnabled Boolean @default(false)
 
   // Full-catalog product sync progress (see product.server.ts's syncAllProducts and
   // productSync.server.ts's runProductSync). One row per store — only one sync runs at a

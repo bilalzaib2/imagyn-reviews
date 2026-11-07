@@ -6,7 +6,8 @@
 //     though Shopify is a trusted source. "Trusted" is not "skip validation".
 //  2. A Shopify API failure must degrade to the stored value and never break a page load — the
 //     sync is fire-and-forget from app.tsx's loader, which every /app/* screen goes through.
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { readFileSync } from "node:fs";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const setShopBrandLogo = vi.fn(async (id: string, url: string | null, syncedAt: Date) => ({ id, url, syncedAt }));
 
@@ -14,27 +15,18 @@ vi.mock("./store.server", () => ({
   setShopBrandLogo: (id: string, url: string | null, syncedAt: Date) => setShopBrandLogo(id, url, syncedAt),
 }));
 
-const { ensureShopBrandLogo, fetchShopBrandLogo, isUsableLogoUrl, SHOP_BRAND_LOGO_TTL_MS } = await import(
-  "./shopBrandLogo.server"
-);
+const {
+  ensureShopBrandLogo,
+  fetchShopBrandLogo,
+  isUsableLogoUrl,
+  SHOP_BRAND_LOGO_AVAILABLE,
+  SHOP_BRAND_LOGO_TTL_MS,
+} = await import("./shopBrandLogo.server");
 
 function admin(payload: unknown) {
   return {
     graphql: vi.fn(async () => ({ json: async () => payload })),
   } as unknown as Parameters<typeof fetchShopBrandLogo>[0];
-}
-
-function brandPayload(logo: string | null, squareLogo: string | null = null) {
-  return {
-    data: {
-      shop: {
-        brand: {
-          logo: logo ? { image: { url: logo } } : null,
-          squareLogo: squareLogo ? { image: { url: squareLogo } } : null,
-        },
-      },
-    },
-  };
 }
 
 const NOW = new Date("2026-11-05T12:00:00Z");
@@ -85,108 +77,78 @@ describe("isUsableLogoUrl — this value becomes an email img src", () => {
   });
 });
 
-describe("fetchShopBrandLogo", () => {
-  it("returns the primary brand logo", async () => {
-    const url = await fetchShopBrandLogo(admin(brandPayload("https://cdn.shopify.com/logo.png")));
-    expect(url).toBe("https://cdn.shopify.com/logo.png");
+// VERIFIED 2026-11-08: the Admin GraphQL API's Shop object has no `brand` field. It exists on
+// the STOREFRONT API only. Both halves of the Admin field list were read and `brand` is absent;
+// the Storefront Shop page lists it as "The shop's branding configuration".
+//
+// So this module can no longer parse a brand response, because one can never arrive. What used
+// to be tested here — primary logo, square-logo fallback, malformed payloads — was a parser for
+// a reply Shopify has no field to produce. Those tests passed for three days against a mocked
+// response while the real call returned an error every time, for every merchant.
+//
+// What is pinned now is the honest contract, plus the thing that actually matters: the logo
+// chain still ends somewhere sensible.
+describe("the Shopify brand logo source is unavailable, and says so", () => {
+  it("reports itself unavailable", () => {
+    expect(SHOP_BRAND_LOGO_AVAILABLE).toBe(false);
   });
 
-  // A store that set only a square avatar still has a usable mark, and a square logo renders
-  // fine at the small size an email header uses.
-  it("falls back to the square logo when there is no primary", async () => {
-    const url = await fetchShopBrandLogo(admin(brandPayload(null, "https://cdn.shopify.com/square.png")));
-    expect(url).toBe("https://cdn.shopify.com/square.png");
+  it("returns null without asking Shopify anything", async () => {
+    const api = admin({ data: { shop: { brand: { logo: { image: { url: "https://cdn.shopify.com/x.png" } } } } } });
+
+    expect(await fetchShopBrandLogo(api)).toBeNull();
+    // The point of the change: no doomed round trip on every app load.
+    expect((api as unknown as { graphql: { mock: { calls: unknown[] } } }).graphql.mock.calls).toHaveLength(0);
   });
 
-  it("falls back to the square logo when the primary is unusable", async () => {
-    const url = await fetchShopBrandLogo(
-      admin(brandPayload("javascript:alert(1)", "https://cdn.shopify.com/square.png")),
-    );
-    expect(url).toBe("https://cdn.shopify.com/square.png");
-  });
+  it("sends no query, so there is no non-existent field left to request", () => {
+    // Comments are stripped first: the module's own note quotes the dead query at length to
+    // explain why it is gone, and that explanation is the opposite of a breach.
+    const code = readFileSync("app/services/shopBrandLogo.server.ts", "utf8")
+      .split("\n")
+      .filter((line) => {
+        const trimmed = line.trim();
+        return trimmed && !trimmed.startsWith("//") && !trimmed.startsWith("*") && !trimmed.startsWith("/*");
+      })
+      .join("\n");
 
-  it("returns null when the shop has no brand logo at all", async () => {
-    expect(await fetchShopBrandLogo(admin(brandPayload(null, null)))).toBeNull();
-  });
-
-  it("returns null on an empty or malformed response rather than throwing", async () => {
-    expect(await fetchShopBrandLogo(admin({}))).toBeNull();
-    expect(await fetchShopBrandLogo(admin({ data: { shop: null } }))).toBeNull();
-    expect(await fetchShopBrandLogo(admin({ data: { shop: { brand: null } } }))).toBeNull();
+    expect(code).not.toMatch(/#graphql/);
+    expect(code).not.toMatch(/brand\s*\{/);
   });
 });
 
-describe("ensureShopBrandLogo — caching", () => {
-  it("uses the cached value without calling Shopify while fresh", async () => {
-    const api = admin(brandPayload("https://cdn.shopify.com/new.png"));
+describe("ensureShopBrandLogo while the source is unavailable", () => {
+  it("does no network call and no write", async () => {
+    const api = admin({});
+    const result = await ensureShopBrandLogo(api, {
+      id: "store_1",
+      shopBrandLogoUrl: null,
+      shopBrandLogoSyncedAt: null,
+    });
 
-    const url = await ensureShopBrandLogo(
-      api,
-      {
-        id: "store_1",
-        shopBrandLogoUrl: "https://cdn.shopify.com/cached.png",
-        shopBrandLogoSyncedAt: new Date(NOW.getTime() - 1000),
-      },
-      NOW,
-    );
-
-    expect(url).toBe("https://cdn.shopify.com/cached.png");
-    expect(setShopBrandLogo).not.toHaveBeenCalled();
+    expect(result).toBeNull();
+    expect((api as unknown as { graphql: { mock: { calls: unknown[] } } }).graphql.mock.calls).toHaveLength(0);
   });
 
-  it("re-syncs once the TTL has elapsed", async () => {
-    const url = await ensureShopBrandLogo(
-      admin(brandPayload("https://cdn.shopify.com/new.png")),
-      {
-        id: "store_1",
-        shopBrandLogoUrl: "https://cdn.shopify.com/old.png",
-        shopBrandLogoSyncedAt: new Date(NOW.getTime() - SHOP_BRAND_LOGO_TTL_MS - 1),
-      },
-      NOW,
-    );
+  it("still returns a logo a previous version cached", async () => {
+    // Removing the broken fetch must not throw away a value already in the column.
+    const result = await ensureShopBrandLogo(admin({}), {
+      id: "store_1",
+      shopBrandLogoUrl: "https://cdn.shopify.com/cached.png",
+      shopBrandLogoSyncedAt: new Date("2026-11-05T00:00:00Z"),
+    });
 
-    expect(url).toBe("https://cdn.shopify.com/new.png");
-    expect(setShopBrandLogo).toHaveBeenCalledWith("store_1", "https://cdn.shopify.com/new.png", NOW);
+    expect(result).toBe("https://cdn.shopify.com/cached.png");
   });
 
-  it("syncs on first ever load, when nothing has been cached", async () => {
-    const url = await ensureShopBrandLogo(
-      admin(brandPayload("https://cdn.shopify.com/logo.png")),
-      { id: "store_1", shopBrandLogoUrl: null, shopBrandLogoSyncedAt: null },
-      NOW,
-    );
+  it("ignores a cached value that is not a usable image src", async () => {
+    const result = await ensureShopBrandLogo(admin({}), {
+      id: "store_1",
+      shopBrandLogoUrl: "javascript:alert(1)",
+      shopBrandLogoSyncedAt: new Date("2026-11-05T00:00:00Z"),
+    });
 
-    expect(url).toBe("https://cdn.shopify.com/logo.png");
-  });
-
-  // A merchant who removed their Shopify logo must stop having the stale one rendered.
-  it("persists null when the merchant removed their Shopify logo", async () => {
-    const url = await ensureShopBrandLogo(
-      admin(brandPayload(null)),
-      {
-        id: "store_1",
-        shopBrandLogoUrl: "https://cdn.shopify.com/old.png",
-        shopBrandLogoSyncedAt: new Date(NOW.getTime() - SHOP_BRAND_LOGO_TTL_MS - 1),
-      },
-      NOW,
-    );
-
-    expect(url).toBeNull();
-    expect(setShopBrandLogo).toHaveBeenCalledWith("store_1", null, NOW);
-  });
-
-  it("discards a cached value that is no longer usable", async () => {
-    const url = await ensureShopBrandLogo(
-      admin(brandPayload("https://cdn.shopify.com/new.png")),
-      {
-        id: "store_1",
-        shopBrandLogoUrl: "javascript:alert(1)",
-        shopBrandLogoSyncedAt: new Date(NOW.getTime() - 1000),
-      },
-      NOW,
-    );
-
-    expect(url).toBeNull();
+    expect(result).toBeNull();
   });
 });
 
@@ -233,49 +195,3 @@ describe("ensureShopBrandLogo — failure posture", () => {
 // feature would appear to work while doing nothing forever.
 //
 // These pin the distinction so the first real install answers the question in one grep.
-describe("the three outcomes are distinguishable, not all silently null", () => {
-  let warn: ReturnType<typeof vi.spyOn>;
-
-  beforeEach(() => {
-    warn = vi.spyOn(console, "warn").mockImplementation(() => {});
-  });
-
-  afterEach(() => {
-    warn.mockRestore();
-  });
-
-  it("warns that the field may not exist when Shopify returns an error", async () => {
-    const url = await fetchShopBrandLogo(
-      admin({ errors: [{ message: "Field 'brand' doesn't exist on type 'Shop'" }] }),
-    );
-
-    expect(url).toBeNull();
-    expect(warn).toHaveBeenCalledWith(expect.stringContaining("may not exist"));
-    expect(warn.mock.calls[0][0]).toContain("Field 'brand' doesn't exist");
-  });
-
-  it("warns separately when brand resolves to null", async () => {
-    const url = await fetchShopBrandLogo(admin({ data: { shop: { brand: null } } }));
-
-    expect(url).toBeNull();
-    expect(warn).toHaveBeenCalledWith(expect.stringContaining("resolved to null"));
-  });
-
-  it("stays quiet when brand exists and the merchant simply has no logo", async () => {
-    // The ordinary case. A warning here would train everyone to ignore the log.
-    const url = await fetchShopBrandLogo(brandPayloadAdmin());
-    expect(url).toBeNull();
-    expect(warn).not.toHaveBeenCalled();
-  });
-
-  it("still returns a real logo without warning", async () => {
-    const url = await fetchShopBrandLogo(admin(brandPayload("https://cdn.shopify.com/logo.png")));
-    expect(url).toBe("https://cdn.shopify.com/logo.png");
-    expect(warn).not.toHaveBeenCalled();
-  });
-});
-
-/** brand present, both logo slots empty — a merchant who has brand settings but no mark. */
-function brandPayloadAdmin() {
-  return admin({ data: { shop: { brand: { logo: null, squareLogo: null } } } });
-}
