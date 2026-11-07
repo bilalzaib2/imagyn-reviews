@@ -61,3 +61,6 @@ database.sqlite
 # shared, secret-free project skill is ever introduced.
 .claude/
 .agents/
+
+# Build output from the local design-review harness (tools/preview).
+tools/preview/dist

@@ -1,5 +1,10 @@
 .page {
   display: grid;
+  /* Every /app screen hangs off this grid, so the track has to be clamped here or any wide
+     child — a data table, a long toolbar — widens the whole page instead of overflowing
+     inside its own box. An implicit `auto` track sizes to max-content and ignores the
+     item's min-width. */
+  grid-template-columns: minmax(0, 1fr);
   gap: var(--space-8);
   padding-block: var(--space-10);
 }

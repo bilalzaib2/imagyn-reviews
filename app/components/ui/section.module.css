@@ -1,6 +1,19 @@
 .section {
   display: grid;
+  /* minmax(0, 1fr), not the implicit `auto` track.
+     ----------------------------------------------
+     An auto-sized grid track grows to its content's max-content width, and `min-width: 0` on
+     the item does not stop it — the track is what overflows. A section holding a data table
+     therefore pushed the page sideways: measured at a 400px viewport, this track resolved to
+     483px inside a 342px page. */
+  grid-template-columns: minmax(0, 1fr);
   gap: var(--space-4);
+  /* A grid item defaults to `min-width: auto` — min-content — so a wide child such as a data
+     table pushes this box past its container instead of overflowing inside it, and the whole
+     page then scrolls sideways. Measured on a 400px viewport: the page grid's track resolved
+     to 483px against a 342px page. Sections hold the app's tables, so this is where the
+     chain has to be broken. */
+  min-width: 0;
 }
 
 .header {

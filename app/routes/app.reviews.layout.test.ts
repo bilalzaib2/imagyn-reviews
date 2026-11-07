@@ -104,17 +104,31 @@ describe("the columns the extra width paid for", () => {
 
   // Customer and Product are the two that drop on a narrow frame; rating, review and status
   // are what a merchant triages on and must always survive.
-  it("drops only the affordable columns on a narrow frame", () => {
+  it("sheds columns in order, rather than all at once", () => {
+    // Both used to carry hideOnNarrow, so opening the detail on an ordinary 1200px screen
+    // left the table 616px wide and took Customer AND Product with it — the merchant lost
+    // the name of the person who wrote the review they were reading. Measured in a browser.
+    //
+    // Product goes first: the detail panel beside the table already names it. Customer is
+    // how a merchant recognises a row at all, so it survives to a much narrower frame.
     const column = (key: string) => {
       const at = ROUTE.indexOf(`key: "${key}"`);
       return ROUTE.slice(at, ROUTE.indexOf("render:", at));
     };
 
+    expect(column("product")).toContain("hideOnCramped: true");
     expect(column("customer")).toContain("hideOnNarrow: true");
-    expect(column("product")).toContain("hideOnNarrow: true");
-    expect(column("rating")).not.toContain("hideOnNarrow");
-    expect(column("review")).not.toContain("hideOnNarrow");
-    expect(column("status")).not.toContain("hideOnNarrow");
+    expect(column("customer")).not.toContain("hideOnCramped");
+
+    for (const key of ["rating", "review", "status"]) {
+      expect(column(key)).not.toMatch(/hideOnNarrow|hideOnCramped/);
+    }
+  });
+
+  it("gives the customer column a fixed minimum rather than a percentage", () => {
+    // 16% of a 616px split-view table is 98px, which rendered "Amelia H…".
+    const at = ROUTE.indexOf('key: "customer"');
+    expect(ROUTE.slice(at, ROUTE.indexOf("render:", at))).toMatch(/width: "\d+(\.\d+)?rem"/);
   });
 
   it("does not repeat the customer or product inside the review cell", () => {
@@ -279,8 +293,9 @@ describe("on a wide screen the detail shares the row instead of covering the tab
     // A viewport media query cannot see that the table just lost 26rem to the panel, so the
     // columns would stay put and every one of them would truncate instead.
     const TABLE_CSS = readFileSync("app/components/ui/table.module.css", "utf8");
-    expect(TABLE_CSS).toMatch(/\.wrap \{[^}]*container-type: inline-size/);
-    expect(TABLE_CSS).toMatch(/@container \(max-width: 640px\)[\s\S]{0,200}\.hideOnNarrow \{\s*display: none/);
+    expect(TABLE_CSS).toMatch(/\.wrap \{[\s\S]{0,600}container-type: inline-size/);
+    expect(TABLE_CSS).toMatch(/@container \(max-width: 560px\)[\s\S]{0,400}\.hideOnNarrow \{\s*display: none/);
+    expect(TABLE_CSS).toMatch(/@container \(max-width: 820px\)[\s\S]{0,400}\.hideOnCramped \{\s*display: none/);
   });
 });
 

@@ -175,15 +175,20 @@
    keep using Polaris Badge (see RequestStatusBadge) since mixing the two badge styles on the
    same Polaris-driven page would look like two different products. Text is always the actual
    state name — color is reinforcement, never the only signal. */
+/* Sentence case, at a readable size.
+   ----------------------------------
+   These were 11px uppercase with 0.03em tracking. Seen rendered, a review row carried
+   APPROVED, VERIFIED BUYER and FEATURED side by side and the badges shouted louder than the
+   review text they were labelling. The benchmark sets every one of its status chips in
+   sentence case. Uppercase now survives nowhere in this app except where it is the content
+   itself. */
 .statusBadge {
   display: inline-flex;
   align-items: center;
   padding: 0.2rem 0.55rem;
   border-radius: var(--radius-full);
-  font-size: 0.6875rem;
-  font-weight: 600;
-  letter-spacing: 0.03em;
-  text-transform: uppercase;
+  font-size: var(--text-xs);
+  font-weight: var(--weight-medium);
   white-space: nowrap;
 }
 

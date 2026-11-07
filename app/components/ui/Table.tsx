@@ -77,6 +77,9 @@ export interface TableColumn<Row> {
    * is in the detail panel for whichever row they open.
    */
   hideOnNarrow?: boolean;
+  /** Dropped before `hideOnNarrow` does — for a column the surrounding UI already repeats,
+   *  so the table sheds width in a sensible order instead of all at once. */
+  hideOnCramped?: boolean;
   /**
    * Hides the header text visually while keeping it available to a screen reader.
    *
@@ -216,6 +219,7 @@ export function Table<Row>({
                   column.align === "end" ? styles.alignEnd : "",
                   column.headerHidden ? styles.hiddenHeader : "",
                   column.hideOnNarrow ? styles.hideOnNarrow : "",
+                  column.hideOnCramped ? styles.hideOnCramped : "",
                 ]
                   .filter(Boolean)
                   .join(" ")}
@@ -277,6 +281,7 @@ export function Table<Row>({
                       column.align === "end" ? styles.alignEnd : "",
                       column.numeric ? styles.numeric : "",
                       column.hideOnNarrow ? styles.hideOnNarrow : "",
+                  column.hideOnCramped ? styles.hideOnCramped : "",
                     ]
                       .filter(Boolean)
                       .join(" ")}

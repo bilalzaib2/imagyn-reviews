@@ -1048,7 +1048,9 @@ export default function ReviewsPage() {
     {
       key: "customer",
       header: "Customer",
-      width: "16%",
+      // A name needs a predictable minimum, not a share of whatever is left: at 16% of a
+      // 616px split-view table this rendered "Amelia H…".
+      width: "8rem",
       hideOnNarrow: true,
       render: (review) => (
         <span className={styles.customerCell}>
@@ -1119,8 +1121,10 @@ export default function ReviewsPage() {
     {
       key: "product",
       header: "Product",
-      width: "18%",
-      hideOnNarrow: true,
+      width: "16%",
+      // Sheds before Customer: the detail panel open beside the table already names the
+      // product, so this is the column the merchant least needs duplicated.
+      hideOnCramped: true,
       render: (review) => (
         <span className={styles.ellipsisCell}>
           {review.productTitle ?? review.product?.name ?? "Unassigned product"}
@@ -1130,13 +1134,15 @@ export default function ReviewsPage() {
     {
       key: "status",
       header: "Status",
-      width: "8rem",
+      // 6.5rem rather than 8rem: the badges are sentence case now, so "Approved" needs
+      // noticeably less room than "APPROVED" did, and the space is worth more to Review.
+      width: "6.5rem",
       render: (review) => <ReviewStatusBadge status={review.status} />,
     },
     {
       key: "date",
       header: "Date",
-      width: "5.5rem",
+      width: "4.75rem",
       render: (review) => <span className={styles.dateCell}>{formatShortDate(review.createdAt)}</span>,
     },
   ];

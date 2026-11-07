@@ -20,6 +20,10 @@
    borders, so an outer container border would just be a box around boxes. */
 .toolbar {
   display: grid;
+  /* Same implicit-auto-track trap as .page and .section: without this the track grows to the
+     widest child and the search field's `min(100%, 28rem)` then resolves 100% against 448px
+     on a 406px screen. */
+  grid-template-columns: minmax(0, 1fr);
   gap: var(--space-4);
 }
 
@@ -79,6 +83,16 @@
   border: 1px solid var(--color-border);
   border-radius: var(--radius-md);
   background: var(--color-surface-muted);
+  /* Five segments with counts do not fit a phone, and each one must stay on a single line to
+     read as a segmented control. So the control scrolls sideways within the page rather than
+     dragging the page sideways with it. */
+  max-width: 100%;
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+
+.statusSegments::-webkit-scrollbar {
+  display: none;
 }
 
 .statusSegment {
@@ -223,6 +237,10 @@
   grid-template-columns: minmax(0, 1fr);
   gap: var(--space-6);
   align-items: start;
+  /* minmax(0, 1fr) clamps this grid's own TRACKS; it does nothing about this element's size
+     as a grid item of the section above, which defaults to min-width: auto. Without this the
+     table's min-content still travelled up the chain and scrolled the page sideways. */
+  min-width: 0;
 }
 
 /* WHY THE DETAIL STOPS BEING AN OVERLAY ON A WIDE SCREEN
@@ -272,6 +290,10 @@
    content; the maxHeight passed to <Table> already caps it on the tall end. */
 .listColumn {
   display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  /* Same reason as .section: this wraps the review table and must be allowed to be narrower
+     than the table's min-content, so the table scrolls inside its own box. */
+  min-width: 0;
 }
 
 .skeletonList {
