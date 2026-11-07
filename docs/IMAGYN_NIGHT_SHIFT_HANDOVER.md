@@ -1018,3 +1018,65 @@ the files will catch the one that was missed.
 **1,947 tests across 98 files.** Typecheck, lint, build clean. **22 commits local, unpushed.**
 Three migrations applied to the local development database only; each backed up and verified by
 restore first.
+
+---
+
+## 18. CHECKPOINT — usage limit, 2026-11-08
+
+**State: 25 commits local and unpushed. 1,955 tests / 99 files, typecheck, lint, build all
+clean. Working tree clean except the three long-standing untracked paths (`.github/`,
+`Brand Assets/`, `skills-lock.json`).**
+
+### 18.1 The thing that changed this session: we can see the UI now
+
+`tools/preview` is a local Vite harness that mounts the **real** route components with the
+**real** stylesheets against fixture data:
+
+```
+npx vite --config tools/preview/vite.config.ts        # http://localhost:5199
+# ?screen=reviews | reviews-empty | questions | questions-empty
+```
+
+A plugin stubs `*.server` imports by mirroring each module's export names, so route files
+load without dragging Prisma into the browser. Fixtures in `tools/preview/fixtures.ts` are
+deliberately hostile — long product titles, a hyphenated full name, a 150-character body —
+because tidy fixtures hide exactly the defects this exists to find.
+
+**It does not prove** loaders, actions, App Bridge or Shopify. Those stay covered by tests and
+by the real admin.
+
+Within an hour it found four defects that 1,947 passing tests had not:
+
+| Defect | Measured | Fix |
+|---|---|---|
+| Checkbox column as wide as the review text | 155px | specificity bug; now 44px, Review +62px |
+| Opening a review hid the customer's name | both optional columns dropped at 616px | staged shedding: Product first, Customer to 560px |
+| Horizontal scroll on a phone | 115px at 400px viewport | four implicit `auto` grid tracks clamped |
+| Status badges shouting | 11px uppercase + tracking | sentence case |
+
+### 18.2 The lesson worth keeping
+
+Three of those four were invisible to every other check. The grid one took five attempts
+because the obvious fix (`min-width: 0` on the child) is not the fix — an auto-sized grid
+**track** grows to max-content regardless of the item's min-width, and only `minmax(0, …)`
+clamps it. `app/styles/gridOverflow.test.ts` now guards that class.
+
+### 18.3 Exact next task
+
+1. **Re-verify the product-column clamp** (`8c…` final commit) in the harness — it is the one
+   change this session not seen rendered.
+2. **Add the remaining screens to the harness**: Dashboard, Email Studio, Brand Studio,
+   Settings, Analytics. Each is one entry in `tools/preview/main.tsx` plus a fixture. Expect
+   the same class of defect on screens never rendered.
+3. Then Brand Studio (priority A) and widget defaults (priority B), which were not started.
+
+### 18.4 Still open from the current brief
+
+- **A — Brand Studio:** not started. Shopify auto-fetch is impossible (§17.1), so this is
+  manual upload, presets, preview and fallbacks.
+- **B — Widget defaults:** not started.
+- **C — Dashboard redesign:** only Reviews and Questions inspected; the Dashboard itself,
+  Settings, Analytics and Email Studio have never been seen rendered.
+- **D — Functional QA:** coupon revoke/usage and Q&A are covered by tests and a rolled-back
+  DB run, but no merchant action has been exercised through a real browser.
+- **E:** gap matrix is current to §6d; this handover is current.
