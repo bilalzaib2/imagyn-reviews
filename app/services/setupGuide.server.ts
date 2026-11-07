@@ -15,11 +15,12 @@ export interface SetupGuideItem {
 // just for this list, so a merchant can never see a checked box that doesn't correspond to
 // something real they actually did.
 export async function getSetupGuideItems(storeId: string): Promise<SetupGuideItem[]> {
-  const [store, totalReviews, totalRequests, appearance] = await Promise.all([
+  const [store, totalReviews, totalRequests, appearance, configuredWidgets] = await Promise.all([
     prisma.store.findUniqueOrThrow({ where: { id: storeId }, select: { planStatus: true } }),
     prisma.review.count({ where: { storeId, deletedAt: null } }),
     prisma.reviewRequest.count({ where: { storeId } }),
     appearanceService.getActive(storeId),
+    prisma.widget.count({ where: { storeId } }),
   ]);
 
   return [
@@ -29,6 +30,26 @@ export async function getSetupGuideItems(storeId: string): Promise<SetupGuideIte
       description: "Pick the plan that fits your store — Starter is free.",
       href: "/app/billing",
       done: store.planStatus !== "pending",
+    },
+    {
+      // The step without which nothing else matters: until a widget is on the storefront, a
+      // shopper cannot read a review or leave one, and every other task here is preparation
+      // for an audience of nobody. The benchmark puts storefront enablement first for the
+      // same reason.
+      //
+      // WHY `done` READS A CONFIGURED WIDGET AND NOT A LIVE THEME
+      //
+      // Judge.me can say "App embeds missing from live theme" because it reads the theme.
+      // That needs `read_themes`, which this app does not request, and adding a scope forces
+      // every existing merchant to re-authorize — not a change to make quietly. So the label
+      // states exactly what the signal proves: a widget has been set up here. The description
+      // carries the part we cannot verify, rather than a checkbox implying we did.
+      key: "widget",
+      label: "Set up your review widget",
+      description:
+        "Choose how reviews appear on your storefront, then add the widget to your theme — reviews only show once it is in place.",
+      href: "/app/widgets",
+      done: configuredWidgets > 0,
     },
     {
       key: "reviews",

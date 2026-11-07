@@ -93,12 +93,42 @@ interface ShopBrandLogoResponse {
       } | null;
     } | null;
   } | null;
+  /** Present when the field does not exist on this API version at all, which is a different
+   *  outcome from a merchant simply not having set a logo. */
+  errors?: Array<{ message?: string }> | null;
 }
 
 /** Reads the shop's brand logo from the Admin API. Returns null on anything unusable. */
 export async function fetchShopBrandLogo(admin: AdminApiContext): Promise<string | null> {
   const response = await admin.graphql(SHOP_BRAND_LOGO_QUERY);
   const body = (await response.json()) as ShopBrandLogoResponse;
+
+  // THREE OUTCOMES, ONLY ONE OF WHICH IS "the merchant has no logo"
+  //
+  // `shop.brand` is documented on Shopify's STOREFRONT API. Whether the Admin API exposes it
+  // is, as of 2026-11-08, unverified against a live shop — every attempt so far has been
+  // blocked (the Admin token on hand was expired, and the docs search found Brand only under
+  // Storefront). If the field does not exist on Admin, this query returns a GraphQL error and
+  // every call quietly yields null, which is indistinguishable from a merchant who simply
+  // never set a brand logo. The feature would then appear to work and never do anything.
+  //
+  // So the two cases are separated and logged. The first real install answers the question
+  // definitively, in one grep, instead of it staying open for another session.
+  if (body.errors?.length) {
+    console.warn(
+      `[shop-brand-logo] Shopify returned an error for shop.brand — the field may not exist on ` +
+        `the Admin API: ${body.errors.map((entry) => entry?.message ?? "unknown").join("; ")}`,
+    );
+    return null;
+  }
+
+  if (!body.data?.shop?.brand) {
+    console.warn(
+      "[shop-brand-logo] shop.brand resolved to null on the Admin API. Either this shop has no " +
+        "brand settings, or the field is unavailable here and the Storefront API is required.",
+    );
+    return null;
+  }
 
   const primary = body.data?.shop?.brand?.logo?.image?.url ?? null;
   if (isUsableLogoUrl(primary)) {

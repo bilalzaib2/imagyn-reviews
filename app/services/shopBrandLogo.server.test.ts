@@ -6,7 +6,7 @@
 //     though Shopify is a trusted source. "Trusted" is not "skip validation".
 //  2. A Shopify API failure must degrade to the stored value and never break a page load — the
 //     sync is fire-and-forget from app.tsx's loader, which every /app/* screen goes through.
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 const setShopBrandLogo = vi.fn(async (id: string, url: string | null, syncedAt: Date) => ({ id, url, syncedAt }));
 
@@ -226,3 +226,56 @@ describe("ensureShopBrandLogo — failure posture", () => {
     expect(setShopBrandLogo).not.toHaveBeenCalled();
   });
 });
+
+// Whether the Admin API exposes shop.brand at all is unverified against a live shop as of
+// 2026-11-08 — the documentation places Brand on the STOREFRONT API. If it is absent here,
+// every call returns null, which looks exactly like a merchant who never set a logo, and the
+// feature would appear to work while doing nothing forever.
+//
+// These pin the distinction so the first real install answers the question in one grep.
+describe("the three outcomes are distinguishable, not all silently null", () => {
+  let warn: ReturnType<typeof vi.spyOn>;
+
+  beforeEach(() => {
+    warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+  });
+
+  afterEach(() => {
+    warn.mockRestore();
+  });
+
+  it("warns that the field may not exist when Shopify returns an error", async () => {
+    const url = await fetchShopBrandLogo(
+      admin({ errors: [{ message: "Field 'brand' doesn't exist on type 'Shop'" }] }),
+    );
+
+    expect(url).toBeNull();
+    expect(warn).toHaveBeenCalledWith(expect.stringContaining("may not exist"));
+    expect(warn.mock.calls[0][0]).toContain("Field 'brand' doesn't exist");
+  });
+
+  it("warns separately when brand resolves to null", async () => {
+    const url = await fetchShopBrandLogo(admin({ data: { shop: { brand: null } } }));
+
+    expect(url).toBeNull();
+    expect(warn).toHaveBeenCalledWith(expect.stringContaining("resolved to null"));
+  });
+
+  it("stays quiet when brand exists and the merchant simply has no logo", async () => {
+    // The ordinary case. A warning here would train everyone to ignore the log.
+    const url = await fetchShopBrandLogo(brandPayloadAdmin());
+    expect(url).toBeNull();
+    expect(warn).not.toHaveBeenCalled();
+  });
+
+  it("still returns a real logo without warning", async () => {
+    const url = await fetchShopBrandLogo(admin(brandPayload("https://cdn.shopify.com/logo.png")));
+    expect(url).toBe("https://cdn.shopify.com/logo.png");
+    expect(warn).not.toHaveBeenCalled();
+  });
+});
+
+/** brand present, both logo slots empty — a merchant who has brand settings but no mark. */
+function brandPayloadAdmin() {
+  return admin({ data: { shop: { brand: { logo: null, squareLogo: null } } } });
+}
