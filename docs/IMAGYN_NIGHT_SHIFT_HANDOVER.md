@@ -911,3 +911,44 @@ zero domain reputation) is unchanged and remains the open risk recorded in §7.
 ### 15.5 State
 
 **1,918 tests across 97 files.** Typecheck, lint, build clean. **17 commits local, unpushed.**
+
+---
+
+## 16. Brand assets and fresh install — 2026-11-08
+
+### 16.1 The brand-colour brief is blocked, and the logo sync may never have worked
+
+`Shop.brand` is documented on the **Storefront** API, not Admin. `shopBrandLogo.server.ts`
+queries it through Admin. That has never been verified against a live shop, and could not be
+verified this session: the Shopify MCP needs re-authentication and the stored Admin token
+returns 401.
+
+Previous handovers recorded automatic brand identity as a differentiator that would put Imagyn
+*ahead* of the benchmark. **Downgrade that to unverified.** If Admin does not expose
+`shop.brand`, the logo sync has been returning null for every merchant since it shipped.
+
+The fetch now separates a GraphQL error from a null `brand` from a merchant with no logo, and
+warns on the first two. One real install answers it.
+
+### 16.2 The fresh-install gap
+
+The setup guide listed plan, reviews, requests and brand — and never told the merchant to put
+a widget on their storefront. That is the only step that makes the product visible to a
+shopper. Added second.
+
+It ticks on a **configured widget**, not a live theme, because theme detection needs
+`read_themes` and this app does not request it. The label says "Set up your review widget" and
+a test forbids it saying "live", "installed" or "on your storefront", so the checkbox cannot
+over-claim.
+
+### 16.3 Two decisions for the owner
+
+1. **`read_themes` scope** — unlocks Judge.me-parity "app embed missing from live theme"
+   detection. Costs a re-authorization for every existing merchant.
+2. **`publicNetworkEnabled` defaults to `true`** — review data goes to the public network on
+   install. Deliberate, documented and reversible, with dev stores excluded, but it is an
+   on-by-default data-sharing posture worth confirming before App Store submission.
+
+### 16.4 State
+
+**1,929 tests across 97 files.** Typecheck, lint, build clean. **19 commits local, unpushed.**

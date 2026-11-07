@@ -72,8 +72,8 @@ session's browser work except the three defects actually observed.
 
 | Feature | Judge.me | Imagyn | Status | Gap / action |
 |---|---|---|---|---|
-| Brand colour | One primary colour, **defaults to Judge.me teal** | Brand Studio | Built, unverified | **Imagyn can lead**: auto-derive from Shopify |
-| Logo | Cross-link into email styling | Shopify logo sync exists | Built, unverified | Imagyn ahead |
+| Brand colour | One primary colour, **defaults to Judge.me teal** | Brand Studio | Built, unverified | Auto-derive is **blocked**: see §6c |
+| Logo | Cross-link into email styling | Shopify logo sync exists | **Unverified — may never fire** | See §6c |
 | Rating icon | Paid, selectable | Missing | Missing | Low value |
 | White-label | Paid | Plan-gated | Built, unverified | — |
 | Widgets | ~22, per-theme gallery, app-embed gating | `Widget` model, widgets + add-to-theme routes | Partial | Count and gallery UX both behind |
@@ -183,6 +183,52 @@ header after a plain trim, while the Shopify-sourced address beside it was re-va
 the reasoning written down — "this is the value that actually becomes a header". Not
 exploitable, because Email Studio rejects a malformed address on save, but that is one
 caller's validation of one path. Both now go through `isHeaderSafeAddress`.
+
+## 6c. Shopify brand assets — the API question, settled as far as it can be
+
+The long-standing assumption was that Imagyn could auto-derive brand identity from Shopify and
+thereby lead the benchmark. That assumption is now **in doubt**, and the honest state is:
+
+- **`Shop.brand` — with `colors`, `logo`, `squareLogo`, `coverImage` — is documented on
+  Shopify's STOREFRONT API**, not the Admin API. A Shopify community thread asking for a
+  shop-logo equivalent on Admin was answered with "theme or checkout branding".
+- The nearest Admin equivalent is **`CheckoutBranding`**, which needs
+  `read_checkout_branding_settings` **and a Plus or Development store plan** — unusable as a
+  general default for ordinary merchants.
+- `app/services/shopBrandLogo.server.ts` queries `shop.brand.logo` **through the Admin API**.
+  Whether that works has never been verified against a live shop.
+
+**Not verified, and why.** The Shopify MCP needs re-authentication, and the Admin token stored
+locally is expired (401), so a live introspection could not be run. Local evidence is weak but
+consistent: all three dev stores show `shopBrandLogoUrl = null`, `syncedAt = never`.
+
+**What was done instead of guessing.** The fetch now distinguishes its three outcomes — a
+GraphQL error (field likely absent), `brand` resolving to null, and a merchant who simply has
+no logo — and warns on the first two. If the field is absent on Admin, the first real install
+says so in one log line. Previously all three collapsed to `null` and the feature would have
+looked healthy while doing nothing indefinitely.
+
+**To settle it:** re-authenticate the Shopify MCP (`/mcp`) and introspect `Shop`, or read the
+warning after one real install.
+
+## 6d. Fresh-install experience
+
+**Gap found and closed:** the Dashboard setup guide had four steps and none was *get a widget
+onto the storefront* — the one step without which a shopper can neither read nor leave a
+review. A new merchant could complete the whole checklist and still have a storefront showing
+nothing. Added as the second step (`19 commits` / see handover §16).
+
+**`done` reads a configured widget, not a live theme.** Detecting real theme installation the
+way Judge.me does needs the `read_themes` scope, which this app does not request; adding it
+forces every existing merchant to re-authorize. **Decision for the owner.** Until then the
+label claims only what the signal proves.
+
+**Defaults reviewed.** Two worth the owner's attention:
+
+| Default | Value | Assessment |
+|---|---|---|
+| `autoRequestEnabled` | `false` | **Correct.** Order automation is approved and globally on, so this is a deliberate per-store opt-in to emailing a merchant's customers. Not a default to flip silently. |
+| `publicNetworkEnabled` | `true` | **Owner decision.** Reviews are exposed to the public network on install. Documented as a control rather than consent, reversible, and development stores are excluded independently — but it is an on-by-default data-sharing posture worth confirming before App Store submission. |
 
 ## 7. Analytics
 
