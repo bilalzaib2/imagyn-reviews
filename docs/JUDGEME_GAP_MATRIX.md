@@ -72,11 +72,11 @@ session's browser work except the three defects actually observed.
 
 | Feature | Judge.me | Imagyn | Status | Gap / action |
 |---|---|---|---|---|
-| Brand colour | One primary colour, **defaults to Judge.me teal** | Brand Studio | Built, unverified | Auto-derive is **blocked**: see §6c |
-| Logo | Cross-link into email styling | Shopify logo sync exists | **Unverified — may never fire** | See §6c |
+| Brand colour | One primary colour, **defaults to Judge.me teal** | Brand Studio | Built, unverified | Auto-derive from Shopify is **not possible** on Admin — see §6c |
+| Logo | Cross-link into email styling | Manual upload + text fallback | **Verified** | Shopify auto-fetch is **impossible on Admin** — see §6c |
 | Rating icon | Paid, selectable | Missing | Missing | Low value |
 | White-label | Paid | Plan-gated | Built, unverified | — |
-| Widgets | ~22, per-theme gallery, app-embed gating | `Widget` model, widgets + add-to-theme routes | Partial | Count and gallery UX both behind |
+| Widgets | ~22, per-theme gallery, app-embed gating | `Widget` model, add-to-theme, **live theme status** | Partial | Gallery UX and count still behind; embed status now at parity |
 | AI reviews summary | Paid widget | Yes | Built, unverified | Level |
 | Product / store FAQs | Paid widgets | Missing | Missing | `getPublicQuestions` is the read side; no widget yet |
 
@@ -184,32 +184,34 @@ the reasoning written down — "this is the value that actually becomes a header
 exploitable, because Email Studio rejects a malformed address on save, but that is one
 caller's validation of one path. Both now go through `isHeaderSafeAddress`.
 
-## 6c. Shopify brand assets — the API question, settled as far as it can be
+## 6c. Shopify brand assets — ANSWERED 2026-11-08
 
-The long-standing assumption was that Imagyn could auto-derive brand identity from Shopify and
-thereby lead the benchmark. That assumption is now **in doubt**, and the honest state is:
+**The Admin API has no `Shop.brand` field.** Verified from Shopify's own reference:
 
-- **`Shop.brand` — with `colors`, `logo`, `squareLogo`, `coverImage` — is documented on
-  Shopify's STOREFRONT API**, not the Admin API. A Shopify community thread asking for a
-  shop-logo equivalent on Admin was answered with "theme or checkout branding".
-- The nearest Admin equivalent is **`CheckoutBranding`**, which needs
-  `read_checkout_branding_settings` **and a Plus or Development store plan** — unusable as a
-  general default for ordinary merchants.
-- `app/services/shopBrandLogo.server.ts` queries `shop.brand.logo` **through the Admin API**.
-  Whether that works has never been verified against a live shop.
+| API | `Shop.brand` |
+|---|---|
+| Admin GraphQL | **absent** — both halves of the field list read; `brand` would sort near the top |
+| Storefront | **present** — "The shop's branding configuration", typed `Brand` (logo, squareLogo, colors, coverImage) |
 
-**Not verified, and why.** The Shopify MCP needs re-authentication, and the Admin token stored
-locally is expired (401), so a live introspection could not be run. Local evidence is weak but
-consistent: all three dev stores show `shopBrandLogoUrl = null`, `syncedAt = never`.
+`shopBrandLogo.server.ts` had been querying it through **Admin** since 2026-11-05. Every call
+errored and returned null — indistinguishable from a merchant with no logo — while firing a
+doomed GraphQL round trip on every app load. **The brand logo sync has never worked.**
 
-**What was done instead of guessing.** The fetch now distinguishes its three outcomes — a
-GraphQL error (field likely absent), `brand` resolving to null, and a merchant who simply has
-no logo — and warns on the first two. If the field is absent on Admin, the first real install
-says so in one log line. Previously all three collapsed to `null` and the feature would have
-looked healthy while doing nothing indefinitely.
+Earlier handovers called automatic brand identity a differentiator that would put Imagyn ahead
+of the benchmark. That was wrong and is now withdrawn.
 
-**To settle it:** re-authenticate the Shopify MCP (`/mcp`) and introspect `Shop`, or read the
-warning after one real install.
+The query is removed; `fetchShopBrandLogo` remains as the named seam returning null, with
+`SHOP_BRAND_LOGO_AVAILABLE = false`. Two routes could re-enable it, both needing a new scope
+and therefore an owner decision:
+
+1. **Storefront API** with a storefront access token (`storefrontAccessTokenCreate`) — the only
+   route that reaches `colors` as well as the logo.
+2. **Admin `CheckoutBranding`** — needs `read_checkout_branding_settings` *and* a Plus or
+   Development store plan, so it cannot serve ordinary merchants.
+
+Until then the honest product answer is the one already built: manual logo upload, with a text
+brand header as the fallback. Judge.me does not derive branding from Shopify either — its
+default is its own teal — so this is parity, not a deficit.
 
 ## 6d. Fresh-install experience
 
@@ -218,17 +220,23 @@ onto the storefront* — the one step without which a shopper can neither read n
 review. A new merchant could complete the whole checklist and still have a storefront showing
 nothing. Added as the second step (`19 commits` / see handover §16).
 
-**`done` reads a configured widget, not a live theme.** Detecting real theme installation the
-way Judge.me does needs the `read_themes` scope, which this app does not request; adding it
-forces every existing merchant to re-authorize. **Decision for the owner.** Until then the
-label claims only what the signal proves.
+**Live theme status is now shown — and `read_themes` was NOT needed.** Reading
+`config/settings_data.json` does require that scope, and a scope addition forces every existing
+merchant to re-authorize. App Bridge's `shopify.app.extensions()` reports activation status for
+this app's theme blocks on the published theme with **no additional scopes**; its only
+limitation (available while the app is open in the admin) is irrelevant, because that is the
+only place the answer is shown. The Dashboard widget step now reads "Live on your theme", "Not
+added to your theme yet" or "Disabled in your theme" from Shopify's own data.
+
+Anything unreadable becomes "unknown" and renders nothing. Reporting absence we did not observe
+would send a merchant to re-add a block already in place.
 
 **Defaults reviewed.** Two worth the owner's attention:
 
 | Default | Value | Assessment |
 |---|---|---|
 | `autoRequestEnabled` | `false` | **Correct.** Order automation is approved and globally on, so this is a deliberate per-store opt-in to emailing a merchant's customers. Not a default to flip silently. |
-| `publicNetworkEnabled` | `true` | **Owner decision.** Reviews are exposed to the public network on install. Documented as a control rather than consent, reversible, and development stores are excluded independently — but it is an on-by-default data-sharing posture worth confirming before App Store submission. |
+| `publicNetworkEnabled` | **`false`** | **Changed 2026-11-08 by owner decision.** Sharing now requires explicit opt-in, and existing rows were reset — see handover §17 for why that was necessary and what it costs. |
 
 ## 7. Analytics
 

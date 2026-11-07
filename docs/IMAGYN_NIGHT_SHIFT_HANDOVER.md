@@ -952,3 +952,69 @@ over-claim.
 ### 16.4 State
 
 **1,929 tests across 97 files.** Typecheck, lint, build clean. **19 commits local, unpushed.**
+
+---
+
+## 17. Three decisions executed — 2026-11-08
+
+### 17.1 Brand API: answered, and a feature retired
+
+**The Admin API has no `Shop.brand`.** Verified from Shopify's published reference (both halves
+of the Admin `Shop` field list; `brand` absent) with the Storefront `Shop` page as a positive
+control, where it is present.
+
+The Shopify MCP could **not** be re-authenticated from this session — that needs `/mcp` run
+interactively — and the stored Admin token returns 401, so a live introspection was impossible.
+The documentation evidence is conclusive on its own and both directions were checked.
+
+Consequence: `shopBrandLogo.server.ts` had queried a non-existent field since 2026-11-05. The
+query is gone. See gap matrix §6c for the two re-enabling routes, both scope decisions.
+
+**A caution worth carrying forward:** the tests for that module passed the whole time. They
+exercised a parser against a mocked response that Shopify has no field to produce. A green
+suite around an integration proves the parsing, never the contract.
+
+### 17.2 read_themes: investigated, and not needed
+
+`shopify.app.extensions()` (App Bridge) reports per-block activation on the published theme
+with **no additional scopes**. `read_themes` would have been required only for the
+settings_data.json route, and would have forced a re-authorization for every existing merchant.
+
+Implemented on the Dashboard's widget step. Unknown states render nothing rather than claiming
+absence. 20 tests on the pure interpretation; one caught a `TypeError` that would have taken
+down the Dashboard.
+
+### 17.3 publicNetworkEnabled: now opt-in
+
+Default flipped to `false`, **and existing rows reset**.
+
+The reset is the only change in this project that edits existing merchant settings, and it was
+necessary: the flag is a control, not a consent record, so a merchant who deliberately enabled
+sharing is indistinguishable from one who inherited the old `true` default. Resetting everyone
+is the safe direction — under-sharing costs one click, over-sharing cannot be undone.
+
+**Before deploying, know:** any merchant who had deliberately enabled public sharing will find
+it off and must re-enable it. The rollback restores the old default but deliberately does *not*
+re-enable anyone.
+
+### 17.4 A real leak found during the privacy audit
+
+`publicDiscovery.server.ts` filtered `deletedAt` and `status` but **not `archivedAt`**. A
+review the merchant had archived — out of their queue, off their storefront, out of their
+statistics — was still being published to a consumer-facing network they do not administer.
+
+That is the 2026-11-07 archive work failing in the one file not checked. Five further services
+had the same hole in their own hand-written clauses: `aiSummary`, `trustCertification`,
+`achievements`, `analytics`, `reviewMedia`. `LIVE_REVIEW` now lives in `review.shared.ts` so
+all of them share one definition without an import cycle, and a test names every file that
+must honour it.
+
+**The pattern:** this codebase has many services writing their own review `where` clauses. Any
+new row-level visibility rule has to be applied to all of them, and only a test that enumerates
+the files will catch the one that was missed.
+
+### 17.5 State
+
+**1,947 tests across 98 files.** Typecheck, lint, build clean. **22 commits local, unpushed.**
+Three migrations applied to the local development database only; each backed up and verified by
+restore first.
