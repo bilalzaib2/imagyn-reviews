@@ -37,6 +37,7 @@ import {
   REVIEW_PRACTICES_THRESHOLD,
   buildPillarViews,
 } from "../services/trustCertification.presentation";
+import { ThemeBlockStatus } from "../components/ui/ThemeBlockStatus";
 import { ORDER_AUTOMATION_ENABLED, SHOPIFY_PROTECTED_CUSTOMER_DATA_APPROVED } from "../config/features";
 import shellStyles from "../styles/app.shell.module.css";
 import styles from "../styles/app._index.module.css";
@@ -296,7 +297,12 @@ export default function Index() {
                     {item.done ? "✓" : ""}
                   </span>
                   <span>
-                    <span className={styles.setupGuideLabel}>{item.label}</span>
+                    <span className={styles.setupGuideLabel}>
+                      {item.label}
+                      {/* The one step whose real state the server cannot see. App Bridge can,
+                          so the live answer is shown here and nowhere else claims it. */}
+                      {item.key === "widget" ? <ThemeBlockStatus /> : null}
+                    </span>
                     <span className={styles.setupGuideDescription}>{item.description}</span>
                   </span>
                 </Link>
