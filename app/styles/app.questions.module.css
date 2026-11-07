@@ -76,10 +76,23 @@
   outline-offset: 1px;
 }
 
-.asker,
+.asker {
+  color: var(--color-text);
+  overflow-wrap: anywhere;
+}
+
+/* Two lines, then clamp.
+   ----------------------
+   Seen rendered: "Merino Wool Crew Neck Sweater — Charcoal, Unisex, Pre-Shrunk" wrapped to
+   four lines and made its row half again as tall as the ones around it. A moderation queue
+   is scanned down the left edge, and ragged row heights are what breaks that. */
 .product {
   color: var(--color-text);
   overflow-wrap: anywhere;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
 }
 
 /* Two lines, then clamp. A question is usually one sentence; an essay must not make the row
