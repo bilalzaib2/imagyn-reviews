@@ -1080,3 +1080,60 @@ clamps it. `app/styles/gridOverflow.test.ts` now guards that class.
 - **D — Functional QA:** coupon revoke/usage and Q&A are covered by tests and a rolled-back
   DB run, but no merchant action has been exercised through a real browser.
 - **E:** gap matrix is current to §6d; this handover is current.
+
+---
+
+## 19. Harness expansion — 2026-11-09
+
+Resumed from §18. **28 commits local, unpushed. 1,976 tests / 101 files**, typecheck, lint,
+build clean.
+
+### 19.1 Verified the one unverified change
+
+The question table's product clamp holds row heights to a **6px spread**, down from ~35px.
+
+### 19.2 Dashboard added to the harness, and two defects fixed
+
+Rendering the **fresh-install** state — nothing imported, nothing configured — showed the
+first sentence this app says to a new merchant:
+
+> "You're all caught up — nothing needs your attention right now."
+
+The subtitle only consulted the pending-moderation count, so an empty queue and an empty store
+produced the same line, while five setup steps sat directly beneath it. Three branches now.
+
+The same screen led with five tiles reading 0, 0, 0%, 0% and 0, pushing the setup guide below
+them. A store with no reviews now leads with the guide; once reviews exist the numbers come
+first again.
+
+### 19.3 The significant one: a crash affecting six screens
+
+Adding Brand Studio to the harness produced a stack trace instead of a page.
+`ContextualSaveBar` called `useAppBridge()` unconditionally, and that hook **throws
+synchronously** when the `shopify` global is absent — taking the whole route to its error
+boundary. The global comes from a CDN script tag, so a slow network can let the app hydrate
+first.
+
+Six screens mount it: Brand Studio, Email Studio, Settings → Requests, Referrals, Moderation
+and Rewards. Most of the configuration surface depended on one unguarded hook call.
+`AppReviewPrompt` already documented this exact hazard and guarded against it; this is the
+same guard with a much larger blast radius.
+
+**This is the strongest argument yet for the harness.** No test caught it, and it would only
+have appeared in production under a slow network — intermittently, on six different screens.
+
+### 19.4 Brand Studio assessment (priority A)
+
+Now that it can be seen, it is in better shape than assumed: five genuinely distinct themes
+with visual miniatures, each palette already covered by contrast tests; global-versus-widget
+scoping; desktop/mobile toggle; live preview. The default (`editorial` structure + default
+tokens) is a valid, sensible fresh-install state.
+
+Remaining for A: logo upload/preview flow and the manual-versus-detected distinction have not
+been exercised.
+
+### 19.5 Next
+
+1. Add Email Studio and Settings to the harness — same method, same expected class of defect.
+2. Then widget defaults (priority B).
+3. Priority D's functional QA still has no browser-exercised merchant action.
