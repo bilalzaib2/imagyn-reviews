@@ -123,3 +123,87 @@ export function questionsLoaderData({ empty = false } = {}) {
     search: "",
   };
 }
+
+// --------------------------------------------------------------------- Dashboard
+
+function pillar(status: string, percent: number, reason: string) {
+  return { status, percent, reason };
+}
+
+export function dashboardLoaderData({ fresh = false } = {}) {
+  // `fresh` is the state that matters most and is hardest to see any other way: a merchant
+  // who installed sixty seconds ago, with nothing done and nothing collected.
+  const stats = fresh
+    ? {
+        totalReviews: 0,
+        publishedReviews: 0,
+        pendingReviews: 0,
+        averageRating: 0,
+        recentReviews: [],
+        autoPublishedToday: 0,
+        heldByRules: 0,
+        verifiedReviews: 0,
+        ratingCounts: { 5: 0, 4: 0, 3: 0, 2: 0, 1: 0 },
+      }
+    : {
+        totalReviews: 83,
+        publishedReviews: 64,
+        pendingReviews: 12,
+        averageRating: 4.6,
+        recentReviews: reviewsLoaderData().reviews.slice(0, 5),
+        autoPublishedToday: 3,
+        heldByRules: 2,
+        verifiedReviews: 51,
+        ratingCounts: { 5: 48, 4: 19, 3: 9, 2: 5, 1: 2 },
+      };
+
+  return {
+    storeName: "Verve Outdoor",
+    storeDomain: "verveoutdoor.com",
+    stats,
+    requestStats: fresh
+      ? { totalCount: 0, sent: 0, completed: 0, completionRate: 0, scheduled: 0, pending: 0 }
+      : { totalCount: 240, sent: 212, completed: 83, completionRate: 0.39, scheduled: 18, pending: 10 },
+    storeAiSummary: fresh
+      ? null
+      : {
+          summary:
+            "Customers consistently praise the build quality and the speed of delivery. The most common criticism is sizing, which several reviewers describe as running small.",
+          recommendation: "Consider adding a sizing note to the product pages.",
+          updatedAt: new Date("2026-11-06").toISOString(),
+        },
+    productCoverage: fresh ? { totalProducts: 12, withoutReviews: 12 } : { totalProducts: 12, withoutReviews: 4 },
+    rewardStats: null,
+    setupGuide: [
+      { key: "plan", label: "Choose your plan", description: "Pick the plan that fits your store — Starter is free.", href: "/app/billing", done: !fresh },
+      {
+        key: "widget",
+        label: "Set up your review widget",
+        description:
+          "Choose how reviews appear on your storefront, then add the widget to your theme — reviews only show once it is in place.",
+        href: "/app/widgets",
+        done: !fresh,
+      },
+      { key: "reviews", label: "Collect or import your first review", description: "Import from Judge.me, Loox, Stamped, or a generic CSV, or wait for your first customer review.", href: "/app/reviews", done: !fresh },
+      { key: "requests", label: "Send your first review request", description: "Ask a real customer for a review from a Shopify order, a customer list, or a CSV upload.", href: "/app/requests", done: false },
+      { key: "brand", label: "Customize your brand appearance", description: "Match your storefront's colors, fonts, and layout to your brand.", href: "/app/appearance", done: false },
+    ],
+    trust: {
+      status: fresh ? "not_certified" : "certified",
+      pillars: {
+        reviewPractices: pillar(fresh ? "not_met" : "met", fresh ? 0 : 61, "Verified reviews as a share of all published reviews."),
+        paymentMethods: pillar("met", 100, "A trusted payment method is enabled."),
+        policy: pillar(fresh ? "unknown" : "met", 100, "A refund policy is published."),
+        storeHistory: pillar("met", 100, "The store has been trading long enough."),
+      },
+      verifiedReviewCount: fresh ? 0 : 51,
+      verifiedAverageRating: fresh ? 0 : 4.7,
+      paused: false,
+      everCertified: !fresh,
+      certifiedAt: fresh ? null : new Date("2026-10-20").toISOString(),
+      lastCheckedAt: new Date("2026-11-08").toISOString(),
+    },
+    appStoreUrl: null,
+    automation: { isApproved: true, isLive: true, canUse: !fresh, isEnabled: !fresh },
+  };
+}

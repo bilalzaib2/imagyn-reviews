@@ -160,6 +160,33 @@ const ACTIVITY_STATUS_DOT_CLASS: Record<string, string> = {
 // a custom property isn't a known style key to the DOM typings.
 const revealStyle = (stepIndex: number): CSSProperties => ({ "--reveal-delay": `${stepIndex * 60}ms` }) as CSSProperties;
 
+/**
+ * The one line under the greeting.
+ *
+ * Three states, because two were not enough. "You're all caught up" was shown whenever there
+ * was nothing pending — including on a brand-new install with no reviews at all and five
+ * setup steps outstanding, which is the first sentence a merchant ever reads from this app
+ * and was telling them there was nothing to do.
+ *
+ * An empty queue and an empty store are different facts and need different sentences.
+ */
+function dashboardSubtitle(
+  stats: { pendingReviews: number; totalReviews: number },
+  incompleteSetupCount: number,
+): string {
+  if (stats.pendingReviews > 0) {
+    return `${stats.pendingReviews} review${stats.pendingReviews === 1 ? "" : "s"} waiting for you.`;
+  }
+
+  if (stats.totalReviews === 0) {
+    return incompleteSetupCount > 0
+      ? `Let's collect your first reviews — ${incompleteSetupCount} step${incompleteSetupCount === 1 ? "" : "s"} left to set up.`
+      : "Set up and ready — your first reviews will appear here as customers leave them.";
+  }
+
+  return "You're all caught up — nothing needs your attention right now.";
+}
+
 export default function Index() {
   const {
     storeName,
@@ -224,16 +251,48 @@ export default function Index() {
       ? Math.round((reviewPracticesPillar.verifiedReviewCount / MIN_VERIFIED_REVIEWS) * 100)
       : Math.min(100, Math.round(((reviewPracticesPillar.percent ?? 0) / REVIEW_PRACTICES_THRESHOLD) * 100));
 
+  // Rendered before the metrics on a store with no reviews yet: five tiles reading 0 and
+  // 0% are not an introduction, and the benchmark leads a fresh install with its setup
+  // guide for the same reason. Once reviews exist the numbers are the headline again.
+  const leadWithSetup = stats.totalReviews === 0 && incompleteSetupItems.length > 0;
+  const setupGuideSection = incompleteSetupItems.length > 0 ? (
+      <Section
+        className={styles.reveal}
+        style={revealStyle(1)}
+        title="Getting started"
+        description={`${setupGuide.length - incompleteSetupItems.length} of ${setupGuide.length} done.`}
+      >
+        <div className={styles.setupGuideGrid}>
+          {setupGuide.map((item) => (
+            <Link
+              key={item.key}
+              to={item.href}
+              className={`${styles.setupGuideCard} ${item.done ? styles.setupGuideCardDone : ""}`}
+            >
+              <span className={styles.setupGuideCheck} aria-hidden="true">
+                {item.done ? "✓" : ""}
+              </span>
+              <span>
+                <span className={styles.setupGuideLabel}>
+                  {item.label}
+                  {/* The one step whose real state the server cannot see. App Bridge can,
+                      so the live answer is shown here and nowhere else claims it. */}
+                  {item.key === "widget" ? <ThemeBlockStatus /> : null}
+                </span>
+                <span className={styles.setupGuideDescription}>{item.description}</span>
+              </span>
+            </Link>
+          ))}
+        </div>
+      </Section>
+    ) : null;
+
   return (
     <Container as="main">
       <div className={`${shellStyles.page} ${styles.page}`}>
         <PageHeader
           title={`${greeting}, ${storeName}`}
-          description={
-            stats.pendingReviews > 0
-              ? `${stats.pendingReviews} review${stats.pendingReviews === 1 ? "" : "s"} waiting for you.`
-              : "You're all caught up — nothing needs your attention right now."
-          }
+          description={dashboardSubtitle(stats, incompleteSetupItems.length)}
           actions={
             <>
               <LinkButton to="/app/requests" variant="primary">
@@ -251,6 +310,8 @@ export default function Index() {
             secondary chips whose tone reflects a real, threshold-based read of the number
             itself — never an invented trend or period-over-period comparison this app has no
             historical snapshots to honestly support. */}
+        {leadWithSetup ? setupGuideSection : null}
+
         <div className={`${styles.reputationRow} ${styles.reveal}`} style={revealStyle(0)}>
           <Metric
             size="hero"
@@ -279,37 +340,7 @@ export default function Index() {
           </MetricRow>
         </div>
 
-        {incompleteSetupItems.length > 0 ? (
-          <Section
-            className={styles.reveal}
-            style={revealStyle(1)}
-            title="Getting started"
-            description={`${setupGuide.length - incompleteSetupItems.length} of ${setupGuide.length} done.`}
-          >
-            <div className={styles.setupGuideGrid}>
-              {setupGuide.map((item) => (
-                <Link
-                  key={item.key}
-                  to={item.href}
-                  className={`${styles.setupGuideCard} ${item.done ? styles.setupGuideCardDone : ""}`}
-                >
-                  <span className={styles.setupGuideCheck} aria-hidden="true">
-                    {item.done ? "✓" : ""}
-                  </span>
-                  <span>
-                    <span className={styles.setupGuideLabel}>
-                      {item.label}
-                      {/* The one step whose real state the server cannot see. App Bridge can,
-                          so the live answer is shown here and nowhere else claims it. */}
-                      {item.key === "widget" ? <ThemeBlockStatus /> : null}
-                    </span>
-                    <span className={styles.setupGuideDescription}>{item.description}</span>
-                  </span>
-                </Link>
-              ))}
-            </div>
-          </Section>
-        ) : null}
+        {leadWithSetup ? null : setupGuideSection}
 
         <nav className={`${styles.quickActions} ${styles.reveal}`} style={revealStyle(2)} aria-label="Quick actions">
           {(rewardStats ? [...QUICK_ACTIONS, REWARDS_QUICK_ACTION] : QUICK_ACTIONS).map((action) => (

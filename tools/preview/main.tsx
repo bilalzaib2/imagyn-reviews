@@ -7,14 +7,22 @@ import enTranslations from "@shopify/polaris/locales/en.json";
 import "@shopify/polaris/build/esm/styles.css";
 import "../../app/styles/design-system.css";
 
+import DashboardPage from "../../app/routes/app._index";
 import ReviewsPage from "../../app/routes/app.reviews";
 import QuestionsPage from "../../app/routes/app.questions";
-import { reviewsLoaderData, questionsLoaderData } from "./fixtures";
+import { dashboardLoaderData, reviewsLoaderData, questionsLoaderData } from "./fixtures";
 
 // Each screen is mounted through a memory router whose loader returns the fixture, which is
 // exactly how the real route receives its data — so useLoaderData, useSearchParams and
 // useNavigation all behave normally.
 const SCREENS: Record<string, { label: string; path: string; element: JSX.Element; data: unknown }> = {
+  dashboard: { label: "Dashboard", path: "/app", element: <DashboardPage />, data: dashboardLoaderData() },
+  "dashboard-fresh": {
+    label: "Dashboard — fresh install",
+    path: "/app",
+    element: <DashboardPage />,
+    data: dashboardLoaderData({ fresh: true }),
+  },
   reviews: { label: "Review management", path: "/app/reviews", element: <ReviewsPage />, data: reviewsLoaderData() },
   "reviews-empty": {
     label: "Review management — empty",
