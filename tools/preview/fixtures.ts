@@ -207,3 +207,23 @@ export function dashboardLoaderData({ fresh = false } = {}) {
     automation: { isApproved: true, isLive: true, canUse: !fresh, isEnabled: !fresh },
   };
 }
+
+// ----------------------------------------------------------------- Brand Studio
+
+import { getDefaultAppearanceTokens } from "../../app/services/appearance.shared";
+
+/** Uses the REAL default tokens, so this is genuinely what a fresh install looks like. */
+export function appearanceLoaderData({ fresh = true, pro = true } = {}) {
+  return {
+    tokens: getDefaultAppearanceTokens(),
+    preset: "editorial",
+    canUseBrandStudio: pro,
+    savedThemes: fresh
+      ? []
+      : [
+          { id: "t1", name: "Holiday", preset: "amber", createdAt: new Date("2026-10-01").toISOString() },
+          { id: "t2", name: "Everyday", preset: "ink", createdAt: new Date("2026-09-12").toISOString() },
+        ],
+    surfaceOverrides: [],
+  };
+}

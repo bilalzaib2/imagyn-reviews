@@ -1,4 +1,4 @@
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { useBlocker } from "react-router";
 import { SaveBar, useAppBridge } from "@shopify/app-bridge-react";
 
@@ -18,7 +18,51 @@ interface ContextualSaveBarProps {
 // the caller's own real dirty-state, so the bar only ever shows when there's an actual unsaved
 // change, and Save/Discard call straight into the caller's existing handlers (no parallel save
 // logic lives here).
-export function ContextualSaveBar({ id, open, onSave, onDiscard, saving, saveLabel = "Save" }: ContextualSaveBarProps) {
+/**
+ * True once App Bridge's CDN script has actually executed.
+ *
+ * useAppBridge() THROWS synchronously when the `shopify` global is missing, and a thrown
+ * error in a component body takes the whole route to its error boundary. The script is a
+ * CDN tag added by app.tsx's AppProvider, so on a slow network this app can hydrate before
+ * it runs — and six screens mount this save bar (Brand Studio, Email Studio and four
+ * Settings pages). AppReviewPrompt already reads `window.shopify` defensively for exactly
+ * this reason; this is the same guard for a far bigger blast radius.
+ */
+function useAppBridgeReady(): boolean {
+  const [ready, setReady] = useState(
+    () => typeof window !== "undefined" && Boolean((window as { shopify?: unknown }).shopify),
+  );
+
+  useEffect(() => {
+    if (ready || typeof window === "undefined") return;
+
+    // Polled rather than awaited: App Bridge exposes no ready event, and the script
+    // typically lands within a frame or two of hydration. Gives up after ~5s, by which point
+    // it is not coming and the page is better off without a save bar than without a page.
+    let attempts = 0;
+    const timer = window.setInterval(() => {
+      attempts += 1;
+      if ((window as { shopify?: unknown }).shopify) {
+        setReady(true);
+        window.clearInterval(timer);
+      } else if (attempts > 50) {
+        window.clearInterval(timer);
+      }
+    }, 100);
+
+    return () => window.clearInterval(timer);
+  }, [ready]);
+
+  return ready;
+}
+
+export function ContextualSaveBar(props: ContextualSaveBarProps) {
+  // Nothing renders until App Bridge exists. The cost is that a merchant briefly has no
+  // unsaved-changes bar; the alternative was the entire screen failing to render.
+  return useAppBridgeReady() ? <ContextualSaveBarWithAppBridge {...props} /> : null;
+}
+
+function ContextualSaveBarWithAppBridge({ id, open, onSave, onDiscard, saving, saveLabel = "Save" }: ContextualSaveBarProps) {
   const shopify = useAppBridge();
 
   // App Bridge's own leaveConfirmation() guards real browser-level navigation (closing the

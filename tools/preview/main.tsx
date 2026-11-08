@@ -10,7 +10,8 @@ import "../../app/styles/design-system.css";
 import DashboardPage from "../../app/routes/app._index";
 import ReviewsPage from "../../app/routes/app.reviews";
 import QuestionsPage from "../../app/routes/app.questions";
-import { dashboardLoaderData, reviewsLoaderData, questionsLoaderData } from "./fixtures";
+import AppearancePage from "../../app/routes/app.appearance";
+import { appearanceLoaderData, dashboardLoaderData, reviewsLoaderData, questionsLoaderData } from "./fixtures";
 
 // Each screen is mounted through a memory router whose loader returns the fixture, which is
 // exactly how the real route receives its data — so useLoaderData, useSearchParams and
@@ -29,6 +30,18 @@ const SCREENS: Record<string, { label: string; path: string; element: JSX.Elemen
     path: "/app/reviews",
     element: <ReviewsPage />,
     data: reviewsLoaderData({ empty: true }),
+  },
+  appearance: {
+    label: "Brand Studio — fresh install",
+    path: "/app/appearance",
+    element: <AppearancePage />,
+    data: appearanceLoaderData(),
+  },
+  "appearance-free": {
+    label: "Brand Studio — Free plan",
+    path: "/app/appearance",
+    element: <AppearancePage />,
+    data: appearanceLoaderData({ pro: false }),
   },
   questions: { label: "Customer questions", path: "/app/questions", element: <QuestionsPage />, data: questionsLoaderData() },
   "questions-empty": {
