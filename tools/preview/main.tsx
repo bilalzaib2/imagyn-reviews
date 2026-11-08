@@ -11,7 +11,14 @@ import DashboardPage from "../../app/routes/app._index";
 import ReviewsPage from "../../app/routes/app.reviews";
 import QuestionsPage from "../../app/routes/app.questions";
 import AppearancePage from "../../app/routes/app.appearance";
-import { appearanceLoaderData, dashboardLoaderData, reviewsLoaderData, questionsLoaderData } from "./fixtures";
+import EmailStudioPage from "../../app/routes/app.email-studio";
+import {
+  appearanceLoaderData,
+  dashboardLoaderData,
+  emailStudioLoaderData,
+  reviewsLoaderData,
+  questionsLoaderData,
+} from "./fixtures";
 
 // Each screen is mounted through a memory router whose loader returns the fixture, which is
 // exactly how the real route receives its data — so useLoaderData, useSearchParams and
@@ -42,6 +49,18 @@ const SCREENS: Record<string, { label: string; path: string; element: JSX.Elemen
     path: "/app/appearance",
     element: <AppearancePage />,
     data: appearanceLoaderData({ pro: false }),
+  },
+  "email-studio": {
+    label: "Email Studio — defaults",
+    path: "/app/email-studio",
+    element: <EmailStudioPage />,
+    data: emailStudioLoaderData(),
+  },
+  "email-studio-free": {
+    label: "Email Studio — Free plan",
+    path: "/app/email-studio",
+    element: <EmailStudioPage />,
+    data: emailStudioLoaderData({ pro: false }),
   },
   questions: { label: "Customer questions", path: "/app/questions", element: <QuestionsPage />, data: questionsLoaderData() },
   "questions-empty": {

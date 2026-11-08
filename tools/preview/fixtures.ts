@@ -227,3 +227,34 @@ export function appearanceLoaderData({ fresh = true, pro = true } = {}) {
     surfaceOverrides: [],
   };
 }
+
+// ----------------------------------------------------------------- Email Studio
+
+import { getDefaultEmailTemplateContent } from "../../app/services/email.shared";
+
+/** Uses the real shipped defaults, so this is what a merchant who never opens the editor has. */
+export function emailStudioLoaderData({ pro = true, withLogo = false } = {}) {
+  return {
+    type: "review_request" as const,
+    content: getDefaultEmailTemplateContent("review_request"),
+    storeName: "Verve Outdoor",
+    canUseCustomBranding: pro,
+    canUseEmailReminders: pro,
+    canUseBrandedEmailSender: pro,
+    emailSenderName: pro ? "Verve Outdoor" : null,
+    senderIdentity: {
+      displayName: "Verve Outdoor",
+      fromAddress: "requests+verveoutdoor.com@notifications.imagyn.co",
+      fromAddressIsMerchantScoped: true,
+      fromAddressConfigured: true,
+      replyTo: "hello@verveoutdoor.com",
+      replyToSource: "verified-store",
+    },
+    sharedBranding: {
+      emailLogoUrl: withLogo ? "https://cdn.shopify.com/s/files/1/0000/0000/files/logo.png" : null,
+      emailLogoDarkUrl: null,
+      // Always null now: the Admin API has no shop.brand (see shopBrandLogo.server.ts).
+      shopBrandLogoUrl: null,
+    },
+  };
+}

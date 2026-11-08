@@ -173,12 +173,12 @@
   color: var(--color-text);
 }
 
+/* Sentence case, like every other chip in the app since the status badges were converted.
+   This was the last uppercase label left on any merchant screen. */
 .currentTag {
   flex-shrink: 0;
   font-size: var(--text-xs);
-  font-weight: var(--weight-semibold);
-  letter-spacing: var(--tracking-caps);
-  text-transform: uppercase;
+  font-weight: var(--weight-medium);
   color: var(--color-brand-strong);
   background: var(--color-brand-soft);
   border-radius: var(--radius-full);

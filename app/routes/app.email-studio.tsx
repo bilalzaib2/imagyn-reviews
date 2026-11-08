@@ -987,6 +987,17 @@ export default function EmailStudioPage() {
         <Container>
           <SettingsBreadcrumb current="Email Studio" />
 
+          {/* Every other screen names itself in an h1. This one went from a breadcrumb
+              straight to section-level h2s, which leaves the page with no top-level heading
+              for a screen reader to land on and no visual anchor above the tab row. */}
+          <header className={shellStyles.headerContent}>
+            <h1 className={shellStyles.title}>Email Studio</h1>
+            <p className={shellStyles.subtitle}>
+              Design the emails that ask your customers for a review. Changes preview instantly and
+              nothing sends until you save.
+            </p>
+          </header>
+
           <div className={styles.previewToggle} role="tablist" aria-label="Email template">
             {TEMPLATE_TABS.map((tab) => {
               const isActive = tab.type === activeType;
