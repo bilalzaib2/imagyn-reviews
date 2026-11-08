@@ -12,9 +12,11 @@ import ReviewsPage from "../../app/routes/app.reviews";
 import QuestionsPage from "../../app/routes/app.questions";
 import AppearancePage from "../../app/routes/app.appearance";
 import EmailStudioPage from "../../app/routes/app.email-studio";
+import CouponsPage from "../../app/routes/app.settings.coupons";
 import {
   appearanceLoaderData,
   dashboardLoaderData,
+  couponsLoaderData,
   emailStudioLoaderData,
   reviewsLoaderData,
   questionsLoaderData,
@@ -61,6 +63,18 @@ const SCREENS: Record<string, { label: string; path: string; element: JSX.Elemen
     path: "/app/email-studio",
     element: <EmailStudioPage />,
     data: emailStudioLoaderData({ pro: false }),
+  },
+  coupons: {
+    label: "Settings › Coupons",
+    path: "/app/settings/coupons",
+    element: <CouponsPage />,
+    data: couponsLoaderData(),
+  },
+  "coupons-empty": {
+    label: "Settings › Coupons — empty",
+    path: "/app/settings/coupons",
+    element: <CouponsPage />,
+    data: couponsLoaderData({ empty: true }),
   },
   questions: { label: "Customer questions", path: "/app/questions", element: <QuestionsPage />, data: questionsLoaderData() },
   "questions-empty": {

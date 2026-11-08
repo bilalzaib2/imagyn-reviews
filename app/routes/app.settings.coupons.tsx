@@ -235,6 +235,24 @@ const REDEMPTION_STATUS_TONE: Record<RedemptionRecord["status"], StatusBadgeTone
   revoked: "neutral",
 };
 
+// Merchant-facing wording for the stored enum values.
+//
+// These used to be rendered raw and read correctly only because the badge applied
+// text-transform: uppercase. Once badges moved to sentence case the mask came off and the
+// page showed "issued", "revoked", "failed" in lower case. A stored value is not a label.
+const REDEMPTION_STATUS_LABEL: Record<RedemptionRecord["status"], string> = {
+  issued: "Issued",
+  failed: "Failed",
+  revoked: "Revoked",
+};
+
+const COUPON_STATUS_LABEL: Record<CouponRecord["status"], string> = {
+  draft: "Draft",
+  active: "Active",
+  paused: "Paused",
+  ended: "Ended",
+};
+
 const dateFormatter = new Intl.DateTimeFormat("en", { month: "short", day: "numeric", year: "numeric" });
 
 /** Built per coupon row rather than once at module scope, so the action cells can reach the
@@ -264,7 +282,7 @@ function redemptionColumns(
     header: "Status",
     width: "14%",
     render: (row) => (
-      <StatusBadge tone={REDEMPTION_STATUS_TONE[row.status]}>{row.status}</StatusBadge>
+      <StatusBadge tone={REDEMPTION_STATUS_TONE[row.status]}>{REDEMPTION_STATUS_LABEL[row.status]}</StatusBadge>
     ),
   },
   {
@@ -346,7 +364,7 @@ function CouponRow({
       <div className={styles.cardHeader}>
         <div>
           <p className={styles.settingsGroupLabel}>
-            {coupon.name} <StatusBadge tone={STATUS_TONE[coupon.status]}>{coupon.status}</StatusBadge>
+            {coupon.name} <StatusBadge tone={STATUS_TONE[coupon.status]}>{COUPON_STATUS_LABEL[coupon.status]}</StatusBadge>
           </p>
           <p className={styles.mutedText}>
             {formatDiscount(coupon)} · {coupon.eligibility === "new_customers" ? "New customers only" : "All customers"} ·{" "}
@@ -574,9 +592,11 @@ export default function SettingsCouponsPage() {
           </>
         ) : null}
 
-        <Button type="button" variant="primary" onClick={handleCreate} disabled={isCreating || !name}>
-          {isCreating ? "Creating…" : "Create coupon"}
-        </Button>
+        <div className={styles.formActions}>
+          <Button type="button" variant="primary" onClick={handleCreate} disabled={isCreating || !name}>
+            {isCreating ? "Creating…" : "Create coupon"}
+          </Button>
+        </div>
       </Section>
 
       <Section title="Your coupons" description="Every campaign this store has created, and its real, live usage.">

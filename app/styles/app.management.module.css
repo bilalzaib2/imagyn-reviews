@@ -267,3 +267,15 @@
   justify-content: flex-end;
   gap: var(--space-2);
 }
+
+/* A form's submit button should be the size of its label.
+   -------------------------------------------------------
+   Section is a minmax(0, 1fr) grid, so every direct child stretches to the full column —
+   which turned "Create coupon" into a 1160px bar spanning the whole content area. Wrapping
+   it in a flex row lets the button size to its own content again, whatever the column does. */
+.formActions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-3);
+  align-items: center;
+}

@@ -258,3 +258,111 @@ export function emailStudioLoaderData({ pro = true, withLogo = false } = {}) {
     },
   };
 }
+
+// ------------------------------------------------------------- Settings › Coupons
+
+export function couponsLoaderData({ empty = false } = {}) {
+  const coupons = empty
+    ? []
+    : [
+        {
+          id: "c1",
+          name: "Thanks for reviewing",
+          status: "active" as const,
+          discountType: "percentage" as const,
+          discountValue: 10,
+          eligibility: "all" as const,
+          minimumOrderAmount: 25,
+          startsAt: new Date("2026-10-01").toISOString(),
+          endsAt: new Date("2026-12-31").toISOString(),
+          usageLimit: 500,
+          perCustomerLimit: 1,
+          customerTargeting: "all" as const,
+          specificCustomerIds: [],
+          shopifyDiscountId: "gid://shopify/DiscountCodeNode/123",
+          discountCode: "THANKSFORR-9K2XQ1",
+          createdAt: new Date("2026-10-01").toISOString(),
+          updatedAt: new Date("2026-11-01").toISOString(),
+          issuedCount: 3,
+        },
+        {
+          id: "c2",
+          name: "Winter photo reviews",
+          status: "paused" as const,
+          discountType: "fixed_amount" as const,
+          discountValue: 5,
+          eligibility: "new_customers" as const,
+          minimumOrderAmount: null,
+          startsAt: new Date("2026-11-01").toISOString(),
+          endsAt: null,
+          usageLimit: null,
+          perCustomerLimit: 1,
+          customerTargeting: "all" as const,
+          specificCustomerIds: [],
+          shopifyDiscountId: "gid://shopify/DiscountCodeNode/456",
+          discountCode: "WINTERPHOT-4B8ZZ0",
+          createdAt: new Date("2026-11-01").toISOString(),
+          updatedAt: new Date("2026-11-05").toISOString(),
+          issuedCount: 0,
+        },
+        {
+          id: "c3",
+          name: "Draft — spring campaign",
+          status: "draft" as const,
+          discountType: "percentage" as const,
+          discountValue: 15,
+          eligibility: "all" as const,
+          minimumOrderAmount: null,
+          startsAt: new Date("2026-11-08").toISOString(),
+          endsAt: null,
+          usageLimit: null,
+          perCustomerLimit: 1,
+          customerTargeting: "all" as const,
+          specificCustomerIds: [],
+          shopifyDiscountId: null,
+          discountCode: null,
+          createdAt: new Date("2026-11-08").toISOString(),
+          updatedAt: new Date("2026-11-08").toISOString(),
+          issuedCount: 0,
+        },
+      ];
+
+  return {
+    coupons,
+    // Only campaigns that have issued anything appear here — matching the loader.
+    redemptionsByCoupon: empty
+      ? {}
+      : {
+          c1: [
+            {
+              id: "r1",
+              couponId: "c1",
+              customerEmail: "amelia.hartley@example.com",
+              discountCode: "THANKSFORR-9K2XQ1-AB12",
+              status: "issued" as const,
+              reason: null,
+              createdAt: new Date("2026-11-02").toISOString(),
+            },
+            {
+              id: "r2",
+              couponId: "c1",
+              customerEmail: "thomas.abernathy-whitfield@example.com",
+              discountCode: "THANKSFORR-9K2XQ1-CD34",
+              status: "revoked" as const,
+              reason: null,
+              createdAt: new Date("2026-11-03").toISOString(),
+            },
+            {
+              id: "r3",
+              couponId: "c1",
+              customerEmail: "yuki.tanaka@example.com",
+              discountCode: null,
+              status: "failed" as const,
+              reason: "Shopify rejected the discount code.",
+              createdAt: new Date("2026-11-04").toISOString(),
+            },
+          ],
+        },
+    storeDomain: "verveoutdoor.com",
+  };
+}
