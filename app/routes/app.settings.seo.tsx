@@ -169,8 +169,16 @@ function SparkleIcon() {
   );
 }
 
-function formatGeneratedAt(value: Date | string) {
-  return new Intl.DateTimeFormat("en", { month: "short", day: "numeric", year: "numeric" }).format(new Date(value));
+function formatGeneratedAt(value: Date | string | null | undefined) {
+  // Intl.DateTimeFormat THROWS a RangeError on an invalid date, and this is called during
+  // render — so one unparseable timestamp takes the whole SEO settings page to its error
+  // boundary. The value comes from a stored row, which is exactly the kind of thing that can
+  // be null on an older record or a partially-written one. A missing date is worth an em
+  // dash, never a blank screen.
+  const date = value == null ? null : new Date(value);
+  if (!date || Number.isNaN(date.getTime())) return "—";
+
+  return new Intl.DateTimeFormat("en", { month: "short", day: "numeric", year: "numeric" }).format(date);
 }
 
 export default function SettingsSeoPage() {

@@ -13,10 +13,18 @@ import QuestionsPage from "../../app/routes/app.questions";
 import AppearancePage from "../../app/routes/app.appearance";
 import EmailStudioPage from "../../app/routes/app.email-studio";
 import CouponsPage from "../../app/routes/app.settings.coupons";
+import SettingsRequestsPage from "../../app/routes/app.settings.requests";
+import SettingsModerationPage from "../../app/routes/app.settings.moderation";
+import SettingsSeoPage from "../../app/routes/app.settings.seo";
+import SettingsTrustPage from "../../app/routes/app.settings.trust";
 import {
   appearanceLoaderData,
   dashboardLoaderData,
   couponsLoaderData,
+  settingsRequestsLoaderData,
+  settingsModerationLoaderData,
+  settingsSeoLoaderData,
+  settingsTrustLoaderData,
   emailStudioLoaderData,
   reviewsLoaderData,
   questionsLoaderData,
@@ -75,6 +83,36 @@ const SCREENS: Record<string, { label: string; path: string; element: JSX.Elemen
     path: "/app/settings/coupons",
     element: <CouponsPage />,
     data: couponsLoaderData({ empty: true }),
+  },
+  "settings-requests": {
+    label: "Settings › Review requests",
+    path: "/app/settings/requests",
+    element: <SettingsRequestsPage />,
+    data: settingsRequestsLoaderData(),
+  },
+  "settings-requests-free": {
+    label: "Settings › Review requests — Free plan",
+    path: "/app/settings/requests",
+    element: <SettingsRequestsPage />,
+    data: settingsRequestsLoaderData({ pro: false }),
+  },
+  "settings-moderation": {
+    label: "Settings › Moderation",
+    path: "/app/settings/moderation",
+    element: <SettingsModerationPage />,
+    data: settingsModerationLoaderData(),
+  },
+  "settings-seo": {
+    label: "Settings › SEO",
+    path: "/app/settings/seo",
+    element: <SettingsSeoPage />,
+    data: settingsSeoLoaderData(),
+  },
+  "settings-trust": {
+    label: "Settings › Trust",
+    path: "/app/settings/trust",
+    element: <SettingsTrustPage />,
+    data: settingsTrustLoaderData(),
   },
   questions: { label: "Customer questions", path: "/app/questions", element: <QuestionsPage />, data: questionsLoaderData() },
   "questions-empty": {

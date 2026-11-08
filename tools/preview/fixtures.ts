@@ -366,3 +366,58 @@ export function couponsLoaderData({ empty = false } = {}) {
     storeDomain: "verveoutdoor.com",
   };
 }
+
+// --------------------------------------------------------- Settings › other screens
+
+export function settingsRequestsLoaderData({ pro = true, enabled = true } = {}) {
+  return {
+    autoRequestEnabled: enabled,
+    autoRequestDelayDays: 7,
+    planIncludesAutomaticRequests: pro,
+    reminderEmailsEnabled: enabled,
+    planIncludesEmailReminders: pro,
+    reminder1DelayDays: 3,
+    reminderFinalDelayDays: 7,
+  };
+}
+
+export function settingsModerationLoaderData({ enabled = true } = {}) {
+  return {
+    moderation: {
+      enabled,
+      minRating: 4,
+      requireVerified: false,
+      holdLinks: true,
+      holdProfanity: true,
+      bannedWords: "competitor\nscam",
+      notifyOnHold: true,
+      notifyEmail: "owner@verveoutdoor.com",
+    },
+    newReviewNotification: { enabled: true, email: "owner@verveoutdoor.com" },
+  };
+}
+
+export function settingsSeoLoaderData({ pro = true } = {}) {
+  return {
+    canUseAI: pro,
+    feed: { enabled: true, token: "feedtoken123", url: "https://app.imagyn.co/feeds/verveoutdoor/google.xml" },
+    reviewSiteUrl: "https://app.imagyn.co/reviews-site/verve-outdoor",
+    storeAiSummary: {
+      summary: "Shoppers highlight build quality and fast delivery; sizing is the recurring criticism.",
+      recommendation: "Add a sizing note to product pages.",
+      reviewCountUsed: 64,
+      generatedAt: new Date("2026-11-06").toISOString(),
+    },
+    aiSummaryOnProductReviewsEnabled: true,
+    aiSummaryOnStoreReviewsEnabled: false,
+    aiSummaryOnCarouselEnabled: false,
+    aiSummaryOnReviewSiteEnabled: false,
+    // Opt-in since 2026-11-08 — a fresh store is private until the merchant chooses.
+    publicNetworkEnabled: false,
+    isDevelopmentStore: false,
+  };
+}
+
+export function settingsTrustLoaderData() {
+  return { storeDomain: "verveoutdoor.com", trust: dashboardLoaderData().trust };
+}

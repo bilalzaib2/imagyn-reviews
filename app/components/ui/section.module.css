@@ -16,6 +16,20 @@
   min-width: 0;
 }
 
+/* A button is as wide as its label, not as wide as the page.
+   ---------------------------------------------------------
+   This grid stretches every direct child to the full column, which silently turned each
+   form's submit into a full-bleed bar — measured at 1160px on Settings → Review requests
+   ("Save" twice, and "Send Test Email" at 1110px) and on Settings → Coupons before it was
+   wrapped. Nothing in the markup asked for that; it is simply what a grid item does.
+
+   `justify-self: start` only affects a button placed DIRECTLY in a section. One inside a
+   row, a toolbar or any other wrapper is positioned by that wrapper and is untouched, so a
+   deliberately full-width control just lives in a container, as it already did. */
+.section > button {
+  justify-self: start;
+}
+
 .header {
   display: flex;
   align-items: flex-start;
