@@ -1137,3 +1137,58 @@ been exercised.
 1. Add Email Studio and Settings to the harness — same method, same expected class of defect.
 2. Then widget defaults (priority B).
 3. Priority D's functional QA still has no browser-exercised merchant action.
+
+---
+
+## 20. Harness: Email Studio, Brand Studio, Coupons — 2026-11-09
+
+**31 commits local, unpushed. 1,999 tests / 103 files**, typecheck, lint, build clean.
+
+Harness screens now: `dashboard`, `dashboard-fresh`, `appearance`, `appearance-free`,
+`email-studio`, `email-studio-free`, `coupons`, `coupons-empty`, `reviews`, `reviews-empty`,
+`questions`, `questions-empty`.
+
+### 20.1 Defects found by rendering, and fixed
+
+| Screen | Defect | Status |
+|---|---|---|
+| Six screens | `ContextualSaveBar` called `useAppBridge()` unguarded; it throws synchronously and took the whole route to its error boundary | fixed |
+| Dashboard | fresh install greeted with "You're all caught up" | fixed |
+| Dashboard | led with five zero tiles, setup guide beneath | fixed |
+| Email Studio | **no `<h1>` at all** — breadcrumb straight to h2s | fixed |
+| Email Studio | `.currentTag` was the last uppercase chip in the app | fixed |
+| Coupons | statuses rendered as raw lower-case enums | fixed |
+| Coupons | submit button stretched to 1160px | fixed |
+
+### 20.2 A regression I caused, and how it surfaced
+
+Converting status badges to sentence case removed `text-transform: uppercase`, which had been
+**masking two badges that rendered a raw database enum**. The page started showing "issued",
+"revoked", "failed", "active". Every other badge in the app already used a label map, so the
+damage was one file — but only rendering the screen revealed it.
+
+`app/components/ui/statusBadgeLabels.test.ts` now forbids `<StatusBadge>{x.status}</StatusBadge>`
+anywhere.
+
+### 20.3 Bug class closed
+
+Scanned every route and component for the unguarded `useAppBridge()` pattern.
+`ContextualSaveBar` was the only real instance; the two other matches are comments explaining
+why `AppReviewPrompt` and `ThemeBlockStatus` read `window.shopify` defensively instead.
+
+### 20.4 What the harness does and does not prove
+
+It renders real components with real stylesheets, so **layout, typography, density,
+responsive behaviour, empty states and render-time crashes are genuinely verified**. It does
+not exercise loaders, actions, App Bridge or Shopify — the preview iframes on Brand Studio
+and Email Studio show harness content rather than a real widget preview, which is an artifact,
+not a defect.
+
+### 20.5 Next
+
+1. Remaining Settings screens into the harness: moderation, rewards, requests, seo, trust,
+   import, referrals, productGroups.
+2. Widget defaults (priority 3), including the actual storefront output rather than only the
+   configuration screen.
+3. Brand Studio logo upload/preview/persistence (priority 1) — still unexercised.
+4. Priority 6's full merchant workflow still needs the real admin; the harness cannot do it.
