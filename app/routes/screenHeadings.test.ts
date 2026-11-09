@@ -59,3 +59,39 @@ describe("uppercase is gone from merchant-facing chips", () => {
     expect(rule![0]).not.toContain("text-transform: uppercase");
   });
 });
+
+// Uppercase micro-labels: gone from the admin, deliberately kept on the storefront.
+//
+// The merchant-facing badges were converted screen by screen as each was rendered. These
+// pin the result so a new one cannot creep back in, and record WHY four rules remain: they
+// style customer-facing surfaces (the public review site, review links, and the preview of
+// the storefront trust badge), which is a different design surface from the admin and not
+// something to restyle on the strength of feedback about the dashboard.
+describe("uppercase survives only where it is not admin chrome", () => {
+  const ADMIN_STYLESHEETS = globSync("app/styles/app*.module.css").concat(
+    globSync("app/components/**/*.module.css"),
+  );
+
+  /** Selectors allowed to keep uppercase, with the reason. */
+  const STOREFRONT_EXCEPTIONS = new Set(["trustBadgePreviewCertified"]);
+
+  it.each(ADMIN_STYLESHEETS)("%s has no uppercase admin labels", (file) => {
+    const css = readFileSync(file, "utf8");
+    const offenders: string[] = [];
+
+    for (const match of css.matchAll(/(^\.[\w-]+)([^{]*)\{([^}]*)\}/gm)) {
+      if (!/text-transform:\s*uppercase/.test(match[3])) continue;
+      const selector = match[1].slice(1);
+      if (!STOREFRONT_EXCEPTIONS.has(selector)) offenders.push(selector);
+    }
+
+    expect(offenders).toEqual([]);
+  });
+
+  it("the storefront stylesheets are deliberately untouched", () => {
+    // If these ever need changing it is a storefront design decision, not a dashboard one.
+    for (const file of ["app/styles/review-site.module.css", "app/styles/review-link.module.css"]) {
+      expect(readFileSync(file, "utf8")).toMatch(/text-transform: uppercase/);
+    }
+  });
+});

@@ -421,3 +421,60 @@ export function settingsSeoLoaderData({ pro = true } = {}) {
 export function settingsTrustLoaderData() {
   return { storeDomain: "verveoutdoor.com", trust: dashboardLoaderData().trust };
 }
+
+// ---------------------------------------------------------------------- Widgets
+
+import { getDefaultWidgetSettings } from "../../app/services/widget.shared";
+
+const INSTALL_KEYS = [
+  "product-reviews-widget",
+  "product-rating-badge",
+  "collection-rating-badge",
+  "review-carousel",
+  "medals-showcase",
+  "store-reviews",
+  "ai-review-summary",
+  "store-ai-summary",
+] as const;
+
+/**
+ * `fresh` is a merchant who installed minutes ago: no saved widget, nothing in the theme.
+ * `existing` has a configured widget and a mix of real detection outcomes, including the
+ * "unknown" state — which is the one most likely to be rendered carelessly.
+ */
+export function widgetsLoaderData({ fresh = true, pro = true } = {}) {
+  return {
+    widgets: fresh
+      ? []
+      : [
+          {
+            id: "w1",
+            storeId: "store_1",
+            productId: null,
+            name: "Product reviews",
+            type: "review-list" as const,
+            settings: getDefaultWidgetSettings("review-list"),
+            createdAt: new Date("2026-10-02").toISOString(),
+            updatedAt: new Date("2026-11-01").toISOString(),
+          },
+        ],
+    shop: "verveonline.myshopify.com",
+    error: null,
+    canUseMultipleWidgetThemes: pro,
+    canUseVideoReviewsCarousel: pro,
+    proPlan: { name: "Pro", price: 15, currencyCode: "USD" },
+    appearanceTokens: getDefaultAppearanceTokens(),
+    installStatus: Object.fromEntries(
+      INSTALL_KEYS.map((key, index) => [
+        key,
+        fresh
+          ? { state: "not-installed" as const }
+          : index === 0
+            ? { state: "installed" as const, checkedUrl: "https://verveoutdoor.com/products/brown-ceramic-plate" }
+            : index === 1
+              ? { state: "unknown" as const, reason: "The storefront is password protected, so it could not be checked." }
+              : { state: "not-installed" as const },
+      ]),
+    ),
+  };
+}

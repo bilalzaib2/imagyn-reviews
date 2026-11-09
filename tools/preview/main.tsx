@@ -17,6 +17,7 @@ import SettingsRequestsPage from "../../app/routes/app.settings.requests";
 import SettingsModerationPage from "../../app/routes/app.settings.moderation";
 import SettingsSeoPage from "../../app/routes/app.settings.seo";
 import SettingsTrustPage from "../../app/routes/app.settings.trust";
+import WidgetsPage from "../../app/routes/app.widgets";
 import {
   appearanceLoaderData,
   dashboardLoaderData,
@@ -25,6 +26,7 @@ import {
   settingsModerationLoaderData,
   settingsSeoLoaderData,
   settingsTrustLoaderData,
+  widgetsLoaderData,
   emailStudioLoaderData,
   reviewsLoaderData,
   questionsLoaderData,
@@ -113,6 +115,24 @@ const SCREENS: Record<string, { label: string; path: string; element: JSX.Elemen
     path: "/app/settings/trust",
     element: <SettingsTrustPage />,
     data: settingsTrustLoaderData(),
+  },
+  widgets: {
+    label: "Widgets — fresh install",
+    path: "/app/widgets",
+    element: <WidgetsPage />,
+    data: widgetsLoaderData(),
+  },
+  "widgets-existing": {
+    label: "Widgets — existing merchant",
+    path: "/app/widgets",
+    element: <WidgetsPage />,
+    data: widgetsLoaderData({ fresh: false }),
+  },
+  "widgets-free": {
+    label: "Widgets — Free plan",
+    path: "/app/widgets",
+    element: <WidgetsPage />,
+    data: widgetsLoaderData({ fresh: false, pro: false }),
   },
   questions: { label: "Customer questions", path: "/app/questions", element: <QuestionsPage />, data: questionsLoaderData() },
   "questions-empty": {

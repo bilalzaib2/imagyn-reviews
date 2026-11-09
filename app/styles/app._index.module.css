@@ -494,8 +494,6 @@
   color: var(--color-ai);
   font-size: var(--text-xs);
   font-weight: 600;
-  letter-spacing: 0.04em;
-  text-transform: uppercase;
 }
 
 .aiSpotlightProduct {
