@@ -135,3 +135,43 @@ collection, Language.
 
 Ahead of Judge.me: bulk archive, AI reply drafting with tone, configurable coupon expiry,
 one-tap star ratings in request emails, and an honest unknown state for widget installation.
+
+---
+
+## 10. Addendum — 2026-11-10 (later)
+
+### 10.1 Defects found and fixed since §1
+
+| Screen | Defect | Evidence |
+|---|---|---|
+| Review requests | Order numbers rendered `##1040` — the column prefixed `#` unconditionally, but Shopify's `fulfillment.name` already carries one, so **every automatically-created request** was affected | rendered; now `#1040` |
+| Review requests | Ten columns in 671px (Order 34px, Scheduled 42px) beside a permanent detail panel | staged shedding; Customer 76→134px, Scheduled 42→74px |
+| Brand Studio | Logo was a URL field only | real file upload, shared limits, specific error states |
+| Settings (all) | Submit buttons stretched to the full column | fixed at the Section layer, 1160→64px |
+| SEO settings | An invalid stored date threw during render, blanking the page | hardened to an em dash |
+
+### 10.2 Screens now rendered and inspected
+
+Dashboard (populated + fresh), Reviews (+ empty), Customer questions (+ empty), Brand Studio
+(+ Free), Email Studio (+ Free), Coupons (+ empty), Settings overview, Review requests
+(+ empty, Free), Moderation, SEO, Trust, Review rewards (+ empty), Referrals, Widgets (fresh,
+existing, Free), Analytics (populated, empty, Free), Medals (+ fresh), Billing (+ trial).
+
+Not yet rendered: Products, Settings → Import, Settings → Product groups.
+
+### 10.3 Two commercial questions for the owner
+
+1. **Pro is priced at `$9.99` in `app/services/billing/plans.ts`**, but the locked pricing
+   decision was Free $0 / **Pro $15/month**. Not changed here: Shopify Managed Pricing holds
+   the real price, so editing the code alone would desync the two, and the number is a
+   commercial call.
+2. **The pricing page sells two features marked "Coming soon"** — Advanced email styling and
+   Advanced analytics. They are honestly labelled, but they are bullets under a paid plan.
+
+### 10.4 Confirmed correct, not changed
+
+- The two-tier lock works: `scale` is defined for existing subscribers but excluded from
+  `PLAN_ORDER`, so neither `getAllPlans()` nor the billing page ever renders it.
+- Email Studio's "JPEG, PNG, WebP or SVG" message looks inconsistent with its raster
+  allowlist but is correct — SVG takes a separate validate-and-rasterize path first.
+- Review rewards offers no rating condition and explains why, visible in the rendered UI.

@@ -21,6 +21,8 @@ import WidgetsPage from "../../app/routes/app.widgets";
 import AnalyticsPage from "../../app/routes/app.analytics";
 import SettingsIndexPage from "../../app/routes/app.settings._index";
 import RequestsPage from "../../app/routes/app.requests";
+import MedalsPage from "../../app/routes/app.medals";
+import BillingPage from "../../app/routes/app.billing";
 import SettingsRewardsPage from "../../app/routes/app.settings.rewards";
 import SettingsReferralsPage from "../../app/routes/app.settings.referrals";
 import {
@@ -35,6 +37,8 @@ import {
   analyticsLoaderData,
   settingsIndexLoaderData,
   requestsLoaderData,
+  medalsLoaderData,
+  billingLoaderData,
   settingsRewardsLoaderData,
   settingsReferralsLoaderData,
   emailStudioLoaderData,
@@ -203,6 +207,30 @@ const SCREENS: Record<string, { label: string; path: string; element: JSX.Elemen
     path: "/app/requests",
     element: <RequestsPage />,
     data: requestsLoaderData({ pro: false }),
+  },
+  medals: {
+    label: "Medals",
+    path: "/app/medals",
+    element: <MedalsPage />,
+    data: medalsLoaderData(),
+  },
+  "medals-fresh": {
+    label: "Medals — fresh install",
+    path: "/app/medals",
+    element: <MedalsPage />,
+    data: medalsLoaderData({ fresh: true }),
+  },
+  billing: {
+    label: "Billing — Starter",
+    path: "/app/billing",
+    element: <BillingPage />,
+    data: billingLoaderData(),
+  },
+  "billing-trial": {
+    label: "Billing — Pro trial",
+    path: "/app/billing",
+    element: <BillingPage />,
+    data: billingLoaderData({ plan: "pro", trialing: true }),
   },
   questions: { label: "Customer questions", path: "/app/questions", element: <QuestionsPage />, data: questionsLoaderData() },
   "questions-empty": {

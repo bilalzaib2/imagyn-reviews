@@ -664,3 +664,49 @@ export function requestsLoaderData({ empty = false, pro = true } = {}) {
     canUseEmailReminders: pro,
   };
 }
+
+// ----------------------------------------------------------------------- Medals
+
+import { ACHIEVEMENT_DEFINITIONS, groupByFamily } from "../../app/services/achievements.shared";
+
+/** Built from the REAL medal definitions, so this is the actual shipped set, not a mock-up. */
+export function medalsLoaderData({ fresh = false } = {}) {
+  const statuses = ACHIEVEMENT_DEFINITIONS.map((definition, index) => ({
+    ...definition,
+    // A fresh store has earned nothing; an established one has a realistic mix.
+    unlocked: fresh ? false : index % 3 === 0,
+    earnedAt: !fresh && index % 3 === 0 ? new Date(2026, 9, 10 + index).toISOString() : null,
+    progress: fresh || index % 3 !== 0 ? { current: fresh ? 0 : index * 3, target: 50 } : null,
+  }));
+
+  const families = Array.from(groupByFamily(statuses).entries()).map(([family, familyStatuses]) => ({
+    family,
+    statuses: familyStatuses,
+  }));
+
+  return {
+    families,
+    earnedCount: statuses.filter((s) => s.unlocked).length,
+    totalCount: statuses.length,
+  };
+}
+
+// ---------------------------------------------------------------------- Billing
+
+import { getAllPlans } from "../../app/services/billing/plans";
+
+/** Real plan metadata — the prices and copy a merchant actually sees. */
+export function billingLoaderData({ plan = "starter", trialing = false, devStore = false } = {}) {
+  return {
+    plans: getAllPlans(),
+    snapshot: {
+      storeId: "store_1",
+      plan,
+      planStatus: trialing ? "trialing" : plan === "starter" ? "active" : "active",
+      isDevelopmentStore: devStore,
+      isTrialing: trialing,
+      trialEndsAt: trialing ? new Date(Date.now() + 9 * 86_400_000).toISOString() : null,
+      hasAccess: devStore || plan !== "starter" || true,
+    },
+  };
+}
