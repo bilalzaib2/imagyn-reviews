@@ -10,6 +10,12 @@ import { Container } from "../components/ui/Container";
 import { ContextualSaveBar } from "../components/ui/ContextualSaveBar";
 import { Section } from "../components/ui/Section";
 import { SettingsBreadcrumb } from "../components/ui/SettingsBreadcrumb";
+import {
+  ALLOWED_LOGO_MIME_TYPES,
+  MAX_LOGO_SIZE_BYTES,
+  MAX_SVG_SIZE_BYTES,
+  SVG_MIME_TYPE,
+} from "../services/logoUpload.shared";
 import { TemplateGallery } from "../components/email/TemplateGallery";
 import { authenticateAdminDeduped } from "../services/auth-dedupe.server";
 import { getOrCreateStore, updateEmailBrandingLogos, updateEmailSenderName } from "../services/store.server";
@@ -87,17 +93,8 @@ const isReminderType = (type: EmailTemplateType) => type === "reminder_1" || typ
  *  request exists for it, so following it would land on the "link not found" page. */
 const SAMPLE_REVIEW_URL = "https://example.com/r/sample-token";
 
-// A logo renders small (see ReviewRequestEmail.tsx), so there is no reason to accept anything
-// large; keeping this well under reviewMedia.server.ts's 5MB review-photo limit is deliberate.
-const MAX_LOGO_SIZE_BYTES = 1 * 1024 * 1024;
-// Raster formats are uploaded as-is. SVG is handled by a separate two-step path (validate +
-// sanitize server-side, rasterize to PNG client-side) — see the validate-svg intent below and
-// uploadLogoFile() in the component, which is why it is not in this list.
-const ALLOWED_LOGO_MIME_TYPES = ["image/jpeg", "image/png", "image/webp"];
-const SVG_MIME_TYPE = "image/svg+xml";
-/** A logo is a small drawing. Anything larger is almost certainly an embedded raster or a
- *  pathological file, and a browser has to parse this before rasterizing it. */
-const MAX_SVG_SIZE_BYTES = 256 * 1024;
+// Limits live in logoUpload.shared.ts so Brand Studio enforces exactly the same ones — two
+// screens disagreeing about what a valid logo is would be worse than either rule alone.
 
 type LogoSlot = "light" | "dark";
 

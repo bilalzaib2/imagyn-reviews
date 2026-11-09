@@ -10,6 +10,8 @@ import { ContextualSaveBar } from "../components/ui/ContextualSaveBar";
 import { Section } from "../components/ui/Section";
 import { UpgradePrompt } from "../components/ui/UpgradePrompt";
 import { SettingsBreadcrumb } from "../components/ui/SettingsBreadcrumb";
+import { validateRasterLogo } from "../services/logoUpload.shared";
+import { getStorageProvider } from "../services/storage/provider.server";
 import { authenticateAdminDeduped } from "../services/auth-dedupe.server";
 import { getOrCreateStore } from "../services/store.server";
 import { appearanceService, type AppearanceRecord } from "../services/appearance.server";
@@ -61,6 +63,7 @@ type ActionData =
   | { ok: true; intent: "applyBrandEverywhere"; emailApplied: boolean }
   | { ok: true; intent: "saveOverride"; surfaceKey: SurfaceKey; tokens: Partial<AppearanceTokens> }
   | { ok: true; intent: "resetOverride"; surfaceKey: SurfaceKey }
+  | { ok: true; intent: "upload-logo"; url: string }
   | { ok: false; intent: string; error: string };
 
 export const loader = async ({ request }: LoaderFunctionArgs): Promise<LoaderData> => {
@@ -90,7 +93,7 @@ export const loader = async ({ request }: LoaderFunctionArgs): Promise<LoaderDat
 };
 
 export const action = async ({ request }: ActionFunctionArgs): Promise<ActionData> => {
-  const { session } = await authenticateAdminDeduped(request);
+  const { admin, session } = await authenticateAdminDeduped(request);
   const store = await getOrCreateStore(session.shop);
 
   const formData = await request.formData();
@@ -117,6 +120,25 @@ export const action = async ({ request }: ActionFunctionArgs): Promise<ActionDat
       await appearanceService.upsertActive(store.id, { tokens: safeTokens, preset });
 
       return { ok: true, intent: "save" };
+    }
+
+    // Uploads the file and hands back a URL; it is NOT persisted here. The merchant still
+    // has to save for it to become their brand logo, which matches how Email Studio's
+    // upload behaves and keeps "I picked a file" distinct from "I committed to it".
+    if (intent === "upload-logo") {
+      const file = formData.get("logo");
+      const rejection = validateRasterLogo(file instanceof File ? file : null);
+      if (rejection) {
+        return { ok: false, intent, error: rejection };
+      }
+
+      const image = file as File;
+      const uploaded = await getStorageProvider().uploadImage(
+        { buffer: Buffer.from(await image.arrayBuffer()), filename: image.name || "logo", mimeType: image.type },
+        { admin },
+      );
+
+      return { ok: true, intent: "upload-logo", url: uploaded.url };
     }
 
     if (intent === "reset") {
@@ -406,6 +428,8 @@ export default function AppearancePage() {
   const themeFetcher = useFetcher<ActionData>();
   const aiSuggestFetcher = useFetcher<ActionData>();
   const emailBrandFetcher = useFetcher<ActionData>();
+  /** Logo upload. Its own fetcher so an upload error never replaces a save confirmation. */
+  const logoFetcher = useFetcher<ActionData>();
   const overrideFetcher = useFetcher<ActionData>();
   const isSaving = fetcher.state !== "idle";
   const isThemeBusy = themeFetcher.state !== "idle";
@@ -596,6 +620,33 @@ export default function AppearancePage() {
   // unreadable accent is caught too, not just the global brand.
   // See appearance.shared.ts's checkAppearanceContrast for exactly what pairs this checks.
   const contrastWarnings: ContrastWarning[] = useMemo(() => checkAppearanceContrast(previewTokens), [previewTokens]);
+
+  const isUploadingLogo = logoFetcher.state !== "idle";
+  const logoUploadError =
+    logoFetcher.data && !logoFetcher.data.ok && logoFetcher.data.intent === "upload-logo"
+      ? logoFetcher.data.error
+      : null;
+
+  // A successful upload writes the URL into the draft, so the preview updates immediately
+  // and the Contextual Save Bar appears — the merchant still has to save, exactly as they
+  // would after typing a URL by hand.
+  useEffect(() => {
+    if (logoFetcher.state !== "idle") return;
+    const result = logoFetcher.data;
+    if (result?.ok && result.intent === "upload-logo") {
+      update("images", { logoUrl: result.url });
+    }
+    // `update` is stable for this purpose and including it would re-run on every draft edit.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [logoFetcher.state, logoFetcher.data]);
+
+  const uploadLogo = (file: File) => {
+    const body = new FormData();
+    body.set("_intent", "upload-logo");
+    body.set("logo", file);
+    // encType matters: a multipart body is the only way the File survives the request.
+    logoFetcher.submit(body, { method: "post", encType: "multipart/form-data" });
+  };
 
   const update = <C extends keyof AppearanceTokens>(category: C, patch: Partial<AppearanceTokens[C]>) => {
     setPreset("custom");
@@ -1063,16 +1114,44 @@ export default function AppearancePage() {
               <GroupLabel>Branding</GroupLabel>
 
               <Section title="Logo" description="A small mark shown in the Ratings & Reviews section.">
+                {/* Upload first, paste second. Asking a merchant for a URL means asking them
+                    to host an image somewhere and find its address — something most of them
+                    cannot do, and the reason this field sat empty. */}
+                <div className={styles.logoUploadRow}>
+                  <label className={styles.logoUploadButton}>
+                    {isUploadingLogo ? "Uploading…" : "Upload a logo"}
+                    <input
+                      type="file"
+                      accept="image/jpeg,image/png,image/webp"
+                      className={styles.visuallyHiddenInput}
+                      disabled={isUploadingLogo}
+                      onChange={(event) => {
+                        const file = event.target.files?.[0];
+                        // Cleared so picking the same file twice still fires a change.
+                        event.target.value = "";
+                        if (file) uploadLogo(file);
+                      }}
+                    />
+                  </label>
+                  {draftTokens.images.logoUrl ? (
+                    <Button type="button" variant="ghost" onClick={() => update("images", { logoUrl: null })}>
+                      Remove
+                    </Button>
+                  ) : null}
+                </div>
+
+                {logoUploadError ? <p className={styles.logoUploadError}>{logoUploadError}</p> : null}
+
                 <TextField
                   label="Logo URL"
-                  labelHidden
                   placeholder="https://…"
                   value={draftTokens.images.logoUrl ?? ""}
                   onChange={(value) => update("images", { logoUrl: value || null })}
                   autoComplete="off"
                 />
                 <p className={styles.mutedHint}>
-                  Paste a link to a hosted image (e.g. from your Shopify files). Leave blank to show no logo.
+                  JPEG, PNG or WebP, under 1MB. You can also paste a link to an image you already
+                  host. Leave blank to show no logo. SVG logos are uploaded from Email Studio.
                 </p>
               </Section>
 
