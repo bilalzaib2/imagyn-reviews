@@ -542,3 +542,62 @@ export function analyticsLoaderData({ empty = false, pro = true } = {}) {
     canUseAnalytics: pro,
   };
 }
+
+// ------------------------------------------------- Settings › index, rewards, referrals
+
+export function settingsIndexLoaderData({ pro = true } = {}) {
+  return {
+    planName: pro ? "Pro" : "Starter",
+    autoRequestEnabled: true,
+    reminderEmailsEnabled: true,
+    reminder1DelayDays: 3,
+    reminderFinalDelayDays: 7,
+    canUseAutomaticReviewRequests: pro,
+    canUseEmailReminders: pro,
+    canUseCustomBranding: pro,
+  };
+}
+
+export function settingsRewardsLoaderData({ enabled = true, empty = false } = {}) {
+  return {
+    settings: {
+      enabled,
+      valueType: "percentage" as const,
+      value: 10,
+      requireVerified: true,
+      requirePhoto: false,
+      requireVideo: false,
+    },
+    stats: empty
+      ? { issued: 0, pending: 0, failed: 0, ineligible: 0 }
+      : { issued: 42, pending: 1, failed: 2, ineligible: 17 },
+  };
+}
+
+export function settingsReferralsLoaderData({ empty = false } = {}) {
+  return {
+    program: {
+      id: "rp1",
+      enabled: !empty,
+      advocateRewardType: "percentage",
+      advocateRewardValue: 10,
+      friendRewardType: "percentage",
+      friendRewardValue: 10,
+      minimumOrderAmount: null,
+      createdAt: new Date("2026-10-01").toISOString(),
+      updatedAt: new Date("2026-11-01").toISOString(),
+    },
+    referrals: empty
+      ? []
+      : [
+          {
+            id: "ref1",
+            advocateEmail: "amelia.hartley@example.com",
+            code: "AMELIA-4F2X",
+            clicks: 12,
+            conversions: 3,
+            createdAt: new Date("2026-10-20").toISOString(),
+          },
+        ],
+  };
+}

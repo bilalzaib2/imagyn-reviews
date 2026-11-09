@@ -19,6 +19,9 @@ import SettingsSeoPage from "../../app/routes/app.settings.seo";
 import SettingsTrustPage from "../../app/routes/app.settings.trust";
 import WidgetsPage from "../../app/routes/app.widgets";
 import AnalyticsPage from "../../app/routes/app.analytics";
+import SettingsIndexPage from "../../app/routes/app.settings._index";
+import SettingsRewardsPage from "../../app/routes/app.settings.rewards";
+import SettingsReferralsPage from "../../app/routes/app.settings.referrals";
 import {
   appearanceLoaderData,
   dashboardLoaderData,
@@ -29,6 +32,9 @@ import {
   settingsTrustLoaderData,
   widgetsLoaderData,
   analyticsLoaderData,
+  settingsIndexLoaderData,
+  settingsRewardsLoaderData,
+  settingsReferralsLoaderData,
   emailStudioLoaderData,
   reviewsLoaderData,
   questionsLoaderData,
@@ -153,6 +159,30 @@ const SCREENS: Record<string, { label: string; path: string; element: JSX.Elemen
     path: "/app/analytics",
     element: <AnalyticsPage />,
     data: analyticsLoaderData({ pro: false }),
+  },
+  "settings-index": {
+    label: "Settings › overview",
+    path: "/app/settings",
+    element: <SettingsIndexPage />,
+    data: settingsIndexLoaderData(),
+  },
+  "settings-rewards": {
+    label: "Settings › Review rewards",
+    path: "/app/settings/rewards",
+    element: <SettingsRewardsPage />,
+    data: settingsRewardsLoaderData(),
+  },
+  "settings-rewards-empty": {
+    label: "Settings › Review rewards — nothing issued",
+    path: "/app/settings/rewards",
+    element: <SettingsRewardsPage />,
+    data: settingsRewardsLoaderData({ empty: true, enabled: false }),
+  },
+  "settings-referrals": {
+    label: "Settings › Referrals",
+    path: "/app/settings/referrals",
+    element: <SettingsReferralsPage />,
+    data: settingsReferralsLoaderData(),
   },
   questions: { label: "Customer questions", path: "/app/questions", element: <QuestionsPage />, data: questionsLoaderData() },
   "questions-empty": {
