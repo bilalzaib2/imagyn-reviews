@@ -478,3 +478,67 @@ export function widgetsLoaderData({ fresh = true, pro = true } = {}) {
     ),
   };
 }
+
+// -------------------------------------------------------------------- Analytics
+
+export function analyticsLoaderData({ empty = false, pro = true } = {}) {
+  const trend = empty
+    ? []
+    : Array.from({ length: 14 }, (_, i) => ({
+        date: new Date(2026, 9, 27 + i).toISOString().slice(0, 10),
+        count: [2, 5, 3, 8, 6, 4, 9, 7, 3, 5, 11, 6, 4, 8][i],
+      }));
+
+  return {
+    range: "30d",
+    reviewAnalytics: {
+      range: "30d",
+      totalReviews: empty ? 0 : 83,
+      averageRating: empty ? 0 : 4.6,
+      ratingCounts: empty ? { 1: 0, 2: 0, 3: 0, 4: 0, 5: 0 } : { 1: 2, 2: 5, 3: 9, 4: 19, 5: 48 },
+      statusCounts: empty
+        ? { approved: 0, pending: 0, rejected: 0 }
+        : { approved: 64, pending: 12, rejected: 7 },
+      trend,
+    },
+    requestAnalytics: {
+      range: "30d",
+      totalRequests: empty ? 0 : 240,
+      sent: empty ? 0 : 212,
+      completed: empty ? 0 : 83,
+      completionRate: empty ? 0 : 0.39,
+      trend,
+    },
+    conversionInsights: {
+      range: "30d",
+      averageTimeToConversionHours: empty ? null : 41.5,
+      bySource: empty
+        ? []
+        : [
+            { source: "order", sent: 180, completed: 72, completionRate: 0.4 },
+            { source: "manual", sent: 32, completed: 11, completionRate: 0.34 },
+          ],
+      byDelayBucket: empty
+        ? []
+        : [
+            { bucket: "0–3 days", sent: 40, completed: 11, completionRate: 0.28 },
+            { bucket: "4–7 days", sent: 120, completed: 55, completionRate: 0.46 },
+            { bucket: "8+ days", sent: 52, completed: 17, completionRate: 0.33 },
+          ],
+    },
+    aiDigest: empty || !pro
+      ? null
+      : [
+          {
+            productId: "prod_0",
+            productName: "Brown Ceramic Plate - Rustic Charm for Every Meal",
+            recommendation: "Add a dishwasher-safe note to the description.",
+            positives: ["Weight and finish", "Arrives well packaged"],
+            negatives: ["Unclear whether it is dishwasher safe"],
+            reviewCountUsed: 31,
+            generatedAt: new Date("2026-11-06").toISOString(),
+          },
+        ],
+    canUseAnalytics: pro,
+  };
+}
