@@ -161,10 +161,9 @@ Not yet rendered: Products, Settings → Import, Settings → Product groups.
 
 ### 10.3 Two commercial questions for the owner
 
-1. **Pro is priced at `$9.99` in `app/services/billing/plans.ts`**, but the locked pricing
-   decision was Free $0 / **Pro $15/month**. Not changed here: Shopify Managed Pricing holds
-   the real price, so editing the code alone would desync the two, and the number is a
-   commercial call.
+1. ~~Pro price discrepancy~~ — **resolved 2026-11-10. $9.99/month is the confirmed,
+   owner-locked Pro price.** An earlier note in this file wrongly recorded the target as $15;
+   that was my error, not a defect in the product. The code was right all along. See §11.
 2. **The pricing page sells two features marked "Coming soon"** — Advanced email styling and
    Advanced analytics. They are honestly labelled, but they are bullets under a paid plan.
 
@@ -175,3 +174,51 @@ Not yet rendered: Products, Settings → Import, Settings → Product groups.
 - Email Studio's "JPEG, PNG, WebP or SVG" message looks inconsistent with its raster
   allowlist but is correct — SVG takes a separate validate-and-rasterize path first.
 - Review rewards offers no rating condition and explains why, visible in the rendered UI.
+
+---
+
+## 11. Pricing — audited and confirmed, 2026-11-10
+
+**Free $0 · Pro $9.99/month, 7-day trial.** Owner-confirmed. `$9.99` is correct everywhere and
+is the locked price.
+
+### What the audit covered
+
+| Surface | Finding |
+|---|---|
+| `app/services/billing/plans.ts` | `$9.99`, the single source of truth — **correct** |
+| Billing page | formats from `plan.price`; never hardcoded — **correct** |
+| Widgets upgrade note | reads `getPlan("growth")` via `proPlanSummary()` — **correct** |
+| Every other `$` literal in the app | one only: `$48.00`, a mock product price inside a widget preview — **not a plan price** |
+| `scale` tier at `$29.99` | defined for existing subscribers, excluded from `PLAN_ORDER`, never rendered — **correct** |
+| Shopify Managed Pricing | **not inspected and not modified** — it is outside this repository and changing it needs owner approval |
+
+### Three things were wrong, all now fixed
+
+1. **A `$15` reference in this very document.** My own error in the 2026-11-10 addendum, which
+   recorded the locked price as $15. The product was right; the report was wrong. Corrected.
+2. **`docs/PROJECT_STATE.md` claimed a 14-day trial.** `plans.ts` says 7, with a comment that
+   it must equal the Managed Pricing setting. Corrected to 7.
+3. **Two screens formatted the price differently** — billing used `toFixed(2)`, the widgets
+   upgrade note interpolated the raw number. At $9.99 both read identically, so the
+   divergence was invisible; at a whole-number price one would have said "$10.00" and the
+   other "$10". Both now use `formatPlanPrice()`.
+
+### Remaining `$15` references are correct
+
+Four mentions of $15 remain, in `JUDGEME_PARITY_AUDIT.md`, `JUDGEME_COMPETITIVE_RESEARCH.md`
+and `IMAGYN_REVIEWS_SESSION_HANDOVER.md`. Every one is **Judge.me's** Awesome-tier price,
+used for comparison. They are accurate competitor data and were left alone.
+
+`docs/CHANGELOG.md` keeps its historical three-tier entry — rewriting history would be worse —
+with a note that the tier names have since changed.
+
+### Locked by test
+
+`plans.test.ts` now asserts `getPlan("growth").price === 9.99` exactly, rather than merely
+"greater than zero". A silent change would reprice the product on every screen that quotes it,
+and the value must stay equal to the Shopify Managed Pricing setting, which this repository
+cannot read.
+
+**Still requires a human check:** that Managed Pricing in the Partner Dashboard also says
+$9.99 with a 7-day trial. Nothing in this repo can verify that.

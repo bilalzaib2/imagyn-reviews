@@ -16,7 +16,7 @@ import {
   syncBillingFromShopify,
   type BillingSnapshot,
 } from "../services/billing/billing.server";
-import type { Plan } from "../services/billing/plans";
+import { formatPlanPrice, type Plan } from "../services/billing/plans";
 import shellStyles from "../styles/app.shell.module.css";
 import styles from "../styles/app.billing.module.css";
 
@@ -69,7 +69,7 @@ export const action = async ({ request }: ActionFunctionArgs): Promise<ActionDat
 };
 
 function formatPrice(plan: Plan) {
-  return plan.price === 0 ? "Free" : `$${plan.price.toFixed(2)}/month`;
+  return formatPlanPrice(plan);
 }
 
 // Per-card stagger reusing shellStyles.reveal's own --reveal-delay mechanism (see

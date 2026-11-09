@@ -134,6 +134,10 @@ Notable changes to Imagyn Reviews, newest first. Commit SHAs refer to `main`.
 
 - **Shopify Billing** — three-tier subscription (Starter free, Growth $9.99/mo, Pro
   $29.99/mo, both paid tiers with a 14-day free trial), built on Shopify's official Billing
+  <!-- Historical entry, left as written. NOTE FOR READERS: the tier names changed after
+       this. Today there are two merchant-facing plans — Free ($0) and Pro ($9.99/mo, 7-day
+       trial) — where "Pro" is the tier called "Growth" above. The $29.99 "Scale" tier is
+       retired and excluded from PLAN_ORDER. -->
   API (`shopifyApp({ billing: {...} })` + `authenticate.admin().billing`), not a third-party
   or off-platform billing system.
   - `app/services/billing/plans.ts` — single source of truth for plan pricing, trial length,

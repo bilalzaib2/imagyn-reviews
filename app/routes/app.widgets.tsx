@@ -12,7 +12,7 @@ import { Medallion } from "../components/medals/Medallion";
 import { authenticateAdminDeduped } from "../services/auth-dedupe.server";
 import { getOrCreateStore } from "../services/store.server";
 import { getStorePermissions } from "../services/permissions";
-import { getPlan } from "../services/billing/plans";
+import { formatPlanPrice, getPlan } from "../services/billing/plans";
 import { getStorefrontAppearance } from "../services/appearance.server";
 import { getDefaultAppearanceTokens, type AppearanceTokens } from "../services/appearance.shared";
 import { widgetService } from "../services/widget.server";
@@ -1169,7 +1169,7 @@ export default function WidgetsPage() {
                   // detection couldn't tell, rather than a generic action nudge that would read
                   // as a status claim either way.
                   const metaLabel = proLocked
-                    ? `Included in ${proPlan.name} — $${proPlan.price}/month. Your settings and reviews are kept if you upgrade later.`
+                    ? `Included in ${proPlan.name} — ${formatPlanPrice(proPlan)}. Your settings and reviews are kept if you upgrade later.`
                     : card.installDetectable === false
                       ? `Block: ${card.blockName} — add or manage it in your Theme Editor.`
                       : status.state === "installed"

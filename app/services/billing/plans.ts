@@ -145,6 +145,18 @@ export const PLANS: Record<PlanId, Plan> = {
 // identifier itself is kept around rather than deleted).
 export const PLAN_ORDER: PlanId[] = ["starter", "growth"];
 
+/**
+ * The one way a plan's price is written for a merchant.
+ *
+ * Billing formatted with `toFixed(2)` while the widget upgrade note interpolated the raw
+ * number. At $9.99 both happen to read the same, so the divergence was invisible — but any
+ * whole-number price would have shown "$10.00" on one screen and "$10" on the other. The
+ * price itself always comes from this module; so should its formatting.
+ */
+export function formatPlanPrice(plan: Pick<Plan, "price">): string {
+  return plan.price === 0 ? "Free" : `$${plan.price.toFixed(2)}/month`;
+}
+
 export function getPlan(id: PlanId): Plan {
   return PLANS[id];
 }

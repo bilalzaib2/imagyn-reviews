@@ -2,7 +2,7 @@
 // This is the regression test for that lockdown: getAllPlans()/PLAN_ORDER must never grow a
 // third entry, and the two that remain must be named exactly "Free" and "Pro".
 import { describe, expect, it } from "vitest";
-import { getAllPlans, getPlan, PLAN_ORDER } from "./plans";
+import { formatPlanPrice, getAllPlans, getPlan, PLAN_ORDER } from "./plans";
 
 describe("PLAN_ORDER — exactly two merchant-facing plans", () => {
   it("contains exactly starter and growth, in that order", () => {
@@ -23,6 +23,26 @@ describe("getAllPlans", () => {
   it("names them exactly Free and Pro", () => {
     const names = getAllPlans().map((plan) => plan.name);
     expect(names).toEqual(["Free", "Pro"]);
+  });
+
+  // The confirmed commercial price, owner-locked 2026-11-10. Pinned exactly rather than
+  // "greater than zero", because a silent change here would reprice the product everywhere
+  // the app quotes it — and because it must stay equal to the Shopify Managed Pricing
+  // setting, which this repository cannot read.
+  it("prices Pro at exactly $9.99 a month", () => {
+    expect(getPlan("growth").price).toBe(9.99);
+  });
+
+  it("formats both plans the one way, so no two screens can disagree", () => {
+    expect(formatPlanPrice(getPlan("starter"))).toBe("Free");
+    expect(formatPlanPrice(getPlan("growth"))).toBe("$9.99/month");
+  });
+
+  it("formats a whole-number price with cents, which raw interpolation did not", () => {
+    // The widget upgrade note used `${plan.price}` and billing used toFixed(2). At 9.99 both
+    // read the same, so the divergence was invisible; at 10 they would have printed "$10"
+    // and "$10.00".
+    expect(formatPlanPrice({ price: 10 })).toBe("$10.00/month");
   });
 
   it("prices Free at $0 and Pro above $0", () => {

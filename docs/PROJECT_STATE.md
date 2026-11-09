@@ -575,7 +575,7 @@ relabeled.** **Nothing was committed or pushed.**
     unaffected. URL analysis and full brand-token generation remain explicitly out of scope
     for this pass — see the "Next" list below for the rest of Brand Studio V2's scope. No
     code changes pending for this item.
--   **Shopify Billing** — Free (Starter) / Pro (Growth, $9.99/mo, 14-day trial), Shopify
+-   **Shopify Billing** — Free (Starter) / Pro (Growth, $9.99/mo, 7-day trial), Shopify
     Managed Pricing, development-store and Owner-plan bypass, centralized access gate
     (`app.tsx`) and feature gating (`services/permissions.ts`), verified end-to-end in
     production (subscription creation, trial, upgrade/downgrade, cancellation, webhook
