@@ -710,3 +710,44 @@ export function billingLoaderData({ plan = "starter", trialing = false, devStore
     },
   };
 }
+
+// --------------------------------------------------------------------- Products
+
+export function productsLoaderData({ empty = false, syncing = false, error = false } = {}) {
+  const products = empty
+    ? []
+    : PRODUCTS.map((name, index) => ({
+        id: `prod_${index}`,
+        storeId: "store_1",
+        shopifyProductId: `gid://shopify/Product/${900 + index}`,
+        name,
+        handle: name.toLowerCase().replace(/[^a-z0-9]+/g, "-").slice(0, 40),
+        vendor: "Verve Outdoor",
+        productType: index % 2 === 0 ? "Homeware" : "Apparel",
+        status: index === 3 ? "DRAFT" : "ACTIVE",
+        featuredImage: null,
+        slug: null,
+        description: null,
+        averageRating: index === 2 ? 0 : 4.2 + index * 0.1,
+        totalReviews: index === 2 ? 0 : 7 + index * 4,
+        rating5Count: 10,
+        rating4Count: 4,
+        rating3Count: 2,
+        rating2Count: 1,
+        rating1Count: 0,
+        createdAt: new Date("2026-09-01").toISOString(),
+        updatedAt: new Date("2026-11-02").toISOString(),
+      }));
+
+  return {
+    products,
+    nextCursor: empty ? null : "prod_3",
+    hasMore: !empty,
+    totalCount: empty ? 0 : 12,
+    search: "",
+    syncState: syncing
+      ? { status: "running", total: 12, synced: 5, failed: 0, startedAt: new Date().toISOString(), finishedAt: null, error: null }
+      : { status: "idle", total: 12, synced: 12, failed: 0, startedAt: null, finishedAt: new Date("2026-11-02").toISOString(), error: null },
+    error: error ? "Shopify did not respond. Your products are unchanged." : null,
+  };
+}

@@ -23,6 +23,7 @@ import SettingsIndexPage from "../../app/routes/app.settings._index";
 import RequestsPage from "../../app/routes/app.requests";
 import MedalsPage from "../../app/routes/app.medals";
 import BillingPage from "../../app/routes/app.billing";
+import ProductsPage from "../../app/routes/app.products";
 import SettingsRewardsPage from "../../app/routes/app.settings.rewards";
 import SettingsReferralsPage from "../../app/routes/app.settings.referrals";
 import {
@@ -39,6 +40,7 @@ import {
   requestsLoaderData,
   medalsLoaderData,
   billingLoaderData,
+  productsLoaderData,
   settingsRewardsLoaderData,
   settingsReferralsLoaderData,
   emailStudioLoaderData,
@@ -231,6 +233,24 @@ const SCREENS: Record<string, { label: string; path: string; element: JSX.Elemen
     path: "/app/billing",
     element: <BillingPage />,
     data: billingLoaderData({ plan: "pro", trialing: true }),
+  },
+  products: {
+    label: "Products",
+    path: "/app/products",
+    element: <ProductsPage />,
+    data: productsLoaderData(),
+  },
+  "products-empty": {
+    label: "Products — none synced",
+    path: "/app/products",
+    element: <ProductsPage />,
+    data: productsLoaderData({ empty: true }),
+  },
+  "products-error": {
+    label: "Products — load error",
+    path: "/app/products",
+    element: <ProductsPage />,
+    data: productsLoaderData({ error: true }),
   },
   questions: { label: "Customer questions", path: "/app/questions", element: <QuestionsPage />, data: questionsLoaderData() },
   "questions-empty": {

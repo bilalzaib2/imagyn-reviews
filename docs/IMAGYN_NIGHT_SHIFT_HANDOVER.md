@@ -1192,3 +1192,67 @@ not a defect.
    configuration screen.
 3. Brand Studio logo upload/preview/persistence (priority 1) — still unexercised.
 4. Priority 6's full merchant workflow still needs the real admin; the harness cannot do it.
+
+---
+
+## 21. CHECKPOINT — 2026-11-10 (late)
+
+**Branch `main`, HEAD `3bdaf09`+, 42 commits ahead of `origin/main` (`f4097c4`).**
+Backup `origin/backup/night-shift-2026-11-09` verified SHA-identical after every milestone.
+**2,083 tests / 107 files**, typecheck, lint, production build — all clean.
+Working tree clean except the three permanent untracked paths.
+
+### 21.1 Harness coverage — 24 screen states
+
+Dashboard (+fresh), Reviews (+empty), Customer questions (+empty), Brand Studio (+Free),
+Email Studio (+Free), Coupons (+empty), Settings overview, Review requests (+empty, +Free),
+Moderation, SEO, Trust, Review rewards (+empty), Referrals, Widgets (fresh, existing, Free),
+Analytics (populated, empty, Free), Medals (+fresh), Billing (+trial), Products (+empty,
++error).
+
+**Not yet rendered:** Settings → Import, Settings → Product groups.
+
+Run it with:
+```
+npx vite --config tools/preview/vite.config.ts   # http://localhost:5199/?screen=<key>
+```
+
+### 21.2 Interaction sweep — first real evidence beyond rendering
+
+Every non-destructive control was clicked on two screens, with console errors captured:
+
+- **Reviews** — 16 controls (status tabs, filters, drawer open/close, reply, archive,
+  pagination). Zero crashes, zero console errors.
+- **Brand Studio** — 14 controls (all five themes, all four structural presets, AI suggest,
+  apply-to-widgets, apply-to-email, override save, scope switch). Zero crashes, zero errors.
+
+**What this proves:** client-side state, re-render and event wiring. **What it does not:**
+persistence — the harness stubs every action, so nothing reaches a loader, Shopify or the
+database.
+
+### 21.3 Pricing — closed
+
+Free $0 / Pro $9.99 / 7-day trial, owner-confirmed and now pinned by test. The audit found
+three real problems, none of them the price: a wrong `$15` in my own report, a stale 14-day
+trial in `PROJECT_STATE.md`, and two screens formatting the price differently (invisible at
+$9.99, divergent at any whole number). All fixed. Managed Pricing itself is untouched and
+still needs a human to confirm it reads $9.99 / 7 days.
+
+### 21.4 Hard blockers — unchanged, and not resolvable locally
+
+1. **The dev-store Admin token is expired (401).** No Shopify call can be made from here, so
+   the coupon lifecycle (§5) cannot be exercised against a real shop. Re-auth needs OAuth
+   through the installed app.
+2. **Production runs the pre-work build**, so no change since 2026-11-06 can be verified in
+   the real embedded admin without a deploy, which is not approved.
+3. Together these block: real discount creation, checkout redemption, storefront widget
+   output, theme compatibility, and the full email journey.
+
+### 21.5 Exact next task
+
+1. `tools/preview` — add Settings → Import and Settings → Product groups (the last two
+   unrendered screens). Same method: read the loader's return shape, add a fixture, add a
+   SCREENS entry.
+2. Extend the interaction sweep to Coupons, Email Studio and Requests.
+3. Audit §9 security items that are checkable locally: webhook HMAC verification and
+   idempotency, upload handling, discount ownership.
