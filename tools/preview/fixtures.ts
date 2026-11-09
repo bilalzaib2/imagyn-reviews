@@ -601,3 +601,66 @@ export function settingsReferralsLoaderData({ empty = false } = {}) {
         ],
   };
 }
+
+// --------------------------------------------------------------------- Requests
+
+const REQUEST_STORE = {
+  id: "store_1",
+  name: "Verve Outdoor",
+  domain: "verveoutdoor.com",
+  emailSenderName: "Verve Outdoor",
+  emailLogoUrl: null,
+  emailLogoDarkUrl: null,
+  shopBrandLogoUrl: null,
+};
+
+function reviewRequest(index: number) {
+  // A spread of real lifecycle states, including the ones that are easy to render wrong:
+  // scheduled but not sent, sent but never opened, and completed.
+  const states = ["scheduled", "sent", "sent", "completed", "failed"] as const;
+  const status = states[index % states.length];
+  const sent = status !== "scheduled";
+  const completed = status === "completed";
+
+  return {
+    id: `req_${index}`,
+    name: NAMES[index % NAMES.length],
+    email: `customer${index}@example.com`,
+    orderNumber: `#10${40 + index}`,
+    customMessage: index === 2 ? "Hope the plates arrived safely!" : null,
+    requestToken: `tok_${index}`,
+    delayDays: 7,
+    scheduledFor: new Date(2026, 10, 1 + index).toISOString(),
+    sentAt: sent ? new Date(2026, 10, 2 + index).toISOString() : null,
+    openedAt: sent && index % 2 === 0 ? new Date(2026, 10, 3 + index).toISOString() : null,
+    reviewedAt: completed ? new Date(2026, 10, 4 + index).toISOString() : null,
+    status,
+    source: index % 3 === 0 ? "order" : "manual",
+    shopifyOrderId: index % 3 === 0 ? `gid://shopify/Order/${1000 + index}` : null,
+    sendAttempts: status === "failed" ? 3 : 1,
+    reminder1SentAt: sent && index % 2 === 1 ? new Date(2026, 10, 5 + index).toISOString() : null,
+    reminderFinalSentAt: null,
+    createdAt: new Date(2026, 10, 1 + index).toISOString(),
+    updatedAt: new Date(2026, 10, 4 + index).toISOString(),
+    store: REQUEST_STORE,
+  };
+}
+
+export function requestsLoaderData({ empty = false, pro = true } = {}) {
+  const requests = empty ? [] : Array.from({ length: 10 }, (_, i) => reviewRequest(i));
+  return {
+    requests,
+    customers: empty ? [] : NAMES.map((name, i) => ({ name, email: `customer${i}@example.com` })),
+    products: PRODUCTS.map((name, i) => ({ id: `prod_${i}`, name, storeId: "store_1" })),
+    totalCount: empty ? 0 : 42,
+    page: 1,
+    pageSize: 25,
+    search: "",
+    status: "",
+    dateFilter: "all",
+    sortBy: "createdAt",
+    sortDir: "desc",
+    error: null,
+    canUseEmailReminders: pro,
+  };
+}

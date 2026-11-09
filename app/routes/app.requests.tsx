@@ -42,6 +42,21 @@ import { importReviewRequestsFromCsv, type CsvRequestImportResult } from "../ser
 import shellStyles from "../styles/app.shell.module.css";
 import styles from "../styles/app.requests.module.css";
 
+/**
+ * One leading "#", whatever the source supplied.
+ *
+ * Order numbers reach this table from two places and they do not agree. A merchant typing
+ * one into the manual form writes "1040"; Shopify's fulfillment webhook stores
+ * `fulfillment.name`, which already carries its own "#". The column prefixed unconditionally,
+ * so every automatically-created request rendered "##1040" — and those are the majority of
+ * requests once order automation is on.
+ */
+function formatOrderNumber(orderNumber: string | null): string {
+  const trimmed = orderNumber?.trim();
+  if (!trimmed) return "—";
+  return `#${trimmed.replace(/^#+/, "")}`;
+}
+
 type CustomerOption = { name: string | null; email: string | null };
 type ProductOption = { id: string; name: string; storeId: string };
 
@@ -1544,10 +1559,14 @@ export default function RequestsPage() {
       render: (request) => <p className={styles.customerName}>{request.name ?? "Unnamed customer"}</p>,
     },
     {
+      // Email, Order and Trigger shed before the rest: the detail panel sitting beside this
+      // table repeats all three verbatim, so losing them costs the merchant nothing while
+      // the columns that identify a row keep their width. Measured before this: ten columns
+      // in 671px, with Order at 34px and Scheduled at 42px.
       key: "email",
       header: "Email",
       width: "16%",
-      hideOnNarrow: true,
+      hideOnCramped: true,
       // Ellipsised rather than hard-clipped: the shared table clips every cell so a long
       // address cannot spill into Order, but an ellipsis is what tells the merchant there is
       // more to it. Applied to a block span inside the cell, which is where the text lives.
@@ -1559,9 +1578,9 @@ export default function RequestsPage() {
       key: "order",
       header: "Order",
       width: "9%",
-      hideOnNarrow: true,
+      hideOnCramped: true,
       render: (request) => (
-        <span className={styles.tdOrder}>{request.orderNumber ? `#${request.orderNumber}` : "—"}</span>
+        <span className={styles.tdOrder}>{formatOrderNumber(request.orderNumber)}</span>
       ),
     },
     {
@@ -1575,7 +1594,7 @@ export default function RequestsPage() {
       key: "trigger",
       header: "Trigger",
       width: "6rem",
-      hideOnNarrow: true,
+      hideOnCramped: true,
       render: (request) => (
         <span className={styles.tdMuted}>{request.source === "order" ? "Automatic" : "Manual"}</span>
       ),

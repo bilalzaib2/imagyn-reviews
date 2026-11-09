@@ -20,6 +20,7 @@ import SettingsTrustPage from "../../app/routes/app.settings.trust";
 import WidgetsPage from "../../app/routes/app.widgets";
 import AnalyticsPage from "../../app/routes/app.analytics";
 import SettingsIndexPage from "../../app/routes/app.settings._index";
+import RequestsPage from "../../app/routes/app.requests";
 import SettingsRewardsPage from "../../app/routes/app.settings.rewards";
 import SettingsReferralsPage from "../../app/routes/app.settings.referrals";
 import {
@@ -33,6 +34,7 @@ import {
   widgetsLoaderData,
   analyticsLoaderData,
   settingsIndexLoaderData,
+  requestsLoaderData,
   settingsRewardsLoaderData,
   settingsReferralsLoaderData,
   emailStudioLoaderData,
@@ -183,6 +185,24 @@ const SCREENS: Record<string, { label: string; path: string; element: JSX.Elemen
     path: "/app/settings/referrals",
     element: <SettingsReferralsPage />,
     data: settingsReferralsLoaderData(),
+  },
+  requests: {
+    label: "Review requests",
+    path: "/app/requests",
+    element: <RequestsPage />,
+    data: requestsLoaderData(),
+  },
+  "requests-empty": {
+    label: "Review requests — empty",
+    path: "/app/requests",
+    element: <RequestsPage />,
+    data: requestsLoaderData({ empty: true }),
+  },
+  "requests-free": {
+    label: "Review requests — Free plan",
+    path: "/app/requests",
+    element: <RequestsPage />,
+    data: requestsLoaderData({ pro: false }),
   },
   questions: { label: "Customer questions", path: "/app/questions", element: <QuestionsPage />, data: questionsLoaderData() },
   "questions-empty": {
