@@ -9,6 +9,7 @@ Incident reports and diagnostic reference for Imagyn Reviews. Add a new dated in
 | Symptom | Check first | Details |
 |---|---|---|
 | Embedded app shows a broken/crashed iframe icon, sidebar submenu (Dashboard/Reviews/etc.) missing | Iframe `src` origin — is it Railway, or a `trycloudflare.com` tunnel? | See [Incident 2026-07-21](#incident-2026-07-21-embedded-app-broken-after-development-work) below. Almost always a leftover `shopify app dev` session, not a code bug. |
+| Embedded app renders styled, then becomes completely unstyled HTML a moment later (serif headings, blue underlined links, no layout) | Grep the `shopify app dev` output for `optimized dependencies changed. reloading` | See [Incident 2026-11-11](#incident-2026-11-11-embedded-dashboard-loses-all-css-mid-load) below. A Vite dependency re-optimization, not a CSS or Polaris problem. |
 | `/app` returns `410` when hit directly, unauthenticated | Expected behavior — this is Shopify's own "exit iframe" bounce (`boundary.error()`), not an error | Not a bug. Only investigate further if the *embedded* (authenticated, real iframe) path also fails. |
 | React error `#418` / `#423` in console when testing a route locally | Check whether you hit the route with real `shop`/embedded session params | These are hydration-mismatch codes; the underlying cause is almost always something upstream (see incident below) throwing before React finishes hydrating — the codes themselves are rarely the root cause. Decode at `react.dev/errors/<code>` for the specific meaning. |
 | `prisma migrate deploy` fails with `P3005: database schema is not empty` | Is `_prisma_migrations` missing entirely? | See [OPERATIONS.md](./OPERATIONS.md#recovering-a-missing-_prisma_migrations-table) — this is a migration-history reconciliation, not a schema problem. |
@@ -98,3 +99,83 @@ It should be `https://imagyn-reviews-production.up.railway.app/...` — not a `t
 ### Prevention
 
 See [SHOPIFY_DEV_WORKFLOW.md](./SHOPIFY_DEV_WORKFLOW.md) for the standing rule this incident produced: **always run `shopify app dev clean` before ending any `shopify app dev` session**, not just when it's inconvenient to leave running.
+
+---
+
+## Incident 2026-11-11: Embedded dashboard loses all CSS mid-load
+
+### Symptom
+
+In the embedded app on `verveonline`, the dashboard renders correctly styled, then a moment
+later becomes completely unstyled HTML — serif headings, blue underlined links, no layout —
+and stays that way until a manual refresh. Loader data and hydration are unaffected: the
+content is all there and correct, only the styling is gone. This makes it read as a CSS,
+Polaris or stylesheet-loading problem. It is none of those.
+
+### Root cause
+
+A **Vite dependency re-optimization firing while the dashboard's route tree was loading.**
+The dev server log pins the moment:
+
+```
+1:15:44  [vite] (client) Re-optimizing dependencies because lockfile has changed
+1:17:51  [vite] (client) ✨ optimized dependencies changed. reloading
+```
+
+`node_modules/.vite/deps/_metadata.json` had an mtime of exactly `1:17:51`. Diffing its
+`optimized` keys against `optimizeDeps.include` in `vite.config.ts` showed eight dependencies
+being discovered lazily rather than pre-bundled at startup: `@shopify/polaris-icons`,
+`papaparse`, `react/jsx-runtime`, `react/jsx-dev-runtime`, `@react-email/components`,
+`@react-email/render`, `resend` and `sanitize-html`.
+
+Why that is fatal rather than a brief pause:
+
+1. **In dev, React Router emits no stylesheet `<link>` tags at all.** It inlines every
+   stylesheet into a single `<style data-react-router-critical-css>` in the SSR document.
+   Confirm with `curl -s <url> | sed -n '/<head>/,/<\/head>/p'` — there are no CSS `<link>`s.
+2. **`HydratedRouter` deletes that tag on mount, unconditionally**, with no check that
+   anything replaced it. See `react-router/dist/development/dom-export.mjs`:
+   `setCriticalCss(void 0)` in a mount effect, then
+   `document.querySelectorAll('[data-react-router-critical-css]').forEach((element) => element.remove())`.
+3. The real styles are expected to arrive separately, as `<style data-vite-dev-id>` tags
+   injected by the client module graph — and a dependency re-optimization invalidates the
+   `?v=<hash>` module URLs that graph is built from.
+4. Vite recovers by calling `location.reload()`. **Top-level that works; inside Shopify's
+   embedded iframe it does not.** The page keeps the state it was left in: critical CSS
+   deleted, replacement styles never injected.
+
+### Fix
+
+Pre-bundle the late-discovered dependencies at startup by adding them to
+`optimizeDeps.include` in `vite.config.ts`, which removes the only observed trigger.
+
+`resend`, `@react-email/*` and `sanitize-html` are server-only. They reach the *client*
+optimizer because its scanner crawls the route modules that import the email services, and
+`@react-email/render` resolves to its browser build. List them rather than excluding them:
+`optimizeDeps` is dev-only and never affects the production bundle, whereas excluding a CJS
+package (`sanitize-html` ships CJS) breaks its dev interop.
+
+### Verification
+
+From a cold dep cache (`rm -rf node_modules/.vite/deps`), against the real embedded app:
+zero re-optimization events in the dev log, and Dashboard, Reviews and Settings each render
+fully styled on first load, after internal navigation, and after a hard refresh.
+
+### Ruled out, each by measurement rather than inspection
+
+- **The HMR websocket.** It connects fine over the tunnel — console shows `[vite] connecting...`
+  then `[vite] connected.` The `hmrConfig` branch in `vite.config.ts` is not implicated.
+- **CSP, nonce handling, cross-origin.** The app sets no CSP of its own; `grep` for
+  `content-security-policy|frame-ancestors|style-src|nonce` across `app/` returns nothing but
+  Shopify's own `addDocumentResponseHeaders`.
+- **Stylesheet removal in app code.** The only `.remove()` on a DOM node is a CSV download
+  anchor cleanup in `app.reviews.tsx`.
+- **Stale dev-server processes.** The Shopify CLI assigns Vite its own port (observed: 59118,
+  59576), so an unrelated process squatting `:3000` — which `server.port` would otherwise
+  default to — never interferes.
+- **Slow first navigation to a route.** Clicking a nav item changes the admin URL immediately
+  while the iframe still shows the previous screen for several seconds. That is first-load
+  module latency over the Cloudflare tunnel, not a navigation defect — it resolves on its own
+  and does not occur once the route's modules are warm.
+- **`monica-id` / `monica-version` hydration warning.** A browser extension writing attributes
+  onto `<body>`, not our markup.
