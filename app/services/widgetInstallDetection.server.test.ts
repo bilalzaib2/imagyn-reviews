@@ -70,12 +70,30 @@ describe("detectWidgetInstallStatus — section-target widgets (product page)", 
     expect(result["product-reviews-widget"].reason).toMatch(/Couldn't reach/);
   });
 
-  it("reports unknown, not not-installed, for a password-protected storefront", async () => {
+  it("reports blocked, not not-installed, for a password-protected storefront", async () => {
     (fetch as unknown as ReturnType<typeof vi.fn>).mockImplementation(async () => redirectToPassword());
 
     const result = await detectWidgetInstallStatus("shop.example.com", "store_1");
-    expect(result["product-reviews-widget"].state).toBe("unknown");
+    // Its own state, not a flavour of "unknown": a development-plan store cannot switch
+    // password protection off, so this never resolves on its own and calls for different
+    // merchant guidance than a failed fetch does.
+    expect(result["product-reviews-widget"].state).toBe("blocked");
     expect(result["product-reviews-widget"].reason).toMatch(/password protection/);
+  });
+
+  // Regression guard. This store's entries in a hardcoded MANUAL_VERIFICATION_OVERRIDES table
+  // used to assert "installed" for four blocks on the strength of a Theme Editor check from
+  // 2026-08-16 against theme 150727819563 — while the CLI now reports the host theme as
+  // 193495335211. A claim sourced from a stale manual note is not evidence, and the app must
+  // not present one as a live detection result.
+  it("never claims installation for a store it could not actually read", async () => {
+    (fetch as unknown as ReturnType<typeof vi.fn>).mockImplementation(async () => redirectToPassword());
+
+    const result = await detectWidgetInstallStatus("verveonline.myshopify.com", "store_1");
+
+    for (const [key, status] of Object.entries(result)) {
+      expect(status.state, `${key} must not claim installation behind a password`).not.toBe("installed");
+    }
   });
 
   it("detects the standalone AI Review Summary block by its own marker, independent of the other product-page blocks", async () => {
@@ -130,21 +148,31 @@ describe("detectWidgetInstallStatus — homepage-only widgets (review carousel)"
   });
 });
 
-describe("detectWidgetInstallStatus — manual verification overrides", () => {
-  it("overrides live detection for a known unreachable store's shop domain", async () => {
+describe("detectWidgetInstallStatus — no store is ever special-cased", () => {
+  // This file used to assert the opposite: that a hardcoded MANUAL_VERIFICATION_OVERRIDES
+  // table reported four blocks as "installed" for verveonline.myshopify.com even behind a
+  // password wall. The evidence behind those entries was a Theme Editor check from 2026-08-16
+  // against theme 150727819563, and the Shopify CLI now reports the host theme as
+  // 193495335211 — a different theme. A months-old manual note about a theme that may no
+  // longer be active is not evidence, and the app must not render it as a live detection
+  // result. The table and its applier are gone; these tests pin that they stay gone.
+  it("does not claim installation for the store that used to be overridden", async () => {
     (fetch as unknown as ReturnType<typeof vi.fn>).mockImplementation(async () => redirectToPassword());
 
     const result = await detectWidgetInstallStatus("verveonline.myshopify.com", "store_1");
-    expect(result["product-reviews-widget"].state).toBe("installed");
-    expect(result["product-rating-badge"].state).toBe("installed");
-    expect(result["collection-rating-badge"].state).toBe("installed");
-    expect(result["review-carousel"].state).toBe("not-installed");
+
+    expect(result["product-reviews-widget"].state).toBe("blocked");
+    expect(result["product-rating-badge"].state).toBe("blocked");
+    expect(result["collection-rating-badge"].state).toBe("blocked");
   });
 
-  it("never applies an override for a store not in the list", async () => {
+  it("treats every shop domain identically", async () => {
     (fetch as unknown as ReturnType<typeof vi.fn>).mockImplementation(async () => htmlResponse("<html>nothing</html>"));
 
-    const result = await detectWidgetInstallStatus("some-other-shop.myshopify.com", "store_1");
-    expect(result["product-reviews-widget"].state).toBe("not-installed");
+    const overridden = await detectWidgetInstallStatus("verveonline.myshopify.com", "store_1");
+    const other = await detectWidgetInstallStatus("some-other-shop.myshopify.com", "store_1");
+
+    expect(overridden["product-reviews-widget"].state).toBe("not-installed");
+    expect(other["product-reviews-widget"].state).toBe("not-installed");
   });
 });

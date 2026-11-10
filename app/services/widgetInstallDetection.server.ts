@@ -9,7 +9,23 @@ import prisma from "../db.server";
 // is the same content any shopper's browser already receives; nothing merchant-specific is
 // hardcoded here, and no store-specific selector, ID, or handle appears anywhere in this file.
 
-export type WidgetInstallState = "installed" | "not-installed" | "unknown";
+/**
+ * What we actually know about a storefront block, kept deliberately narrow.
+ *
+ *  - "installed"     confirmed active on the live theme: the block's own marker was found in
+ *                    the HTML the storefront served.
+ *  - "not-installed" confirmed available but not added: the storefront was read successfully
+ *                    and the marker was absent.
+ *  - "blocked"       the theme could not be read at all because the storefront is password
+ *                    protected. A development-plan store cannot turn that off, so this is a
+ *                    permanent condition for some stores, not a transient error.
+ *  - "unknown"       unable to verify for any other reason — the fetch failed or timed out, or
+ *                    the block can legitimately live on a page we do not check.
+ *
+ * "blocked" is separate from "unknown" because the two call for different merchant guidance
+ * and because collapsing them hides the one case that can never resolve on its own.
+ */
+export type WidgetInstallState = "installed" | "not-installed" | "blocked" | "unknown";
 
 export interface WidgetInstallStatus {
   state: WidgetInstallState;
@@ -82,7 +98,7 @@ async function fetchStorefrontHtml(url: string): Promise<FetchResult> {
 
 function resolveSectionWidget(marker: string, fetched: FetchResult, url: string): WidgetInstallStatus {
   if (fetched.passwordProtected) {
-    return { state: "unknown", checkedUrl: url, reason: PASSWORD_PROTECTED_REASON };
+    return { state: "blocked", checkedUrl: url, reason: PASSWORD_PROTECTED_REASON };
   }
   if (fetched.html === null) {
     return { state: "unknown", checkedUrl: url, reason: UNREACHABLE_REASON };
@@ -110,7 +126,7 @@ function resolveEmbedWidget(
   }
 
   if (home.passwordProtected || product?.passwordProtected) {
-    return { state: "unknown", checkedUrl: homeUrl, reason: PASSWORD_PROTECTED_REASON };
+    return { state: "blocked", checkedUrl: homeUrl, reason: PASSWORD_PROTECTED_REASON };
   }
   if (home.html !== null || product?.html !== null) {
     return { state: "not-installed", checkedUrl: homeUrl };
@@ -125,7 +141,7 @@ function resolveEmbedWidget(
 // explanation instead.
 function resolveHomepageOnlyWidget(marker: string, home: FetchResult, homeUrl: string, notOnHomeReason: string): WidgetInstallStatus {
   if (home.passwordProtected) {
-    return { state: "unknown", checkedUrl: homeUrl, reason: PASSWORD_PROTECTED_REASON };
+    return { state: "blocked", checkedUrl: homeUrl, reason: PASSWORD_PROTECTED_REASON };
   }
   if (home.html === null) {
     return { state: "unknown", checkedUrl: homeUrl, reason: UNREACHABLE_REASON };
@@ -134,35 +150,6 @@ function resolveHomepageOnlyWidget(marker: string, home: FetchResult, homeUrl: s
     return { state: "installed", checkedUrl: homeUrl };
   }
   return { state: "unknown", checkedUrl: homeUrl, reason: notOnHomeReason };
-}
-
-// Manual-verification overrides — a general escape hatch for any store where live
-// detection is blocked by something outside the app's control (the leading case: a
-// development-plan store's storefront password, which Shopify itself won't let the
-// merchant turn off — see fetchStorefrontHtml's password-redirect handling above). An
-// entry here means a human independently confirmed the real state directly in that
-// store's own Shopify Theme Editor — never guessed — and takes precedence over whatever
-// the live HTML fetch would otherwise conclude. This is keyed by shop domain so it works
-// for any store that needs it, not special-cased detection logic for one merchant; remove
-// a store's entry once its storefront is reachable for automatic checks again (e.g. once
-// it's on a paid plan and password protection can be turned off).
-const MANUAL_VERIFICATION_OVERRIDES: Partial<Record<string, Partial<Record<WidgetInstallKey, WidgetInstallState>>>> = {
-  "verveonline.myshopify.com": {
-    // Verified 2026-08-16 via Shopify Theme Editor (Online Store > Themes > Dawn (Active)
-    // > Edit theme, theme id 150727819563): "Imagyn Reviews" and "Product Rating Badge"
-    // blocks both present under the Product information section on the Default product
-    // template; "Collection Ratings" app embed toggle is ON in the App Embeds panel;
-    // Review Carousel section is absent from the Home page template.
-    "product-reviews-widget": "installed",
-    "product-rating-badge": "installed",
-    "collection-rating-badge": "installed",
-    "review-carousel": "not-installed",
-  },
-};
-
-function applyManualOverride(shop: string, key: WidgetInstallKey, status: WidgetInstallStatus): WidgetInstallStatus {
-  const state = MANUAL_VERIFICATION_OVERRIDES[shop]?.[key];
-  return state ? { state } : status;
 }
 
 export async function detectWidgetInstallStatus(
@@ -211,10 +198,6 @@ export async function detectWidgetInstallStatus(
       STORE_AI_SUMMARY_NOT_ON_HOME_REASON,
     ),
   };
-
-  for (const key of Object.keys(result) as WidgetInstallKey[]) {
-    result[key] = applyManualOverride(shop, key, result[key]);
-  }
 
   return result;
 }

@@ -1176,7 +1176,10 @@ export default function WidgetsPage() {
                         ? `Block: ${card.blockName} — detected live on your storefront.`
                         : status.state === "not-installed"
                           ? `Block: ${card.blockName} — not yet added to your theme.`
-                          : status.reason ?? "Install state can't be determined automatically.";
+                          : status.state === "blocked"
+                            ? status.reason ??
+                              "Your storefront can't be read, so this can't be checked automatically."
+                            : status.reason ?? "Install state can't be determined automatically.";
 
                   return (
                     <div
