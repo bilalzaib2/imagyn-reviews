@@ -89,3 +89,6 @@ main().catch((error) => {
   console.error(error);
   process.exit(1);
 });
+
+// Keeps this file a module so its top-level consts do not collide with the other scripts.
+export {};
