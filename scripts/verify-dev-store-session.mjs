@@ -116,7 +116,22 @@ async function main() {
   );
 
   const granted = (session.scope || "").split(",").map((s) => s.trim()).filter(Boolean);
-  const missing = REQUESTED_SCOPES.filter((s) => !granted.includes(s));
+
+  // A granted write scope carries its read counterpart — Shopify's own access-scope guide says
+  // so explicitly, and warns about this exact misreading: "a granted write scope carries its
+  // read counterpart, so don't read an absent read_ handle as a missing permission."
+  // Comparing the two strings as literal sets gets this wrong, and gets it wrong in the worst
+  // direction: it reports a healthy session as incomplete. The real stored session proved it —
+  // granted held write_files but not read_files, and this check called read_files "missing"
+  // while every Files API call the app makes was in fact authorised. Left as a literal
+  // comparison it would have failed a good re-authorisation at 5/6 and blocked the whole
+  // integration-test queue on a permission that was never actually absent.
+  const isCoveredBy = (scope, held) => held.includes(scope)
+    || (scope.startsWith("read_") && held.includes(`write_${scope.slice("read_".length)}`));
+
+  const missing = REQUESTED_SCOPES.filter((s) => !isCoveredBy(s, granted));
+  const impliedOnly = REQUESTED_SCOPES.filter((s) => !granted.includes(s) && isCoveredBy(s, granted));
+
   record(
     REQUESTED_SCOPES.length > 0,
     "SCOPES is configured for this environment",
@@ -125,7 +140,11 @@ async function main() {
   record(
     missing.length === 0,
     "granted scopes cover every requested scope",
-    missing.length ? `missing: ${missing.join(", ")}` : `${granted.length} granted`,
+    missing.length
+      ? `missing: ${missing.join(", ")}`
+      : impliedOnly.length
+        ? `${granted.length} granted; ${impliedOnly.join(", ")} covered by the write scope`
+        : `${granted.length} granted`,
   );
 
   // The live round-trip. Everything above is readable from our own database and can be true
