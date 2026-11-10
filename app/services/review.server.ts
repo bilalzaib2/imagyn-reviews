@@ -887,9 +887,26 @@ async function setReviewStatus(
 ) {
   const existing = await requireReview(storeId, id);
 
+  // Archive is the gate on publication, and it outranks a moderation verdict.
+  //
+  // The Archive view renders the same bulk bar as every other view, so "Approve" sits directly
+  // above a list of archived reviews. Writing `isPublished: status === APPROVED` here without
+  // consulting archivedAt put a review in two places at once: listed in the Archive and live
+  // on the storefront, while every statistic (all of which filter on LIVE_REVIEW) went on
+  // excluding it — so a merchant who filed a review away found it back on their product page
+  // and missing from the counts describing that page, with nothing raised anywhere.
+  //
+  // Approving an archived review still records the verdict; it just cannot put it back on the
+  // storefront. Restoring is the one action that does that, and unarchiveReview already
+  // recomputes isPublished from whatever status it finds.
+  const isArchived = existing.archivedAt !== null;
+
   // Only a transition INTO published state can push a store over its plan's published-review
   // cap — re-approving an already-published review, or rejecting one, never needs this check.
-  if (status === ReviewStatus.APPROVED && !existing.isPublished) {
+  // Neither does approving an archived review, which publishes nothing: the cap limits what is
+  // ON the storefront, and charging it here would stop a Free-plan merchant at their limit from
+  // tidying up their Archive at all.
+  if (status === ReviewStatus.APPROVED && !existing.isPublished && !isArchived) {
     const permissions = await getStorePermissions(existing.storeId);
     const limit = permissions.maxPublishedReviews;
 
@@ -911,7 +928,7 @@ async function setReviewStatus(
     where: { id },
     data: {
       status,
-      isPublished: status === ReviewStatus.APPROVED,
+      isPublished: status === ReviewStatus.APPROVED && !isArchived,
       // Hiding records WHY and WHEN; restoring clears both. A stale reason left on a
       // restored review would misreport it as hidden everywhere the column is read, and the
       // Spam view is a filter over exactly this column.
@@ -1087,18 +1104,22 @@ export async function bulkModerateReviews(
 
   const owned = await prisma.review.findMany({
     where: { id: { in: ids }, storeId, deletedAt: null },
-    select: { id: true, productId: true, isPublished: true },
+    // archivedAt is selected because it decides this row's isPublished — see setReviewStatus's
+    // own note on why archive outranks a moderation verdict. The Archive view shows the same
+    // bulk bar as every other view, so a bulk approve over archived rows is two clicks away.
+    select: { id: true, productId: true, isPublished: true, archivedAt: true },
   });
 
   if (owned.length === 0) {
     return { count: 0, affectedProductIds: [] };
   }
 
-  const ownedIds = owned.map((review) => review.id);
   const affectedProductIds = Array.from(new Set(owned.map((review) => review.productId)));
 
   // Same cap setReviewStatus enforces for a single approval — bulk-approve is a separate
-  // updateMany() call, not a loop over setReviewStatus, so it needs its own check.
+  // updateMany() call, not a loop over setReviewStatus, so it needs its own check. Archived
+  // rows are excluded for the same reason they are there: they are not about to be published,
+  // so they cost nothing against a limit on what is on the storefront.
   if (status === ReviewStatus.APPROVED) {
     const permissions = await getStorePermissions(storeId);
     const limit = permissions.maxPublishedReviews;
@@ -1107,7 +1128,9 @@ export async function bulkModerateReviews(
       const alreadyPublished = await prisma.review.count({
         where: { storeId, deletedAt: null, isPublished: true },
       });
-      const aboutToApprove = owned.filter((review) => !review.isPublished).length;
+      const aboutToApprove = owned.filter(
+        (review) => !review.isPublished && review.archivedAt === null,
+      ).length;
 
       if (alreadyPublished + aboutToApprove > limit) {
         throw new PermissionError(
@@ -1118,12 +1141,32 @@ export async function bulkModerateReviews(
     }
   }
 
-  const result = await prisma.review.updateMany({
-    where: { id: { in: ownedIds }, deletedAt: null },
-    // Same record as a single moderation — a reason must not be something a merchant can
-    // skip simply by selecting several reviews instead of one.
-    data: { status, isPublished: status === ReviewStatus.APPROVED, ...hideDecision(status, hideReason) },
-  });
+  // Same record as a single moderation — a reason must not be something a merchant can skip
+  // simply by selecting several reviews instead of one.
+  const moderation = { status, ...hideDecision(status, hideReason) };
+
+  // One updateMany cannot write two different isPublished values, so an approval that spans
+  // the Archive is split exactly as bulkSetReviewArchived splits on status. A rejection needs
+  // no split: hiding publishes nothing either way.
+  const groups =
+    status === ReviewStatus.APPROVED
+      ? [
+          { ids: owned.filter((r) => r.archivedAt === null).map((r) => r.id), isPublished: true },
+          { ids: owned.filter((r) => r.archivedAt !== null).map((r) => r.id), isPublished: false },
+        ]
+      : [{ ids: owned.map((r) => r.id), isPublished: false }];
+
+  const results = await Promise.all(
+    groups
+      .filter((group) => group.ids.length > 0)
+      .map((group) =>
+        prisma.review.updateMany({
+          where: { id: { in: group.ids }, deletedAt: null },
+          data: { ...moderation, isPublished: group.isPublished },
+        }),
+      ),
+  );
+  const result = { count: results.reduce((total, r) => total + r.count, 0) };
 
   await Promise.all(affectedProductIds.map((productId) => recalculateProductStats(productId)));
 

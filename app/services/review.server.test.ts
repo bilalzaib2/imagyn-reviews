@@ -25,6 +25,7 @@ interface FakeReview {
   reply: string | null;
   repliedAt: Date | null;
   deletedAt: Date | null;
+  archivedAt: Date | null;
   createdAt: Date;
   media: Array<{ type: string }>;
 }
@@ -57,6 +58,10 @@ function seedReview(overrides: Partial<FakeReview> & { id: string; storeId: stri
     reply: null,
     repliedAt: null,
     deletedAt: null,
+    // Archive outranks a moderation verdict (see setReviewStatus), so this column decides
+    // whether an approval can publish. A seeded review is a live one unless a test says
+    // otherwise.
+    archivedAt: null,
     createdAt: new Date(),
     // Mirrors review.server.ts's real reviewInclude (always includes media) — setReviewStatus
     // reads review.media directly to derive hasPhoto/hasVideo for issueRewardIfEligible.

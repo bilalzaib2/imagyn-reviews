@@ -68,6 +68,11 @@ const review = {
   productId: "prod_1",
   isPublished: false,
   status: ReviewStatus.PENDING,
+  // A real row always carries this column, and setReviewStatus reads it: archive outranks a
+  // moderation verdict, so a review with no archivedAt is the one that can be published.
+  // Omitting it here made this fixture model a row that cannot exist, and the tests below
+  // silently measured an archived review's behaviour instead of a live one's.
+  archivedAt: null as Date | null,
 };
 
 const update = vi.fn();

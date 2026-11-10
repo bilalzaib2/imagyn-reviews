@@ -308,3 +308,103 @@ describe("archived reviews are invisible everywhere public", () => {
     expect(body).toContain("LIVE_REVIEW");
   });
 });
+
+describe("moderating a review that is archived", () => {
+  // The hole this closes. The Archive view renders the same bulk bar as every other view, so
+  // "Approve" sits right there above a list of archived reviews — two clicks from the Archive
+  // to a published review that is still archived. Both moderation paths wrote
+  // `isPublished: status === APPROVED` unconditionally, with nothing consulting archivedAt.
+  //
+  // The result was a review in two places at once: listed in the Archive (archivedAt set) and
+  // live on the storefront (isPublished true), while every statistic — all of which filter on
+  // LIVE_REVIEW — went on excluding it. A merchant filing a review away would find it back on
+  // their product page, absent from the counts that are supposed to describe that page, and no
+  // error anywhere.
+  //
+  // The rule both paths now share: archivedAt is the gate. A review is published only when it
+  // is approved AND not archived. The two axes stay independent exactly as the Archive's own
+  // design comment claims — moderation still records its verdict on an archived review, it
+  // simply cannot put it back on the storefront. Restoring is the one action that does that,
+  // and unarchiveReview already recomputes isPublished from the status it finds.
+  const archived = { ...review, status: ReviewStatus.PENDING, isPublished: false, archivedAt: new Date() };
+
+  it("records the approval but does NOT publish it", async () => {
+    findFirst.mockResolvedValue(archived);
+
+    await svc.approveReview("store_1", "rev_1");
+
+    const data = dataOf(update);
+    expect(data.status).toBe(ReviewStatus.APPROVED);
+    expect(data.isPublished).toBe(false);
+  });
+
+  it("leaves archivedAt alone — approving is not restoring", async () => {
+    findFirst.mockResolvedValue(archived);
+
+    await svc.approveReview("store_1", "rev_1");
+    expect(dataOf(update)).not.toHaveProperty("archivedAt");
+  });
+
+  it("still publishes an approval when the review is not archived", async () => {
+    findFirst.mockResolvedValue({ ...review, status: ReviewStatus.PENDING, isPublished: false });
+
+    await svc.approveReview("store_1", "rev_1");
+    expect(dataOf(update).isPublished).toBe(true);
+  });
+
+  it("does not spend a plan's published-review slot on an archived review", async () => {
+    // The cap exists to limit what is ON the storefront. An approval that cannot publish must
+    // not be rejected for being over the limit, or a Free-plan merchant at their cap could not
+    // tidy up their Archive at all.
+    const { getStorePermissions } = await import("./permissions");
+    vi.mocked(getStorePermissions).mockResolvedValueOnce({ maxPublishedReviews: 5 } as never);
+    count.mockResolvedValue(5);
+    findFirst.mockResolvedValue(archived);
+
+    await expect(svc.approveReview("store_1", "rev_1")).resolves.toBeDefined();
+  });
+
+  it("bulk-approve publishes the unarchived rows and not the archived ones", async () => {
+    // One updateMany cannot write two different isPublished values, so bulk-approve has to
+    // split the selection the same way bulkSetReviewArchived splits on status.
+    findMany.mockResolvedValue([
+      { id: "rev_live", productId: "prod_1", status: ReviewStatus.PENDING, isPublished: false, archivedAt: null },
+      { id: "rev_arch", productId: "prod_1", status: ReviewStatus.PENDING, isPublished: false, archivedAt: new Date() },
+    ]);
+
+    await svc.bulkModerateReviews("store_1", ["rev_live", "rev_arch"], ReviewStatus.APPROVED);
+
+    const byPublished = new Map<boolean, string[]>();
+    for (const [args] of updateMany.mock.calls) {
+      byPublished.set(args.data.isPublished, args.where.id.in);
+    }
+
+    expect(byPublished.get(true)).toEqual(["rev_live"]);
+    expect(byPublished.get(false)).toEqual(["rev_arch"]);
+  });
+
+  it("bulk-approve counts only the unarchived rows against the plan cap", async () => {
+    const { getStorePermissions } = await import("./permissions");
+    vi.mocked(getStorePermissions).mockResolvedValueOnce({ maxPublishedReviews: 5 } as never);
+    count.mockResolvedValue(5);
+    findMany.mockResolvedValue([
+      { id: "rev_arch", productId: "prod_1", status: ReviewStatus.PENDING, isPublished: false, archivedAt: new Date() },
+    ]);
+
+    await expect(
+      svc.bulkModerateReviews("store_1", ["rev_arch"], ReviewStatus.APPROVED),
+    ).resolves.toMatchObject({ count: 1 });
+  });
+
+  it("bulk-hide needs no split, because hiding never publishes anything", async () => {
+    findMany.mockResolvedValue([
+      { id: "rev_live", productId: "prod_1", status: ReviewStatus.APPROVED, isPublished: true, archivedAt: null },
+      { id: "rev_arch", productId: "prod_1", status: ReviewStatus.APPROVED, isPublished: false, archivedAt: new Date() },
+    ]);
+
+    await svc.bulkModerateReviews("store_1", ["rev_live", "rev_arch"], ReviewStatus.REJECTED, "spam");
+
+    expect(updateMany).toHaveBeenCalledTimes(1);
+    expect(dataOf(updateMany).isPublished).toBe(false);
+  });
+});
