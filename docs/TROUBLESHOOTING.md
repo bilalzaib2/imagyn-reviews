@@ -9,7 +9,7 @@ Incident reports and diagnostic reference for Imagyn Reviews. Add a new dated in
 | Symptom | Check first | Details |
 |---|---|---|
 | Embedded app shows a broken/crashed iframe icon, sidebar submenu (Dashboard/Reviews/etc.) missing | Iframe `src` origin — is it Railway, or a `trycloudflare.com` tunnel? | See [Incident 2026-07-21](#incident-2026-07-21-embedded-app-broken-after-development-work) below. Almost always a leftover `shopify app dev` session, not a code bug. |
-| Embedded app renders styled, then becomes completely unstyled HTML a moment later (serif headings, blue underlined links, no layout) | Grep the `shopify app dev` output for `optimized dependencies changed. reloading` | See [Incident 2026-11-11](#incident-2026-11-11-embedded-dashboard-loses-all-css-mid-load) below. A Vite dependency re-optimization, not a CSS or Polaris problem. |
+| Embedded app renders styled, then becomes completely unstyled HTML a moment later (serif headings, blue underlined links, no layout) | A React hydration failure, not a stylesheet problem — the console reports `Expected server HTML to contain a matching <X> in <Y>` | See [Incident 2026-11-11](#incident-2026-11-11-embedded-dashboard-loses-all-css-mid-load) below, **including the correction at the top of it**. A failed hydration discards the dev-only critical-CSS node. Development-only; production ships real stylesheet links. |
 | `/app` returns `410` when hit directly, unauthenticated | Expected behavior — this is Shopify's own "exit iframe" bounce (`boundary.error()`), not an error | Not a bug. Only investigate further if the *embedded* (authenticated, real iframe) path also fails. |
 | React error `#418` / `#423` in console when testing a route locally | Check whether you hit the route with real `shop`/embedded session params | These are hydration-mismatch codes; the underlying cause is almost always something upstream (see incident below) throwing before React finishes hydrating — the codes themselves are rarely the root cause. Decode at `react.dev/errors/<code>` for the specific meaning. |
 | `prisma migrate deploy` fails with `P3005: database schema is not empty` | Is `_prisma_migrations` missing entirely? | See [OPERATIONS.md](./OPERATIONS.md#recovering-a-missing-_prisma_migrations-table) — this is a migration-history reconciliation, not a schema problem. |
@@ -112,7 +112,57 @@ and stays that way until a manual refresh. Loader data and hydration are unaffec
 content is all there and correct, only the styling is gone. This makes it read as a CSS,
 Polaris or stylesheet-loading problem. It is none of those.
 
-### Root cause
+### CORRECTION (2026-11-11, later the same day)
+
+**The root cause recorded below is incomplete, and on its own it is wrong.** Removing the
+re-optimization trigger did not fix the bug — the dashboard went on rendering unstyled with
+zero re-optimization events in the log. Read this correction first; the original analysis is
+kept underneath because the mechanism it describes is real and its measurements still hold.
+
+**The actual root cause is a failed React hydration.** Instrumented from inside the embedded
+iframe (cross-origin, so its DOM and console cannot be read from the admin page — the page was
+made to POST its own stylesheet census back to the dev server), a failing load reports:
+
+```
+Uncaught Error: Hydration failed because the initial UI does not match what was rendered on the server.
+Warning: Expected server HTML to contain a matching <div> in <p>.
+  at div / at StarRating / at p / at Metric / at Index          (/app)
+Warning: Expected server HTML to contain a matching <ui-save-bar> in <div>.
+  at ui-save-bar / at InternalSaveBar / at ContextualSaveBar    (/app/email-studio, /app/appearance)
+```
+
+When hydration fails React discards the server-rendered DOM and re-renders from scratch. In
+development that takes React Router's single `data-react-router-critical-css` node with it and
+nothing replaces it — measured at **0 CSS rules**, `body` background `rgba(0, 0, 0, 0)`. That
+is the unstyled dashboard, and it persists until a manual refresh.
+
+Two distinct mismatches, both fixed:
+
+1. **`Metric` wrapped its `ReactNode` slots in `<p>`.** The dashboard passes `<StarRating/>`
+   (root: a `<div>`) as `sub`. A `<div>` inside a `<p>` is invalid HTML; the parser auto-closes
+   the paragraph, so the parsed DOM can never match the tree the server rendered.
+2. **`ContextualSaveBar` seeded its readiness state from `window.shopify`.** The server has no
+   `window` and renders null, so whenever App Bridge's script had already run the first client
+   render emitted `<ui-save-bar>` where the server payload had nothing.
+
+**Why the first diagnosis looked right.** A dependency re-optimization does trigger a reload,
+and every reload is another chance to lose the hydration race — so removing it genuinely cut
+the failure rate, enough to look like a fix across a handful of loads. It was not one. The
+lesson: verify an intermittent fix with a measurement across many loads, not a few screenshots.
+
+**Production was never affected.** The critical-CSS mechanism is development-only; a real
+production build was checked and ships ordinary stylesheet links — 42 CSS assets emitted, zero
+`data-react-router-critical-css` occurrences in the served HTML. A dev-loop defect, not a
+release blocker.
+
+**Verification after both fixes**, against the real embedded app on verveonline: `/app` across
+10 cold loads and 10 hard refreshes — **15 final-state samples, 0 unstyled**; `/app/reviews`,
+`/app/settings`, `/app/settings/requests`, `/app/email-studio`, `/app/appearance` all styled;
+**0 hydration failures, 0 "Expected server HTML" mismatches**.
+
+---
+
+### Original root cause (partial — see the correction above)
 
 A **Vite dependency re-optimization firing while the dashboard's route tree was loading.**
 The dev server log pins the moment:

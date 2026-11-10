@@ -1424,3 +1424,69 @@ printed. Current result: 3 of 6.
    coupon tiering and combinations, revenue attribution, and the Q&A widget plus its
    notification.
 4. The backfill in §22.3 needs owner approval before it runs anywhere.
+
+---
+
+## §23 — 2026-11-11: Shopify unblocked, hydration fixed, a claim withdrawn
+
+### §23.1 What changed
+
+- **Shopify auth is working.** `node --env-file=.env scripts/verify-dev-store-session.mjs`
+  reports **13/13**. Note the count: an earlier handover said "6 of 6" — the script has 13
+  checks, and 6 was simply how many could run before the token was valid.
+- **Three real-Shopify e2e scripts exist now** and are the way to re-check the live
+  integration without clicking through the admin:
+  - `scripts/e2e-shopify-discounts.ts` — full coupon lifecycle, 18 checks
+  - `scripts/e2e-shopify-data.ts` — orders, JSON-LD metafield, Files upload, 14 checks
+  - `scripts/cleanup-e2e-shopify-artifacts.ts` — janitor for artifacts stranded by a failure
+  All three refuse a non-local `DATABASE_URL`, target only the development store, and delete
+  what they create.
+- **The unstyled dashboard is fixed** — two hydration mismatches, not a CSS bug. See §23.2.
+- **The theme-extension "Live on your theme" claim is withdrawn** for this store. See §23.3.
+
+### §23.2 The unstyled dashboard — what it actually was
+
+A failed React hydration. React discards the server DOM and re-renders from scratch, and in
+development that drops React Router's single `data-react-router-critical-css` node, which is
+where **all** dev CSS lives. Result: 0 CSS rules, until a manual refresh.
+
+Two causes, both fixed: `Metric` wrapped `ReactNode` slots in `<p>` while the dashboard passes
+`<StarRating/>` (a `<div>`) into one; and `ContextualSaveBar` seeded state from
+`window.shopify`, so its first client render disagreed with the server's null.
+
+**Two things to carry forward:**
+
+1. **Production was never affected** — it ships real `<link rel="stylesheet">` tags. If this
+   gets re-reported as a launch blocker, it is not one.
+2. **My first diagnosis was wrong** and is corrected in place at the top of the 2026-11-11
+   incident in `TROUBLESHOOTING.md`. I blamed a Vite dependency re-optimization, fixed that,
+   and the bug continued. It was a contributing trigger, not the cause. Verify an intermittent
+   fix with a measurement across many loads, not a few screenshots.
+
+**How to instrument the embedded iframe** (this is the reusable part): the iframe is
+cross-origin, so its DOM and console cannot be read from the admin page, and the browser
+network tool does not cross that boundary either. What works is making the page POST its own
+state back to the dev server it was served from, and reading it out of the dev log. Keep the
+middleware's body-log limit high enough — a 400-character truncation silently cut the React
+component stack and cost an extra investigation round.
+
+### §23.3 Theme extension status
+
+`MANUAL_VERIFICATION_OVERRIDES` is gone. It asserted four blocks as installed for
+`verveonline.myshopify.com` from a Theme Editor check dated 2026-08-16 against theme
+`150727819563`; the CLI now reports the host theme as `193495335211`. Detection now reports
+four distinct states — `installed`, `not-installed`, `blocked` (storefront password protected)
+and `unknown` — and no shop domain is special-cased.
+
+If you want these blocks genuinely verified, the options are: grant `read_themes`, put the
+store on a plan where password protection can be turned off, or re-record a manual check
+against the **current** theme id and date it.
+
+### §23.4 Exact next task
+
+1. Decide the checkout-redemption path — it is the largest remaining unverified workflow and
+   needs either a non-development store or the storefront password.
+2. Check `bilal.zaib@outlook.com` for the two Resend messages and confirm Reply-To and
+   rendering, which upgrades "Real email accepted" to "Inbox delivery verified".
+3. The Notion parity tracker connector is still unauthenticated, so
+   `JUDGEME_GAP_MATRIX.md` remains the single source of parity truth.

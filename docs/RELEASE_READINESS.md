@@ -281,3 +281,52 @@ read-only run whether it worked.
 products not touched by a later review mutation keep their old figures. It is dry-run by
 default, refuses a non-local database, and has **not** been applied anywhere. It needs owner
 approval.
+
+---
+
+## §13 Addendum — 2026-11-11 (real Shopify testing, hydration fix, theme-status withdrawal)
+
+### Readiness movement
+
+**Net: forward.** The Shopify authentication blocker that gated every real integration test is
+cleared (session verified 13/13, all ten declared scopes granted and probed live), and the
+first real end-to-end workflow — the full coupon/discount lifecycle — is now verified against
+Shopify rather than mocks.
+
+### Corrections to earlier entries in this document
+
+1. **The unstyled dashboard is not a launch blocker.** It was reported as one earlier today.
+   It is a development-only defect: React Router's critical-CSS mechanism is dev-only, and a
+   real production build was checked and ships ordinary stylesheet links (42 CSS assets, zero
+   `data-react-router-critical-css` occurrences). It is fixed regardless — two hydration
+   mismatches, in `Metric` and `ContextualSaveBar`.
+
+2. **The Vite dependency re-optimization was not the root cause.** §12's successor entry
+   claimed it was. It was a contributing trigger only; the fix for it is kept because the
+   mechanism is real, but the actual cause was a failed hydration. See the correction at the
+   top of the 2026-11-11 incident in `TROUBLESHOOTING.md`.
+
+3. **Four theme blocks are no longer reported as installed on this store.** Previously they
+   read "Live on your theme" from a hardcoded override whose evidence was a 2026-08-16 Theme
+   Editor check against a theme that is no longer the host theme. That claim is withdrawn.
+
+### Launch blockers
+
+| # | Blocker | Owner action |
+|---|---|---|
+| 1 | Checkout redemption unverified | Needs a real order on a store whose storefront can be reached. Requires either a non-development store or the storefront password. |
+| 2 | Storefront widget rendering unverified | Same root constraint — the storefront 302s to `/password`. |
+| 3 | Theme extension activation unverifiable | No `read_themes` scope and no storefront access. Either grant the scope or confirm manually in the Theme Editor and re-record with a current theme id. |
+| 4 | Email inbox placement unverified | Human check of `bilal.zaib@outlook.com`. Provider acceptance is recorded; delivery is not. |
+| 5 | Order-triggered review requests unverified | The development store has 0 orders. |
+
+### Not blockers (explicitly)
+
+- The unstyled dashboard (dev-only, fixed, verified across 20 loads).
+- The AS23674 API-activity alert — investigated, matches our own testing, no compromise; see
+  `SECURITY.md`.
+
+### Gates at this entry
+
+`Test Files 111 passed · Tests 2115 passed` · typecheck clean · lint clean · production build
+clean · `prisma migrate status`: 42 migrations, database schema up to date, 0 pending.

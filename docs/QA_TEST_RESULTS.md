@@ -226,3 +226,81 @@ Audited by reading every relevant path and probing for the specific failure.
 - Persistence of any control exercised in §3.
 - Shopify Managed Pricing showing $9.99 / 7 days — needs a human to look at the dashboard.
 - Theme app extension rendering on a real storefront.
+
+---
+
+## 2026-11-11 — real development-store integration testing and the hydration fix
+
+Session state: offline session verified **13/13** (`scripts/verify-dev-store-session.mjs`),
+including live Admin API read probes per scope and `shop.plan.partnerDevelopment = true`.
+
+### Real Shopify verified
+
+Evidence label: **Real Shopify verified** — driven against the live Admin API on
+`verveonline.myshopify.com`, asserted by reading state back from Shopify rather than trusting
+a mutation's return value. Re-run clean twice.
+
+| Workflow | Script | Result |
+|---|---|---|
+| Discount create / read-back by code / revoke / resume / usage count / delete | `scripts/e2e-shopify-discounts.ts` | **18/18** |
+| Orders + customers query, fulfilment filter | `scripts/e2e-shopify-data.ts` | pass (0 orders on store — see blocked) |
+| `reviews_jsonld` product metafield — written, valid JSON, `@type: Product`, real `aggregateRating` | `scripts/e2e-shopify-data.ts` | pass (3.5 / 2 reviews, matches local DB) |
+| Files upload — staged upload → fileCreate → poll → CDN URL fetched over HTTP → listed → deleted | `scripts/e2e-shopify-data.ts` | **14/14** |
+
+Specifics pinned because they silently break real redemption: 10% is stored as Shopify's `0.1`
+fraction and not `10`; `usageLimit`, `appliesOncePerCustomer` and minimum subtotal round-trip;
+an unknown code reads `null` rather than `0`, which is the distinction `referrals.server.ts`
+depends on to tell "never created" from "created but unused".
+
+All test artifacts were deleted and re-verified gone (`scripts/cleanup-e2e-shopify-artifacts.ts`:
+0 matching files, 0 matching discounts).
+
+### Real email accepted
+
+Both flows accepted by Resend with message ids, to `bilal.zaib@outlook.com` only.
+**Not** inbox delivery verified — that needs a human looking at the mailbox.
+
+### Browser-interaction-tested — the unstyled dashboard
+
+Measured from inside the embedded iframe by having the page POST its own stylesheet census to
+the dev server (the iframe is cross-origin; its DOM and console cannot be read from the admin
+page, and `read_network_requests` does not cross that boundary either).
+
+Before: `/app` unstyled on repeated loads; `/app/email-studio` and `/app/appearance` at 0 rules.
+
+After both fixes:
+
+| Screen | Loads | Unstyled |
+|---|---|---|
+| `/app` | 15 final-state samples, across 10 cold loads + 10 hard refreshes | **0** |
+| `/app/reviews` | 1 | 0 |
+| `/app/settings` | 1 | 0 |
+| `/app/settings/requests` | 1 | 0 |
+| `/app/email-studio` | 1 | 0 |
+| `/app/appearance` | 1 | 0 |
+
+0 hydration failures, 0 `Expected server HTML` mismatches, 0 Vite re-optimization events.
+
+**Production was never affected.** Verified against a real production build: the served HTML
+carries ordinary `<link rel="stylesheet">` tags (42 CSS assets emitted) and **zero**
+`data-react-router-critical-css` occurrences. The mechanism that loses the stylesheets is
+development-only.
+
+### Not verified — and why
+
+| Item | Status | Reason |
+|---|---|---|
+| Coupon redemption at checkout | **Blocked** | Needs a real order. Storefront is password protected and the app holds `read_orders`, not `write_orders`. |
+| Storefront widget rendering | **Blocked** | Storefront 302s to `/password`. A development-plan store cannot turn this off. |
+| Order-triggered review requests | **Blocked** | The development store returns 0 orders. |
+| Theme extension activation | **Blocked** | No `read_themes` scope, and the storefront cannot be read. Now reported honestly as `blocked` rather than claimed — see the override removal below. |
+| Email inbox placement | **Not verified** | Provider acceptance is not delivery. |
+
+### Theme extension status — claim withdrawn
+
+`MANUAL_VERIFICATION_OVERRIDES` asserted four blocks as `installed` for this store on the
+strength of a Theme Editor check dated **2026-08-16 against theme 150727819563**. The Shopify
+CLI now reports the host theme as **193495335211** — a different theme. The table is removed;
+no shop domain is special-cased anywhere in detection. Those four blocks now report `blocked`
+("your storefront is password protected, verify in your Theme Editor") instead of
+"Live on your theme". Lower confidence, higher honesty.
