@@ -28,6 +28,9 @@ import SettingsImportPage from "../../app/routes/app.settings.import";
 import SettingsProductGroupsPage from "../../app/routes/app.settings.productGroups";
 import SettingsRewardsPage from "../../app/routes/app.settings.rewards";
 import SettingsReferralsPage from "../../app/routes/app.settings.referrals";
+import NewReviewPage from "../../app/routes/app.reviews_.new";
+import EditReviewPage from "../../app/routes/app.reviews_.$id.edit";
+import ProductDetailPage from "../../app/routes/app.products_.$id";
 import {
   appearanceLoaderData,
   dashboardLoaderData,
@@ -50,6 +53,9 @@ import {
   emailStudioLoaderData,
   reviewsLoaderData,
   questionsLoaderData,
+  newReviewLoaderData,
+  editReviewLoaderData,
+  productDetailLoaderData,
 } from "./fixtures";
 
 // Each screen is mounted through a memory router whose loader returns the fixture, which is
@@ -281,13 +287,69 @@ const SCREENS: Record<string, { label: string; path: string; element: JSX.Elemen
     element: <QuestionsPage />,
     data: questionsLoaderData({ empty: true }),
   },
+
+  // Reached by URL rather than by a nav item, which is exactly why these three went unrendered
+  // until 2026-11-10 — a sweep driven by the sidebar never arrives at them.
+  "review-new": {
+    label: "Add a review manually",
+    path: "/app/reviews/new",
+    element: <NewReviewPage />,
+    data: newReviewLoaderData(),
+  },
+  "review-edit": {
+    label: "Edit a review",
+    path: "/app/reviews/rev_1/edit",
+    element: <EditReviewPage />,
+    data: editReviewLoaderData(),
+  },
+  "review-edit-missing": {
+    label: "Edit a review — not this store's",
+    path: "/app/reviews/rev_other/edit",
+    element: <EditReviewPage />,
+    data: editReviewLoaderData({ found: false }),
+  },
+  "product-detail": {
+    label: "Product detail",
+    path: "/app/products/prod_0",
+    element: <ProductDetailPage />,
+    data: productDetailLoaderData(),
+  },
+  "product-detail-empty": {
+    label: "Product detail — no reviews yet",
+    path: "/app/products/prod_0",
+    element: <ProductDetailPage />,
+    data: productDetailLoaderData({ reviews: false }),
+  },
+  "product-detail-missing": {
+    label: "Product detail — not found",
+    path: "/app/products/prod_other",
+    element: <ProductDetailPage />,
+    data: productDetailLoaderData({ found: false }),
+  },
 };
 
 const key = new URLSearchParams(window.location.search).get("screen") ?? "reviews";
 const screen = SCREENS[key] ?? SCREENS.reviews;
 
 const router = createMemoryRouter(
-  [{ path: screen.path, element: screen.element, loader: () => screen.data, action: async () => ({ ok: true }) }],
+  [
+    { path: screen.path, element: screen.element, loader: () => screen.data, action: async () => ({ ok: true }) },
+    // Several screens load data from a RESOURCE route through a fetcher — app.requests.tsx's
+    // "Send Request" reaches /app/requests/orders, for instance. Those routes render no UI, so
+    // they are not screens and have no SCREENS entry, but without a route to match them
+    // React Router answers the fetcher with a 404 and the DEFAULT ErrorBoundary replaces the
+    // whole page with "Unexpected Application Error!". That looked exactly like a crash in the
+    // Requests screen during the 2026-11-10 interaction sweep, and was not one.
+    //
+    // A catch-all under /app returning an empty payload keeps the router whole, so a fetcher
+    // resolves to "no results" — a state the UI is built to handle — and the sweep can carry
+    // on into the drawer the fetcher opens.
+    {
+      path: "/app/*",
+      loader: () => ({ orders: [], products: [], results: [], hasMore: false, nextCursor: null, error: null }),
+      action: async () => ({ ok: true }),
+    },
+  ],
   { initialEntries: [screen.path] },
 );
 

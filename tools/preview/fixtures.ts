@@ -800,6 +800,79 @@ export function settingsImportLoaderData({ empty = false } = {}) {
   };
 }
 
+// ---------------------------------------------------------------------------------------------
+// The three screens that reach a merchant through a URL rather than a nav item, and so went
+// unrendered until 2026-11-10 even after a sweep that claimed to cover every merchant screen:
+// a product's own detail page, and the manual add/edit review forms.
+// ---------------------------------------------------------------------------------------------
+
+/** app.reviews_.new — the manual "add a review" form. Only needs the product picker's options. */
+export function newReviewLoaderData() {
+  return {
+    products: PRODUCTS.map((name, index) => ({ id: `prod_${index}`, name })),
+  };
+}
+
+/**
+ * app.reviews_.$id.edit — editing an existing review.
+ *
+ * `found: false` is the more interesting of the two states and is why this takes a flag: the
+ * route returns `review: null` with an error string for any id that is not this store's, which
+ * is the tenant-isolation path a merchant hits by editing a URL.
+ */
+export function editReviewLoaderData({ found = true } = {}) {
+  return {
+    review: found ? review(1) : null,
+    products: PRODUCTS.map((name, index) => ({ id: `prod_${index}`, name })),
+    error: found ? null : "Review not found.",
+  };
+}
+
+/** app.products_.$id — one product, its reviews and its AI summary. */
+export function productDetailLoaderData({ found = true, reviews: withReviews = true } = {}) {
+  if (!found) {
+    return {
+      product: null,
+      reviews: [],
+      reviewsTotalCount: 0,
+      aiSummary: null,
+      canUseAI: false,
+      error: "Product not found.",
+    };
+  }
+
+  const product = productsLoaderData().products[0];
+  const reviews = withReviews ? Array.from({ length: 5 }, (_, index) => review(index)) : [];
+
+  return {
+    product,
+    reviews,
+    reviewsTotalCount: withReviews ? 31 : 0,
+    // Every field of ProductAiSummaryRecord, including positives/negatives — the route reads
+    // `.length` on both, so an incomplete summary object crashes the screen rather than
+    // degrading. Written out in full for that reason.
+    aiSummary: withReviews
+      ? {
+          id: "sum_1",
+          productId: product.id,
+          summary:
+            "Shoppers consistently praise the build quality and the speed of delivery. The most " +
+            "common criticism is sizing, which several reviewers describe as running small.",
+          positives: ["Build quality", "Fast delivery", "Looks as pictured"],
+          negatives: ["Sizing runs small"],
+          recommendation: "Add a sizing note to the product description.",
+          reviewCountUsed: 31,
+          provider: "openai",
+          modelUsed: "gpt-4o-mini",
+          generatedAt: new Date("2026-11-08").toISOString(),
+          updatedAt: new Date("2026-11-08").toISOString(),
+        }
+      : null,
+    canUseAI: true,
+    error: null,
+  };
+}
+
 export function settingsProductGroupsLoaderData({ empty = false } = {}) {
   return {
     groups: empty
