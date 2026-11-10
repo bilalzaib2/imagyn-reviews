@@ -1256,3 +1256,171 @@ still needs a human to confirm it reads $9.99 / 7 days.
 2. Extend the interaction sweep to Coupons, Email Studio and Requests.
 3. Audit §9 security items that are checkable locally: webhook HMAC verification and
    idempotency, upload handling, discount ownership.
+
+---
+
+## 22. Session 2026-11-10 (later) — four defects, the OAuth diagnosis, and a correction
+
+**Branch `main`, 48 commits ahead of `origin/main`.** 2,110 tests / 110 files, typecheck, lint
+and production build all clean. Working tree clean except the three permanent untracked paths
+(`.github/`, `Brand Assets/`, `skills-lock.json`).
+
+Full evidence for everything below now lives in **`docs/QA_TEST_RESULTS.md`** (new — it did
+not exist, despite being named in the brief). `IMAGYN_PRODUCT_MASTER_STATUS.md` was
+deliberately **not** created: `PROJECT_STATE.md` already holds that role, and the brief says
+not to create another tracker.
+
+### 22.1 A correction to §21
+
+§21.1 said Settings → Import and Product groups were the last two unrendered screens, and a
+later report claimed every merchant-facing screen was then covered. **That was wrong.** Three
+screens were never rendered or inspected, because they are reached by URL rather than by a
+sidebar item and a nav-driven sweep never arrives at them:
+
+- `app.products_.$id` — product detail
+- `app.reviews_.new` — add a review manually
+- `app.reviews_.$id.edit` — edit a review
+
+All three are now in the harness, with the not-found variants of the two that take an id,
+since "this review isn't yours" is the tenant-isolation path a merchant reaches by editing a
+URL. **Rendering product detail for the first time immediately found a real defect** (§22.3).
+
+The remaining uncovered `app.*` routes are genuinely not screens — six resource routes with a
+loader and no component. That is now stated in QA_TEST_RESULTS §2 so the distinction does not
+have to be rediscovered.
+
+### 22.2 An approval could put an archived review back on the storefront
+
+`setReviewStatus` and `bulkModerateReviews` both wrote `isPublished: status === APPROVED`
+with nothing consulting `archivedAt`. The Archive view renders the same bulk bar as every
+other view, so "Approve" sits directly above a list of archived reviews — two clicks to a
+review listed in the Archive *and* live on the storefront, while every statistic (all filtered
+by `LIVE_REVIEW`) went on excluding it.
+
+Archive is now the gate and outranks a moderation verdict: published iff approved **and** not
+archived. Two consequences carried through — the plan's published-review cap no longer charges
+for approving an archived review (it publishes nothing, and charging it would stop a Free-plan
+merchant at their cap from tidying their Archive), and bulk-approve splits into archived and
+unarchived groups because one `updateMany` cannot write two different `isPublished` values.
+
+Two existing fixtures modelled a review row with no `archivedAt` column, which cannot exist.
+Corrected rather than worked around — they had been measuring an archived review's behaviour
+while claiming to test a live one's.
+
+### 22.3 A product's rating counted reviews nobody could see
+
+`Product.averageRating / totalReviews / ratingNCount` were filtered by `LIVE_REVIEW` alone —
+deleted and archived excluded, moderation status ignored. A merchant who rejected a one-star
+review as spam still saw it dragging down the average on their own product page, beside a
+rating breakdown counting it.
+
+It survived because **no public reader trusts those columns**: the storefront batch endpoint,
+the review APIs and the JSON-LD sync each compute their own approved-only figure. The
+storefront and the Google rich snippet were always correct; only the merchant's own screen was
+wrong. `archiveReview`'s own comment states the intent — a review being archived means "the
+review just left the public set" — and a rejected review has left it in the same sense.
+
+Two labels changed with it, because the fix makes two numbers on one screen legitimately
+differ: product detail now says "**Published** reviews" (the Reviews section below it lists
+every status for moderation, so its count is larger), and the dashboard's coverage card says
+"products with no **published** reviews yet".
+
+**Needs a backfill after deploy.** `scripts/backfill-product-review-stats.mjs` recomputes the
+columns; it is dry-run by default and refuses a non-local database. Against the local dev
+database it reports 10 of 12 products diverging — all **historical seed drift**, not this bug.
+Worth stating plainly: the dry run does not corroborate the fix. The code reading and the
+tests do.
+
+### 22.4 The app requested nine of its ten declared scopes
+
+`app/shopify.server.ts` passes `scopes: process.env.SCOPES?.split(",")` — so the authorization
+request is built from `.env`, **not** from `shopify.app.toml`. Three scopes added to the toml
+in September were never carried across: `read_fulfillments`, `read_legal_policies`, and
+`write_discounts`.
+
+This is the blocker *behind* the blocker. Even with a fresh OAuth session, every Coupons and
+Review Rewards discount call would have been rejected with "Access denied … write_discounts
+access scope", and it would have looked like a Coupons bug. `.env` and `.env.example` are
+aligned, and `app/services/scopes.config.test.ts` now reads both files and the toml and fails
+on any divergence — `.env.example` always (so CI sees it), and a developer's own `.env` when
+present (so the machine performing OAuth fails at the test, not at the API).
+
+### 22.5 Settings → Overview's eight identical buttons
+
+Six of eight navigation buttons announced as "Configure", indistinguishable in a screen
+reader's element list. `ActionCard` now composes an accessible name from the card's title.
+
+**Checked and deliberately not changed:** they are `<button>`s, not `<a href>`s. Zero anchors
+on a navigation grid looks like a defect, but App Bridge intercepts a same-origin anchor click
+inside the embedded iframe before the anchor's own handler runs, so a link navigates nowhere —
+documented in `ActionCard.tsx` with production request-log evidence. Now pinned by test, so a
+later "fix" back to anchors cannot quietly break every Settings entry point.
+
+### 22.6 Interaction sweep — 218 controls, 8 screens, zero crashes, zero console errors
+
+Coupons 23, Email Studio 79, Review requests 39, Widgets 37, Add-a-review 8, Product detail 2,
+plus Reviews 16 and Brand Studio 14 from §21.2.
+
+**Review requests went from "crashed on the fifth control" to 39 clean controls**, and the
+crash was never real: "Send Request" loads `/app/requests/orders` through a fetcher, that
+route renders no UI so it had no harness entry, and React Router's default ErrorBoundary
+replaced the entire page with "Unexpected Application Error!" on the 404. The harness now
+stubs resource routes with a catch-all under `/app` returning an empty payload, so the fetcher
+resolves to "no results" — a state the UI is built for — and the sweep continues into the
+drawer it opens.
+
+Six unnamed `role="button"` elements on Coupons were Polaris's own number-input spinner
+segments, `tabindex="-1"` and outside the accessibility tree. Not ours.
+
+### 22.7 Security review — one defect, everything else sound
+
+§22.2 was the only finding. Webhook HMAC (all five Shopify routes plus the hand-rolled Svix
+verification on the Resend route), idempotency, discount ownership, public-endpoint abuse
+controls, email header injection via the shopper-supplied Reply-To, public PII exposure,
+opt-in sharing defaults and tenant isolation were each probed for the specific failure and
+each held. The detail is in QA_TEST_RESULTS §7. No merchant privacy setting was changed.
+
+### 22.8 Shopify authentication — diagnosed, and one thing is now certain
+
+Established first-hand, not inferred:
+
+1. **The token is revoked, not merely stale.** A real Admin API round-trip returns `HTTP 401 —
+   "[API] Invalid API key or access token"`. Only a live call separates "expired in our row"
+   from "rejected by Shopify", and the two need different fixes.
+2. **The MCP is irrelevant to this.** `unauthenticated.admin(storeDomain)` loads the offline
+   session from our own database; our Shopify code never touches the MCP connector.
+   Reconnecting it gives *Claude* read/write against the store for independent inspection — it
+   cannot make our code path run.
+3. **The registered app config is intact.** `shopify app info` reports `applicationUrl:
+   https://app.imagyn.co`, no stale dev override, and the CLI is already authenticated
+   (account `bilal.zaib@outlook.com`, org `129629038`).
+4. **A correction to this handover's earlier advice.** An earlier session recommended creating
+   a *separate development app*, on the belief that `shopify app dev` would rewrite the global
+   `application_url` and break live merchants. **This project's own incident record says
+   otherwise.** TROUBLESHOOTING.md's 2026-07-21 writeup establishes that the dev-preview
+   override is tracked **per development store**, that `application_url` "was correct the
+   entire time, in every version inspected", and that this app's config model has **no App
+   URL field at all** in the dev dashboard. The documented, reversible fix is
+   `shopify app dev clean --store=verveonline.myshopify.com`. So the existing app
+   (`8f84af74377630a28899e60d2a32b753`, whose `.shopify/project.json` already records
+   `dev_store_url: verveonline.myshopify.com`) is the right one, and no new app is needed.
+
+`scripts/verify-dev-store-session.mjs` is ready to run the moment a session exists: identity,
+app match, token validity, scope coverage, a per-scope read probe, and
+`shop.plan.partnerDevelopment` so the development-store requirement is proven from Shopify's
+own data rather than the store's name. Read-only, non-local database refused, token never
+printed. Current result: 3 of 6.
+
+### 22.9 Exact next task
+
+1. **Awaiting the owner:** run `shopify app dev --store=verveonline.myshopify.com`, open the
+   app once in that store's admin to complete OAuth, then
+   `shopify app dev clean --store=verveonline.myshopify.com`. Then
+   `node --env-file=.env scripts/verify-dev-store-session.mjs` must print 6 of 6 before any
+   integration test is trusted.
+2. Once it does, QA_TEST_RESULTS §5's blocked list is the work queue, in that order.
+3. Independent of Shopify: the Judge.me gaps still open — product-vs-store reviews, the Spam
+   view, segmented scheduling, multiple request templates, media/coupon reminder emails,
+   coupon tiering and combinations, revenue attribution, and the Q&A widget plus its
+   notification.
+4. The backfill in §22.3 needs owner approval before it runs anywhere.

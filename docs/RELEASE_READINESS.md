@@ -222,3 +222,62 @@ cannot read.
 
 **Still requires a human check:** that Managed Pricing in the Partner Dashboard also says
 $9.99 with a 7-day trial. Nothing in this repo can verify that.
+
+---
+
+## 12. Addendum — 2026-11-10 (later)
+
+Evidence for everything here is in `docs/QA_TEST_RESULTS.md`, which this section does not
+duplicate. Gates at this checkpoint: **2,110 tests / 110 files**, typecheck, lint and
+production build clean. 48 commits ahead of `origin/main`; nothing pushed to `main`, nothing
+deployed.
+
+### 12.1 Four defects found and fixed
+
+| Defect | Severity | How it was found |
+|---|---|---|
+| An approval could put an archived review back on the storefront, two clicks from the Archive view, while every statistic went on excluding it | **High** — merchant-visible, storefront-visible | Code reading during the security review |
+| A product's own rating averaged in reviews the merchant had rejected. Merchant screen only — every public reader computes its own approved-only figure, so the storefront and the Google rich snippet were always correct | **Medium** | Rendering product detail in the harness for the first time |
+| The app requested nine of its ten declared scopes, `write_discounts` among them. Every Coupons discount call would have been rejected the first time it ran against a live store | **High, latent** — would have presented as a Coupons bug | Comparing `.env` against `shopify.app.toml` while diagnosing the OAuth blocker |
+| Six of eight Settings → Overview buttons were indistinguishable in a screen reader's element list | **Low** | Interaction sweep |
+
+Each is covered by new tests: 7, 8, 6 and 4 respectively.
+
+### 12.2 Three screens had never been rendered
+
+`app.products_.$id`, `app.reviews_.new` and `app.reviews_.$id.edit` are reached by URL rather
+than by a sidebar item, so a nav-driven sweep never arrived at them. An earlier claim in this
+project's handover that every merchant-facing screen was covered was therefore wrong, and is
+corrected rather than restated. All six states (including both not-found paths) are now
+rendered, and the first render found the defect in §12.1 row 2.
+
+### 12.3 The release blocker is unchanged, but is now precisely diagnosed
+
+**Still blocking:** no Shopify Admin API call can be made from this environment, so nothing in
+the coupon lifecycle, the storefront widget output, theme compatibility or the review-
+collection journey is **Real Shopify verified**.
+
+What changed is that the cause is now established rather than assumed — the token is *revoked*
+by Shopify (proved by a live 401, not inferred from a stored expiry date), reconnecting the
+Shopify MCP would not help (our code reads the offline session from our own database), the
+app's registered configuration is intact, and the existing development app is the correct one
+to re-authorise. An earlier recommendation in this project to create a separate development
+app was based on a risk this repo's own incident record contradicts; see handover §22.8.
+
+One owner action unblocks it, and `scripts/verify-dev-store-session.mjs` will say in one
+read-only run whether it worked.
+
+### 12.4 Two items still need a human, not more engineering
+
+- **Shopify Managed Pricing** showing Free $0 / Pro $9.99 / 7-day trial. The app code is
+  audited and locked by test (§11); the hosted pricing page itself has never been looked at.
+- **Inbox placement.** Four emails were accepted by Resend. Nothing has been seen in an inbox
+  and no folder has been named, so this stays **Real email accepted** and not **Inbox delivery
+  verified**.
+
+### 12.5 One deferred write
+
+`scripts/backfill-product-review-stats.mjs` must run after the §12.1 rating fix deploys, or
+products not touched by a later review mutation keep their old figures. It is dry-run by
+default, refuses a non-local database, and has **not** been applied anywhere. It needs owner
+approval.

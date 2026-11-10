@@ -703,3 +703,41 @@ relabeled.** **Nothing was committed or pushed.**
     merchant-initiated way to promote a specific source-verified import to a real
     IMAGYN-verified review, it needs its own deliberate, auditable action — not an automatic
     mapping from `sourceVerified`.
+
+---
+
+## Checkpoint — 2026-11-10 (later)
+
+This file is Imagyn Reviews' master product-status document. A brief on 2026-11-10 asked for
+`IMAGYN_PRODUCT_MASTER_STATUS.md`; it was deliberately not created, because that would be a
+second tracker saying the same thing. This section is that status.
+
+**Engineering gates:** 2,110 tests / 110 files, typecheck, lint and production build clean.
+48 commits ahead of `origin/main`. Nothing pushed to `main`. Nothing deployed.
+
+**Where the product actually stands.** Every merchant-facing screen is now rendered and
+inspected (35 states), and 218 controls across 8 screens have been clicked with zero crashes
+and zero console errors. That is the honest ceiling of what can be shown from here: the
+preview harness stubs every action, so none of it proves persistence, and **no Shopify Admin
+API call can be made from this environment at all** — the development store's offline token is
+revoked, proved by a live 401 rather than inferred.
+
+So the product is comprehensively *implemented* and *unit-tested*, partially
+*browser-interaction-tested*, and **not** *Real Shopify verified* anywhere. The distinction
+matters more than the test count: `docs/QA_TEST_RESULTS.md` holds the evidence per area under
+labels that say exactly which of those each claim has earned.
+
+**Four defects fixed on 2026-11-10**, two of them merchant-visible and one latent but costly:
+an approval could republish an archived review; a product's rating averaged in rejected
+reviews; the app requested nine of its ten declared scopes (`write_discounts` among them, so
+every Coupons discount call would have failed on first contact with a live store); and six of
+eight Settings → Overview buttons were indistinguishable to a screen reader. See
+`docs/RELEASE_READINESS.md` §12 and the handover's §22.
+
+**One owner action is the critical path.** Re-authorising the existing development app against
+`verveonline` unblocks the entire real-Shopify verification queue. Handover §22.8 has the
+exact commands and the reasoning, including a correction to earlier advice in this project
+that a separate development app was needed.
+
+**One deferred write** needs approval: `scripts/backfill-product-review-stats.mjs`, required
+after the product-rating fix deploys.
