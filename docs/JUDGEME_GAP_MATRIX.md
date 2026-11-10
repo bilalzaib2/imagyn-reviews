@@ -279,3 +279,27 @@ intact afterwards.
 
 Remaining: 3 (product vs store reviews), 4 (segmented request scheduling), 5 (coupon tiering,
 combinations, eligibility) and 6 (multiple request templates). None started.
+
+---
+
+## 2026-11-11 — verification status, not a parity change
+
+**No parity item moved this session, and nothing was added to or removed from the gaps above.**
+Recorded here only so a later reader does not have to re-derive it: the four remaining gaps
+(3 product-vs-store reviews, 4 segmented request scheduling, 5 coupon tiering/combinations,
+6 multiple request templates) are still unstarted.
+
+What did change is the *evidence* behind one already-shipped capability. Widget install
+detection previously reported four theme blocks as installed on the development store from a
+hardcoded override whose evidence was a Theme Editor check dated 2026-08-16 against a theme
+that is no longer the host theme. That override is removed. The capability is unchanged; the
+claim about it is now honest, and on a password-protected storefront it reports `blocked`
+rather than "Live on your theme".
+
+Parity implication worth stating plainly: Judge.me can verify widget installation because it
+is not blocked from the storefront. Imagyn cannot, on this store, until either `read_themes`
+is granted or the storefront password is lifted. That is an access gap in our test environment,
+not a product gap — the detection itself works and is covered by tests.
+
+The Notion parity tracker connector is still unauthenticated, so this file remains the single
+source of parity truth. Do not create a second tracker.

@@ -330,3 +330,60 @@ Shopify rather than mocks.
 
 `Test Files 111 passed · Tests 2115 passed` · typecheck clean · lint clean · production build
 clean · `prisma migrate status`: 42 migrations, database schema up to date, 0 pending.
+
+---
+
+## §14 — 2026-11-11 checkpoint: CSS incident closed, blocker status by evidence class
+
+### Checkpoint
+
+Branch `checkpoint/imagyn-reviews-2026-11-11` created at `dac2483`, verified to point at the
+exact HEAD. **Local only — not pushed.** `backup/night-shift-2026-11-09` is unchanged at
+`7160ae8` locally and on the remote, and verified an ancestor of HEAD.
+
+### CSS incident — closed
+
+50 instrumented loads across six screens, including 9 under up to 300 ms of injected per-request
+latency: **0 unstyled, 0 hydration failures, 0 mismatches, 0 console errors.** Production proven
+unaffected from a build served locally — ordinary `<link rel="stylesheet">` tags, all serving
+200 `text/css`, zero critical-CSS nodes. Full evidence in `TROUBLESHOOTING.md`.
+
+**This was never a production defect.** It was reported as a launch blocker earlier in the day;
+that was wrong, and it is withdrawn.
+
+### Launch blockers by evidence class
+
+| Workflow | Implemented | Automated-test verified | Real Shopify verified | Browser verified | Blocked |
+|---|---|---|---|---|---|
+| Discount create / activate / revoke / resume / usage / delete | yes | yes | **yes** (18/18) | — | — |
+| JSON-LD product metafield sync | yes | yes | **yes** | — | — |
+| Files upload (photo/video review media) | yes | yes | **yes** (14/14) | — | — |
+| Orders / customers data layer | yes | yes | **yes** (queries accepted) | — | store has 0 orders |
+| Merchant admin UI (6 screens) | yes | yes | — | **yes** (50 loads) | — |
+| Widget install detection | yes | yes | — | — | storefront password |
+| Theme extension activation | yes | yes | — | — | no `read_themes` + storefront password |
+| Storefront widget rendering | yes | yes | — | — | storefront 302s to `/password` |
+| Review collection via storefront | yes | yes | — | — | storefront password |
+| Checkout coupon redemption | yes | yes | — | — | needs a real order; `write_orders` not held |
+| Order-triggered review requests | yes | yes | — | — | store has 0 orders |
+| Email request + reminder | yes | yes | accepted by provider | — | inbox placement unverified |
+| Merchant onboarding / fresh install | yes | yes | — | — | needs an uninstall/reinstall cycle (owner approval) |
+
+Nothing in the "Real Shopify verified" column is asserted without a read-back from Shopify.
+Nothing is marked verified on the strength of a passing unit test alone.
+
+### What actually gates launch
+
+Every remaining blocker reduces to **three access constraints**, not to unfinished product:
+
+1. **The development store's storefront is password protected** and a development-plan store
+   cannot turn that off. This blocks widget rendering, review collection, install detection and
+   theme activation in one stroke.
+2. **No orders exist on the store, and the app holds `read_orders`, not `write_orders`.** This
+   blocks checkout redemption and order-triggered requests.
+3. **Inbox placement needs a human** looking at `bilal.zaib@outlook.com`.
+
+### Gates
+
+`Test Files 111 · Tests 2115 passed` · typecheck clean · lint clean · production build clean ·
+42 migrations, schema up to date, 0 pending.

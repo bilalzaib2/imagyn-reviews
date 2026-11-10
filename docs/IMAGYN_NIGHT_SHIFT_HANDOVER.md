@@ -1490,3 +1490,24 @@ against the **current** theme id and date it.
    rendering, which upgrades "Real email accepted" to "Inbox delivery verified".
 3. The Notion parity tracker connector is still unauthenticated, so
    `JUDGEME_GAP_MATRIX.md` remains the single source of parity truth.
+
+---
+
+## §24 — 2026-11-11 checkpoint
+
+- **Checkpoint branch** `checkpoint/imagyn-reviews-2026-11-11` at `dac2483`, local only.
+  `backup/night-shift-2026-11-09` untouched at `7160ae8`, still an ancestor of HEAD.
+- **CSS incident is closed.** 50 instrumented loads, 0 failures, including 9 under injected
+  latency. Production proven unaffected from a local production build. Do not reopen this as a
+  launch blocker — see `TROUBLESHOOTING.md` 2026-11-11, correction first.
+- **Every remaining blocker is an access constraint, not missing product.** Storefront password,
+  no orders / no `write_orders`, and a human inbox check. §23.4's next-task list still stands.
+
+### The reusable technique from this session
+
+To see inside the embedded iframe — whose DOM, console and network are all unreadable from the
+admin page — have the page POST its own state back to the dev server and read it from the dev
+log. To test slow networks, inject latency into module responses in a dev-only Vite middleware
+rather than throttling the machine: it targets exactly the race you are trying to widen. Keep
+the server's body-log limit generous; a 400-character truncation silently cut a React component
+stack and cost an investigation round.

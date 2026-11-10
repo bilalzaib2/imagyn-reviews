@@ -155,10 +155,42 @@ production build was checked and ships ordinary stylesheet links — 42 CSS asse
 `data-react-router-critical-css` occurrences in the served HTML. A dev-loop defect, not a
 release blocker.
 
-**Verification after both fixes**, against the real embedded app on verveonline: `/app` across
-10 cold loads and 10 hard refreshes — **15 final-state samples, 0 unstyled**; `/app/reviews`,
-`/app/settings`, `/app/settings/requests`, `/app/email-studio`, `/app/appearance` all styled;
-**0 hydration failures, 0 "Expected server HTML" mismatches**.
+**Verification after both fixes**, against the real embedded app on verveonline.
+
+First pass: `/app` across 10 cold loads and 10 hard refreshes — 15 final-state samples, 0
+unstyled; the other screens all styled.
+
+Second pass, a deliberately harsher re-verification — **50 instrumented loads in total**:
+
+| Conditions | Samples | Unstyled | Hydration failures | Mismatches | Console errors |
+|---|---|---|---|---|---|
+| Normal (20 navigations, 20 hard refreshes, cold loads) | 41 | **0** | 0 | 0 | 0 |
+| Slow network — up to 300 ms of injected latency on every CSS and module response | 9 | **0** | 0 | 0 | 0 |
+
+Screens covered: Dashboard, Reviews, Settings, Settings → Requests, Email Studio, Brand Studio.
+App Bridge was present (`window.shopify`) on every sample.
+
+The slow-network run is the more informative one. Latency was injected server-side rather than
+throttling the machine, specifically to widen the hydration race that caused the bug. It also
+shows both healthy handoff paths: on `/app` the critical node was still present at the sample
+point (`critical=1, viteStyles=0`), while Email Studio and Brand Studio had completed the
+handoff (`critical=0, viteStyles=12`). Both render styled — which is the point. The failure
+mode was never "slow", it was "critical node removed with nothing behind it".
+
+**Proof that production is unaffected**, from a real build served locally:
+
+```
+<link rel="stylesheet" href="/assets/root-UCZ0XyTV.css"/>   200 text/css  448127B
+<link rel="stylesheet" href="/assets/route-CKNclt2R.css"/>  200 text/css    2075B
+<link rel="stylesheet" href="/assets/button-DZi8eWEV.css"/> 200 text/css    1115B
+<link rel="stylesheet" href="/assets/styles-B4O3cao2.css"/> 200 text/css    2508B
+
+data-react-router-critical-css occurrences: 0
+CSS assets emitted: 42
+```
+
+Production delivers stylesheets as ordinary links that the browser owns. There is no
+critical-CSS node to remove, so a hydration failure there costs a warning, not the stylesheet.
 
 ---
 
