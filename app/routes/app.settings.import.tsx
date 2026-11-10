@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { Fragment, useEffect, useRef, useState } from "react";
 import type { ChangeEvent, DragEvent } from "react";
 import { useFetcher, useLoaderData, useRouteError } from "react-router";
 import type { ActionFunctionArgs, HeadersFunction, LoaderFunctionArgs } from "react-router";
@@ -27,6 +27,55 @@ import {
 } from "../services/reviewImportExport.server";
 import styles from "../styles/app.import.module.css";
 import managementStyles from "../styles/app.management.module.css";
+
+/** Merchant-facing wording for the stored status values. These were rendered raw, so the
+ *  history table read "completed" and "failed" in lower case. A stored value is not a label. */
+const IMPORT_STATUS_LABEL: Record<string, string> = {
+  completed: "Completed",
+  failed: "Failed",
+  undone: "Undone",
+  running: "Running",
+};
+
+/**
+ * Turns a batch's stored errorDetail into something a merchant can act on.
+ *
+ * An import that failed showed the word "failed" and nothing else, while the reason sat in
+ * the database unread — so the one person who could fix the file was the only one not told
+ * what was wrong with it.
+ *
+ * Two shapes are written by the importer: a file-level `{ fileErrors }` when the upload
+ * could not be parsed at all, and a row-level summary when it parsed but rows did not land.
+ * Both are handled, and anything unrecognised yields nothing rather than "[object Object]".
+ */
+function summariseImportErrors(errorDetail: unknown): string[] {
+  if (!errorDetail || typeof errorDetail !== "object") return [];
+  const detail = errorDetail as Record<string, unknown>;
+  const messages: string[] = [];
+
+  const push = (value: unknown, prefix = "") => {
+    if (typeof value === "string" && value.trim()) messages.push(prefix + value.trim());
+  };
+  const pushAll = (value: unknown, prefix = "") => {
+    if (Array.isArray(value)) value.slice(0, 3).forEach((entry) => push(entry, prefix));
+  };
+
+  pushAll(detail.fileErrors);
+  pushAll(detail.errors);
+  push(detail.message);
+
+  const missing = Array.isArray(detail.missingProducts) ? detail.missingProducts.length : 0;
+  if (missing > 0) {
+    messages.push(`${missing} row${missing === 1 ? "" : "s"} referenced a product that could not be matched.`);
+  }
+
+  const ambiguous = Array.isArray(detail.ambiguousProducts) ? detail.ambiguousProducts.length : 0;
+  if (ambiguous > 0) {
+    messages.push(`${ambiguous} row${ambiguous === 1 ? "" : "s"} matched more than one product.`);
+  }
+
+  return messages;
+}
 
 type ImportBatchSummary = Awaited<ReturnType<typeof listImportBatches>>[number];
 
@@ -432,15 +481,20 @@ export default function ImportReviewsPage() {
                         : batch.status === "undone"
                           ? styles.statusPillUndone
                           : "";
+                  const problems = summariseImportErrors(batch.errorDetail);
+
                   return (
-                    <tr key={batch.id}>
+                    <Fragment key={batch.id}>
+                    <tr>
                       <td>{formatDate(batch.createdAt)}</td>
                       <td>{sourceLabel}</td>
                       <td>{batch.filename || "—"}</td>
                       <td>{batch.imported}</td>
                       <td>{batch.duplicates}</td>
                       <td>
-                        <span className={`${styles.statusPill} ${statusClass}`}>{batch.status}</span>
+                        <span className={`${styles.statusPill} ${statusClass}`}>
+                          {IMPORT_STATUS_LABEL[batch.status] ?? batch.status}
+                        </span>
                       </td>
                       <td>
                         {batch.status === "completed" && batch.imported > 0 ? (
@@ -450,6 +504,19 @@ export default function ImportReviewsPage() {
                         ) : null}
                       </td>
                     </tr>
+                    {/* The reason a failed import failed. It was already stored and simply
+                        never shown, so the one person who could fix the file was the only
+                        one not told what was wrong with it. */}
+                    {problems.length > 0 ? (
+                      <tr>
+                        <td colSpan={7} className={styles.historyProblems}>
+                          {problems.map((problem, index) => (
+                            <p key={index}>{problem}</p>
+                          ))}
+                        </td>
+                      </tr>
+                    ) : null}
+                    </Fragment>
                   );
                 })}
               </tbody>

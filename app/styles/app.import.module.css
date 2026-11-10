@@ -270,3 +270,22 @@
   font-weight: 600;
   margin: 0 0 var(--space-1);
 }
+
+/* The reason a failed import failed, under its own row.
+   -----------------------------------------------------
+   This was stored in ImportBatch.errorDetail and never rendered: the history table showed
+   the word "failed" and nothing else, so the only person who could fix the file was the
+   only one not told what was wrong with it. */
+.historyProblems {
+  padding-top: 0;
+  color: var(--color-text-muted);
+  font-size: var(--text-sm);
+}
+
+.historyProblems p {
+  margin: 0 0 var(--space-1);
+}
+
+.historyProblems p:last-child {
+  margin-bottom: 0;
+}

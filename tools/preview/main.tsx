@@ -24,6 +24,8 @@ import RequestsPage from "../../app/routes/app.requests";
 import MedalsPage from "../../app/routes/app.medals";
 import BillingPage from "../../app/routes/app.billing";
 import ProductsPage from "../../app/routes/app.products";
+import SettingsImportPage from "../../app/routes/app.settings.import";
+import SettingsProductGroupsPage from "../../app/routes/app.settings.productGroups";
 import SettingsRewardsPage from "../../app/routes/app.settings.rewards";
 import SettingsReferralsPage from "../../app/routes/app.settings.referrals";
 import {
@@ -41,6 +43,8 @@ import {
   medalsLoaderData,
   billingLoaderData,
   productsLoaderData,
+  settingsImportLoaderData,
+  settingsProductGroupsLoaderData,
   settingsRewardsLoaderData,
   settingsReferralsLoaderData,
   emailStudioLoaderData,
@@ -251,6 +255,24 @@ const SCREENS: Record<string, { label: string; path: string; element: JSX.Elemen
     path: "/app/products",
     element: <ProductsPage />,
     data: productsLoaderData({ error: true }),
+  },
+  "settings-import": {
+    label: "Settings › Import",
+    path: "/app/settings/import",
+    element: <SettingsImportPage />,
+    data: settingsImportLoaderData(),
+  },
+  "settings-import-empty": {
+    label: "Settings › Import — nothing imported",
+    path: "/app/settings/import",
+    element: <SettingsImportPage />,
+    data: settingsImportLoaderData({ empty: true }),
+  },
+  "settings-groups": {
+    label: "Settings › Product groups",
+    path: "/app/settings/productGroups",
+    element: <SettingsProductGroupsPage />,
+    data: settingsProductGroupsLoaderData(),
   },
   questions: { label: "Customer questions", path: "/app/questions", element: <QuestionsPage />, data: questionsLoaderData() },
   "questions-empty": {

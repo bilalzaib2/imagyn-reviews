@@ -37,6 +37,36 @@ describe("status badges render labels, not stored values", () => {
     expect(offenders).toEqual([]);
   });
 
+  it("no element renders a bare .status as its only text, badge or not", () => {
+    // The first version of this test only looked at <StatusBadge>. Settings → Import
+    // rendered its status in a styled <span> instead, so it slipped through and the import
+    // history read "completed" and "failed" in lower case until the screen was rendered.
+    const offenders: string[] = [];
+
+    for (const path of SOURCES) {
+      const src = readFileSync(path, "utf8");
+      for (const match of src.matchAll(/<(\w+)[^>]*>\{([\w.]+\.status)\}<\/\1>/g)) {
+        offenders.push(`${path}: <${match[1]}>{${match[2]}}`);
+      }
+    }
+
+    expect(offenders).toEqual([]);
+  });
+
+  it("the import history maps its statuses and surfaces why a batch failed", () => {
+    const src = readFileSync("app/routes/app.settings.import.tsx", "utf8");
+    expect(src).toMatch(/const IMPORT_STATUS_LABEL: Record</);
+    for (const value of ["completed", "failed", "undone"]) {
+      expect(src).toMatch(new RegExp(`${value}: "`));
+    }
+
+    // The reason was stored in errorDetail and never rendered, so a merchant saw "failed"
+    // with nothing to act on.
+    expect(src).toMatch(/function summariseImportErrors\(/);
+    expect(src).toMatch(/fileErrors/);
+    expect(src).toMatch(/could not be matched/);
+  });
+
   it("the coupon page maps both of its enums", () => {
     const src = readFileSync("app/routes/app.settings.coupons.tsx", "utf8");
     expect(src).toMatch(/const REDEMPTION_STATUS_LABEL: Record</);

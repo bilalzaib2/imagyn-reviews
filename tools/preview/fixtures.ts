@@ -751,3 +751,75 @@ export function productsLoaderData({ empty = false, syncing = false, error = fal
     error: error ? "Shopify did not respond. Your products are unchanged." : null,
   };
 }
+
+// --------------------------------------------- Settings › Import, Product groups
+
+import { IMPORT_SOURCES } from "../../app/services/importers/types";
+
+/** Uses the real source list, so the "coming soon" gating on Ryviu is the shipped one. */
+export function settingsImportLoaderData({ empty = false } = {}) {
+  return {
+    sources: IMPORT_SOURCES,
+    batches: empty
+      ? []
+      : [
+          {
+            id: "b1",
+            storeId: "store_1",
+            source: "judgeme",
+            filename: "judgeme-export-2026-11-01.csv",
+            totalRows: 412,
+            imported: 388,
+            duplicates: 19,
+            heldForModeration: 3,
+            unmatchedRows: 2,
+            invalidRows: 0,
+            status: "completed",
+            errorDetail: null,
+            createdAt: new Date("2026-11-01").toISOString(),
+            updatedAt: new Date("2026-11-01").toISOString(),
+          },
+          {
+            id: "b2",
+            storeId: "store_1",
+            source: "loox",
+            filename: "loox.csv",
+            totalRows: 60,
+            imported: 0,
+            duplicates: 0,
+            heldForModeration: 0,
+            unmatchedRows: 60,
+            invalidRows: 0,
+            // The failure case is the one worth seeing rendered.
+            status: "failed",
+            errorDetail: { fileErrors: ["No products matched. Check the product handle column."], missingProducts: ["sku-1", "sku-2"] },
+            createdAt: new Date("2026-11-03").toISOString(),
+            updatedAt: new Date("2026-11-03").toISOString(),
+          },
+        ],
+  };
+}
+
+export function settingsProductGroupsLoaderData({ empty = false } = {}) {
+  return {
+    groups: empty
+      ? []
+      : [
+          {
+            id: "g1",
+            name: "Ceramic plates",
+            products: [
+              { id: "prod_0", name: PRODUCTS[0], totalReviews: 31, averageRating: 4.6 },
+              { id: "prod_3", name: PRODUCTS[3], totalReviews: 12, averageRating: 4.2 },
+            ],
+            createdAt: new Date("2026-10-10").toISOString(),
+          },
+        ],
+    ungroupedProducts: PRODUCTS.slice(1, 3).map((name, i) => ({
+      id: `prod_${i + 1}`,
+      name,
+      totalReviews: 7 + i,
+      averageRating: 4.1,
+    })),
+  };
+}
