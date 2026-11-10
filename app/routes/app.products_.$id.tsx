@@ -290,11 +290,17 @@ export default function ProductDetailPage() {
                   <dl className={styles.statGrid}>
                     <StatItem label="Vendor" value={product.vendor || "—"} />
                     <StatItem label="Product type" value={product.productType || "—"} />
+                    {/* Both figures describe the PUBLIC set — approved, not archived, not
+                        deleted — because that is what Product.averageRating/totalReviews hold
+                        and what a shopper sees (see recalculateProductStats). The Reviews
+                        section below lists every status for moderation, so its own count is
+                        legitimately larger; "Published reviews" is what keeps the two from
+                        reading as a contradiction. */}
                     <StatItem
                       label="Average rating"
                       value={product.totalReviews > 0 ? `${product.averageRating.toFixed(1)} / 5` : "No ratings yet"}
                     />
-                    <StatItem label="Total reviews" value={String(product.totalReviews)} />
+                    <StatItem label="Published reviews" value={String(product.totalReviews)} />
                     <StatItem label="Created" value={formatDate(product.createdAt)} />
                     <StatItem label="Last updated" value={formatDate(product.updatedAt)} />
                     {product.lastSyncedAt ? (

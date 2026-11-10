@@ -145,16 +145,35 @@ async function requireReview(storeId: string, id: string) {
   return existing;
 }
 
+// Recalculates a product's denormalized PUBLIC rating: the five Product columns
+// (averageRating, totalReviews, ratingNCount) that describe what a shopper sees.
+//
+// "Public" means approved as well as live. LIVE_REVIEW excludes deleted and archived reviews
+// but says nothing about moderation status, and until 2026-11-10 that was the whole filter —
+// so these columns counted pending and rejected reviews too.
+//
+// It went unnoticed because no public reader trusts these columns: the storefront, the batch
+// summary endpoint and the JSON-LD sync each compute their own approved-only figure (see
+// getPublicReviewSummary / getPublicReviewSummaryBatch). The merchant's own product detail
+// page is the one place that reads them directly, which is where it showed: a merchant who
+// rejected a one-star review as spam still saw it dragging down the average on their product
+// page, next to a rating breakdown counting it, and the figure never matched their storefront.
+//
+// archiveReview's comment states the intent plainly — a review being archived means "the
+// review just left the public set, so the product's totals are now wrong". A rejected review
+// has left the public set in exactly the same sense.
 export async function recalculateProductStats(productId: string) {
+  const publicScope = { productId, ...LIVE_REVIEW, status: ReviewStatus.APPROVED };
+
   const [totalReviews, aggregate, ratingGroups] = await Promise.all([
-    prisma.review.count({ where: { productId, ...LIVE_REVIEW } }),
+    prisma.review.count({ where: publicScope }),
     prisma.review.aggregate({
-      where: { productId, ...LIVE_REVIEW },
+      where: publicScope,
       _avg: { rating: true },
     }),
     prisma.review.groupBy({
       by: ["rating"],
-      where: { productId, ...LIVE_REVIEW },
+      where: publicScope,
       _count: { rating: true },
     }),
   ]);

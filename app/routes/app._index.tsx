@@ -433,7 +433,9 @@ export default function Index() {
               ) : productCoverage.withoutReviews === 0 ? (
                 <>
                   <p className={styles.healthCardValue}>All {productCoverage.totalProducts} covered</p>
-                  <p className={styles.healthCardText}>Every synced product has at least one review.</p>
+                  <p className={styles.healthCardText}>
+                    Every synced product has at least one published review.
+                  </p>
                 </>
               ) : (
                 <>
@@ -441,7 +443,7 @@ export default function Index() {
                     {productCoverage.withoutReviews} of {productCoverage.totalProducts}
                   </p>
                   <p className={styles.healthCardText}>
-                    Products with no reviews yet. <Link to="/app/requests">Request reviews</Link> for their recent
+                    Products with no published reviews yet. <Link to="/app/requests">Request reviews</Link> for their recent
                     buyers.
                   </p>
                 </>
