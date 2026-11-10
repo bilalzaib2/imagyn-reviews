@@ -133,3 +133,75 @@ This is not a claim of ISO 27001, SOC 2, or any formal certified security progra
 third-party security audit has been performed on this app (see the compliance audit this
 document accompanies). This is a real, honest description of how a small, single-operator
 team would actually respond — not aspirational process theater.
+
+---
+
+## Incident log
+
+### 2026-11-11 — "unusual API activity" alert, network AS23674 (investigated: no compromise found)
+
+**Reported:** Shopify flagged unusual API activity and blocked bulk queries and bulk mutations
+from network **AS23674**, detected **2026-11-10 20:06:50 UTC**.
+
+**Conclusion: this matches our own development-store testing.** No evidence of unauthorized
+access was found. Nothing was rotated, allowlisted, reinstalled or changed — containment was
+limited to stopping the dev server and clearing the dev preview.
+
+**1. The reported network is this development machine's own ISP.** Resolved from the actual
+outbound address rather than inferred from the ASN:
+
+```
+23674 | 154.192.201.82                          | 154.192.201.0/24   | NAYATEL-PK - Nayatel (Pvt) Ltd, PK
+23674 | 2407:d000:405:3825:74fc:d8c3:1561:d8d5  | 2407:d000:405::/48  | NAYATEL-PK - Nayatel (Pvt) Ltd, PK
+```
+
+Both the IPv4 and IPv6 egress addresses map to AS23674. Note both are dynamic (residential
+ISP; the IPv6 interface identifier rotates), so the specific address Shopify saw is not
+reconstructable after the fact — the ASN is the stable part, and it matches.
+
+**2. The timestamp coincides with our own OAuth to within 1.2 seconds.** The offline session
+token in the local database carries `expires 2026-11-10T21:06:48.831Z`; with the one-hour TTL
+these tokens use, issuance was `20:06:48.831Z`. The alert is timestamped `20:06:50Z` — **1.2
+seconds later**, which is the embedded dashboard's first authenticated Admin API burst
+immediately after the OAuth handshake completed.
+
+**3. We do not use the Bulk Operations API at all.** `bulkOperationRunQuery`,
+`bulkOperationRunMutation` and `/bulk` appear nowhere in `app/`, `scripts/` or `extensions/`.
+A block on bulk queries and mutations therefore restricts an API surface this product has
+never called, and does not affect any existing code path.
+
+**4. No credential exposure.** `.env` is untracked and covered by `.gitignore` (`.env`,
+`.env.*`). The only `shpat_` occurrence in tracked files is a prefix comparison in
+`scripts/verify-dev-store-session.mjs`, not a token. `SHOPIFY_API_SECRET` and
+`SHOPIFY_API_KEY` in `.env.example` are empty placeholders (value length 0). No captured dev
+or tunnel log contains a real token.
+
+**5. No unauthorized access on the store.** Read-only audit via
+`scripts/audit-shopify-activity.ts`:
+
+- App installation identity is ours — `imagyn-reviews`, developer `Imagyn Studios`
+- Discount codes: 1, `QATESTCOUP-VALZRZ`, EXPIRED, 0 uses — a prior QA artifact, not recent
+- Files: 24, most recent `2026-08-29` — no unexpected recent uploads
+- Webhook subscriptions: 0 unknown HTTP endpoints (this app declares its webhooks in
+  `shopify.app.toml`, so they are registered against the app version rather than created per
+  shop via the API — an empty list here is expected, and the security-relevant reading is that
+  no endpoint we did not configure is receiving this store's data)
+
+**6. An IP allowlist is not appropriate for this architecture.** Production runs on Railway,
+whose egress addresses are dynamic unless a static-egress plan is purchased; development runs
+from a residential connection with a dynamic IPv4 and a rotating IPv6 suffix. Pinning either
+would break the app rather than protect it.
+
+**7. Credential rotation was judged unnecessary.** There is no evidence of exposure, and
+rotation is not a free action: `SHOPIFY_API_SECRET` signs webhook HMAC verification and
+unsubscribe tokens (`emailSuppression.server.ts`), so rotating it breaks webhook processing
+until Railway is updated and redeployed. Revisit only if evidence of exposure appears.
+
+**What could not be determined from here.** The Admin API exposes no per-request activity log,
+so *which specific operations* Shopify flagged cannot be established from the app side. The
+alert email and the Partner/Dev Dashboard are the only sources for that, and both are
+owner-accessible only.
+
+**Logs preserved for this investigation** (session scratchpad — ephemeral, move these if
+long-term retention is wanted): `shopify-dev.log`, `shopify-dev2.log`, `shopify-dev3.log`.
+Each was checked and contains no access token or secret.
