@@ -387,3 +387,92 @@ Every remaining blocker reduces to **three access constraints**, not to unfinish
 
 `Test Files 111 · Tests 2115 passed` · typecheck clean · lint clean · production build clean ·
 42 migrations, schema up to date, 0 pending.
+
+---
+
+## §15 — 2026-11-11 (second pass): migration made non-destructive, and a correction
+
+### Decision 1 — `public_network_opt_in` no longer touches existing merchants
+
+`20261107213014_public_network_opt_in` now changes one column DEFAULT and nothing else. The
+`UPDATE "Store" SET "publicNetworkEnabled" = false ...` statement is removed.
+
+Safe to edit: the migration has never been applied to production — `origin/main` contains
+none of the three pending migrations, confirmed by `git cat-file`. No applied history was
+rewritten.
+
+Consequence, stated plainly: existing merchants keep sharing if they were sharing, **including
+merchants who only inherited the old `true` default rather than choosing it**. Addressing that
+population is a product decision about how to ask them, not something a migration can infer.
+The rollback is now symmetrical and lossless, because nothing is overwritten.
+
+Local evidence of what was avoided: the original migration had already run against the
+development database and forced **3 of 3** stores to `false`.
+
+### Audit of all three pending migrations
+
+| | Destructive to rows | Irreversible | Tenant isolation | Backward compatible |
+|---|---|---|---|---|
+| `add_hide_reasons_and_questions` | no — additive only | no, rollback drops what it created | `Question.storeId` FK + index; every read goes through `buildQuestionWhere(storeId)`, every write through `requireQuestion(storeId, id)` | yes — nullable columns, new table; deployed code ignores them |
+| `add_review_archive` | no — one nullable column + index | no | inherits `Review` scoping | yes |
+| `public_network_opt_in` | **no, after this change** | no — rollback is one symmetrical statement | n/a, column default only | yes — a DEFAULT change is invisible to running code |
+
+Pinned by `app/services/migrationSafety.test.ts` (92 assertions): no migration may UPDATE,
+DELETE or TRUNCATE rows, or drop a column or table. Two historical exceptions are listed
+explicitly and the list is asserted closed — a new entry would mean a destructive migration
+reached production.
+
+### Decision 2 — CORRECTION: the Railway `SCOPES` finding was wrong in its consequence
+
+§14 reported that production runs on 7 of 10 scopes and concluded Coupons and Review Rewards
+"cannot be creating real discount codes for any live merchant". **That conclusion was wrong
+and is withdrawn.**
+
+For an app built with the Shopify CLI, scopes are declared in `[access_scopes]` in
+`shopify.app.toml` and deployed with the app version — Shopify's own documentation states this
+directly. The `scopes` option passed to `shopifyApp()` feeds only the legacy authorization-code
+URL, which this app does not use (managed install, `AppDistribution.AppStore`, token exchange).
+The SDK's own scope logic reads `app.installation.accessScopes` and `app.requestedAccessScopes`
+from Shopify's API, never `config.scopes`.
+
+Queried live against the released app version:
+
+```
+requestedAccessScopes (14):  read_customers, read_discounts, read_files, read_fulfillments,
+  read_legal_policies, read_metaobject_definitions, read_metaobjects, read_orders,
+  read_products, write_discounts, write_files, write_metaobject_definitions,
+  write_metaobjects, write_products
+
+write_discounts      declared=true  granted=true
+read_fulfillments    declared=true  granted=true
+read_legal_policies  declared=true  granted=true
+```
+
+So: all three are already declared by the released version and granted. **No Railway change is
+required, and no merchant re-consent is triggered by anything in this release.** Aligning
+`SCOPES` on Railway from 7 to 10 is housekeeping that makes the variable stop misrepresenting
+what the app uses; it changes no behaviour.
+
+All three scopes are genuinely required: `write_discounts` has five call sites (Coupons route,
+Flow trigger, referrals, coupons, rewards); `read_fulfillments` backs the `fulfillments/create`
+subscription feeding `reviewRequestService.createFromOrder`; `read_legal_policies` backs Trust
+Certification pillar 3, confirmed ACCESS_DENIED without it. `read_fulfillments` carries
+protected customer data, for which approval was already granted 2026-09-08.
+
+### Decision 3 — a production backup cannot be taken from outside Railway
+
+The app's `DATABASE_URL` resolves to `postgres.railway.internal`, which exists only inside
+Railway's private network. The Postgres service exposes **no public or TCP-proxy endpoint**
+(variable names enumerated; nothing matching PUBLIC or PROXY). `pg_dump` 16.14 is installed
+locally and works, but has no route to the database.
+
+A backup must therefore come from one of:
+
+1. Railway's own backup feature for the Postgres service (dashboard), with the snapshot
+   timestamp recorded before deploy;
+2. a `pg_dump` run from inside Railway;
+3. temporarily enabling a TCP proxy on the Postgres service — a production configuration
+   change, so it needs approval first.
+
+Until one of those produces a dump that has been restored somewhere and checked, the
+deployment has no verified rollback for data.

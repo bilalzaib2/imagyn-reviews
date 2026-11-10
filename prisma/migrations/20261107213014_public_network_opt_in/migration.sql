@@ -1,35 +1,36 @@
--- Public review-network sharing becomes opt-in.
+-- Public review-network sharing becomes opt-in for NEW stores only.
 --
 -- OWNER DECISION, 2026-11-08: "Keep publicNetworkEnabled = false by default. Public
 -- review-network sharing must require explicit merchant opt-in."
+-- OWNER DECISION, 2026-11-11, which supersedes how that is implemented: "Do NOT reset
+-- publicNetworkEnabled for existing merchants. Modify the pending migration to preserve every
+-- existing merchant's current preference. New merchants may receive the intended secure
+-- default."
 --
--- ============================ READ BEFORE DEPLOYING ============================
+-- This migration therefore changes the column DEFAULT and nothing else. It does not read,
+-- rewrite or delete a single existing row. Running it twice is harmless.
 --
--- The UPDATE below CHANGES EXISTING MERCHANT SETTINGS. That is deliberate, and it is the only
--- migration in this project that touches existing rows rather than only adding structure.
+-- An earlier draft of this file also ran:
 --
--- Why it is necessary: `publicNetworkEnabled` is a CONTROL, not a consent record. It stores a
--- current preference and never captured who agreed, when, or to what (see the field's own
--- comment in schema.prisma). So there is no way to distinguish a merchant who deliberately
--- switched sharing ON from one who simply inherited the old `true` default. Changing only the
--- default would leave every existing store sharing without having opted in, which is the exact
--- state this change exists to end.
+--     UPDATE "Store" SET "publicNetworkEnabled" = false WHERE "publicNetworkEnabled" = true;
 --
--- What it costs: a merchant who DID deliberately enable sharing is switched off and must
--- re-enable it. That is the safe direction to be wrong in — sharing less review data than a
--- merchant wanted is recoverable in one click; sharing more than they agreed to is not.
+-- That statement is removed. It was never applied to production — this migration has never
+-- shipped; `origin/main` does not contain it — so removing it rewrites no applied history.
+-- It was dropped because it was irreversible in the one way that matters: publicNetworkEnabled
+-- is a control, not a consent record (see the field's comment in schema.prisma), so the
+-- per-merchant values it overwrote were recorded nowhere and could not have been restored by
+-- any rollback.
 --
--- What it does NOT do: no Review row is edited, unpublished or deleted. Storefront widgets, the
--- merchant dashboard and every private API are unaffected. Only what the public network may
--- read changes. Development stores were already excluded independently of this flag.
+-- The trade-off is now stated honestly rather than resolved silently: a merchant who had
+-- sharing ON before this deploy still has it ON afterwards, including one who only ever
+-- inherited the old `true` default rather than choosing it. If that inherited-consent
+-- population needs to be addressed, it is a product decision about how to ask them — a
+-- prompt, a notice, a settings callout — not something a migration can infer. Turning the
+-- setting off for everyone was the one option that could not be undone.
 --
--- Reversal: see rollback.sql. Note that reversing restores the old DEFAULT but cannot restore
--- individual merchants' previous values, because they were not recorded anywhere.
---
--- ===============================================================================
+-- Backward compatibility: a DEFAULT change is invisible to running code. Existing rows keep
+-- their values, every column keeps its type and nullability, and the currently deployed
+-- release continues to read and write this column exactly as it does today.
 
--- 1. New stores are private unless the merchant opts in.
+-- New stores are private unless the merchant opts in. Existing stores are left untouched.
 ALTER TABLE "Store" ALTER COLUMN "publicNetworkEnabled" SET DEFAULT false;
-
--- 2. Existing stores stop sharing until they opt in explicitly.
-UPDATE "Store" SET "publicNetworkEnabled" = false WHERE "publicNetworkEnabled" = true;
