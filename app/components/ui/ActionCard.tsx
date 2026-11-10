@@ -41,8 +41,13 @@ export function ActionCard({ title, description, action, badge }: ActionCardProp
         </div>
         <p className={styles.description}>{description}</p>
       </div>
+      {/* The visible label stays short ("Configure"), but the accessible name carries the card
+          it belongs to. Settings → Overview renders eight of these, six of them labelled
+          "Configure": listed out of context — which is how a screen reader's element list
+          presents them — those six were indistinguishable from each other. */}
       <button
         type="button"
+        aria-label={`${action.label} ${title}`}
         onClick={(event) => handleTopLevelNavigate(event, action.href, location.search)}
         className={`${buttonStyles.button} ${buttonStyles.secondary} ${styles.actionButton}`}
       >
