@@ -102,9 +102,26 @@ export function Metric({
         .filter(Boolean)
         .join(" ")}
     >
-      <p className={styles.value}>{value}</p>
-      {sub ? <p className={styles.sub}>{sub}</p> : null}
-      <p className={styles.label}>{label}</p>
+      {/* <div>, not <p>, for all three slots. Each is typed ReactNode, so a caller may pass an
+          element — and the dashboard does: the "Average rating" tile passes <StarRating/> as
+          `sub`, whose root is a <div>. A <div> inside a <p> is invalid HTML, and the browser's
+          parser auto-closes the <p> when it reaches it, so the parsed DOM can never match the
+          tree React rendered on the server.
+
+          In production that costs a hydration warning. In development it takes the entire
+          stylesheet with it: React Router serves all dev CSS as one
+          data-react-router-critical-css node, and a failed hydration re-renders from scratch
+          without it, leaving the dashboard as unstyled HTML until a manual refresh. Captured
+          live on verveonline — "Expected server HTML to contain a matching <div> in <p>", with
+          the component stack reading `at StarRating / at p / at Metric`, on a load measured at
+          0 CSS rules and body background rgba(0, 0, 0, 0).
+
+          Banner's own subtitle slot reached the same conclusion for the same reason; see the
+          comment there. A ReactNode slot does not get wrapped in a <p>. The three classes set
+          margin: 0 and nothing in metric.module.css selects `p`, so this renders identically. */}
+      <div className={styles.value}>{value}</div>
+      {sub ? <div className={styles.sub}>{sub}</div> : null}
+      <div className={styles.label}>{label}</div>
     </div>
   );
 }

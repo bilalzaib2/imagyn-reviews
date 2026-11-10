@@ -56,9 +56,21 @@ describe("the readiness check cannot leak or spin forever", () => {
   });
 
   it("does not poll at all when the global is already there", () => {
-    // The initial state is computed synchronously, and the effect returns early.
-    expect(SOURCE).toMatch(/useState\(\s*\(\) => typeof window !== "undefined" && Boolean/);
+    // The effect checks the global synchronously and returns before setting up any interval,
+    // so an App Bridge that is already present costs one tick, not a polling cycle.
+    expect(SOURCE).toMatch(/shopify\) \{[\s\S]{0,60}setReady\(true\);[\s\S]{0,40}return;/);
     expect(SOURCE).toMatch(/if \(ready \|\| typeof window === "undefined"\) return;/);
+  });
+
+  // Regression guard. Seeding the initial state from `window.shopify` made the first client
+  // render disagree with the server (which renders null, having no `window`), and React
+  // reported "Expected server HTML to contain a matching <ui-save-bar> in <div>" and failed
+  // hydration outright. In development that costs the whole stylesheet, because React Router
+  // serves all dev CSS as one critical-CSS node that a from-scratch re-render discards —
+  // measured on verveonline, Email Studio and Brand Studio each came back at 0 CSS rules.
+  it("never seeds its initial state from the browser, which would break hydration", () => {
+    expect(SOURCE).toMatch(/const \[ready, setReady\] = useState\(false\)/);
+    expect(SOURCE).not.toMatch(/useState\(\s*\(\) => typeof window/);
   });
 });
 

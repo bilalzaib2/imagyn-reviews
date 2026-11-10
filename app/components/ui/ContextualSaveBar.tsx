@@ -29,12 +29,32 @@ interface ContextualSaveBarProps {
  * this reason; this is the same guard for a far bigger blast radius.
  */
 function useAppBridgeReady(): boolean {
-  const [ready, setReady] = useState(
-    () => typeof window !== "undefined" && Boolean((window as { shopify?: unknown }).shopify),
-  );
+  // Always false for the first render, never seeded from `window.shopify`.
+  //
+  // Seeding it from the browser made the first CLIENT render disagree with the server, which
+  // rendered null because `window` is undefined there. When App Bridge's script had already
+  // run, hydration's very first pass emitted <ui-save-bar> against a server payload that had
+  // nothing at that position, and App Bridge then relocates that element to <body> anyway —
+  // so React reported "Expected server HTML to contain a matching <ui-save-bar> in <div>" and
+  // hydration failed outright.
+  //
+  // A failed hydration is not cosmetic here. React discards the server DOM and re-renders from
+  // scratch, and in development that drops React Router's single critical-CSS node, leaving the
+  // screen as unstyled HTML until a manual refresh. Measured on verveonline: Email Studio and
+  // Brand Studio — two of the six screens mounting this bar — each came back at 0 CSS rules.
+  //
+  // Deferring to an effect is the fix: the first client render matches the server exactly, and
+  // the bar appears a tick later. The effect checks synchronously before polling, so when App
+  // Bridge is already present there is no added delay beyond that one tick.
+  const [ready, setReady] = useState(false);
 
   useEffect(() => {
     if (ready || typeof window === "undefined") return;
+
+    if ((window as { shopify?: unknown }).shopify) {
+      setReady(true);
+      return;
+    }
 
     // Polled rather than awaited: App Bridge exposes no ready event, and the script
     // typically lands within a frame or two of hydration. Gives up after ~5s, by which point
