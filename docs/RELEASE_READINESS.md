@@ -476,3 +476,52 @@ A backup must therefore come from one of:
 
 Until one of those produces a dump that has been restored somewhere and checked, the
 deployment has no verified rollback for data.
+
+---
+
+## §16 — 2026-11-11 (third pass): Medals removed, held back from deploy
+
+### Status: complete, verified, NOT deployed — by owner decision
+
+`origin/main` stays at `78f8610`. The Medals removal lives on
+`feature/remove-medals-carousel-customization` at `25afe67` and will deploy together with the
+Review Carousel customization work, not before it.
+
+### What was removed
+
+Eleven files deleted outright (merchant page, storefront API route, Medallion component, both
+achievements services and tests, theme extension block plus its script and two stylesheets),
+and the feature unpicked from thirteen shared surfaces: Widgets dashboard card, gallery
+thumbnail and install-detection key; Settings sidebar; both storefront API payloads; two
+storefront widget scripts that each carried their own hand-synced medallion artwork; the Store
+Reviews block's "Show achievements" theme setting; and the associated CSS.
+
+### Database — deferred, not done
+
+The `Achievement` table is **retained**. Dropping it would destroy real merchant milestone
+history, and the removal was scoped to exclude destructive migrations. The model stays declared
+in `schema.prisma` so the schema matches the live database and Prisma never generates a DROP.
+`prisma validate` passes, `migrate status` reports nothing pending: **this change deploys with
+no schema change whatsoever.**
+
+Deferred task, needing its own approval and backup: drop `Achievement` and
+`Store.achievements` if Medals is not rebuilt. Do not fold it into an unrelated deploy.
+
+### Deployment requires a Shopify extension release
+
+The Railway deploy alone is not sufficient. `medals_showcase.liquid` is removed from the theme
+extension, so `shopify app deploy` is required for the block to stop being installable, and
+merchants who added Medals Showcase to a theme will see it disappear. That is the intended
+removal, but it is a storefront-visible change and should not be released unannounced.
+
+### Gates
+
+112 files / 2210 tests, typecheck, lint, production build all clean. Extension integrity
+checked: every asset referenced by a remaining block still exists.
+
+### Review Carousel customization — blocked on a verifiable storefront
+
+Owner decision: provide a storefront that can actually be reached, then build and verify
+end-to-end. Not started, deliberately. §2.8 of the brief requires every saved setting to be
+confirmed on the real storefront widget, and the only development store redirects to
+`/password`.

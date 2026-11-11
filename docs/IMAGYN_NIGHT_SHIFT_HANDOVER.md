@@ -1511,3 +1511,46 @@ log. To test slow networks, inject latency into module responses in a dev-only V
 rather than throttling the machine: it targets exactly the race you are trying to widen. Keep
 the server's body-log limit generous; a 400-character truncation silently cut a React component
 stack and cost an investigation round.
+
+---
+
+## §25 — 2026-11-11: Medals removed (held), Carousel customization blocked
+
+### State
+
+- Branch `feature/remove-medals-carousel-customization` at `25afe67` — Medals removal,
+  complete and green, **deliberately not deployed**. `origin/main` stays at `78f8610`.
+- Recovery checkpoint `checkpoint/pre-medals-removal-2026-11-11` at `254de7f`.
+- One unpushed docs commit on `main` (`254de7f`, the backup procedure).
+
+### Medals is gone from the application, not from the database
+
+Every route, service, component, storefront block, API field and stylesheet is deleted —
+`app/services/medalsRemoval.test.ts` (28 assertions) fails the build if any of it returns. The
+`Achievement` table is retained on purpose and annotated `RETAINED, UNUSED` in schema.prisma.
+No migration was generated; this deploys with no schema change.
+
+**Two things to know before deploying it:** it needs `shopify app deploy` as well as the
+Railway push, because the theme extension block is gone; and merchants who added Medals
+Showcase to a theme will see it vanish.
+
+### Review Carousel customization — read this before starting
+
+The carousel is not uncustomizable today. It already has **23 Theme Editor block settings**
+(cards per breakpoint, spacing, image ratio, alignment, field visibility, review length, text
+size, autoplay, arrows, dots). The brief asks to relocate that into Widgets → Review Carousel →
+Customize and expand it substantially: image placement/sizing/fitting/styling, typography,
+card styling and shadows, and five presets.
+
+The architecture already supports it, which is the useful finding: app-side persistence exists
+(`Widget` model, `type: "review-carousel"`, store-wide resolver in `widget.server.ts`). The
+only structural gap is that `review-carousel.js` reads Theme Editor data attributes (its line
+~57) rather than app-side settings. The build is: extend the settings schema with defaults and
+validation, build the editor, have the block consume app-side settings merged over the theme
+defaults, release the extension.
+
+**It is blocked on a verifiable storefront, by owner decision.** §2.8 of the brief requires
+every saved setting to be confirmed on the real storefront widget; the development store
+redirects to `/password` and a development-plan store cannot turn that off. Do not build the
+storefront half against the dashboard preview alone — that is the exact failure the brief
+names. Get a reachable storefront first.

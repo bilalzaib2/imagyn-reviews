@@ -303,3 +303,36 @@ not a product gap — the detection itself works and is covered by tests.
 
 The Notion parity tracker connector is still unauthenticated, so this file remains the single
 source of parity truth. Do not create a second tracker.
+
+---
+
+## 2026-11-11 (second entry) — Medals removed; Review Carousel customization pending
+
+### Medals / Achievements — removed from the product
+
+Owner decision: the implementation was unsatisfactory and comes out entirely, possibly to be
+rebuilt later. This is a parity *reduction* and is recorded as one deliberately rather than
+quietly dropped from the matrix.
+
+Judge.me has no direct equivalent of Medals, so this does not open a parity gap against them.
+What it does remove is an Imagyn-only differentiator: store-wide earned achievement badges on
+the storefront (Store Reviews block, Product Reviews summary) and the merchant-facing Medals
+page. If Medals is rebuilt, it returns as a differentiator rather than a parity item.
+
+The `Achievement` table and its rows are retained — see the deferred cleanup below.
+
+### Review Carousel customization — not started, and why
+
+Not a gap against Judge.me in capability terms: the Review Carousel already exposes 23
+merchant-facing settings (cards per breakpoint, spacing, image ratio, alignment, field
+visibility, review length, text size, autoplay, arrows, dots and more). The gap is *where*
+they live — Shopify's Theme Editor rather than the Imagyn Widgets Dashboard — plus a set of
+controls Judge.me does offer and we do not: image placement and fitting, card styling, shadow,
+typography and design presets.
+
+Blocked on verification, not on design or architecture. The app-side persistence path already
+exists (`Widget` model, `type: "review-carousel"`, store-wide resolver in widget.server.ts);
+`review-carousel.js` simply reads Theme Editor data attributes today instead of app-side
+settings. Building it is tractable. Verifying it is not, while the only development store's
+storefront is password protected — and a saved setting that is never confirmed on a real
+storefront is exactly the kind of claim this matrix is supposed to prevent.
