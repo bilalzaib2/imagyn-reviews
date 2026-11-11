@@ -22,6 +22,18 @@ import { ContextualSaveBar } from "../components/ui/ContextualSaveBar";
 import shellStyles from "../styles/app.shell.module.css";
 import styles from "../styles/app.widgets.carousel.module.css";
 
+/*
+ * Filename note: the underscore in `app.widgets_.carousel` is load-bearing.
+ *
+ * Without it this file is a CHILD of app.widgets.tsx, which renders no <Outlet/>, so
+ * /app/widgets/carousel matched the parent and silently rendered the Widgets list instead of
+ * this screen — including on a direct hard refresh. The trailing underscore opts out of that
+ * parent layout while keeping the same URL, which is the convention app.products_.$id.tsx and
+ * app.reviews_.new.tsx already use here.
+ *
+ * Worth knowing: the preview harness renders route components directly and therefore cannot
+ * catch this class of bug. It only showed up in the real embedded app.
+ */
 type LoaderData = {
   settings: CarouselSettings;
   reviews: PreviewReview[];

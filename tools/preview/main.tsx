@@ -59,7 +59,7 @@ import {
 // Each screen is mounted through a memory router whose loader returns the fixture, which is
 // exactly how the real route receives its data — so useLoaderData, useSearchParams and
 // useNavigation all behave normally.
-import CarouselCustomizePage from "../../app/routes/app.widgets.carousel";
+import CarouselCustomizePage from "../../app/routes/app.widgets_.carousel";
 import { DEFAULT_CAROUSEL_SETTINGS, applyCarouselPreset } from "../../app/services/carouselSettings.shared";
 
 /** The loader shape app.widgets.carousel.tsx returns. Sample reviews cover the awkward cases:

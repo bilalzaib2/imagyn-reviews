@@ -1,4 +1,4 @@
-import { readFileSync } from "node:fs";
+import { readFileSync, readdirSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 
@@ -200,5 +200,29 @@ describe("presets reach the storefront as real differences", () => {
     const applied = applyCarouselPreset(DEFAULT_CAROUSEL_SETTINGS, "image-focused");
     expect(applied.imageSize).toBe("large");
     expect(carouselCssVariables(applied)["--imagyn-carousel-image-max-height"]).toBe("320px");
+  });
+});
+
+describe("the customization screen is actually reachable", () => {
+  const routes = readdirSync(join(ROOT, "app", "routes"));
+
+  // Caught in production, not by the preview harness: the harness renders route components
+  // directly, so a route that never matches still looks fine there. Nesting this screen under
+  // app.widgets.tsx — which renders no <Outlet/> — made /app/widgets/carousel silently render
+  // the Widgets list instead, even on a direct hard refresh.
+  it("opts out of the widgets layout, which has no Outlet", () => {
+    expect(routes).toContain("app.widgets_.carousel.tsx");
+    expect(routes).not.toContain("app.widgets.carousel.tsx");
+  });
+
+  it("app.widgets.tsx still renders no Outlet, which is why the escape is needed", () => {
+    const widgets = readFileSync(join(ROOT, "app", "routes", "app.widgets.tsx"), "utf8");
+    expect(widgets).not.toMatch(/<Outlet\s*\/>/);
+  });
+
+  it("the Widgets dashboard links to the screen", () => {
+    const widgets = readFileSync(join(ROOT, "app", "routes", "app.widgets.tsx"), "utf8");
+    expect(widgets).toContain("/app/widgets/carousel");
+    expect(widgets).toMatch(/card\.key === "review-carousel"/);
   });
 });
