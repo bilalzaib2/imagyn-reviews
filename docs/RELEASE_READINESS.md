@@ -525,3 +525,51 @@ Owner decision: provide a storefront that can actually be reached, then build an
 end-to-end. Not started, deliberately. §2.8 of the brief requires every saved setting to be
 confirmed on the real storefront widget, and the only development store redirects to
 `/password`.
+
+---
+
+## §17 — 2026-11-12: Medals removed and Carousel customization DEPLOYED
+
+**Status: live in production.** `origin/main` at `938ee5b`, Railway deployment
+`109c8636-3287-4547-a11f-3570c84d1977`, Shopify app version `imagyn-reviews-103` released.
+
+### Database — nothing changed
+
+`No pending migrations to apply` in the deployment log. The only `prisma/` change in this
+release is a comment block on the retained `Achievement` model. Verified in production after
+deploy: Store 12, Review 169 and `publicNetworkEnabled = true` on all 12 stores, all unchanged;
+**`Achievement` still holds its 7 rows.**
+
+### Verified in production
+
+Dashboard, Reviews, Settings, Widgets and the new Customize screen all load and are styled.
+Medals is absent from navigation, settings, the Widgets gallery and the deployed extension.
+The Review Carousel card now carries a Customize action that no other theme-editor block has.
+
+Save/reload exercised on the authorized development store: applying the Compact preset updated
+the preview immediately, flipped the status to "Unsaved changes" and raised Shopify's own save
+bar; saving persisted it (`imageVisibility=never, cardsDesktop=4, maxLines=2` read back from
+the production database); a hard refresh showed it still applied; Reset to default then saved
+back to `when-present / 3 / 4`. Exactly one carousel row exists, scoped to that store.
+
+### A bug this step caught
+
+`/app/widgets/carousel` initially rendered the Widgets list instead of the customization
+screen, because the route nested under `app.widgets.tsx`, which renders no `<Outlet/>`. Fixed
+by the `app.widgets_.carousel.tsx` escape. **The preview harness could not have caught this** —
+it renders route components directly and never exercises routing. Production verification is
+the only thing that would have found it.
+
+### Storefront verification — the standing limitation
+
+The development store's storefront is password protected and a development-plan store cannot
+turn that off, so the carousel has **not** been verified on a live storefront. What was
+verified is the real extension code — `review-carousel.js` and `imagyn-component-carousel.css`
+as shipped — running locally against a fixture built from the same settings module the server
+uses (`tools/storefront-harness`), at real viewport widths. That is extension verification,
+not production storefront verification, and is not recorded as such anywhere.
+
+### Gates at deploy
+
+115 files / 2352 tests, typecheck, lint, production build, `prisma validate`, migrate status,
+and extension validation (10 Liquid blocks, all assets parse) — all clean.
