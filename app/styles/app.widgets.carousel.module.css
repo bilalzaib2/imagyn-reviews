@@ -1,0 +1,478 @@
+/* Review Carousel customization screen.
+ *
+ * Follows the existing dashboard language — white/off-white surfaces, neutral type, the
+ * restrained Imagyn green only on the one primary action — rather than introducing a second
+ * design vocabulary for a settings-heavy screen. The controls column is deliberately plain:
+ * with this many settings, the interesting thing on the page is the preview, and the controls
+ * should read as a quiet list rather than compete with it. */
+
+.topBar {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: var(--space-5);
+  flex-wrap: wrap;
+  padding-bottom: var(--space-5);
+  border-bottom: 1px solid var(--color-border-subtle, #ececef);
+  margin-bottom: var(--space-6);
+}
+
+.breadcrumb {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  font-size: var(--text-xs);
+  color: var(--color-text-muted);
+  margin-bottom: var(--space-2);
+}
+
+.breadcrumb a {
+  color: var(--color-text-muted);
+  text-decoration: none;
+}
+
+.breadcrumb a:hover {
+  color: var(--color-text);
+  text-decoration: underline;
+}
+
+.topActions {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+}
+
+.statusSaved,
+.statusDirty {
+  font-size: var(--text-xs);
+  padding: 4px 10px;
+  border-radius: 999px;
+}
+
+.statusSaved {
+  color: var(--color-text-muted);
+  background: var(--color-surface-subtle, #f6f6f8);
+}
+
+/* Unsaved state is stated in words, not only colour — a merchant who cannot distinguish the
+   tints still needs to know the work is not saved. */
+.statusDirty {
+  color: #8a5a00;
+  background: #fdf3e2;
+}
+
+.primaryButton,
+.secondaryButton {
+  font: inherit;
+  font-size: var(--text-sm);
+  padding: 8px 16px;
+  border-radius: 8px;
+  cursor: pointer;
+  border: 1px solid transparent;
+  transition: background 140ms ease, border-color 140ms ease;
+}
+
+.primaryButton {
+  background: #5c9754;
+  color: #fff;
+}
+
+.primaryButton:hover:not(:disabled) {
+  background: #4e8247;
+}
+
+.secondaryButton {
+  background: #fff;
+  border-color: var(--color-border, #d9d9de);
+  color: var(--color-text);
+}
+
+.secondaryButton:hover:not(:disabled) {
+  border-color: var(--color-text-muted);
+}
+
+.primaryButton:disabled,
+.secondaryButton:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.layout {
+  display: grid;
+  grid-template-columns: minmax(320px, 400px) 1fr;
+  gap: var(--space-6);
+  align-items: start;
+}
+
+@media (max-width: 1100px) {
+  .layout {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* ----------------------------------------------------------------------------- controls */
+
+.controls {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+
+.group {
+  border: 1px solid var(--color-border-subtle, #ececef);
+  border-radius: 12px;
+  background: #fff;
+  overflow: hidden;
+}
+
+.groupSummary {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+  padding: var(--space-4);
+  cursor: pointer;
+  list-style: none;
+}
+
+.groupSummary::-webkit-details-marker {
+  display: none;
+}
+
+.groupTitle {
+  display: block;
+  font-size: var(--text-sm);
+  font-weight: var(--weight-medium);
+  color: var(--color-text);
+}
+
+.groupHint {
+  display: block;
+  font-size: var(--text-xs);
+  color: var(--color-text-muted);
+  margin-top: 2px;
+}
+
+.chevron {
+  width: 8px;
+  height: 8px;
+  border-right: 1.5px solid var(--color-text-muted);
+  border-bottom: 1.5px solid var(--color-text-muted);
+  transform: rotate(45deg);
+  transition: transform 160ms ease;
+  flex-shrink: 0;
+}
+
+.group[open] .chevron {
+  transform: rotate(-135deg);
+}
+
+.groupBody {
+  padding: 0 var(--space-4) var(--space-4);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  border-top: 1px solid var(--color-border-subtle, #f1f1f3);
+  padding-top: var(--space-3);
+}
+
+.row {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  align-items: center;
+  gap: var(--space-4);
+  padding: 7px 0;
+  min-height: 34px;
+}
+
+.rowLabel {
+  font-size: var(--text-sm);
+  color: var(--color-text);
+}
+
+.rowHint {
+  display: block;
+  font-size: var(--text-xs);
+  color: var(--color-text-muted);
+  margin-top: 1px;
+}
+
+.rowControl {
+  display: flex;
+  justify-content: flex-end;
+}
+
+.select {
+  font: inherit;
+  font-size: var(--text-xs);
+  padding: 5px 8px;
+  border-radius: 7px;
+  border: 1px solid var(--color-border, #d9d9de);
+  background: #fff;
+  color: var(--color-text);
+  max-width: 190px;
+}
+
+.toggle {
+  appearance: none;
+  width: 36px;
+  height: 20px;
+  border-radius: 999px;
+  background: #d9d9de;
+  position: relative;
+  cursor: pointer;
+  transition: background 140ms ease;
+  flex-shrink: 0;
+}
+
+.toggle::after {
+  content: "";
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: #fff;
+  transition: transform 140ms ease;
+}
+
+.toggle:checked {
+  background: #5c9754;
+}
+
+.toggle:checked::after {
+  transform: translateX(16px);
+}
+
+.toggle:focus-visible {
+  outline: 2px solid #5c9754;
+  outline-offset: 2px;
+}
+
+.slider {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.slider input[type="range"] {
+  width: 120px;
+  accent-color: #5c9754;
+}
+
+.sliderValue {
+  font-size: var(--text-xs);
+  color: var(--color-text-muted);
+  font-variant-numeric: tabular-nums;
+  min-width: 42px;
+  text-align: right;
+}
+
+.color {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.color input[type="color"] {
+  width: 28px;
+  height: 24px;
+  padding: 0;
+  border: 1px solid var(--color-border, #d9d9de);
+  border-radius: 6px;
+  background: none;
+  cursor: pointer;
+}
+
+.color code {
+  font-size: 11px;
+  color: var(--color-text-muted);
+  font-variant-numeric: tabular-nums;
+}
+
+.presets {
+  display: grid;
+  gap: var(--space-2);
+}
+
+.preset {
+  text-align: left;
+  background: #fff;
+  border: 1px solid var(--color-border-subtle, #ececef);
+  border-radius: 10px;
+  padding: var(--space-3);
+  cursor: pointer;
+  font: inherit;
+  transition: border-color 140ms ease, background 140ms ease;
+}
+
+.preset:hover {
+  border-color: #5c9754;
+  background: #fbfdfb;
+}
+
+.presetName {
+  display: block;
+  font-size: var(--text-sm);
+  font-weight: var(--weight-medium);
+  color: var(--color-text);
+}
+
+.presetDescription {
+  display: block;
+  font-size: var(--text-xs);
+  color: var(--color-text-muted);
+  margin-top: 2px;
+}
+
+/* ------------------------------------------------------------------------------ preview */
+
+.previewPane {
+  /* Without min-width: 0 a grid item sizes to its content, so the desktop preview frame
+     pushes the column wider than the page instead of the stage scrolling. */
+  min-width: 0;
+  position: sticky;
+  top: var(--space-4);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+
+.previewToolbar {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.viewport,
+.viewportActive {
+  font: inherit;
+  font-size: var(--text-xs);
+  padding: 5px 12px;
+  border-radius: 999px;
+  cursor: pointer;
+  border: 1px solid var(--color-border, #d9d9de);
+  background: #fff;
+  color: var(--color-text-muted);
+}
+
+.viewportActive {
+  background: var(--color-text, #1a1a1a);
+  border-color: var(--color-text, #1a1a1a);
+  color: #fff;
+}
+
+.previewWidth {
+  margin-left: auto;
+  font-size: var(--text-xs);
+  color: var(--color-text-muted);
+  font-variant-numeric: tabular-nums;
+}
+
+.previewStage {
+  background: var(--color-surface-subtle, #f6f6f8);
+  border: 1px solid var(--color-border-subtle, #ececef);
+  border-radius: 14px;
+  padding: var(--space-4);
+  display: flex;
+  justify-content: center;
+  overflow: hidden;
+}
+
+/* Reserves the scaled footprint, so the stage does not keep the full unscaled height as empty
+   space below the preview. */
+.previewScaler {
+  display: flex;
+  justify-content: center;
+}
+
+.previewFrame {
+  transform-origin: top center;
+  position: relative;
+  /* The frame is a fixed, honest viewport width; when the dashboard column is narrower than
+     that, the stage scrolls rather than the cards being squeezed into a layout the storefront
+     would never produce. */
+  flex: 0 0 auto;
+  background: #fff;
+  border-radius: 10px;
+  padding: var(--space-4);
+}
+
+.previewTrack {
+  display: flex;
+  gap: var(--imagyn-carousel-gap);
+  align-items: stretch;
+  overflow: hidden;
+}
+
+.previewSlide {
+  flex-grow: 0;
+  flex-shrink: 0;
+  min-width: 0;
+}
+
+.arrowInside,
+.arrowOutside {
+  position: absolute;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 30px;
+  height: 30px;
+  border-radius: 50%;
+  background: #fff;
+  border: 1px solid var(--color-border, #d9d9de);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 16px;
+  color: var(--color-text);
+}
+
+.arrowLeft {
+  left: 6px;
+}
+
+.arrowRight {
+  right: 6px;
+}
+
+.arrowOutside {
+  left: -14px;
+}
+
+.dots {
+  display: flex;
+  justify-content: center;
+  gap: 6px;
+  margin-top: var(--space-3);
+}
+
+.dot,
+.dotBar {
+  background: #d9d9de;
+  display: block;
+}
+
+.dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+}
+
+.dotBar {
+  width: 22px;
+  height: 3px;
+  border-radius: 2px;
+}
+
+.dot[data-active="true"],
+.dotBar[data-active="true"] {
+  background: var(--color-text, #1a1a1a);
+}
+
+.previewNote {
+  font-size: var(--text-xs);
+  color: var(--color-text-muted);
+  margin: 0;
+}

@@ -59,8 +59,38 @@ import {
 // Each screen is mounted through a memory router whose loader returns the fixture, which is
 // exactly how the real route receives its data — so useLoaderData, useSearchParams and
 // useNavigation all behave normally.
+import CarouselCustomizePage from "../../app/routes/app.widgets.carousel";
+import { DEFAULT_CAROUSEL_SETTINGS, applyCarouselPreset } from "../../app/services/carouselSettings.shared";
+
+/** The loader shape app.widgets.carousel.tsx returns. Sample reviews cover the awkward cases:
+ *  text-only, one image, several images plus video, a long body and a low rating. */
+function carouselLoaderData(presetId?: string) {
+  return {
+    settings: presetId ? applyCarouselPreset(DEFAULT_CAROUSEL_SETTINGS, presetId) : DEFAULT_CAROUSEL_SETTINGS,
+    usingSampleData: true,
+    reviews: [
+      { id: "p1", title: "Exactly what I hoped for", body: "Arrived two days early and the finish is lovely — photos genuinely do not do it justice. I have already ordered a second one for my sister's birthday next month.", rating: 5, reviewerName: "Amelia R.", date: "9 Nov 2026", productName: "Brown Ceramic Plate", verified: true, images: ["/preview-media/one.svg"], hasVideo: false },
+      { id: "p2", title: "Good, with one caveat", body: "Comfortable and well made. The sizing runs a little small, so size up if you are between sizes.", rating: 4, reviewerName: "Jonas P.", date: "4 Nov 2026", productName: "Glacier Merino Hoodie", verified: true, images: [], hasVideo: false },
+      { id: "p3", title: "Beautiful set", body: "Bought these for a dinner party and they were the thing everyone commented on. The glaze has a depth to it that is hard to photograph, though I have tried. Washing has not dulled them at all after a month of regular use.", rating: 5, reviewerName: "Priya N.", date: "20 Oct 2026", productName: "Atlas Linen Bedding Set", verified: true, images: ["/preview-media/two.svg", "/preview-media/three.svg"], hasVideo: true },
+      { id: "p4", title: "Not quite for me", body: "Quality is fine but the colour is noticeably warmer than it looks on screen.", rating: 3, reviewerName: "Dana K.", date: "8 Oct 2026", productName: "Cirrus Ambient Lamp", verified: false, images: ["/preview-media/three.svg"], hasVideo: false },
+    ],
+  };
+}
+
 const SCREENS: Record<string, { label: string; path: string; element: JSX.Element; data: unknown }> = {
   dashboard: { label: "Dashboard", path: "/app", element: <DashboardPage />, data: dashboardLoaderData() },
+  "carousel-customize": {
+    label: "Widgets → Review Carousel → Customize",
+    path: "/app/widgets/carousel",
+    element: <CarouselCustomizePage />,
+    data: carouselLoaderData(),
+  },
+  "carousel-customize-editorial": {
+    label: "Carousel Customize — Editorial preset",
+    path: "/app/widgets/carousel",
+    element: <CarouselCustomizePage />,
+    data: carouselLoaderData("editorial"),
+  },
   "dashboard-fresh": {
     label: "Dashboard — fresh install",
     path: "/app",

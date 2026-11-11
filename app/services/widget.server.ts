@@ -5,6 +5,7 @@ import {
   type WidgetSettings,
   type WidgetType,
 } from "./widget.shared";
+import { normalizeCarouselSettings, type CarouselSettings } from "./carouselSettings.shared";
 
 export interface WidgetRecord {
   id: string;
@@ -224,4 +225,53 @@ export async function getStorefrontCarouselSettings(
   );
 
   return match ? match.settings : getDefaultWidgetSettings(type);
+}
+
+// ---------------------------------------------------------------- Review Carousel customization
+
+/**
+ * The Review Carousel's saved customization for a store, always valid.
+ *
+ * Resolution and tenant scoping are the existing ones — this is the store-wide
+ * `type: "review-carousel"` row, found by storeId like every other widget read. The only thing
+ * added is normalization, so a row saved before a control existed, a row with nothing saved at
+ * all, and a row someone hand-edited in the database all return the same complete shape.
+ */
+export async function getCarouselCustomization(storeId: string): Promise<CarouselSettings> {
+  const settings = await getStorefrontCarouselSettings(storeId);
+  return normalizeCarouselSettings(settings.carousel);
+}
+
+/**
+ * Persists the Review Carousel's customization for one store.
+ *
+ * Creates the store-wide row on first save rather than requiring one to be seeded, which is
+ * why a merchant who has never opened this screen still gets working defaults on the
+ * storefront. Normalizes before writing, so the database can only ever hold values the
+ * storefront is safe to render — the form is not trusted to have clamped anything.
+ */
+export async function saveCarouselCustomization(
+  storeId: string,
+  input: unknown,
+): Promise<CarouselSettings> {
+  const carousel = normalizeCarouselSettings(input);
+  const storeScoped = await widgetService.listWidgets(storeId);
+  const existing = storeScoped.find(
+    (widget) => widget.type === "review-carousel" && widget.productId === null,
+  );
+
+  if (existing) {
+    await widgetService.updateWidget(storeId, existing.id, {
+      settings: { ...existing.settings, carousel },
+    });
+  } else {
+    await widgetService.createWidget({
+      storeId,
+      name: "Review Carousel",
+      type: "review-carousel",
+      settings: { ...getDefaultWidgetSettings("review-carousel"), carousel },
+    });
+  }
+
+  return carousel;
 }

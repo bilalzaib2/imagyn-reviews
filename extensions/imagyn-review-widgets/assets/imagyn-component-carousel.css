@@ -286,9 +286,16 @@
   min-height: 0;
 }
 
+/* A text-only card gets more room than a media card, because the review is the whole of it.
+   Driven by the dashboard's "maximum visible lines" where the merchant has set one, with the
+   previous literal 6 as the fallback so untouched stores are unaffected. Specificity here is
+   higher than the base rule above, which is why it has to read the variable too — otherwise it
+   silently wins and the setting appears to do nothing. */
 .imagyn-carousel__slide .imagyn-review-card:not(.imagyn-review-card--media) .imagyn-review-card__body {
-  -webkit-line-clamp: 6;
-  max-height: 9em;
+  -webkit-line-clamp: var(--imagyn-carousel-max-lines, 6);
+  line-clamp: var(--imagyn-carousel-max-lines, 6);
+  min-height: 0;
+  max-height: calc(var(--imagyn-carousel-max-lines, 6) * 1.5em);
 }
 
 .imagyn-carousel__content {
@@ -380,16 +387,24 @@
 .imagyn-carousel__slide .imagyn-review-card__body {
   display: -webkit-box !important;
   -webkit-box-orient: vertical !important;
-  -webkit-line-clamp: 3;
+  /* The dashboard's "maximum visible lines" drives this when the merchant has set it; the
+     literal 3 remains the fallback, so a store that has never opened the customization screen
+     renders exactly as before. min/max-height are derived from the same number rather than
+     hardcoded, so the backstop described above still holds at any line count. */
+  -webkit-line-clamp: var(--imagyn-carousel-max-lines, 3);
+  line-clamp: var(--imagyn-carousel-max-lines, 3);
   overflow: hidden !important;
-  min-height: 4.5em;
-  max-height: 4.5em;
+  min-height: calc(var(--imagyn-carousel-max-lines, 3) * 1.5em);
+  max-height: calc(var(--imagyn-carousel-max-lines, 3) * 1.5em);
 }
 
 .imagyn-review-card--media .imagyn-review-card__body {
-  -webkit-line-clamp: 2;
-  min-height: 3em;
-  max-height: 3em;
+  /* A media card's excerpt is shorter than a text-only card's by design (see the note above),
+     so it takes one line fewer than the configured maximum, never fewer than one. */
+  -webkit-line-clamp: max(1, calc(var(--imagyn-carousel-max-lines, 3) - 1));
+  line-clamp: max(1, calc(var(--imagyn-carousel-max-lines, 3) - 1));
+  min-height: calc(max(1, calc(var(--imagyn-carousel-max-lines, 3) - 1)) * 1.5em);
+  max-height: calc(max(1, calc(var(--imagyn-carousel-max-lines, 3) - 1)) * 1.5em);
 }
 
 /* "Review length" Theme Editor setting — medium is the two defaults set above; small/large
@@ -673,5 +688,230 @@ a.imagyn-carousel__product:hover {
   .imagyn-carousel__slide:hover .imagyn-carousel__media,
   .imagyn-carousel__slide:focus-within .imagyn-carousel__media {
     transform: none;
+  }
+}
+
+/* ===========================================================================================
+   Dashboard customization (Widgets → Review Carousel → Customize)
+   ===========================================================================================
+
+   Everything below reads --imagyn-carousel-* custom properties set on the container by
+   review-carousel.js from the server-rendered string in carouselSettings.shared.ts. The
+   dashboard preview's own stylesheet reads the same property names, which is what makes the
+   two renderings agree by construction rather than by coincidence.
+
+   Each rule falls back to the value the carousel already used before these settings existed,
+   so a store that has never opened the customization screen renders exactly as it did. */
+
+.imagyn-review-card {
+  background: var(--imagyn-carousel-card-bg, transparent);
+  border-radius: var(--imagyn-carousel-card-radius, 0);
+  border-width: var(--imagyn-carousel-card-border-width, 0);
+  border-style: var(--imagyn-carousel-card-border-style, solid);
+  border-color: var(--imagyn-carousel-card-border-color, transparent);
+  box-shadow: var(--imagyn-carousel-card-shadow, none);
+  padding: var(--imagyn-carousel-card-padding, 0);
+  min-height: var(--imagyn-carousel-card-min-height, auto);
+  font-family: var(--imagyn-carousel-font-family, inherit);
+  color: var(--imagyn-carousel-text-color, inherit);
+  text-align: var(--imagyn-carousel-text-align, inherit);
+  box-sizing: border-box;
+  transition:
+    transform var(--imagyn-carousel-transition, 0ms) ease,
+    box-shadow var(--imagyn-carousel-transition, 0ms) ease;
+}
+
+/* Equal-height cards: the slide stretches and the card fills it, so a short review and a long
+   one end up the same height instead of the row looking ragged. */
+[data-imagyn-equal-height="true"] .imagyn-carousel__track {
+  align-items: stretch;
+}
+
+[data-imagyn-equal-height="true"] .imagyn-review-card {
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+}
+
+[data-imagyn-hover="lift"] .imagyn-review-card:hover {
+  transform: translateY(var(--imagyn-carousel-hover-lift, 0));
+}
+
+[data-imagyn-hover="zoom"] .imagyn-review-card:hover {
+  transform: scale(var(--imagyn-carousel-hover-scale, 1));
+}
+
+/* Image shape and fit. object-fit is the setting that decides between a cropped photo and a
+   distorted one; `fill` is never offered, because stretching a shopper's photo is not a
+   design choice anyone would make deliberately. */
+.imagyn-carousel__media-wrap {
+  border-radius: var(--imagyn-carousel-image-radius, 0);
+  border: var(--imagyn-carousel-image-border-width, 0) solid var(--imagyn-carousel-image-border-color, transparent);
+  margin-bottom: var(--imagyn-carousel-image-spacing, 0);
+  aspect-ratio: var(--imagyn-carousel-image-ratio, auto);
+  max-height: var(--imagyn-carousel-image-max-height, none);
+  overflow: hidden;
+}
+
+.imagyn-carousel__media {
+  width: 100%;
+  height: 100%;
+  object-fit: var(--imagyn-carousel-image-fit, cover);
+  transition: transform var(--imagyn-carousel-transition, 0ms) ease;
+}
+
+.imagyn-carousel__media-wrap:hover .imagyn-carousel__media {
+  transform: scale(var(--imagyn-carousel-image-zoom, 1));
+}
+
+/* Image placement. Left/right turn the card into a row; the text column gets min-width:0 so a
+   long unbroken word cannot push the card wider than its track. */
+[data-imagyn-image-position="below"] .imagyn-review-card {
+  flex-direction: column-reverse;
+  display: flex;
+}
+
+[data-imagyn-image-position="left"] .imagyn-review-card,
+[data-imagyn-image-position="right"] .imagyn-review-card {
+  display: flex;
+  flex-direction: row;
+  align-items: flex-start;
+  gap: var(--imagyn-carousel-image-spacing, 12px);
+}
+
+[data-imagyn-image-position="right"] .imagyn-review-card {
+  flex-direction: row-reverse;
+}
+
+[data-imagyn-image-position="left"] .imagyn-carousel__media-wrap,
+[data-imagyn-image-position="right"] .imagyn-carousel__media-wrap {
+  flex: 0 0 40%;
+  margin-bottom: 0;
+}
+
+[data-imagyn-image-position="left"] .imagyn-carousel__content,
+[data-imagyn-image-position="right"] .imagyn-carousel__content {
+  min-width: 0;
+  flex: 1 1 auto;
+}
+
+/* Image as card background. The scrim is deliberately not a setting: text laid over an
+   arbitrary customer photo is unreadable without one, and that is an accessibility floor
+   rather than a style preference. */
+[data-imagyn-image-position="background"] .imagyn-review-card {
+  position: relative;
+  padding: 0;
+  overflow: hidden;
+}
+
+[data-imagyn-image-position="background"] .imagyn-carousel__media-wrap {
+  position: absolute;
+  inset: 0;
+  margin: 0;
+  aspect-ratio: auto;
+  max-height: none;
+  border-radius: inherit;
+}
+
+[data-imagyn-image-position="background"] .imagyn-carousel__content {
+  position: relative;
+  z-index: 1;
+  padding: var(--imagyn-carousel-card-padding, 16px);
+  background: linear-gradient(180deg, rgba(0, 0, 0, 0.1) 0%, rgba(0, 0, 0, 0.72) 100%);
+  color: #fff;
+  min-height: 180px;
+  display: flex;
+  align-items: flex-end;
+}
+
+[data-imagyn-image-position="background"] .imagyn-review-card__title,
+[data-imagyn-image-position="background"] .imagyn-review-card__body,
+[data-imagyn-image-position="background"] .imagyn-review-card__name {
+  color: #fff;
+}
+
+/* "Never show images" is enforced in CSS as well as in the renderer, so a cached response
+   cannot briefly flash media the merchant turned off. */
+[data-imagyn-image-visibility="never"] .imagyn-carousel__media-wrap {
+  display: none;
+}
+
+/* Typography */
+.imagyn-review-card__title {
+  font-size: var(--imagyn-carousel-title-size, inherit);
+  font-weight: var(--imagyn-carousel-font-weight, inherit);
+  line-height: var(--imagyn-carousel-line-height, inherit);
+}
+
+.imagyn-review-card__body {
+  font-size: var(--imagyn-carousel-body-size, inherit);
+  line-height: var(--imagyn-carousel-line-height, inherit);
+  color: var(--imagyn-carousel-text-color, inherit);
+}
+
+.imagyn-review-card__name,
+.imagyn-carousel__product-name,
+.imagyn-review-card__date {
+  font-size: var(--imagyn-carousel-name-size, inherit);
+}
+
+.imagyn-carousel__product-name,
+.imagyn-review-card__date {
+  color: var(--imagyn-carousel-muted-color, inherit);
+}
+
+/* Truncation. The clamp count is a variable, and "full" resolves it to `unset`, which removes
+   the clamp rather than setting an implausibly large number. */
+/* "Full review" removes the clamp outright. It has to carry !important to overcome the base
+   rule's own !important display, and lifts the height backstop with it — a merchant who asked
+   for the whole review has asked for a taller card. */
+.imagyn-carousel__slide .imagyn-review-card__body[data-imagyn-full],
+[data-imagyn-text-display="full"] .imagyn-carousel__slide .imagyn-review-card__body,
+[data-imagyn-text-display="full"] .imagyn-review-card__body {
+  display: block !important;
+  overflow: visible !important;
+  -webkit-line-clamp: unset;
+  line-clamp: unset;
+  min-height: 0;
+  max-height: none;
+}
+
+.imagyn-review-card__stars {
+  color: var(--imagyn-carousel-star-color, inherit);
+}
+
+/* Arrow placement */
+[data-imagyn-arrow-position="outside"] .imagyn-carousel__nav {
+  position: absolute;
+  top: 50%;
+  transform: translateY(-50%);
+}
+
+[data-imagyn-arrow-position="outside"] .imagyn-carousel__nav--prev {
+  left: -18px;
+}
+
+[data-imagyn-arrow-position="outside"] .imagyn-carousel__nav--next {
+  right: -18px;
+}
+
+/* Pagination style */
+[data-imagyn-dot-style="bar"] .imagyn-carousel__dot {
+  width: 22px;
+  height: 3px;
+  border-radius: 2px;
+}
+
+/* A merchant can set a long transition; a shopper who asked their operating system for less
+   motion overrides all of it. Not negotiable through settings. */
+@media (prefers-reduced-motion: reduce) {
+  .imagyn-review-card,
+  .imagyn-carousel__media,
+  .imagyn-carousel__track {
+    transition: none !important;
+  }
+
+  .imagyn-review-card:hover {
+    transform: none !important;
   }
 }

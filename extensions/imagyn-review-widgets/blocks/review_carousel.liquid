@@ -27,24 +27,33 @@
   class="imagyn-carousel imagyn-carousel--align-{{ block.settings.text_align | escape }}"
   data-imagyn-carousel
   data-heading="{{ block.settings.heading | escape }}"
+  {%- comment -%}
+    Settings that now ALSO exist in Widgets → Review Carousel → Customize are emitted only when
+    the merchant changed them from this block's default. That makes the dashboard configuration
+    the base while still letting a deliberate Theme Editor choice win, so a block someone tuned
+    here keeps rendering exactly as it did. review-carousel.js reads these with
+    readExplicitSettings and merges accordingly.
+  {%- endcomment -%}
   data-review-count="{{ block.settings.review_count | escape }}"
   data-show-summary="{{ block.settings.show_summary | escape }}"
   data-product-id="{{ product.id }}"
   data-show-ai-summary="{{ block.settings.show_ai_summary | escape }}"
-  data-cards-mobile="{{ block.settings.cards_mobile | escape }}"
   data-review-length="{{ block.settings.review_length | escape }}"
   data-text-size="{{ block.settings.text_size | escape }}"
   data-no-image-fallback="{{ block.settings.no_image_fallback | escape }}"
-  data-show-rating="{{ block.settings.show_rating | escape }}"
-  data-show-date="{{ block.settings.show_date | escape }}"
-  data-show-name="{{ block.settings.show_name | escape }}"
-  data-show-images="{{ block.settings.show_images | escape }}"
-  data-show-video="{{ block.settings.show_video | escape }}"
-  data-show-product="{{ block.settings.show_product | escape }}"
-  data-show-arrows="{{ block.settings.show_arrows | escape }}"
-  data-show-dots="{{ block.settings.show_dots | escape }}"
-  data-autoplay="{{ block.settings.autoplay | escape }}"
-  data-autoplay-speed="{{ block.settings.autoplay_speed | escape }}"
+  {% if block.settings.show_rating != true %}data-show-rating="{{ block.settings.show_rating | escape }}"{% endif %}
+  {% if block.settings.show_date != true %}data-show-date="{{ block.settings.show_date | escape }}"{% endif %}
+  {% if block.settings.show_name != true %}data-show-name="{{ block.settings.show_name | escape }}"{% endif %}
+  {% if block.settings.show_images != true %}data-show-images="{{ block.settings.show_images | escape }}"{% endif %}
+  {% if block.settings.show_video != true %}data-show-video="{{ block.settings.show_video | escape }}"{% endif %}
+  {% if block.settings.show_product != true %}data-show-product="{{ block.settings.show_product | escape }}"{% endif %}
+  {% if block.settings.show_arrows != true %}data-show-arrows="{{ block.settings.show_arrows | escape }}"{% endif %}
+  {% if block.settings.show_dots != false %}data-show-dots="{{ block.settings.show_dots | escape }}"{% endif %}
+  {% if block.settings.autoplay != false %}data-autoplay="{{ block.settings.autoplay | escape }}"{% endif %}
+  {% if block.settings.autoplay_speed != 5 %}data-autoplay-speed="{{ block.settings.autoplay_speed | escape }}"{% endif %}
+  {% if block.settings.cards_desktop != 3 %}data-cards-desktop="{{ block.settings.cards_desktop | escape }}"{% endif %}
+  {% if block.settings.cards_tablet != 2 %}data-cards-tablet="{{ block.settings.cards_tablet | escape }}"{% endif %}
+  {% if block.settings.cards_mobile != 1 %}data-cards-mobile="{{ block.settings.cards_mobile | escape }}"{% endif %}
   style="--imagyn-carousel-cards-desktop: {{ block.settings.cards_desktop | escape }}; --imagyn-carousel-cards-tablet: {{ block.settings.cards_tablet | escape }}; --imagyn-carousel-cards-mobile: {{ block.settings.cards_mobile | escape }}; --imagyn-carousel-gap: {{ block.settings.card_spacing | escape }}px; --imagyn-carousel-content-gap: {{ block.settings.content_spacing | escape }}px; --imagyn-carousel-image-ratio: {{ block.settings.image_ratio | replace: ':', ' / ' | escape }};"
 >
   <div class="imagyn-carousel__viewport" data-imagyn-carousel-viewport>

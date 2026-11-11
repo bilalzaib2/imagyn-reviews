@@ -1,0 +1,255 @@
+/* The dashboard preview's card styling.
+ *
+ * Every value here comes from a --imagyn-carousel-* custom property, the same names the
+ * storefront stylesheet (imagyn-component-carousel.css) consumes. Nothing is hardcoded that a
+ * merchant can control, which is what keeps the preview honest: if the two stylesheets ever
+ * disagree, it is visible as a difference in which variable is read, not as a silent drift in
+ * magic numbers. */
+
+.card {
+  display: flex;
+  flex-direction: column;
+  gap: var(--imagyn-carousel-content-gap);
+  box-sizing: border-box;
+  background: var(--imagyn-carousel-card-bg);
+  border-radius: var(--imagyn-carousel-card-radius);
+  border-width: var(--imagyn-carousel-card-border-width);
+  border-style: var(--imagyn-carousel-card-border-style);
+  border-color: var(--imagyn-carousel-card-border-color);
+  box-shadow: var(--imagyn-carousel-card-shadow);
+  padding: var(--imagyn-carousel-card-padding);
+  min-height: var(--imagyn-carousel-card-min-height);
+  font-family: var(--imagyn-carousel-font-family);
+  color: var(--imagyn-carousel-text-color);
+  text-align: var(--imagyn-carousel-text-align);
+  transition:
+    transform var(--imagyn-carousel-transition) ease,
+    box-shadow var(--imagyn-carousel-transition) ease;
+  overflow: hidden;
+  position: relative;
+}
+
+.cardEqual {
+  height: 100%;
+}
+
+.card:hover {
+  transform: translateY(var(--imagyn-carousel-hover-lift)) scale(var(--imagyn-carousel-hover-scale));
+}
+
+/* Image left/right. The image keeps a sane share of the card rather than collapsing, and the
+   text column is allowed to shrink — min-width:0 is what stops a long unbroken word forcing
+   the card wider than its track. */
+.cardSide {
+  flex-direction: row;
+  align-items: flex-start;
+}
+
+.cardSideReverse {
+  flex-direction: row-reverse;
+}
+
+.cardSide .media {
+  flex: 0 0 40%;
+  margin-bottom: 0;
+}
+
+.cardSide .body {
+  min-width: 0;
+  flex: 1 1 auto;
+}
+
+.media {
+  position: relative;
+  overflow: hidden;
+  border-radius: var(--imagyn-carousel-image-radius);
+  border: var(--imagyn-carousel-image-border-width) solid var(--imagyn-carousel-image-border-color);
+  margin-bottom: var(--imagyn-carousel-image-spacing);
+  aspect-ratio: var(--imagyn-carousel-image-ratio);
+  max-height: var(--imagyn-carousel-image-max-height);
+  background: #f3f3f4;
+  flex-shrink: 0;
+}
+
+.media img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  /* object-fit is the difference between a cropped photo and a distorted one — never
+     `fill`, which is what stretches a shopper's photo out of proportion. */
+  object-fit: var(--imagyn-carousel-image-fit);
+  transition: transform var(--imagyn-carousel-transition) ease;
+}
+
+.mediaZoom:hover img {
+  transform: scale(var(--imagyn-carousel-image-zoom));
+}
+
+.mediaEmpty {
+  width: 100%;
+  height: 100%;
+  background: linear-gradient(135deg, #f1f1f2 0%, #e7e7e9 100%);
+}
+
+.videoBadge {
+  position: absolute;
+  left: 8px;
+  bottom: 8px;
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  background: rgba(0, 0, 0, 0.55);
+}
+
+.videoBadge::after {
+  content: "";
+  position: absolute;
+  top: 6px;
+  left: 8px;
+  border-style: solid;
+  border-width: 5px 0 5px 8px;
+  border-color: transparent transparent transparent #fff;
+}
+
+.mediaCount {
+  position: absolute;
+  right: 8px;
+  bottom: 8px;
+  padding: 2px 6px;
+  border-radius: 999px;
+  background: rgba(0, 0, 0, 0.55);
+  color: #fff;
+  font-size: 11px;
+  line-height: 1.4;
+}
+
+/* Image as card background, with the text over it. The scrim is not optional and not a
+   setting: text over an arbitrary shopper photo is unreadable without one, so accessibility
+   here is not left to the merchant to get right. */
+.cardBackground {
+  padding: 0;
+}
+
+.cardBackground .media {
+  position: absolute;
+  inset: 0;
+  margin: 0;
+  border-radius: inherit;
+  aspect-ratio: auto;
+  max-height: none;
+}
+
+.cardBackground .overlay {
+  position: relative;
+  z-index: 1;
+  padding: var(--imagyn-carousel-card-padding);
+  background: linear-gradient(180deg, rgba(0, 0, 0, 0.1) 0%, rgba(0, 0, 0, 0.72) 100%);
+  color: #fff;
+  min-height: 180px;
+  display: flex;
+  align-items: flex-end;
+}
+
+.cardBackground .overlay .title,
+.cardBackground .overlay .text,
+.cardBackground .overlay .name,
+.cardBackground .overlay .date,
+.cardBackground .overlay .product {
+  color: #fff;
+}
+
+.body {
+  display: flex;
+  flex-direction: column;
+  gap: var(--imagyn-carousel-content-gap);
+}
+
+.stars {
+  display: flex;
+  gap: 2px;
+  font-size: 14px;
+  line-height: 1;
+  justify-content: var(--imagyn-carousel-text-align, left);
+}
+
+.starOn {
+  color: var(--imagyn-carousel-star-color);
+}
+
+.starOff {
+  color: #d9d9dd;
+}
+
+.title {
+  margin: 0;
+  font-size: var(--imagyn-carousel-title-size);
+  font-weight: var(--imagyn-carousel-font-weight);
+  line-height: var(--imagyn-carousel-line-height);
+}
+
+.text {
+  margin: 0;
+  font-size: var(--imagyn-carousel-body-size);
+  line-height: var(--imagyn-carousel-line-height);
+  color: var(--imagyn-carousel-text-color);
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: var(--imagyn-carousel-max-lines);
+  line-clamp: var(--imagyn-carousel-max-lines);
+  overflow: hidden;
+}
+
+.readMore {
+  align-self: flex-start;
+  background: none;
+  border: 0;
+  padding: 0;
+  font: inherit;
+  font-size: var(--imagyn-carousel-name-size);
+  color: var(--imagyn-carousel-muted-color);
+  text-decoration: underline;
+  cursor: pointer;
+}
+
+.meta,
+.product {
+  margin: 0;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+  font-size: var(--imagyn-carousel-name-size);
+  color: var(--imagyn-carousel-muted-color);
+  justify-content: var(--imagyn-carousel-text-align, left);
+}
+
+.name {
+  font-weight: var(--imagyn-carousel-font-weight);
+  color: var(--imagyn-carousel-text-color);
+}
+
+.verified {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  color: #2f7d32;
+}
+
+.productThumb {
+  width: 18px;
+  height: 18px;
+  border-radius: 4px;
+  background: #e7e7e9;
+  flex-shrink: 0;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .card,
+  .media img {
+    transition: none;
+  }
+
+  .card:hover {
+    transform: none;
+  }
+}

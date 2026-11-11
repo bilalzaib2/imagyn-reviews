@@ -6,6 +6,8 @@ export type WidgetType =
   | "masonry-grid"
   | "floating-badge";
 
+import type { CarouselSettings } from "./carouselSettings.shared";
+
 export interface WidgetSettings {
   widgetName: string;
   enabled: boolean;
@@ -59,6 +61,14 @@ export interface WidgetSettings {
   customCss: string;
   enableAnimations: boolean;
   darkMode: boolean;
+  /**
+   * The Review Carousel's own customization, stored on the store-wide
+   * `type: "review-carousel"` row. Optional on purpose: every other widget type leaves it
+   * undefined, and a carousel row saved before this existed reads as undefined too — both
+   * resolve through normalizeCarouselSettings to the defaults, so no stored configuration
+   * ever had to be migrated. See carouselSettings.shared.ts.
+   */
+  carousel?: CarouselSettings;
 }
 
 const defaultSettingsByType: Record<WidgetType, WidgetSettings> = {

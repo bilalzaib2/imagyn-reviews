@@ -167,6 +167,112 @@
     });
   }
 
+
+  // The same attributes as readSettings, but reporting only the ones actually present on the
+  // element. readSettings deliberately still fills in defaults, because a storefront running
+  // against an older response (no app-side settings in the payload) must keep working exactly
+  // as it did; this reader exists purely to answer "did the merchant set this in the Theme
+  // Editor?" without that defaulting hiding the answer.
+  function readExplicitSettings(container) {
+    var out = {};
+
+    function boolAttr(attr, key) {
+      var value = container.getAttribute(attr);
+      if (value === null) return;
+      out[key] = value !== "false";
+    }
+    function numberAttr(attr, key) {
+      var value = parseFloat(container.getAttribute(attr));
+      if (isFinite(value)) out[key] = value;
+    }
+
+    boolAttr("data-show-rating", "showRating");
+    boolAttr("data-show-date", "showDate");
+    boolAttr("data-show-name", "showName");
+    boolAttr("data-show-images", "showImages");
+    boolAttr("data-show-video", "showVideo");
+    boolAttr("data-show-product", "showProduct");
+    boolAttr("data-show-arrows", "showArrows");
+    boolAttr("data-show-dots", "showDots");
+    boolAttr("data-autoplay", "autoplay");
+    numberAttr("data-autoplay-speed", "autoplaySpeed");
+    numberAttr("data-cards-desktop", "cardsDesktop");
+    numberAttr("data-cards-tablet", "cardsTablet");
+    numberAttr("data-cards-mobile", "cardsMobile");
+
+    return out;
+  }
+
+  // Merges the merchant's saved dashboard customization with this block's own Theme Editor
+  // settings.
+  //
+  // Precedence is deliberate and is the whole of requirement 8's "preserve compatibility":
+  // the dashboard configuration is the base, and a Theme Editor value only wins where the
+  // merchant actually changed it from its schema default. review_carousel.liquid emits those
+  // attributes only when they differ from the default, so a block a merchant tuned in the
+  // Theme Editor keeps rendering exactly as it did, while a block they never touched picks up
+  // whatever they set in Widgets → Review Carousel → Customize.
+  //
+  // Settings that exist only in the dashboard (image placement, card styling, typography and
+  // the rest) have no Theme Editor counterpart at all, so they always come from here.
+  function mergeCarouselSettings(themeSettings, appSettings) {
+    var merged = {};
+    var key;
+
+    for (key in appSettings) {
+      if (Object.prototype.hasOwnProperty.call(appSettings, key)) {
+        merged[key] = appSettings[key];
+      }
+    }
+    for (key in themeSettings) {
+      if (Object.prototype.hasOwnProperty.call(themeSettings, key) && themeSettings[key] !== undefined) {
+        merged[key] = themeSettings[key];
+      }
+    }
+
+    // The renderer's own vocabulary predates the dashboard's; map the overlapping names once
+    // here rather than renaming call sites throughout this file.
+    if (appSettings) {
+      if (merged.showName === undefined) merged.showName = appSettings.showReviewerName;
+      if (merged.showImages === undefined) merged.showImages = appSettings.showMedia;
+      if (merged.showVideo === undefined) merged.showVideo = appSettings.showMedia;
+      if (merged.autoplaySpeed === undefined) merged.autoplaySpeed = appSettings.autoplaySpeed;
+
+      // "Never show images" has to stop the markup being emitted, not merely hide it. The
+      // card carries an --media modifier whose layout assumes a picture is there, so hiding
+      // only the image left a card with a hole in it where the photo used to be — visible on
+      // the Compact preset, which turns images off. Suppressing the media here removes the
+      // modifier too, and the card lays out as the text-only card it now is.
+      if (appSettings.imageVisibility === "never") {
+        merged.showImages = false;
+        merged.showVideo = false;
+      }
+    }
+
+    return merged;
+  }
+
+  // Structural choices CSS alone cannot express — which side the image sits on, whether cards
+  // stretch to equal height, how the arrows are positioned. Applied as data attributes so the
+  // stylesheet owns the actual rules and this function owns no measurements.
+  function applyStructuralSettings(container, settings) {
+    function setAttr(name, value) {
+      if (value === undefined || value === null || value === "") {
+        container.removeAttribute(name);
+      } else {
+        container.setAttribute(name, String(value));
+      }
+    }
+
+    setAttr("data-imagyn-image-position", settings.imagePosition);
+    setAttr("data-imagyn-image-visibility", settings.imageVisibility);
+    setAttr("data-imagyn-equal-height", settings.equalHeight ? "true" : "false");
+    setAttr("data-imagyn-arrow-position", settings.arrowPosition);
+    setAttr("data-imagyn-dot-style", settings.dotStyle);
+    setAttr("data-imagyn-text-display", settings.textDisplay);
+    setAttr("data-imagyn-hover", settings.hoverEffect);
+  }
+
   function renderSlide(review, settings) {
     // At most one photo/video per slide — a carousel card is a compact preview, not the
     // full review detail (the Product Reviews Widget's gallery/lightbox already covers
@@ -338,6 +444,17 @@
 
         if (window.ImagynAppearance) {
           window.ImagynAppearance.apply(data.appearance, container);
+        }
+
+        // One style attribute, computed server-side by carouselSettings.shared.ts and shared
+        // verbatim with the dashboard preview. Scoped to this container, so none of it can
+        // leak into the merchant's theme.
+        if (data.carouselCss) {
+          container.style.cssText += ";" + data.carouselCss;
+        }
+        if (data.carousel) {
+          settings = mergeCarouselSettings(readExplicitSettings(container), data.carousel);
+          applyStructuralSettings(container, settings);
         }
 
         var reviews = data.reviews || [];

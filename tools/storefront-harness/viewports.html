@@ -1,0 +1,32 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>Imagyn Review Carousel — viewport harness</title>
+    <!--
+      Renders the same harness page at three real viewport widths. Each frame is a genuine
+      browsing context, so the extension stylesheet's media queries resolve against the frame's
+      own width — which is what makes this a real responsive check rather than a scaled-down
+      picture of the desktop layout.
+    -->
+    <style>
+      body { margin:0; padding:24px; background:#f6f6f8; font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif; }
+      .grid { display:flex; gap:24px; align-items:flex-start; justify-content:center; flex-wrap:wrap; }
+      figure { margin:0; background:#fff; border:1px solid #e3e3e7; border-radius:12px; padding:12px; }
+      figcaption { font-size:12px; color:#6b6b6b; margin-bottom:8px; font-weight:500; }
+      iframe { border:0; display:block; background:#fff; }
+    </style>
+  </head>
+  <body>
+    <div class="grid">
+      <figure>
+        <figcaption>Mobile — 390px</figcaption>
+        <iframe src="/tools/storefront-harness/index.html" width="390" height="720" title="Mobile"></iframe>
+      </figure>
+      <figure>
+        <figcaption>Tablet — 760px</figcaption>
+        <iframe src="/tools/storefront-harness/index.html" width="760" height="720" title="Tablet"></iframe>
+      </figure>
+    </div>
+  </body>
+</html>

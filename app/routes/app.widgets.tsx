@@ -1172,10 +1172,21 @@ export default function WidgetsPage() {
                             Upgrade to {proPlan.name}
                           </a>
                         ) : (
-                          <InstallStateAction
-                            status={card.installDetectable === false ? UNKNOWN_INSTALL_STATUS : status}
-                            addToThemeHref={addToThemeHref(card.blockHandle!)}
-                          />
+                          <>
+                            {/* The Review Carousel is the one theme-editor block with its own
+                                customization screen in this dashboard. Everything else is still
+                                configured in the Theme Editor, so it gets the install action
+                                alone rather than a Customize button that would go nowhere. */}
+                            {card.key === "review-carousel" ? (
+                              <a className={styles.widgetCustomizeAction} href={`/app/widgets/carousel${location.search}`}>
+                                Customize
+                              </a>
+                            ) : null}
+                            <InstallStateAction
+                              status={card.installDetectable === false ? UNKNOWN_INSTALL_STATUS : status}
+                              addToThemeHref={addToThemeHref(card.blockHandle!)}
+                            />
+                          </>
                         )}
                       </div>
                     </div>

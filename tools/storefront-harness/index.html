@@ -1,0 +1,90 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <title>Imagyn Review Carousel — storefront harness</title>
+
+    <!--
+      A local stand-in for a Shopify storefront page, loading the REAL extension assets by
+      relative path. Nothing here reimplements the widget: the stylesheet and the script below
+      are the exact files that ship in the theme app extension, and the markup is the same
+      structure review_carousel.liquid renders.
+
+      It exists because the only development store's storefront is password protected, so the
+      extension code cannot be exercised there. This verifies the extension code; it is NOT
+      production storefront verification and must never be described as such.
+    -->
+    <link rel="stylesheet" href="/extensions/imagyn-review-widgets/assets/imagyn-tokens.css" />
+    <link rel="stylesheet" href="/extensions/imagyn-review-widgets/assets/imagyn-typography.css" />
+    <link rel="stylesheet" href="/extensions/imagyn-review-widgets/assets/imagyn-utilities.css" />
+    <link rel="stylesheet" href="/extensions/imagyn-review-widgets/assets/imagyn-component-review-card.css" />
+    <link rel="stylesheet" href="/extensions/imagyn-review-widgets/assets/imagyn-component-skeleton.css" />
+    <link rel="stylesheet" href="/extensions/imagyn-review-widgets/assets/imagyn-component-ratings-section.css" />
+    <link rel="stylesheet" href="/extensions/imagyn-review-widgets/assets/imagyn-component-summary.css" />
+    <link rel="stylesheet" href="/extensions/imagyn-review-widgets/assets/imagyn-component-carousel.css" />
+
+    <style>
+      body {
+        margin: 0;
+        padding: 32px 24px;
+        background: #fff;
+        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+        color: #1a1a1a;
+      }
+      .harness-note {
+        max-width: 1100px;
+        margin: 0 auto 20px;
+        font-size: 12px;
+        color: #6b6b6b;
+      }
+      .harness-stage {
+        max-width: 1100px;
+        margin: 0 auto;
+      }
+    </style>
+  </head>
+  <body>
+    <p class="harness-note" data-harness-note>Local extension harness — real review-carousel.js and real stylesheet.</p>
+
+    <div class="harness-stage">
+      <!-- Same element, classes and data attributes review_carousel.liquid emits. -->
+      <div
+        class="imagyn-carousel imagyn-carousel--align-left"
+        data-imagyn-carousel
+        data-heading="What customers are saying"
+        data-review-count="12"
+        data-show-summary="true"
+        data-show-ai-summary="false"
+        data-review-length="short"
+        data-text-size="medium"
+        data-no-image-fallback="text"
+      >
+        <div class="imagyn-carousel__viewport" data-imagyn-carousel-viewport>
+          <ul class="imagyn-carousel__track" data-imagyn-carousel-track></ul>
+        </div>
+        <div class="imagyn-carousel__controls" data-imagyn-carousel-controls></div>
+        <div class="imagyn-carousel__dots" data-imagyn-carousel-dots></div>
+      </div>
+    </div>
+
+    <script>
+      // Intercept the one request the widget makes and answer it with the fixture, so the real
+      // script runs its real fetch/parse/render path rather than being driven directly.
+      (function () {
+        var realFetch = window.fetch;
+        window.fetch = function (url, options) {
+          if (String(url).indexOf("/apps/reviews/featured") === 0) {
+            return fetch("/tools/storefront-harness/payload.json", { headers: { Accept: "application/json" } });
+          }
+          return realFetch.call(window, url, options);
+        };
+      })();
+    </script>
+
+    <!-- Same two scripts, same order, as review_carousel.liquid. imagyn-appearance.js is what
+         defines window.ImagynShared, which review-carousel.js reads at module scope. -->
+    <script src="/extensions/imagyn-review-widgets/assets/imagyn-appearance.js"></script>
+    <script src="/extensions/imagyn-review-widgets/assets/review-carousel.js"></script>
+  </body>
+</html>

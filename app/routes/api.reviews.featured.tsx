@@ -6,6 +6,7 @@ import { getStoreBySlug } from "../services/store.server";
 import { getOrSyncProductForStoreByShopifyId } from "../services/product.server";
 import { getStorefrontAppearance } from "../services/appearance.server";
 import { getStorefrontCarouselSettings } from "../services/widget.server";
+import { carouselCssText, normalizeCarouselSettings } from "../services/carouselSettings.shared";
 import { getAiSummary, getStoreAiSummary } from "../services/aiSummary.server";
 import { json, isPreflight, preflightResponse, storeSlugFromShop } from "./api.reviews";
 
@@ -111,9 +112,18 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
   const productIds = Array.from(new Set(reviews.map((review) => review.product.id)));
   const productSummaries = await getPublicReviewSummaryBatch(productIds);
 
+  // The carousel's own customization, resolved and clamped server-side, plus the same values
+  // pre-rendered as a CSS custom-property string. Sending both means the storefront's ES5
+  // renderer performs no arithmetic and makes no styling decisions of its own — it sets one
+  // style attribute and reads a handful of behaviour flags — which is what keeps it visually
+  // identical to the dashboard preview rather than approximately like it.
+  const carousel = normalizeCarouselSettings(widget.carousel);
+
   return json({
     ok: true,
     widget,
+    carousel,
+    carouselCss: carouselCssText(carousel),
     appearance,
     storeSummary: {
       averageRating: storeSummary.averageRating,
