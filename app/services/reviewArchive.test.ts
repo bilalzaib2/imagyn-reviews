@@ -277,7 +277,6 @@ describe("archived reviews are invisible everywhere public", () => {
     ["app/services/publicDiscovery.server.ts", "the public review network"],
     ["app/services/aiSummary.server.ts", "AI summaries shown to shoppers"],
     ["app/services/trustCertification.server.ts", "the public trust badge"],
-    ["app/services/achievements.server.ts", "merchant achievements"],
     ["app/services/analytics.server.ts", "merchant analytics"],
     ["app/services/reviewMedia.server.ts", "storefront media galleries"],
   ])("%s excludes archived reviews from %s", (file) => {

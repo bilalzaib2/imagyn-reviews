@@ -24,79 +24,6 @@
     '<circle cx="7.01" cy="27.26" r="7.01" fill="currentColor"/>' +
     "</svg>";
 
-  // Mirrors medals-showcase.js's own glyph set exactly (and Medallion.tsx's
-  // GLYPH_BY_CATEGORY) — the same original Imagyn glyph paths, not a separate icon set.
-  var GLYPH_BY_CATEGORY = {
-    verified: "M9 16.2l-3.5-3.5L4 14.2l5 5 11-11-1.5-1.5z",
-    milestone: "M4 17h16l-5-9-3.5 6-2-3z",
-    trust: "M12 3l7 3v6c0 4.4-3 8-7 9-4-1-7-4.6-7-9V6z",
-    trending: "M4 16l6-6 4 4 6-7",
-  };
-  var FINISH_STOPS = {
-    pewter: { ring: "#a7a8ad", fill: "color-mix(in srgb, #a7a8ad 14%, #ffffff)", base: "#4c4d52" },
-    silver: { ring: "#9a9ca0", fill: "color-mix(in srgb, #9a9ca0 10%, #ffffff)", base: "#3a3b3f" },
-    graphite: { ring: "#3d3e42", fill: "#3d3e42", base: "#dcdde0" },
-    onyx: { ring: "#0d0e0f", fill: "#0d0e0f", base: "#e9eaec" },
-  };
-  var FINISH_BY_TIER = ["pewter", "silver", "graphite", "onyx"];
-
-  function finishForTier(tier) {
-    var index = Math.min(Math.max(Math.round(tier) || 1, 1), FINISH_BY_TIER.length) - 1;
-    return FINISH_BY_TIER[index];
-  }
-
-  // Same flat-badge technique as medals-showcase.js's renderMedallion — kept as its own small
-  // copy (not a cross-script import) matching this extension's existing convention of each
-  // widget script being self-contained. Keep both in sync if the medal artwork ever changes.
-  // Size bumped from a fixed 44 to a `size` parameter (default 80) as part of the 2026-09-09
-  // "medals are far too small" fix — matches medals-showcase.js's own already-parameterized
-  // renderMedallion exactly, just closing the gap between the two copies.
-  function renderMedallion(category, tier, size) {
-    var finish = FINISH_STOPS[finishForTier(tier)];
-    var glyph = GLYPH_BY_CATEGORY[category];
-    var resolvedSize = size || 80;
-
-    var svg = '<svg width="' + resolvedSize + '" height="' + resolvedSize + '" viewBox="0 0 24 24" fill="none" role="img" aria-hidden="true" class="imagyn-medals-showcase__medallion">';
-    svg += '<circle cx="12" cy="12" r="10.5" stroke="' + finish.ring + '" stroke-width="1.5" fill="none"></circle>';
-    svg += '<circle cx="12" cy="12" r="9" fill="' + finish.fill + '"></circle>';
-
-    if (category === "ranking") {
-      svg += '<circle cx="12" cy="12" r="5.5" fill="none" stroke="' + finish.base + '" stroke-width="1.25"></circle>';
-      svg += '<circle cx="12" cy="12" r="2" fill="' + finish.base + '"></circle>';
-    } else if (glyph) {
-      svg += '<path d="' + glyph + '" fill="' + finish.base + '"></path>';
-    }
-
-    svg += '<g opacity="0.55" fill="' + finish.base + '">';
-    svg += '<circle cx="9.4" cy="19.1" r="0.55"></circle>';
-    svg += '<circle cx="12" cy="19.6" r="0.7"></circle>';
-    svg += '<circle cx="14.6" cy="19.1" r="0.55"></circle>';
-    svg += "</g>";
-
-    svg += "</svg>";
-    return svg;
-  }
-
-  function renderMedals(medals) {
-    if (!medals || medals.length === 0) {
-      return "";
-    }
-
-    var html = '<ul class="imagyn-medals-showcase__list imagyn-store-reviews__medals-list">';
-    for (var i = 0; i < medals.length; i++) {
-      var medal = medals[i];
-      html +=
-        '<li class="imagyn-medals-showcase__item">' +
-        renderMedallion(medal.category, medal.tier, 80) +
-        '<div class="imagyn-medals-showcase__body">' +
-        '<p class="imagyn-medals-showcase__name">' + escapeHtml(medal.name) + "</p>" +
-        '<p class="imagyn-medals-showcase__description">' + escapeHtml(medal.description) + "</p>" +
-        "</div></li>";
-    }
-    html += "</ul>";
-    return html;
-  }
-
   // Same markup/classes as reviews-widget.js's own renderAiSummary (product-level) — one
   // shared visual component, two independent data sources. data.storeAiSummary is the real,
   // persisted Store AI Summary (see api.reviews.store.tsx) — never a per-product fallback,
@@ -190,7 +117,6 @@
       rating: isOn(container.getAttribute("data-show-rating")),
       distribution: isOn(container.getAttribute("data-show-distribution")),
       cta: isOn(container.getAttribute("data-show-cta")),
-      achievements: isOn(container.getAttribute("data-show-achievements")),
       aiSummary: isOn(container.getAttribute("data-show-ai-summary")),
     };
 
@@ -210,14 +136,6 @@
     // (see api.reviews.store.tsx), and visibility.aiSummary is this block's own Theme
     // Editor "Show AI Summary" setting for this specific instance.
     html += visibility.aiSummary ? renderAiSummary(data.storeAiSummary) : "";
-
-    var medalsHtml = visibility.achievements ? renderMedals(data.medals) : "";
-    if (medalsHtml) {
-      html += '<div class="imagyn-medals-showcase imagyn-store-reviews__medals">';
-      html += '<p class="imagyn-ratings-section__label">Achievements</p>';
-      html += medalsHtml;
-      html += "</div>";
-    }
 
     container.innerHTML = html;
     window.ImagynShared.animateHistogramFills(container);
@@ -243,7 +161,7 @@
         render(container, data);
       })
       .catch(function () {
-        // Fails quietly, same reasoning as review-carousel.js/medals-showcase.js's own
+        // Fails quietly, same reasoning as review-carousel.js's own
         // catch — a broken/unavailable widget disappears rather than showing an error block
         // on a page where a shopper has no recovery action available anyway.
         container.innerHTML = "";

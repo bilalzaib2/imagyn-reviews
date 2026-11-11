@@ -32,7 +32,6 @@ const ALLOWED_BLOCKS: Record<string, { template: "product" | "collection" | "ind
   review_carousel: { template: "index", kind: "section" },
   // Same reasoning as review_carousel above — store-wide, section-target, typically
   // homepage-placed.
-  medals_showcase: { template: "index", kind: "section" },
   // Store-wide, section-target, typically homepage-placed — same shape as review_carousel.
   // Pro-gated, but the gate is server-side in api.reviews.video-carousel.tsx: a Free store
   // that reaches this deep link still gets a block that renders nothing, so there is no
@@ -40,7 +39,7 @@ const ALLOWED_BLOCKS: Record<string, { template: "product" | "collection" | "ind
   video_reviews_carousel: { template: "index", kind: "section" },
   store_reviews: { template: "index", kind: "section" },
   // Store-wide, placeable on any page — opens on the homepage template by default, same
-  // reasoning as review_carousel/medals_showcase/store_reviews above.
+  // reasoning as review_carousel/store_reviews above.
   store_ai_summary: { template: "index", kind: "section" },
   // An app embed (`"target": "body"` — see floating_reviews.liquid), enabled once for the
   // whole storefront rather than placed in a section, so it takes the same activateAppId +

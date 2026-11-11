@@ -1,7 +1,6 @@
 import type { LoaderFunctionArgs } from "react-router";
 import { authenticate } from "../shopify.server";
 import { getPublicStoreReviewSummary } from "../services/review.server";
-import { getEarnedMedalsForStorefront } from "../services/achievements.server";
 import { getStoreBySlug } from "../services/store.server";
 import { getStorefrontAppearance } from "../services/appearance.server";
 import { getStoreAiSummary } from "../services/aiSummary.server";
@@ -9,10 +8,10 @@ import { json, isPreflight, preflightResponse, storeSlugFromShop } from "./api.r
 
 // Public, unauthenticated, App-Proxy-verified read for the Store Reviews widget
 // (extensions/imagyn-review-widgets/blocks/store_reviews.liquid) — same shape/pattern as
-// api.reviews.medals.tsx and api.reviews.featured.tsx. Store-wide, not per-product: this is a
+// api.reviews.featured.tsx. Store-wide, not per-product: this is a
 // rollup of the store's own real product reviews (getPublicStoreReviewSummary), not a separate
 // "store review" entity — no such concept exists in the schema, and this never fabricates one.
-// Bundles the summary + earned medals + appearance tokens in one response so the widget needs
+// Bundles the summary + appearance tokens in one response so the widget needs
 // only one round trip, matching api.reviews.tsx's own per-product bundling.
 export const loader = async ({ request }: LoaderFunctionArgs) => {
   if (isPreflight(request)) {
@@ -38,9 +37,8 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
     return json({ ok: false, error: "Shop not found." }, { status: 404 });
   }
 
-  const [summary, medals, appearance, storeAiSummary] = await Promise.all([
+  const [summary, appearance, storeAiSummary] = await Promise.all([
     getPublicStoreReviewSummary(store.id),
-    getEarnedMedalsForStorefront(store.id),
     getStorefrontAppearance(store.id, "store_reviews"),
     // Pure cache read (never generates) — only fetched at all when the merchant has actually
     // turned this surface on, and only ever the real persisted Store AI Summary, never a
@@ -53,7 +51,6 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
   return json({
     ok: true,
     summary,
-    medals,
     appearance,
     storeAiSummary: storeAiSummary
       ? { summary: storeAiSummary.summary, reviewCountUsed: storeAiSummary.reviewCountUsed }

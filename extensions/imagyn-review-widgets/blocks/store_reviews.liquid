@@ -3,14 +3,13 @@
 {{ 'imagyn-utilities.css' | asset_url | stylesheet_tag }}
 {{ 'imagyn-component-summary.css' | asset_url | stylesheet_tag }}
 {{ 'imagyn-component-histogram.css' | asset_url | stylesheet_tag }}
-{{ 'imagyn-component-medals-showcase.css' | asset_url | stylesheet_tag }}
 {{ 'imagyn-component-ratings-section.css' | asset_url | stylesheet_tag }}
 {{ 'imagyn-component-store-reviews.css' | asset_url | stylesheet_tag }}
 
 {% comment %}
   Store-wide (not per-product) — a rollup of this store's own real, approved product reviews
   (see app/services/review.server.ts's getPublicStoreReviewSummary) plus currently-earned
-  achievement medals, both sourced from app/routes/api.reviews.store.tsx. Not a separate
+  sourced from app/routes/api.reviews.store.tsx. Not a separate
   "store review" entity — no such concept exists in the schema, and none is introduced here;
   every real review is still tied to a specific product.
 
@@ -34,7 +33,6 @@
   data-show-rating="{{ block.settings.show_rating | escape }}"
   data-show-distribution="{{ block.settings.show_distribution | escape }}"
   data-show-cta="{{ block.settings.show_cta | escape }}"
-  data-show-achievements="{{ block.settings.show_achievements | escape }}"
   data-show-ai-summary="{{ block.settings.show_ai_summary | escape }}"
 ></div>
 
@@ -75,7 +73,6 @@
     { "type": "checkbox", "id": "show_distribution", "label": "Show rating distribution", "default": true },
     { "type": "checkbox", "id": "show_cta", "label": "Show \"Write a Review\" button", "default": true },
     { "type": "text", "id": "cta_label", "label": "Write-a-review button label", "default": "Write a Review" },
-    { "type": "checkbox", "id": "show_achievements", "label": "Show achievements", "default": true },
     {
       "type": "checkbox",
       "id": "show_ai_summary",

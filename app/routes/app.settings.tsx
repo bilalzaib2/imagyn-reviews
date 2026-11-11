@@ -12,7 +12,7 @@ import styles from "../styles/app.settingsWorkspace.module.css";
 
 // The Settings workspace shell — a dedicated secondary navigation, not a single flat page.
 // Everything that used to be its own top-level nav item (Products, Requests already moved to
-// a Reviews tab, Email Studio, Widgets, Brand Studio, Medals, Billing) is real, unchanged,
+// a Reviews tab, Email Studio, Widgets, Brand Studio, Billing) is real, unchanged,
 // and still lives at its existing URL; this shell only adds ONE place a merchant can find all
 // of it, grouped by what it's actually for, instead of a flat list in primary nav. Settings
 // content that's genuinely new here (Automatic Requests, Moderation, Reminder Emails) was
@@ -101,7 +101,6 @@ export default function SettingsWorkspace() {
       label: "Brand",
       items: [
         { label: "Brand Studio", href: "/app/appearance" },
-        { label: "Medals", href: "/app/medals" },
       ],
     },
     {

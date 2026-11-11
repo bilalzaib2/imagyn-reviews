@@ -21,7 +21,6 @@ import WidgetsPage from "../../app/routes/app.widgets";
 import AnalyticsPage from "../../app/routes/app.analytics";
 import SettingsIndexPage from "../../app/routes/app.settings._index";
 import RequestsPage from "../../app/routes/app.requests";
-import MedalsPage from "../../app/routes/app.medals";
 import BillingPage from "../../app/routes/app.billing";
 import ProductsPage from "../../app/routes/app.products";
 import SettingsImportPage from "../../app/routes/app.settings.import";
@@ -43,7 +42,6 @@ import {
   analyticsLoaderData,
   settingsIndexLoaderData,
   requestsLoaderData,
-  medalsLoaderData,
   billingLoaderData,
   productsLoaderData,
   settingsImportLoaderData,
@@ -219,18 +217,6 @@ const SCREENS: Record<string, { label: string; path: string; element: JSX.Elemen
     path: "/app/requests",
     element: <RequestsPage />,
     data: requestsLoaderData({ pro: false }),
-  },
-  medals: {
-    label: "Medals",
-    path: "/app/medals",
-    element: <MedalsPage />,
-    data: medalsLoaderData(),
-  },
-  "medals-fresh": {
-    label: "Medals — fresh install",
-    path: "/app/medals",
-    element: <MedalsPage />,
-    data: medalsLoaderData({ fresh: true }),
   },
   billing: {
     label: "Billing — Starter",

@@ -914,7 +914,22 @@ model EmailTemplate {
   @@index([storeId, type, isActive])
 }
 
-// Medals/Achievements — see app/services/achievements.server.ts. One row per (store, key)
+// RETAINED, UNUSED — the Medals/Achievements feature was removed from the application on
+// 2026-11-11. No application code reads or writes this table any more: the routes, services,
+// admin UI, storefront blocks and API payloads are all gone (see docs for the removal record).
+//
+// The table and its rows are kept deliberately. Dropping it would be a destructive migration
+// against real merchant history — these rows record milestones that genuinely happened — and
+// the removal was explicitly scoped to exclude that. The model stays declared here so the
+// Prisma schema continues to match the live database and no DROP is ever generated.
+//
+// Deferred task: if Medals is not rebuilt, drop Achievement (and Store.achievements) in a
+// separate, separately-approved migration with its own backup. Do not fold it into an
+// unrelated deploy.
+//
+// Original notes follow, kept for whoever rebuilds this.
+//
+// Medals/Achievements — formerly app/services/achievements.server.ts. One row per (store, key)
 // once a milestone-style medal is genuinely earned (real, storeId-scoped data crossed the
 // threshold) — this is a ledger of "this happened," not a settings table, so it's never
 // written to from client input. Only medals whose definition has `persistent: true` in

@@ -1,7 +1,7 @@
 /*
  * Imagyn Reviews — Store Reviews component.
  *
- * A store-wide rating summary + achievements section, distinct from the existing
+ * A store-wide rating summary, distinct from the existing
  * per-product Review Summary (imagyn-component-summary.css) — this rolls up every approved
  * review across the whole store, not one product.
  *
@@ -12,17 +12,16 @@
  * mature review platform's storefront summary for product-experience and visual hierarchy
  * only (no assets, copy, layout code, or branding reproduced). Reuses .imagyn-histogram
  * (imagyn-component-histogram.css, with its starLabels option) for the distribution bars and
- * .imagyn-medals-showcase (imagyn-component-medals-showcase.css) for the achievements row —
  * this file supplies the grid, the rating typography, the CTA button, and the empty state.
  *
  * Load imagyn-tokens.css, imagyn-typography.css, imagyn-utilities.css,
- * imagyn-component-histogram.css, imagyn-component-medals-showcase.css, and
+ * imagyn-component-histogram.css and
  * imagyn-component-ratings-section.css (for .imagyn-ratings-section__label) before this file.
  */
 
 /* --imagyn-store-reviews-max-width is set inline by store-reviews.js from the block's own
    "Max width" theme editor setting (480-1200px) — a per-block override, distinct from
-   --imagyn-medals-showcase-max-width (Brand Studio's global layout width) so a merchant can
+   Brand Studio's global layout width so a merchant can
    make this one section narrower/wider than every other widget without changing their whole
    storefront's Imagyn max-width. */
 [data-imagyn-store-reviews] {
@@ -31,13 +30,13 @@
   font-family: var(--imagyn-font-family);
   color: var(--imagyn-color-text, inherit);
   width: 100%;
-  max-width: var(--imagyn-store-reviews-max-width, var(--imagyn-medals-showcase-max-width, 1080px));
+  max-width: var(--imagyn-store-reviews-max-width, 1080px);
   margin-inline: auto;
   padding-inline: var(--imagyn-space-px-md, 16px);
   box-sizing: border-box;
 }
 
-/* Size setting (Compact/Standard/Large) — scales the rating number, medallions and grid
+/* Size setting (Compact/Standard/Large) — scales the rating number and grid
    padding together as one deliberate step, not independent sliders per element, so the
    section always reads as one coherent size rather than mismatched parts. Standard (the
    default) sets no overrides at all — it IS the base values defined below. */
@@ -49,26 +48,12 @@
   font-size: var(--imagyn-font-size-xl, 26px);
 }
 
-[data-imagyn-store-reviews][data-imagyn-size="compact"] .imagyn-medals-showcase__medallion {
-  width: 56px;
-  height: 56px;
-}
-
 [data-imagyn-store-reviews][data-imagyn-size="large"] .imagyn-store-reviews__grid {
   padding: var(--imagyn-space-px-xl, 32px) var(--imagyn-space-px-xl, 40px);
 }
 
 [data-imagyn-store-reviews][data-imagyn-size="large"] .imagyn-store-reviews__rating-number {
   font-size: 56px;
-}
-
-[data-imagyn-store-reviews][data-imagyn-size="large"] .imagyn-medals-showcase__medallion {
-  width: 104px;
-  height: 104px;
-}
-
-[data-imagyn-store-reviews][data-imagyn-size="large"] .imagyn-medals-showcase__item {
-  width: 13rem;
 }
 
 .imagyn-store-reviews__heading {
@@ -222,25 +207,13 @@
   opacity: var(--imagyn-color-text-muted-opacity, 0.6);
 }
 
-.imagyn-store-reviews__medals {
-  display: grid;
-  justify-items: center;
-  gap: var(--imagyn-space-md, 1em);
-  padding-top: var(--imagyn-space-px-lg, 24px);
-  border-top: var(--imagyn-border-width, 1px) solid var(--imagyn-color-border, rgba(0, 0, 0, 0.08));
-}
-
-/* Same "quiet divider above an optional section" treatment as .imagyn-store-reviews__medals
+/* Same "quiet divider above an optional section" treatment
    above — this section renders nothing at all (see store-reviews.js's renderAiSummary) until
    a merchant has both enabled it and generated a real Store AI Summary, so there's never an
    empty bordered box waiting for content that doesn't exist yet. */
 .imagyn-store-reviews__ai-summary {
   padding-top: var(--imagyn-space-px-lg, 24px);
   border-top: var(--imagyn-border-width, 1px) solid var(--imagyn-color-border, rgba(0, 0, 0, 0.08));
-}
-
-.imagyn-store-reviews__medals .imagyn-medals-showcase__list {
-  padding: 0;
 }
 
 /* Tablet: keep the summary horizontal (rating + distribution), but drop the CTA to its own

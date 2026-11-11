@@ -24,10 +24,6 @@ vi.mock("../services/review.server", () => ({
   getPublicStoreReviewSummary: vi.fn(async () => ({ averageRating: 4.7, totalReviews: 10, ratingCounts: { 1: 0, 2: 0, 3: 1, 4: 2, 5: 7 } })),
 }));
 
-vi.mock("../services/achievements.server", () => ({
-  getEarnedMedalsForStorefront: vi.fn(async () => []),
-}));
-
 const getStorefrontAppearanceMock = vi.fn(async () => ({}));
 vi.mock("../services/appearance.server", () => ({
   getStorefrontAppearance: getStorefrontAppearanceMock,

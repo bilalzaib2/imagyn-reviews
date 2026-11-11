@@ -82,7 +82,7 @@ export default function App() {
   const isNavigating = navigation.state !== "idle";
   const appContextQuery = location.search;
   // Kept intentionally short — the day-to-day merchant workflows only. Everything else
-  // (Products, Requests, Email Studio, Widgets, Brand Studio, Medals, Billing) is real,
+  // (Products, Requests, Email Studio, Widgets, Brand Studio, Billing) is real,
   // unchanged, and still reachable at its existing URL — just relocated to the Settings
   // workspace's own secondary navigation (app.settings.tsx) or, for Requests, a tab on the
   // Reviews page itself — rather than permanently occupying primary nav.

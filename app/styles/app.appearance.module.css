@@ -1,6 +1,6 @@
 /* Wider than the shared shell default — this page's two-column settings + live-preview
    layout needs the extra room, a genuine intentional difference, not drift (see the same
-   single-property carve-out used by app.medals.module.css for its own page-scoped tweak). */
+   single-property carve-out for a page-scoped tweak). */
 .page {
   max-width: 1200px;
 }

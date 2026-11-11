@@ -21,7 +21,6 @@ import { getStoreBySlug } from "../services/store.server";
 import { getStorefrontWidgetSettings } from "../services/widget.server";
 import { getAiSummary } from "../services/aiSummary.server";
 import { getStorefrontAppearance } from "../services/appearance.server";
-import { getEarnedMedalsForStorefront } from "../services/achievements.server";
 import { getStorePermissions } from "../services/permissions";
 import { evaluateReview, getModerationSettings, sendHeldReviewNotification } from "../services/moderationRules.server";
 import { sendNewReviewNotification } from "../services/reviewNotifications.server";
@@ -147,7 +146,7 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
   // overwhelming majority of products, which aren't grouped at all.
   const reviewProductIds = await getGroupedProductIds(product.id);
 
-  const [summary, result, widget, aiSummary, gallery, appearance, medals] = await Promise.all([
+  const [summary, result, widget, aiSummary, gallery, appearance] = await Promise.all([
     getPublicReviewSummary(reviewProductIds),
     getProductReviews(reviewProductIds, { status: ReviewStatus.APPROVED, limit: 50 }),
     getStorefrontWidgetSettings(store.id, product.id, "review-list", permissions.canUseMultipleWidgetThemes),
@@ -166,9 +165,6 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
     // "product_reviews" also covers the standalone Product AI Summary block, which hits
     // this exact same endpoint/request shape — see appearance.shared.ts's SurfaceKey.
     getStorefrontAppearance(store.id, "product_reviews"),
-    // Store-wide (not product-scoped) earned Medals — a pure, cheap ledger read, never the
-    // full evaluateAchievements computation (see that function's own comment for why).
-    getEarnedMedalsForStorefront(store.id),
   ]);
 
   const orderedReviews = sort === "helpful" ? rankByHelpfulness(result.reviews) : result.reviews;
@@ -187,7 +183,6 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
     // saved-widget-settings side is already coerced server-side above.
     permissions: { canUseAdvancedLayout: permissions.canUseMultipleWidgetThemes },
     appearance,
-    medals,
     aiSummary: aiSummary
       ? { summary: aiSummary.summary, recommendation: aiSummary.recommendation }
       : null,

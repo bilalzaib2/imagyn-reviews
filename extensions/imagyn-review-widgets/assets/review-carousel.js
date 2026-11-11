@@ -353,7 +353,7 @@
         }
 
         // Empty state: hide the whole section rather than showing a fake/locked
-        // placeholder — matches renderAiSummary/renderMedals's own convention in
+        // placeholder — matches renderAiSummary's own convention in
         // reviews-widget.js.
         if (reviews.length === 0) {
           container.innerHTML = "";

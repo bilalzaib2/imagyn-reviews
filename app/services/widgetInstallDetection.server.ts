@@ -40,7 +40,6 @@ export type WidgetInstallKey =
   | "product-rating-badge"
   | "collection-rating-badge"
   | "review-carousel"
-  | "medals-showcase"
   | "store-reviews"
   | "ai-review-summary"
   | "store-ai-summary";
@@ -52,8 +51,6 @@ const PASSWORD_PROTECTED_REASON =
 const NO_PRODUCT_REASON = "This store has no synced products yet, so there's no product page to check.";
 const CAROUSEL_NOT_ON_HOME_REASON =
   "Not detected on your homepage. Review Carousel can be added to any page, so this can't be fully confirmed automatically — check your Theme Editor.";
-const MEDALS_SHOWCASE_NOT_ON_HOME_REASON =
-  "Not detected on your homepage. Medals Showcase can be added to any page, so this can't be fully confirmed automatically — check your Theme Editor.";
 const STORE_REVIEWS_NOT_ON_HOME_REASON =
   "Not detected on your homepage. Store Reviews can be added to any page, so this can't be fully confirmed automatically — check your Theme Editor.";
 const STORE_AI_SUMMARY_NOT_ON_HOME_REASON =
@@ -135,7 +132,7 @@ function resolveEmbedWidget(
 }
 
 // Unlike the two "canonical location" blocks, a section-target block placeable on any page
-// (Review Carousel, Medals Showcase) has no fixed location — a merchant can put it anywhere.
+// (Review Carousel) has no fixed location — a merchant can put it anywhere.
 // A miss on the homepage genuinely cannot be promoted to "not installed" without risking
 // exactly the false negative this feature exists to prevent, so it stays "unknown" with an
 // explanation instead.
@@ -189,7 +186,6 @@ export async function detectWidgetInstallStatus(
       productUrl,
     ),
     "review-carousel": resolveHomepageOnlyWidget("data-imagyn-carousel", home, homeUrl, CAROUSEL_NOT_ON_HOME_REASON),
-    "medals-showcase": resolveHomepageOnlyWidget("data-imagyn-medals-showcase", home, homeUrl, MEDALS_SHOWCASE_NOT_ON_HOME_REASON),
     "store-reviews": resolveHomepageOnlyWidget("data-imagyn-store-reviews", home, homeUrl, STORE_REVIEWS_NOT_ON_HOME_REASON),
     "store-ai-summary": resolveHomepageOnlyWidget(
       "data-imagyn-store-ai-summary",

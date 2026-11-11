@@ -431,7 +431,6 @@ const INSTALL_KEYS = [
   "product-rating-badge",
   "collection-rating-badge",
   "review-carousel",
-  "medals-showcase",
   "store-reviews",
   "ai-review-summary",
   "store-ai-summary",
@@ -662,32 +661,6 @@ export function requestsLoaderData({ empty = false, pro = true } = {}) {
     sortDir: "desc",
     error: null,
     canUseEmailReminders: pro,
-  };
-}
-
-// ----------------------------------------------------------------------- Medals
-
-import { ACHIEVEMENT_DEFINITIONS, groupByFamily } from "../../app/services/achievements.shared";
-
-/** Built from the REAL medal definitions, so this is the actual shipped set, not a mock-up. */
-export function medalsLoaderData({ fresh = false } = {}) {
-  const statuses = ACHIEVEMENT_DEFINITIONS.map((definition, index) => ({
-    ...definition,
-    // A fresh store has earned nothing; an established one has a realistic mix.
-    unlocked: fresh ? false : index % 3 === 0,
-    earnedAt: !fresh && index % 3 === 0 ? new Date(2026, 9, 10 + index).toISOString() : null,
-    progress: fresh || index % 3 !== 0 ? { current: fresh ? 0 : index * 3, target: 50 } : null,
-  }));
-
-  const families = Array.from(groupByFamily(statuses).entries()).map(([family, familyStatuses]) => ({
-    family,
-    statuses: familyStatuses,
-  }));
-
-  return {
-    families,
-    earnedCount: statuses.filter((s) => s.unlocked).length,
-    totalCount: statuses.length,
   };
 }
 

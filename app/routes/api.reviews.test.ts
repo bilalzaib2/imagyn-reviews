@@ -49,10 +49,6 @@ vi.mock("../services/appearance.server", () => ({
   getStorefrontAppearance: vi.fn(async () => ({})),
 }));
 
-vi.mock("../services/achievements.server", () => ({
-  getEarnedMedalsForStorefront: vi.fn(async () => []),
-}));
-
 let aiSummaryRecord: { summary: string; recommendation: string | null } | null;
 const getAiSummaryMock = vi.fn(async () => aiSummaryRecord);
 vi.mock("../services/aiSummary.server", () => ({

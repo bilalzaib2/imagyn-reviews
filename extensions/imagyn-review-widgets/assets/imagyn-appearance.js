@@ -5,7 +5,7 @@
  * appearance.shared.ts) into real --imagyn-* CSS custom properties. Loaded once, before
  * each widget's own script tag (see the blocks/*.liquid files), and applied at
  * document.documentElement (:root) — not a per-widget root — so every current widget
- * (Reviews, Rating Badge, Collection Badges, Review Carousel, Medals Showcase, Store
+ * (Reviews, Rating Badge, Collection Badges, Review Carousel, Store
  * Reviews) and every future one inherits it for free, with zero widget-specific plumbing.
  * Scale/density/radius math lives here, once, rather than being duplicated per widget script.
  *
