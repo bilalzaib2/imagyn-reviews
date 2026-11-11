@@ -85,3 +85,65 @@ After pushing:
 - **Theme app extension metafield access**: reading an app-owned metafield (`[product.metafields.app.*]` in `shopify.app.toml`) from *inside a theme app extension Liquid block* requires bracket notation — `product.metafields["$app"].key` — not the dot-notation (`product.metafields.app.key`) shown in Shopify's general metafields docs. The dot-notation silently resolves to nothing specifically inside theme app extension blocks. Verified empirically, deployed and confirmed live.
 - **Deploying the web app and deploying extensions are fully decoupled.** A `git push` can be hours or days ahead of the last `shopify app deploy` with no error or warning from either side — check `shopify app versions list` if you're ever unsure what's actually live on Shopify's side versus what's committed.
 - **`shopify app dev` mutates shared state beyond the local tunnel.** It's not a sandboxed, side-effect-free preview — it changes what a real merchant session resolves to for the targeted dev store until explicitly cleaned up (see [SHOPIFY_DEV_WORKFLOW.md](./SHOPIFY_DEV_WORKFLOW.md)).
+
+---
+
+## Database backup and restore
+
+Railway's Postgres has **no public or TCP-proxy endpoint**, so `pg_dump` cannot reach it from a
+laptop — `DATABASE_URL` resolves to `postgres.railway.internal`, which only exists inside
+Railway's network. Railway's CLI also has no `backup` command. The working route is to run
+`pg_dump` *inside* the Postgres container over `railway ssh`, which also means the database
+credential never leaves that container.
+
+Requires an SSH key registered with Railway (`railway ssh keys add`). The container runs
+**PostgreSQL 18**, so `pg_restore` on a machine with an older client cannot read a `-Fc` dump
+from it — run `pg_restore --list` inside the container, not locally.
+
+```bash
+# 1. Create the dump inside the Postgres container
+railway ssh --service Postgres -i ~/.ssh/<key> '
+  TS=$(date -u +%Y%m%dT%H%M%SZ); OUT=/tmp/imagyn-prod-$TS.dump
+  pg_dump -Fc --no-owner --no-acl "$DATABASE_URL" -f "$OUT"
+  echo "$OUT $(stat -c %s "$OUT") $(sha256sum "$OUT" | cut -d" " -f1)"
+  pg_restore --list "$OUT" | grep -vc "^;"        # TOC entry count
+'
+
+# 2. Prove it restores — into an ISOLATED database, never "railway"
+railway ssh --service Postgres -i ~/.ssh/<key> '
+  DUMP=$(ls -t /tmp/imagyn-prod-*.dump | head -1); TESTDB=imagyn_restore_test_$$
+  psql "$DATABASE_URL" -q -c "CREATE DATABASE $TESTDB;"
+  BASE=$(echo "$DATABASE_URL" | sed "s|/railway|/$TESTDB|")
+  pg_restore --no-owner --no-acl -d "$BASE" "$DUMP"
+  psql "$BASE" -At -c "select count(*) from \"Store\";"   # compare against production
+  psql "$DATABASE_URL" -q -c "DROP DATABASE $TESTDB;"
+'
+
+# 3. Pull an off-Railway copy. base64 in transit keeps it 8-bit clean; verify the hash.
+railway ssh --service Postgres -i ~/.ssh/<key> \
+  'base64 -w0 $(ls -t /tmp/imagyn-prod-*.dump | head -1)' | base64 -d > ~/imagyn-backups/<name>.dump
+shasum -a 256 ~/imagyn-backups/<name>.dump   # must equal the sha256 from step 1
+
+# 4. Clean up the container
+railway ssh --service Postgres -i ~/.ssh/<key> 'rm -f /tmp/imagyn-prod-*.dump'
+```
+
+**Recovery.** Restore into a fresh database and repoint the app, rather than overwriting
+`railway` in place — an in-place restore over a live database is how a bad backup becomes a
+total loss:
+
+```bash
+railway ssh --service Postgres -i ~/.ssh/<key> '
+  psql "$DATABASE_URL" -c "CREATE DATABASE railway_restored;"
+  pg_restore --no-owner --no-acl -d "$(echo "$DATABASE_URL" | sed "s|/railway|/railway_restored|")" /tmp/<dump>
+'
+# verify counts, then switch the app service's DATABASE_URL to the restored database
+```
+
+Backups live in `~/imagyn-backups` (mode 700), outside the repository. **Never commit a dump** —
+it contains every merchant's data.
+
+### Pre-deployment checklist addition
+
+- [ ] Backup taken, `pg_restore --list` clean, test-restored into an isolated database, row
+      counts compared against production, local copy's sha256 verified
