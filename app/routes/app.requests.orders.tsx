@@ -35,7 +35,7 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
   const productId = url.searchParams.get("productId") || undefined;
 
   try {
-    const { orders, hasNextPage, endCursor } = await searchShopifyOrders(admin, store.id, {
+    const { orders, hasNextPage, endCursor, protectedCustomerDataLimited } = await searchShopifyOrders(admin, store.id, {
       search,
       cursor,
       fulfillmentStatus,
@@ -108,7 +108,7 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
         .filter((order) => order.lineItems.length > 0);
     }
 
-    return { ok: true as const, orders: enriched, hasNextPage, endCursor };
+    return { ok: true as const, orders: enriched, hasNextPage, endCursor, protectedCustomerDataLimited };
   } catch (error) {
     return {
       ok: false as const,

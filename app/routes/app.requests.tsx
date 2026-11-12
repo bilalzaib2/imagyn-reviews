@@ -683,6 +683,68 @@ function CustomerPicker({
   );
 }
 
+// Lightweight local customer finder for the "Individual Customer" tab — searches existing
+// reviewers (from the database) by name or email and lets the merchant click one to pre-fill
+// the orders search with that customer's email. This bridges the gap when Protected Customer
+// Data blocks Shopify's customer name search, giving merchants a way to find customers by
+// name from their own review data and then see that customer's orders below.
+function CustomerQuickSearch({
+  customers,
+  onSelect,
+}: {
+  customers: CustomerOption[];
+  onSelect: (email: string) => void;
+}) {
+  const [query, setQuery] = useState("");
+  const trimmed = query.trim().toLowerCase();
+
+  const matches = useMemo(() => {
+    if (!trimmed) return [];
+    return customers
+      .filter(
+        (c) =>
+          c.email &&
+          (c.name?.toLowerCase().includes(trimmed) || c.email.toLowerCase().includes(trimmed)),
+      )
+      .slice(0, 5);
+  }, [customers, trimmed]);
+
+  return (
+    <div className={styles.customerQuickSearch}>
+      <TextField
+        label="Find a previous customer"
+        labelHidden
+        placeholder="Type a customer name or email to find their orders"
+        autoComplete="off"
+        value={query}
+        onChange={setQuery}
+        prefix={<Icon source={PersonIcon} tone="subdued" />}
+      />
+      {matches.length > 0 ? (
+        <ul className={styles.customerQuickSearchResults}>
+          {matches.map((c) => (
+            <li key={c.email}>
+              <button
+                type="button"
+                className={styles.customerQuickSearchItem}
+                onClick={() => {
+                  onSelect(c.email!);
+                  setQuery("");
+                }}
+              >
+                <span className={styles.customerName}>{c.name || c.email}</span>
+                {c.name ? <span className={styles.customerEmail}>{c.email}</span> : null}
+              </button>
+            </li>
+          ))}
+        </ul>
+      ) : trimmed.length >= 2 ? (
+        <p className={styles.feedbackMuted}>No matching customers from previous reviews.</p>
+      ) : null}
+    </div>
+  );
+}
+
 type SendSource = "shopify-orders" | "individual" | "segment" | "csv";
 
 const SEND_SOURCE_TABS: Array<{ value: SendSource; label: string; disabled?: boolean }> = [
@@ -948,11 +1010,10 @@ function ShopifyOrdersPicker({
           limitation, not a bug in this picker. Order number, product, and date are unaffected. */}
       {isProtectedDataLimitation ? (
         <Banner tone="warning" title="Customer name and email aren't available yet">
-          <p>{loadError}</p>
           <p>
-            Order number, product, and date still work normally. Sending a request needs a
-            customer email, so this will unblock automatically once Shopify grants approval — no
-            action needed here.
+            This app hasn&apos;t completed Shopify&apos;s Protected Customer Data approval yet.
+            You can still search by order number (e.g. #1001) and browse by product and date.
+            Customer name search will work once Shopify grants approval — no action needed here.
           </p>
         </Banner>
       ) : loadError ? (
@@ -1189,6 +1250,7 @@ export default function RequestsPage() {
     ok: boolean;
     error?: string;
     reason?: "protected_customer_data";
+    protectedCustomerDataLimited?: boolean;
     orders: ShopifyOrderRow[];
     hasNextPage: boolean;
     endCursor: string | null;
@@ -2317,10 +2379,18 @@ export default function RequestsPage() {
             ) : null}
 
             {requestModalMode === "create" && sendSource === "individual" ? (
-              <p className={styles.feedbackMuted}>
-                Search by customer name or email below — only real purchases from this store&apos;s actual Shopify
-                orders are eligible, so a request can never be sent for a product a customer didn&apos;t buy.
-              </p>
+              <>
+                <p className={styles.feedbackMuted}>
+                  Search by customer name, email, or order number below — only real purchases from this
+                  store&apos;s actual Shopify orders are eligible.
+                </p>
+                {customers.length > 0 ? (
+                  <CustomerQuickSearch
+                    customers={customers}
+                    onSelect={(email) => setOrderSearch(email)}
+                  />
+                ) : null}
+              </>
             ) : null}
 
             {requestModalMode === "create" &&
@@ -2332,7 +2402,9 @@ export default function RequestsPage() {
                 isLoading={ordersFetcher.state !== "idle"}
                 loadError={ordersFetcher.data && !ordersFetcher.data.ok ? ordersFetcher.data.error : null}
                 isProtectedDataLimitation={Boolean(
-                  ordersFetcher.data && !ordersFetcher.data.ok && ordersFetcher.data.reason === "protected_customer_data",
+                  ordersFetcher.data &&
+                    (ordersFetcher.data.protectedCustomerDataLimited ||
+                      (!ordersFetcher.data.ok && ordersFetcher.data.reason === "protected_customer_data")),
                 )}
                 hasNextPage={orderPageInfo.hasNextPage}
                 onLoadMore={handleLoadMoreOrders}

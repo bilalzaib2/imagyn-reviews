@@ -1,12 +1,11 @@
 import { useState } from "react";
-import { redirect, useFetcher, useLoaderData, useLocation, useRouteError } from "react-router";
+import { redirect, useFetcher, useLoaderData, useLocation, useNavigate, useRouteError } from "react-router";
 import type { ActionFunctionArgs, HeadersFunction, LoaderFunctionArgs } from "react-router";
 import { boundary } from "@shopify/shopify-app-react-router/server";
 
 
 import { Button } from "../components/ui/Button";
 import { Container } from "../components/ui/Container";
-import { LinkButton } from "../components/ui/LinkButton";
 import { Banner } from "../components/ui/Banner";
 import { Card } from "../components/ui/Card";
 import { EmptyState } from "../components/ui/EmptyState";
@@ -96,13 +95,15 @@ export const action = async ({ request, params }: ActionFunctionArgs) => {
     };
   }
 
-  return redirect("/app/reviews");
+  const returnSearch = new URL(request.url).search;
+  return redirect(`/app/reviews${returnSearch}`);
 };
 
 export default function EditReviewPage() {
   const { review, products, error } = useLoaderData<typeof loader>();
   const fetcher = useFetcher<ActionData>();
   const location = useLocation();
+  const navigate = useNavigate();
   const isSubmitting = fetcher.state !== "idle";
   const backHref = `/app/reviews${location.search}`;
 
@@ -176,7 +177,7 @@ export default function EditReviewPage() {
             </Card>
 
             <div className={styles.formActions}>
-              <LinkButton to={backHref}>Cancel</LinkButton>
+              <Button type="button" onClick={() => navigate(backHref)}>Cancel</Button>
               <Button
                 type="button"
                 variant="primary"

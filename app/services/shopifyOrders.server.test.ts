@@ -175,12 +175,30 @@ describe("searchShopifyOrders — real Shopify search-syntax translation", () =>
 });
 
 describe("searchShopifyOrders — error handling", () => {
-  it("throws ProtectedCustomerDataError with a real explanation when Shopify denies Customer access", async () => {
-    const admin = fakeAdmin([
-      { errors: [{ message: "This app is not approved to access the Customer object.", extensions: { code: "ACCESS_DENIED" } }] },
-    ]);
+  it("falls back to a no-customer query on ProtectedCustomerDataError and returns orders with the flag set", async () => {
+    const protectedError = { errors: [{ message: "This app is not approved to access the Customer object.", extensions: { code: "ACCESS_DENIED" } }] };
+    const fallbackSuccess = ordersResponse([orderNode({ customer: undefined })]);
+    const admin = fakeAdmin([protectedError, fallbackSuccess]);
+
+    const result = await searchShopifyOrders(admin, "store_1");
+    expect(result.orders).toHaveLength(1);
+    expect(result.protectedCustomerDataLimited).toBe(true);
+    expect(admin.graphql).toHaveBeenCalledTimes(2);
+  });
+
+  it("still throws if the fallback query also fails", async () => {
+    const protectedError = { errors: [{ message: "This app is not approved to access the Customer object.", extensions: { code: "ACCESS_DENIED" } }] };
+    const admin = fakeAdmin([protectedError, protectedError]);
 
     await expect(searchShopifyOrders(admin, "store_1")).rejects.toThrow(ProtectedCustomerDataError);
+  });
+
+  it("returns protectedCustomerDataLimited as false when the primary query succeeds", async () => {
+    const admin = fakeAdmin([ordersResponse([orderNode()])]);
+    const result = await searchShopifyOrders(admin, "store_1");
+
+    expect(result.protectedCustomerDataLimited).toBe(false);
+    expect(admin.graphql).toHaveBeenCalledTimes(1);
   });
 
   it("retries once on a throttled response, then succeeds", async () => {

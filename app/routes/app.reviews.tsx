@@ -4,6 +4,7 @@ import {
   useFetcher,
   useLoaderData,
   useLocation,
+  useNavigate,
   useNavigation,
   useRevalidator,
   useRouteError,
@@ -19,7 +20,6 @@ import { Table, type TableColumn } from "../components/ui/Table";
 import { WorkspaceTabs } from "../components/ui/WorkspaceTabs";
 import { REVIEW_WORKSPACE_TABS } from "../components/ui/reviewWorkspaceTabs";
 import { Container } from "../components/ui/Container";
-import { LinkButton } from "../components/ui/LinkButton";
 import { Section } from "../components/ui/Section";
 import { Banner } from "../components/ui/Banner";
 import { ReviewStatusBadge } from "../components/reviews/ReviewStatusBadge";
@@ -506,6 +506,7 @@ export default function ReviewsPage() {
 
   const mutationFetcher = useFetcher<ActionData>();
   const importFetcher = useFetcher<ActionData>();
+  const navigate = useNavigate();
   const navigation = useNavigation();
   const revalidator = useRevalidator();
   const location = useLocation();
@@ -1276,9 +1277,9 @@ export default function ReviewsPage() {
                 ]}
               />
             </Popover>
-            <LinkButton to={`/app/reviews/new${location.search}`} variant="primary">
+            <Button type="button" variant="primary" onClick={() => navigate(`/app/reviews/new${location.search}`)}>
               New Review
-            </LinkButton>
+            </Button>
           </div>
         </header>
 
@@ -2002,7 +2003,10 @@ export default function ReviewsPage() {
                               items: [
                                 {
                                   content: "Edit",
-                                  url: `/app/reviews/${selectedReview.id}/edit${location.search}`,
+                                  onAction: () => {
+                                    setActionsMenuOpen(false);
+                                    navigate(`/app/reviews/${selectedReview.id}/edit${location.search}`);
+                                  },
                                 },
                               ],
                             },

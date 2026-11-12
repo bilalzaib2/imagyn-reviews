@@ -102,29 +102,28 @@ export interface ShopifyOrderSummary {
   lineItems: ShopifyOrderLineItem[];
 }
 
-interface OrdersQueryResponse {
-  orders: {
+interface OrderNode {
+  id: string;
+  name: string;
+  createdAt: string;
+  displayFulfillmentStatus: string;
+  displayFinancialStatus: string;
+  customer?: { firstName: string | null; lastName: string | null; email: string | null } | null;
+  lineItems: {
     edges: Array<{
-      cursor: string;
       node: {
         id: string;
-        name: string;
-        createdAt: string;
-        displayFulfillmentStatus: string;
-        displayFinancialStatus: string;
-        customer: { firstName: string | null; lastName: string | null; email: string | null } | null;
-        lineItems: {
-          edges: Array<{
-            node: {
-              id: string;
-              title: string;
-              quantity: number;
-              product: { id: string } | null;
-            };
-          }>;
-        };
+        title: string;
+        quantity: number;
+        product: { id: string } | null;
       };
     }>;
+  };
+}
+
+interface OrdersQueryResponse {
+  orders: {
+    edges: Array<{ cursor: string; node: OrderNode }>;
     pageInfo: { hasNextPage: boolean; endCursor: string | null };
   };
 }
@@ -145,6 +144,43 @@ const ORDERS_QUERY = `#graphql
             lastName
             email
           }
+          lineItems(first: 20) {
+            edges {
+              node {
+                id
+                title
+                quantity
+                product {
+                  id
+                }
+              }
+            }
+          }
+        }
+      }
+      pageInfo {
+        hasNextPage
+        endCursor
+      }
+    }
+  }
+`;
+
+// Fallback query without the `customer` field — used when Protected Customer Data approval
+// hasn't been granted and Shopify rejects access to customer name/email. Orders still load
+// (with products, dates, fulfillment status) so the merchant can search by order number and
+// select line items, rather than seeing a completely empty table.
+const ORDERS_QUERY_NO_CUSTOMER = `#graphql
+  query ImagynOrdersForRequestsNoCustomer($first: Int!, $after: String, $query: String) {
+    orders(first: $first, after: $after, query: $query, sortKey: CREATED_AT, reverse: true) {
+      edges {
+        cursor
+        node {
+          id
+          name
+          createdAt
+          displayFulfillmentStatus
+          displayFinancialStatus
           lineItems(first: 20) {
             edges {
               node {
@@ -227,12 +263,26 @@ export async function searchShopifyOrders(
     dateFrom?: string;
     dateTo?: string;
   } = {},
-): Promise<{ orders: ShopifyOrderSummary[]; hasNextPage: boolean; endCursor: string | null }> {
-  const data = await adminGraphql<OrdersQueryResponse>(admin, ORDERS_QUERY, {
+): Promise<{ orders: ShopifyOrderSummary[]; hasNextPage: boolean; endCursor: string | null; protectedCustomerDataLimited: boolean }> {
+  const variables = {
     first: ORDERS_PAGE_SIZE,
     after: params.cursor ?? undefined,
     query: buildOrderSearchQuery(params),
-  });
+  };
+
+  let data: OrdersQueryResponse;
+  let protectedCustomerDataLimited = false;
+
+  try {
+    data = await adminGraphql<OrdersQueryResponse>(admin, ORDERS_QUERY, variables);
+  } catch (error) {
+    if (error instanceof ProtectedCustomerDataError) {
+      protectedCustomerDataLimited = true;
+      data = await adminGraphql<OrdersQueryResponse>(admin, ORDERS_QUERY_NO_CUSTOMER, variables);
+    } else {
+      throw error;
+    }
+  }
 
   const shopifyProductIds = new Set<string>();
   for (const edge of data.orders.edges) {
@@ -289,5 +339,6 @@ export async function searchShopifyOrders(
     orders,
     hasNextPage: data.orders.pageInfo.hasNextPage,
     endCursor: data.orders.pageInfo.endCursor,
+    protectedCustomerDataLimited,
   };
 }
